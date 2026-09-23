@@ -17,20 +17,174 @@
     return '/provider';
   }
 
+  /* The API host. apiBase() above returns only the ROLE PREFIX, and Api.get()
+     supplies the host itself -- so anything using a raw fetch() must add it, or the
+     request goes to app.kiddietrac.com and 404s. That was the report button. */
+  function apiHost() {
+    return (window.KT && KT.API_BASE)
+        || (window.Api && Api.base)
+        || 'https://api.kiddietrac.com/api/v1';
+  }
+
+  function authToken() {
+    return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '';
+  }
+
+  /* Open the printable report in a new tab.
+     Fetched with the auth header and shown from a blob: a plain <a href> arrives
+     unauthenticated and 401s. The window is opened BEFORE the await -- a popup
+     blocker rejects window.open() that is not a direct result of the click. */
+  async function openReportPdf(inc, role, btn) {
+    var was = btn ? btn.textContent : null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
+    var win = window.open('', '_blank');
+    try {
+      var h = { Authorization: 'Bearer ' + authToken() };
+      var ag = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id');
+      if (ag) { h['X-Active-Agency-Id'] = ag; }
+
+      var r = await fetch(apiHost() + apiBase(role) + '/incidents/' + inc.id + '/report.pdf', { headers: h });
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      var u = URL.createObjectURL(await r.blob());
+      if (win) { win.location = u; } else { window.open(u, '_blank'); }
+      setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+      return true;
+    } catch (e) {
+      if (win) { win.close(); }
+      var msg = 'Could not build the report (' + ((e && e.message) || 'error') + ')';
+      if (window.KT && KT.Dom && KT.Dom.toast) { KT.Dom.toast(msg, 'error'); }
+      else if (window.KT && KT.toast) { KT.toast('⚠️', 'Report', msg, '#DC2626'); }
+      return msg;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = was; }
+    }
+  }
+
+  /* An incident open in a dialog: { host, id, role, viewOnly, onDone, dirty }.
+     Module-level because only one can be open at a time, and threading it through
+     every render function would touch a dozen signatures for no gain. */
+  var _modal = null;
+
+  /* Wider than a standard modal — an incident report is a document, and at the
+     default width the description wraps into a ribbon. Injected once. */
+  function ensureModalCss() {
+    if (document.getElementById('kt-inc-modal-css')) { return; }
+    var st = document.createElement('style');
+    st.id = 'kt-inc-modal-css';
+    st.textContent =
+      '.modal.kt-inc-modal{max-width:1080px;width:min(96vw,1080px);}'
+      + '.modal.kt-inc-modal .modal-body{max-height:calc(100vh - 190px);overflow-y:auto;}'
+      + '.modal.kt-inc-modal .kt-inc-detail{padding:0;}'
+      + '@media(max-width:760px){.modal.kt-inc-modal{width:100vw;max-width:100vw;}}';
+    document.head.appendChild(st);
+  }
+
+  /* Open an incident over the list instead of navigating to it. */
+  function openIncidentDialog(id, role, viewOnly, onDone) {
+    ensureModalCss();
+    var host = document.createElement('div');
+    host.style.cssText = 'min-height:140px;';
+    host.appendChild(Dom.el('div', {
+      style: 'padding:24px;color:var(--kt-text-muted);font-size:13.5px;',
+    }, 'Loading…'));
+
+    _modal = { host: host, id: id, role: role, viewOnly: !!viewOnly, onDone: onDone || null, dirty: false };
+
+    Shell.Modal.open({
+      title: viewOnly ? 'Incident report' : 'Incident',
+      body: host,
+      large: true,
+      actions: [{ label: 'Done' }],
+      onClose: function () {
+        var st = _modal;
+        _modal = null;
+        // Refresh the list only now — never underneath an open dialog.
+        if (st && st.dirty && st.onDone) { st.onDone(); }
+      },
+    });
+
+    // Widen it. Shell.Modal gives us .modal.modal-large; this is the same element.
+    try {
+      var box = document.querySelector('.modal.modal-large');
+      if (box) { box.classList.add('kt-inc-modal'); }
+    } catch (e) { /* a narrower dialog is still a working dialog */ }
+
+    return paintModal();
+  }
+
+  /* Re-render the open dialog's body from the server. */
+  function paintModal() {
+    if (!_modal) { return Promise.resolve(); }
+    return renderIncidentDetail(_modal.host, {
+      role: _modal.role,
+      params: { id: _modal.id, view: _modal.viewOnly ? '1' : '', modal: '1' },
+    });
+  }
+
+  /* After an action succeeded: in a dialog, re-render in place and mark the list
+     stale; on the page, the old full re-render. */
+  function afterAction() {
+    if (_modal) {
+      _modal.dirty = true;
+      return paintModal();
+    }
+    return (window.KT && KT.Shell && KT.Shell.renderScreen)
+      ? KT.Shell.renderScreen()
+      : window.location.reload();
+  }
+
+  /* The signature pad, with a consistent refusal path.
+     Returns a PNG data URL, or null if they backed out — callers must treat null
+     as "do nothing", never as "proceed unsigned". */
+  async function askForSignature(opts) {
+    if (!(window.KT && KT.signaturePad)) {
+      Dom.toast('The signature pad could not be loaded. Please reload and try again.', 'error');
+      return null;
+    }
+    var sig = await KT.signaturePad(opts || {});
+    return sig || null;
+  }
+
   function esc(s) {
     return s == null ? '' : String(s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function fmt(d) {
-    if (!d) return '-';
+  /* WALL CLOCK — occurred_at only.
+     The educator typed a local time into a datetime-local field and that is what is
+     stored; there is no zone in it. Parsed from its parts on purpose: handing the
+     string to Date() lets kt-tz-global treat it as UTC and shift it, which is how
+     08:15 became 04:15 on a record of when a child was hurt. */
+  function fmtWall(d) {
+    if (!d) { return '-'; }
+    var m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if (!m) { return String(d); }
+    var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var hh = parseInt(m[4], 10);
+    var ap = hh >= 12 ? 'PM' : 'AM';
+    var h12 = hh % 12; if (h12 === 0) { h12 = 12; }
+    return MON[parseInt(m[2], 10) - 1] + ' ' + parseInt(m[3], 10) + ', ' + m[1]
+      + ', ' + h12 + ':' + m[5] + ' ' + ap;
+  }
+
+  /* A real INSTANT — created_at, submitted_at, reviewed_at, parent_notified_at,
+     closed_at. Written by the server with app.timezone=UTC, so these are converted
+     into the agency's zone, which is what kt-tz-global does to a bare timestamp. */
+  function fmtInstant(d) {
+    if (!d) { return '-'; }
     try {
       return new Date(d).toLocaleString('en-CA', {
         year: 'numeric', month: 'short', day: 'numeric',
         hour: 'numeric', minute: '2-digit',
       });
-    } catch (e) { return d; }
+    } catch (e) { return String(d); }
+  }
+
+  /* Kept so nothing that still calls fmt() silently changes meaning: occurred_at is
+     by far its commonest argument, and wall clock is the safe reading. */
+  function fmt(d) {
+    return fmtWall(d);
   }
 
   function statusBadge(status) {
@@ -113,7 +267,7 @@
   function buildIncidentCard(inc) {
     var childName = inc.child ? ((inc.child.first_name || '') + ' ' + (inc.child.last_name || '')).trim() : '';
     if (!childName) childName = 'Incident';
-    var recorded = (inc.recorded_by && inc.recorded_by.name) || '-';
+    var recorded = personName(inc.recorded_by);
     var sev = INC_SEV_COLOR[inc.severity] || '#64748B';
     var photo = (inc.child && inc.child.photo_url) ? incAbsUrl(inc.child.photo_url) : null;
     var avatarHtml = (window.KT && KT.avatar)
@@ -141,12 +295,40 @@
     return card;
   }
 
+
+  /* `users` has no `name` column — the API selects first_name/last_name, and every
+     caller here was still reading `.name`, so every Recorded-by cell rendered "-".
+     One helper so the three call sites cannot drift apart again. */
+  function personName(p) {
+    if (!p) { return '-'; }
+    var n = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+    return n || p.name || p.preferred_name || '-';
+  }
+
+  /* When this incident last MOVED — not when a field was last edited. The most
+     specific stamp wins, so "submitted 3 days ago" is visible at a glance. */
+  function lastStatusChange(inc) {
+    var t = inc.closed_at || inc.acknowledged_at || inc.parent_notified_at
+         || inc.reviewed_at || inc.director_reviewed_at || inc.submitted_at || inc.updated_at;
+    if (!t) { return '-'; }
+    /* These are server instants, so they are CONVERTED to the agency's zone —
+       slicing the raw string showed UTC, four hours adrift in Toronto. */
+    var shown = fmtInstant(t);
+    var d = new Date(t);
+    if (isNaN(d.getTime())) { return shown; }
+    var days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    var rel = days <= 0 ? 'today' : (days === 1 ? 'yesterday' : days + ' days ago');
+    return shown + ' · ' + rel;
+  }
+
   async function renderIncidentsList(main, ctx) {
     Dom.clear(main);
     const role = ctx && ctx.role;
     const params = (ctx && ctx.params) || {};
     const base = apiBase(role);
     const filterStatus = params.status || '';
+    // Only a director or admin gets the Edit control; an educator gets read-only View.
+    const canManage = isDirector(role);
 
     const wrap = document.createElement('div');
     main.appendChild(wrap);
@@ -220,7 +402,7 @@
     table.innerHTML =
       '<table class="data-table" style="margin:0;">' +
         '<thead><tr>' +
-          '<th>When</th><th>Child</th><th>Type</th><th>Severity</th><th>Status</th><th>Recorded by</th><th></th>' +
+          '<th>When</th><th>Child</th><th>Type</th><th>Severity</th><th>Status</th><th>Last update</th><th>Recorded by</th><th></th>' +
         '</tr></thead>' +
         '<tbody></tbody>' +
       '</table>';
@@ -228,7 +410,7 @@
 
     rows.forEach(function (inc) {
       const childName = inc.child ? ((inc.child.first_name || '') + ' ' + (inc.child.last_name || '')).trim() : '-';
-      const recorded  = (inc.recorded_by && inc.recorded_by.name) || '-';
+      const recorded  = personName(inc.recorded_by);
       const tr = document.createElement('tr');
       tr.style.cursor = 'pointer';
       tr.innerHTML =
@@ -237,15 +419,39 @@
         '<td>' + esc(typeLabel(inc.incident_type)) + (inc.is_serious_occurrence ? ' <span class="tag tag-danger" style="font-size:9px;">SO</span>' : '') + '</td>' +
         '<td>' + severityBadge(inc.severity) + '</td>' +
         '<td>' + statusBadge(inc.status) + '</td>' +
+        '<td style="font-size:12.5px; color:var(--kt-text-muted); white-space:nowrap;">' + esc(lastStatusChange(inc)) + '</td>' +
         '<td style="font-size:13px; color:var(--kt-text-muted);">' + esc(recorded) + '</td>' +
         // Real action control (not a bare arrow) so kt-row-actions.js collapses it
         // into the standard ⋮ kebab, consistent with every other data table.
-        '<td style="text-align:right;"><button type="button" class="kt-inc-view kt-act-icon kt-act-info kt-icon-tip" data-id="' + inc.id + '" data-kttip="View" aria-label="View">👁️</button></td>';
+        // Plain controls in the last cell — kt-row-actions collapses them into the ⋮.
+        '<td style="text-align:right;white-space:nowrap;">' +
+          '<button type="button" class="kt-inc-view kt-act-icon kt-act-info kt-icon-tip" data-id="' + inc.id + '" data-kttip="View" aria-label="View">👁️</button>' +
+          // Reading the report is a READ, so it sits beside View and is offered to
+          // anyone who can see the row — not buried in Manage → Report.
+          '<button type="button" class="kt-inc-pdf kt-act-icon kt-icon-tip" data-id="' + inc.id + '" data-kttip="View report" aria-label="View report" style="margin-left:4px;">📄</button>' +
+          (canManage ? '<button type="button" class="kt-inc-edit kt-act-icon kt-icon-tip" data-id="' + inc.id + '" data-kttip="Edit" aria-label="Edit" style="margin-left:4px;">✏️</button>' : '') +
+        '</td>';
       tr.addEventListener('click', function () {
-        window.location.hash = '#incident-detail?id=' + inc.id;
+        openIncidentDialog(inc.id, role, false, function () { renderIncidentsList(main, ctx); });
+      });
+      var _eb = tr.querySelector('.kt-inc-edit');
+      if (_eb) _eb.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openManageDialog(inc, apiBase(role), function () { renderIncidentsList(main, ctx); });
+      });
+      var _pb = tr.querySelector('.kt-inc-pdf');
+      if (_pb) _pb.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openReportPdf(inc, role, _pb);
       });
       var _vb = tr.querySelector('.kt-inc-view');
-      if (_vb) _vb.addEventListener('click', function (e) { e.stopPropagation(); window.location.hash = '#incident-detail?id=' + inc.id; });
+      /* View means READ. The row itself still opens the working screen; this
+         button opens the same report with every control stood down, so looking at
+         an incident can never notify a family or close a record by mis-tap. */
+      if (_vb) _vb.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openIncidentDialog(inc.id, role, true, function () { renderIncidentsList(main, ctx); });
+      });
       tbody.appendChild(tr);
     });
     listEl.appendChild(table);
@@ -349,7 +555,7 @@
       '<div style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:20px; margin-bottom:16px;">' +
         '<h2 style="font-family:var(--kt-font-display); font-size:16px; margin-bottom:12px;">Timeline</h2>' +
         '<div style="font-size:13px; line-height:1.8; color:var(--kt-text-muted);">' +
-          '<div>Recorded by ' + esc((inc.recorded_by && inc.recorded_by.name) || '-') + '</div>' +
+          '<div>Recorded by ' + esc(personName(inc.recorded_by)) + '</div>' +
           (inc.submitted_at        ? '<div>Submitted: ' + fmt(inc.submitted_at) + '</div>' : '') +
           (inc.reviewed_at         ? '<div>Reviewed by ' + esc((inc.reviewed_by && inc.reviewed_by.name) || '-') + ': ' + fmt(inc.reviewed_at) + '</div>' : '') +
           (inc.parent_notified_at  ? '<div>Parent notified: ' + fmt(inc.parent_notified_at) + '</div>' : '') +
@@ -363,15 +569,18 @@
       '<div id="kt-actions"></div>'
     );
 
-    renderNotes(wrap.querySelector('#kt-notes'), inc, role, base);
-    renderActions(wrap.querySelector('#kt-actions'), inc, role, base);
+    /* ?view=1 comes from the ⋮ View. Reading a report must not be able to change
+       it — that covers the note box as much as the buttons below it. */
+    const viewOnly = String((ctx && ctx.params && ctx.params.view) || '') === '1';
+    renderNotes(wrap.querySelector('#kt-notes'), inc, role, base, viewOnly);
+    renderActions(wrap.querySelector('#kt-actions'), inc, role, base, viewOnly);
   }
 
   /* ===== NOTES (staff-internal audit trail) ===== */
   // Educators + directors/admins can append notes/details; each is stamped with
   // who wrote it and when. Guardians never see this section (the API also strips
   // notes from their payload).
-  function renderNotes(el, inc, role, base) {
+  function renderNotes(el, inc, role, base, viewOnly) {
     Dom.clear(el);
     if (isGuardian(role)) return;
 
@@ -400,6 +609,7 @@
       '<div id="kt-note-list">' +
         (notes.length ? notes.map(noteHtml).join('') : '<div id="kt-note-empty" style="font-size:13px;color:var(--kt-text-muted);padding:4px 0 8px;">No notes yet.</div>') +
       '</div>' +
+      (viewOnly ? '' :
       '<div style="margin-top:14px;">' +
         '<textarea id="kt-note-input" rows="3" placeholder="Add a note or extra detail…" style="width:100%; padding:10px; border:1.5px solid var(--kt-border); border-radius:8px; font-family:inherit; box-sizing:border-box; font-size:14px;"></textarea>' +
         // Left-aligned directly under the textarea — was flex-end, which parked it at
@@ -407,12 +617,14 @@
         '<div style="display:flex; justify-content:flex-start; margin-top:8px;">' +
           '<button class="btn btn-primary" id="kt-note-add">Add note</button>' +
         '</div>' +
-      '</div>';
+      '</div>');
     el.appendChild(card);
 
     const input = card.querySelector('#kt-note-input');
     const addBtnEl = card.querySelector('#kt-note-add');
     const list = card.querySelector('#kt-note-list');
+    // Read-only: the notes already written stay readable, the way to add one does not.
+    if (!addBtnEl || !input) { return; }
 
     addBtnEl.addEventListener('click', async function () {
       const text = (input.value || '').trim();
@@ -434,8 +646,383 @@
     });
   }
 
-  function renderActions(el, inc, role, base) {
+
+  /* The director's review, as a screen rather than a window.prompt.
+
+     This is the moment somebody with authority reads what an educator wrote about
+     a child being hurt and decides what happens next. It needs the report in front
+     of it, somewhere to record a judgement, and the option to notify the family in
+     the same breath — asking a director to review, close the box, find the report
+     again and press a second button is how the second button gets forgotten. */
+
+  /* Everything a director does to an incident, in one place.
+     Four tabs because these are four different jobs; one long form would be read
+     as one job and three-quarters of it skipped. */
+  function openManageDialog(inc, base, onDone) {
+    var tab = 'status';
+    var wrap = Dom.el('div', { style: 'max-width:620px;' });
+    var bar  = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E2E8F0;margin-bottom:16px;' });
+    var pane = Dom.el('div', {});
+    wrap.appendChild(bar); wrap.appendChild(pane);
+
+    var TABS = [['status','Status'], ['note','Note'], ['contact','Log contact'], ['report','Report']];
+    var IN = 'width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #CBD5E1;'
+           + 'border-radius:8px;font:inherit;font-size:14px;';
+    var LBL = 'display:block;font-weight:700;font-size:12.5px;color:#334155;margin:0 0 5px;';
+
+    function paintBar() {
+      Dom.clear(bar);
+      TABS.forEach(function (t) {
+        var on = tab === t[0];
+        var b = Dom.el('button', { type: 'button', style:
+          'padding:9px 14px;border:0;background:transparent;cursor:pointer;font-size:13.5px;font-weight:600;'
+          + (on ? 'color:#1F6080;border-bottom:2px solid #1F6080;margin-bottom:-1px;' : 'color:#64748B;') }, t[1]);
+        b.addEventListener('click', function () { tab = t[0]; paintBar(); paintPane(); });
+        bar.appendChild(b);
+      });
+    }
+
+    function say(msg, good) {
+      Dom.toast(msg, good ? 'success' : 'error');
+    }
+
+    function paintPane() {
+      Dom.clear(pane);
+
+      if (tab === 'status') {
+        pane.appendChild(Dom.el('div', { style: 'font-size:13px;color:#64748B;margin-bottom:12px;' },
+          'Currently ' + String(inc.status || '').replace(/_/g, ' ') + '.'));
+        var lab = Dom.el('label', { style: LBL }, 'Move it to'); pane.appendChild(lab);
+        var sel = Dom.el('select', { style: IN + 'background:#fff;' });
+        [['draft','Draft'],['submitted','Submitted for review'],['director_reviewed','Reviewed by a director'],
+         ['parent_notified','Parent notified'],['acknowledged','Acknowledged by the parent'],['closed','Closed']]
+          .forEach(function (o) {
+            var op = Dom.el('option', { value: o[0] }, o[1]);
+            if (o[0] === inc.status) { op.selected = true; }
+            sel.appendChild(op);
+          });
+        pane.appendChild(sel);
+        pane.appendChild(Dom.el('label', { style: LBL + 'margin-top:14px;' }, 'Why is it moving?'));
+        var why = Dom.el('textarea', { rows: '3', style: IN,
+          placeholder: 'Recorded on the incident so the history explains itself.' });
+        pane.appendChild(why);
+        var go = Dom.el('button', { class: 'btn btn-primary', style: 'margin-top:14px;' }, 'Change status');
+        go.addEventListener('click', async function () {
+          if (sel.value === inc.status) { say('It is already at that status.', false); return; }
+          go.disabled = true;
+          try {
+            await Api.patch(base + '/incidents/' + inc.id + '/status', { status: sel.value, reason: why.value || null });
+            say('Status changed.', true);
+            Shell.Modal.close(); if (onDone) { onDone(); }
+          } catch (e) { say((e && e.message) || 'Could not change the status', false); go.disabled = false; }
+        });
+        pane.appendChild(go);
+      }
+
+      if (tab === 'note') {
+        pane.appendChild(Dom.el('label', { style: LBL }, 'Note'));
+        var nt = Dom.el('textarea', { rows: '5', style: IN, placeholder: 'Staff-only. Records who wrote it and when.' });
+        pane.appendChild(nt);
+        var addN = Dom.el('button', { class: 'btn btn-primary', style: 'margin-top:12px;' }, 'Add note');
+        addN.addEventListener('click', async function () {
+          if (!nt.value.trim()) { say('Write something first.', false); return; }
+          addN.disabled = true;
+          try {
+            await Api.post(base + '/incidents/' + inc.id + '/notes', { note: nt.value.trim(), kind: 'note' });
+            say('Note added.', true); Shell.Modal.close(); if (onDone) { onDone(); }
+          } catch (e) { say((e && e.message) || 'Could not add the note', false); addN.disabled = false; }
+        });
+        pane.appendChild(addN);
+      }
+
+      if (tab === 'contact') {
+        pane.appendChild(Dom.el('div', { style: 'font-size:13px;color:#64748B;margin-bottom:12px;' },
+          'Record that somebody was spoken to. This is what shows on the report as evidence of contact.'));
+        pane.appendChild(Dom.el('label', { style: LBL }, 'Who did you speak to?'));
+        var who = Dom.el('select', { style: IN + 'background:#fff;' });
+        [['parent','A parent or guardian'],['educator','The educator'],['director','Another director'],['other','Someone else']]
+          .forEach(function (o) { who.appendChild(Dom.el('option', { value: o[0] }, o[1])); });
+        pane.appendChild(who);
+        pane.appendChild(Dom.el('label', { style: LBL + 'margin-top:12px;' }, 'Their name'));
+        var nm = Dom.el('input', { type: 'text', style: IN, placeholder: 'e.g. Farjana Jesmin' });
+        pane.appendChild(nm);
+        pane.appendChild(Dom.el('label', { style: LBL + 'margin-top:12px;' }, 'How?'));
+        var how = Dom.el('select', { style: IN + 'background:#fff;' });
+        [['in_person','In person'],['phone','By phone'],['email','By email'],['message','By message']]
+          .forEach(function (o) { how.appendChild(Dom.el('option', { value: o[0] }, o[1])); });
+        pane.appendChild(how);
+        pane.appendChild(Dom.el('label', { style: LBL + 'margin-top:12px;' }, 'What was discussed?'));
+        var what = Dom.el('textarea', { rows: '4', style: IN, placeholder: 'What was said, and anything agreed.' });
+        pane.appendChild(what);
+        var logIt = Dom.el('button', { class: 'btn btn-primary', style: 'margin-top:14px;' }, 'Log this contact');
+        logIt.addEventListener('click', async function () {
+          if (!what.value.trim()) { say('Say what was discussed.', false); return; }
+          logIt.disabled = true;
+          try {
+            await Api.post(base + '/incidents/' + inc.id + '/notes', {
+              note: what.value.trim(), kind: 'interaction',
+              contact_with: who.value, contact_name: nm.value.trim() || null, contact_method: how.value,
+            });
+            say('Contact logged.', true); Shell.Modal.close(); if (onDone) { onDone(); }
+          } catch (e) { say((e && e.message) || 'Could not log it', false); logIt.disabled = false; }
+        });
+        pane.appendChild(logIt);
+      }
+
+      if (tab === 'report') {
+        pane.appendChild(Dom.el('div', { style: 'font-size:13.5px;color:#475569;line-height:1.6;margin-bottom:14px;' },
+          'A printable incident report on your own branding — the child, what happened, what was done, '
+          + 'every status change and every logged contact, with space for a signature.'));
+        var dl = Dom.el('button', { class: 'btn btn-primary' }, '📄 Open the report');
+        dl.addEventListener('click', async function () {
+          var r = await openReportPdf(inc, null, dl);
+          if (r !== true) { say(r, false); }
+        });
+        pane.appendChild(dl);
+      }
+    }
+
+    paintBar(); paintPane();
+    Shell.Modal.open({
+      title: 'Manage incident',
+      body: wrap,
+      actions: [{ label: 'Done' }],
+    });
+  }
+
+  /* Close an incident: say what was done, then sign it off.
+     The note is collected in the confirmation itself because "what changed since
+     this was filed" is the line a reader of the report most wants, and it had
+     nowhere to live except the internal note thread. */
+  async function openCloseDialog(inc, base) {
+    var extra = document.createElement('div');
+    extra.innerHTML =
+      '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:5px;">'
+        + 'How this was resolved '
+        + '<span style="font-weight:400;color:#94A3B8;">— this appears on the report</span>'
+      + '</label>'
+      + '<textarea id="kt-close-note" rows="4" placeholder="What was done, and anything that changed since it was filed…" '
+        + 'style="width:100%;box-sizing:border-box;padding:9px;border:1.5px solid #CBD5E1;'
+        + 'border-radius:8px;font-family:inherit;font-size:13.5px;"></textarea>';
+    var ta = extra.querySelector('#kt-close-note');
+    if (inc.director_notes) { ta.value = inc.director_notes; }
+
+    var ok = await KT.confirm({
+      title: 'Close this incident?',
+      description: 'It stays on the child’s record and can still be read, but no further '
+        + 'action can be taken on it. Make sure the parent has been notified first.\n\n'
+        + 'You will be asked to sign the closure.',
+      okLabel: 'Continue to sign',
+      extra: extra,
+    });
+    if (!ok) { return; }
+
+    var note = (ta.value || '').trim();
+    /* Signed BEFORE the request: backing out here must leave the incident open,
+       not closed-but-unsigned. */
+    var sig = await askForSignature({
+      title: 'Sign off this incident',
+      subtitle: 'You are confirming this has been handled and the file can rest.',
+      okLabel: 'Sign & close',
+    });
+    if (!sig) { Dom.toast('Not closed — the sign-off needs your signature.', 'error'); return; }
+
+    try {
+      await Api.post(base + '/incidents/' + inc.id + '/close', {
+        signature: sig,
+        director_notes: note || null,
+      });
+      Dom.toast('Incident closed and signed off', 'success');
+      await afterAction();
+    } catch (e) {
+      Dom.toast((e && e.message) || 'Could not close this incident', 'error');
+    }
+  }
+
+  function openReviewDialog(inc, base) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'max-width:640px;';
+
+    const esc2 = (t) => String(t == null ? '' : t)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const when = inc.occurred_at ? String(inc.occurred_at).replace('T',' ').slice(0,16) : '—';
+
+    wrap.innerHTML =
+      '<div style="background:var(--kt-surface-2,#F8FAFC);border:1px solid var(--kt-border,#E2E8F0);' +
+        'border-radius:12px;padding:16px;margin-bottom:16px;">' +
+        '<div style="font-size:11.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;' +
+          'color:var(--kt-text-muted,#64748B);margin-bottom:8px;">What you are reviewing</div>' +
+        '<div style="font-size:13.5px;line-height:1.6;">' +
+          '<b>' + esc2(typeLabel(inc.incident_type)) + '</b> · ' + esc2(inc.severity || '') +
+          ' · ' + esc2(when) + (inc.location ? ' · ' + esc2(inc.location) : '') +
+        '</div>' +
+        '<div style="margin-top:10px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;">' +
+          esc2(inc.description || '(no description)') +
+        '</div>' +
+        (inc.action_taken ? '<div style="margin-top:10px;font-size:13px;color:var(--kt-text-muted,#475569);' +
+          'line-height:1.6;white-space:pre-wrap;"><b>Action taken:</b> ' + esc2(inc.action_taken) + '</div>' : '') +
+      '</div>' +
+      '<div class="form-row" style="margin-bottom:14px;">' +
+        '<label style="display:block;font-weight:700;font-size:13px;margin-bottom:5px;">Your review notes</label>' +
+        '<textarea id="rv-notes" rows="4" placeholder="What did you check, and what happens next? These notes stay on the record." ' +
+          'style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--kt-border,#CBD5E1);' +
+          'border-radius:8px;font:inherit;font-size:14px;"></textarea>' +
+      '</div>' +
+      '<label style="display:flex;gap:9px;align-items:flex-start;font-size:13.5px;cursor:pointer;">' +
+        '<input type="checkbox" id="rv-notify" checked style="width:17px;height:17px;margin-top:2px;flex:0 0 auto;">' +
+        '<span>Notify the family now. They receive the report and can acknowledge it. ' +
+        '<span style="color:var(--kt-text-muted,#64748B);">Leave this ticked unless you need to speak to them first.</span></span>' +
+      '</label>';
+
+    Shell.Modal.open({
+      title: 'Review incident',
+      body: wrap,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Record review',
+          primary: true,
+          onClick: async () => {
+            const notes = (document.getElementById('rv-notes') || {}).value || '';
+            const notify = !!(document.getElementById('rv-notify') || {}).checked;
+            try {
+              await Api.post(base + '/incidents/' + inc.id + '/review', { director_notes: notes.trim() || null });
+              if (notify) {
+                await Api.post(base + '/incidents/' + inc.id + '/notify-parent');
+              }
+              Dom.toast(notify ? 'Reviewed, and the family has been notified.' : 'Review recorded.', 'success');
+              (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload());
+            } catch (e) {
+              /* false keeps the dialog open — a refusal must not throw away what
+                 they typed, or the notes get written twice and shorter each time. */
+              Dom.toast((e && e.message) || 'Could not record the review', 'error');
+              return false;
+            }
+          },
+        },
+      ],
+    });
+  }
+
+
+  /* The family's own words, and a request to meet.
+     Separate from the acknowledgment on purpose: a parent should not have to sign
+     something to be able to ask a question about it, and the questions keep coming
+     after they have signed. */
+  function appendParentVoiceCard(el, inc, base) {
+    var card = document.createElement('div');
+    card.style.cssText = 'background:var(--kt-surface);border:1px solid var(--kt-border);'
+      + 'border-radius:14px;padding:24px;margin-top:16px;';
+    card.innerHTML =
+      '<h2 style="font-family:var(--kt-font-display);font-size:18px;margin-bottom:8px;">Your response</h2>' +
+      '<p style="margin-bottom:16px;color:var(--kt-text-muted);line-height:1.6;">' +
+        'If you would like to add anything — what your child told you at home, or something ' +
+        'that does not match this report — write it here and it goes on the record with your name.' +
+      '</p>' +
+      '<div class="form-row">' +
+        '<label>Your comments</label>' +
+        '<textarea id="kt-pv-text" rows="4" placeholder="Anything you would like recorded." ' +
+          'style="font-family:inherit;padding:10px;border:1.5px solid var(--kt-border);border-radius:8px;width:100%;box-sizing:border-box;"></textarea>' +
+      '</div>' +
+      '<label style="display:flex;gap:9px;align-items:flex-start;margin-top:14px;font-size:14px;cursor:pointer;">' +
+        '<input type="checkbox" id="kt-pv-meet" style="width:17px;height:17px;margin-top:2px;flex:0 0 auto;">' +
+        '<span>I would like to meet to discuss this. ' +
+        '<span style="color:var(--kt-text-muted);">Your centre will be told and will contact you.</span></span>' +
+      '</label>' +
+      '<div class="form-row" id="kt-pv-meetnote" style="margin-top:12px;display:none;">' +
+        '<label>When suits you? (optional)</label>' +
+        '<input type="text" id="kt-pv-when" placeholder="e.g. any afternoon this week, or at pick-up" ' +
+          'style="padding:10px;border:1.5px solid var(--kt-border);border-radius:8px;width:100%;box-sizing:border-box;">' +
+      '</div>' +
+      '<div style="margin-top:16px;">' +
+        '<button class="btn btn-primary btn-block" id="kt-pv-send">Send to my centre</button>' +
+      '</div>' +
+      '<div id="kt-pv-msg" style="font-size:13px;margin-top:10px;min-height:18px;"></div>';
+    el.appendChild(card);
+
+    var meet = card.querySelector('#kt-pv-meet');
+    var note = card.querySelector('#kt-pv-meetnote');
+    meet.addEventListener('change', function () { note.style.display = meet.checked ? '' : 'none'; });
+
+    var btn = card.querySelector('#kt-pv-send');
+    var msg = card.querySelector('#kt-pv-msg');
+    btn.addEventListener('click', async function () {
+      var text = (card.querySelector('#kt-pv-text').value || '').trim();
+      if (!text && !meet.checked) {
+        msg.style.color = '#B3261E';
+        msg.textContent = 'Write something, or tick the box to ask for a meeting.';
+        return;
+      }
+      btn.disabled = true;
+      var was = btn.textContent;
+      btn.textContent = 'Sending…';
+      try {
+        var r = await Api.post(base + '/incidents/' + inc.id + '/feedback', {
+          feedback: text || null,
+          request_meeting: !!meet.checked,
+          meeting_note: (card.querySelector('#kt-pv-when').value || '').trim() || null,
+        });
+        msg.style.color = '#166534';
+        msg.textContent = (r && r.message) || 'Thank you — this is on the record.';
+        card.querySelector('#kt-pv-text').value = '';
+        meet.checked = false; note.style.display = 'none';
+      } catch (e) {
+        msg.style.color = '#B3261E';
+        msg.textContent = (e && e.message) || 'That could not be sent.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = was;
+      }
+    });
+  }
+
+  function renderActions(el, inc, role, base, viewOnly) {
     Dom.clear(el);
+
+    /* Read-only: one way back, and one deliberate step into acting. Nothing here
+       can change the record, so a director can open a report to check a detail
+       without the controls that notify a parent sitting under their thumb. */
+    if (viewOnly) {
+      const back = document.createElement('button');
+      back.className = 'btn btn-secondary';
+      back.style.marginRight = '8px';
+      back.dataset.ktIconized = '1';
+      back.dataset.ktInpage = '1';   // see the note on the twin below
+      back.textContent = _modal ? 'Done' : '← Back to incidents';
+      back.addEventListener('click', function () {
+        if (_modal) { Shell.Modal.close(); return; }
+        window.location.hash = '#incidents';
+      });
+      el.appendChild(back);
+
+      /* Reading the report cannot change anything, so it belongs here — this is
+         the screen a director lands on from the ⋮ View, and it had no way to reach
+         the PDF at all without leaving read-only.
+         Built directly rather than via addBtn(): addBtn leaves its button disabled
+         after a successful call, which is right for "Close incident" and wrong for
+         something you may want to open twice. */
+      const pdfBtn = document.createElement('button');
+      pdfBtn.className = 'btn btn-secondary';
+      pdfBtn.style.marginRight = '8px';
+      pdfBtn.dataset.ktIconized = '1';
+      pdfBtn.textContent = '📄 View report';
+      pdfBtn.addEventListener('click', function () { openReportPdf(inc, role, pdfBtn); });
+      el.appendChild(pdfBtn);
+
+      if (isDirector(role) || (isEducator(role) && inc.status === 'draft')) {
+        addBtn(el, '✏️ Open to take action', 'btn-primary', function () {
+          // In a dialog, step out of read-only in place rather than navigating away.
+          if (_modal) { _modal.viewOnly = false; return paintModal(); }
+          window.location.hash = '#incident-detail?id=' + inc.id;
+        });
+      }
+
+      const note = document.createElement('div');
+      note.style.cssText = 'margin-top:10px;font-size:12.5px;color:var(--kt-text-muted);';
+      note.textContent = 'You are reading this report. Nothing on this screen changes it.';
+      el.appendChild(note);
+      return;
+    }
 
     // Always offer a way back to the list — previously a director on an already
     // reviewed/notified incident saw only "Close", with no way to leave without
@@ -446,8 +1033,14 @@
     back.className = 'btn btn-secondary';
     back.style.marginRight = '8px';
     back.dataset.ktIconized = '1';
-    back.textContent = '← Back to incidents';
-    back.addEventListener('click', function () { window.location.hash = '#incidents'; });
+    // Moves between views in THIS screen; the shell's capture-phase back listener
+    // would otherwise claim the word "back" and cancel the handler below.
+    back.dataset.ktInpage = '1';
+    back.textContent = _modal ? 'Done' : '← Back to incidents';
+    back.addEventListener('click', function () {
+      if (_modal) { Shell.Modal.close(); return; }
+      window.location.hash = '#incidents';
+    });
     el.appendChild(back);
 
     // Staff: email the report to parent / director / agency admin.
@@ -457,34 +1050,51 @@
 
     if (isDirector(role)) {
       if (inc.status === 'submitted') {
-        addBtn(el, 'Mark reviewed', 'btn-primary', async () => {
-          const notes = prompt('Optional notes for the parent (leave blank to skip):');
-          await Api.post(base + '/incidents/' + inc.id + '/review', { director_notes: notes || null });
-          window.location.reload();
+        addBtn(el, '🔍 Review incident', 'btn-primary', function () {
+          openReviewDialog(inc, base);
         });
       }
       if (inc.status === 'director_reviewed' || inc.status === 'submitted') {
         addBtn(el, 'Notify parent', 'btn-success', async () => {
           if (!await KT.confirm('Send notification to the child\'s parents now?')) return;
           await Api.post(base + '/incidents/' + inc.id + '/notify-parent');
-          window.location.reload();
+          await afterAction();
         });
       }
       if (inc.status !== 'closed') {
-        addBtn(el, 'Close', 'btn-secondary', async () => {
-          if (!await KT.confirm('Close this incident?')) return;
-          await Api.post(base + '/incidents/' + inc.id + '/close');
-          window.location.reload();
+        /* "Close incident", not "Close" — beside a ⋮ menu and a modal, a button
+           called Close reads as "close this window" as often as not, and this one
+           ends the record. */
+        addBtn(el, '🔒 Close incident', 'btn-secondary', async () => {
+          await openCloseDialog(inc, base);
         });
       }
     }
 
     if (isEducator(role) && inc.status === 'draft') {
       addBtn(el, 'Submit for review', 'btn-primary', async () => {
-        if (!await KT.confirm('Submit this report to your director?')) return;
-        await Api.post(base + '/incidents/' + inc.id + '/submit');
-        window.location.reload();
+        if (!await KT.confirm({
+          title: 'Submit this report to your director?',
+          description: 'You will be asked to sign it. Your signature is stored with the record and appears on the printed report.',
+        })) { return; }
+        /* Signed BEFORE the request: backing out of the pad must leave the draft
+           exactly as it was, not submitted-but-unsigned. */
+        const sig = await askForSignature({
+          title: 'Sign this incident report',
+          subtitle: 'You are confirming this is your account of what happened.',
+          okLabel: 'Sign & submit',
+        });
+        if (!sig) { Dom.toast('Not submitted — the report needs your signature.', 'error'); return; }
+        await Api.post(base + '/incidents/' + inc.id + '/submit', { signature: sig });
+        Dom.toast('Submitted for review', 'success');
+        await afterAction();
       });
+    }
+
+    /* Already acknowledged? The signing is done, but the conversation may not be —
+       the response card stays available. */
+    if (isGuardian(role) && inc.status !== 'parent_notified' && inc.status !== 'draft') {
+      appendParentVoiceCard(el, inc, base);
     }
 
     if (isGuardian(role) && inc.status === 'parent_notified') {
@@ -519,6 +1129,8 @@
           'For our records, your IP address, browser, and timestamp will be saved with this acknowledgment.' +
         '</p>';
       el.appendChild(card);
+
+      appendParentVoiceCard(el, inc, base);
 
       // Signature pad (draw with mouse/finger). The drawn PNG is sent alongside
       // the typed name so the acknowledgment has a real signature + date.
@@ -562,7 +1174,7 @@
             signed_name: name, comment: comment || null, signature_data: sig,
           });
           Dom.toast('Acknowledged. Thank you.', 'success');
-          setTimeout(() => window.location.reload(), 800);
+          setTimeout(() => (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload()), 800);
         } catch (e) {
           Dom.toast((e && e.message) || 'Could not save', 'error');
           btn.disabled = false; btn.textContent = 'Acknowledge';
@@ -593,26 +1205,56 @@
     const role = ctx && ctx.role;
     const base = apiBase(role);
 
-    // Try to load roster for child dropdown
+    /* The child dropdown.
+
+       This asked /provider/bootstrap for rooms and flattened room.children — a key
+       that endpoint does not return — and then fell back to /parent/children, which
+       lists the children YOU are a guardian of. For an educator that is nobody, so
+       the dropdown was empty and an incident could not be filed against any child.
+
+       /provider/children is the educator's own roster and was never being called.
+       Ordered by who is asking, each step only used if the one before found nobody. */
     let children = [];
+    const pushAll = function (list) {
+      (Array.isArray(list) ? list : []).forEach(function (c) {
+        if (c && c.id && !children.some(function (x) { return x.id === c.id; })) { children.push(c); }
+      });
+    };
+
+    // 1. an educator's / provider's own roster
     try {
-      const r = await Api.get('/provider/bootstrap');
-      if (r && r.rooms) {
-        // bootstrap returns rooms with children -- flatten
-        r.rooms.forEach(function (room) {
-          if (Array.isArray(room.children)) {
-            room.children.forEach(function (c) { children.push(c); });
-          }
-        });
-      }
-    } catch (e) {
-      // Continue with empty children list
+      const r = await Api.get('/provider/children');
+      pushAll(r && (r.children || r.data));
+    } catch (e) {}
+
+    // 2. rooms, for the shapes that do carry their children
+    if (children.length === 0) {
+      try {
+        const r = await Api.get('/provider/bootstrap');
+        if (r && r.rooms) {
+          r.rooms.forEach(function (room) { pushAll(room && room.children); });
+        }
+      } catch (e) {}
     }
+
+    // 3. a director or admin sees the whole centre through enrolments
+    if (children.length === 0) {
+      try {
+        const r = await Api.get('/director/enrollments');
+        pushAll((r && r.enrollments || []).filter(function (e) {
+          return e.status === 'enrolled' || e.status === 'active';
+        }).map(function (e) {
+          return { id: e.child_id, first_name: e.first_name, last_name: e.last_name };
+        }));
+      } catch (e) {}
+    }
+
+    // 4. a guardian filing about their own child
     if (children.length === 0) {
       try {
         const r = await Api.get('/parent/children');
-        children = r.children || r.data || r || [];
-      } catch (e2) {}
+        pushAll(r && (r.children || r.data || r));
+      } catch (e) {}
     }
 
     const wrap = document.createElement('div');
@@ -720,11 +1362,28 @@
       const data = {};
       fd.forEach(function (v, k) { if (v !== '') data[k] = v; });
 
+      /* Sign FIRST, create second. Cancelling the pad then writes nothing at all
+         rather than leaving an orphan draft, and the form is still filled in
+         behind so they can sign, or switch to Save as draft. A draft is never
+         signed — it is still being written. */
+      let signature = null;
+      if (pendingSubmit) {
+        signature = await askForSignature({
+          title: 'Sign this incident report',
+          subtitle: 'You are confirming this is your account of what happened.',
+          okLabel: 'Sign & submit',
+        });
+        if (!signature) {
+          Dom.toast('Not submitted — the report needs your signature. You can still save it as a draft.', 'error');
+          return;
+        }
+      }
+
       try {
         const res = await Api.post(base + '/incidents', data);
         const inc = (res && res.data) || res;
         if (pendingSubmit) {
-          await Api.post(base + '/incidents/' + inc.id + '/submit');
+          await Api.post(base + '/incidents/' + inc.id + '/submit', { signature: signature });
           Dom.toast('Submitted for review', 'success');
         } else {
           Dom.toast('Saved as draft', 'success');
@@ -738,6 +1397,7 @@
 
   /* ===== Register ===== */
   window.KT = window.KT || {};
+  window.KT.openIncidentDialog    = openIncidentDialog;
   window.KT.renderIncidentsList   = renderIncidentsList;
   window.KT.renderIncidentDetail  = renderIncidentDetail;
   window.KT.renderIncidentNew     = renderIncidentNew;

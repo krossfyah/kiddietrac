@@ -49,11 +49,41 @@
     });
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  function within3mo(d) { if (!d) return false; var t = new Date(d + 'T00:00:00'); if (isNaN(t)) return false; return (Date.now() - t.getTime()) <= 92 * 86400000; }
+  /* Numeric parts, never `new Date('2026-08-31T00:00:00')` — kt-tz-global patches Date and
+     a date-only string parses as UTC, which shifts the day for anyone west of Greenwich. */
+  function within3mo(d) {
+    if (!d) return false;
+    var p = String(d).split('-');
+    if (p.length !== 3) return false;
+    var t = new Date(+p[0], +p[1] - 1, +p[2]).getTime();
+    if (isNaN(t)) return false;
+    return (Date.now() - t) <= 92 * 86400000;
+  }
   // Date-only: see KT.dayLabel.
   function fmtDate(s) { return (window.KT && KT.dayLabel) ? KT.dayLabel(s) : s; }
-  function newest(d) { var ns = forMe(d.entries).filter(function (e) { return e.type === 'new' && e.date; }).map(function (e) { return e.date; }).sort(); return ns.length ? ns[ns.length - 1] : ''; }
-  function seenDate() { try { return localStorage.getItem('kt_whatsnew_seen') || ''; } catch (e) { return ''; } }
+  /* THE SAME ENTRIES THE PANEL WILL SHOW — this is what makes the dot honest.
+
+     The dot was computed from every 'new' entry that had a date, while the panel renders
+     only those `within3mo`. The moment the newest entry aged past 92 days the two
+     disagreed: the badge stayed lit because a newest still existed, and opening it showed
+     an empty list. "Showing a new notification when there is nothing new" is exactly that
+     gap, and it is permanent once it starts — nothing new arrives to clear it.
+
+     One filter, used by both, so the dot cannot claim something the panel will not show.
+     (Anthony, 2026-09-09) */
+  function newest(d) {
+    var ns = forMe(d.entries)
+      .filter(function (e) { return e.type === 'new' && within3mo(e.date); })
+      .map(function (e) { return e.date; })
+      .sort();
+    return ns.length ? ns[ns.length - 1] : '';
+  }
+  /* Account-wide — see kt-markers.js. Reading the release notes on one device should not
+     leave the dot showing on another. */
+  function seenDate() {
+    if (window.KT && KT.markers) { return KT.markers.get('kt_whatsnew_seen'); }
+    try { return localStorage.getItem('kt_whatsnew_seen') || ''; } catch (e) { return ''; }
+  }
   function todayISO() {
     var d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
@@ -75,6 +105,7 @@
       var cur = seenDate();
       var v = n || cur || todayISO();
       if (cur && v < cur) { v = cur; }
+      if (window.KT && KT.markers) { KT.markers.set('kt_whatsnew_seen', v); return; }
       localStorage.setItem('kt_whatsnew_seen', v);
     } catch (e) { /* private mode — the dot is not worth an exception */ }
   }
@@ -92,6 +123,14 @@
     badge(false);
     load(function (d) {
       if (!d) { markSeen(null); return; }
+      /* MARKED READ HERE, the moment the data arrives — not after the overlay is built.
+
+         markSeen(d) used to run at the very bottom of this callback, after ~40 lines of
+         DOM building. Anything that threw in between (a malformed entry, a missing field)
+         left the panel open and the marker unwritten, so the dot came back on the next
+         sweep and kept coming back. Opening it IS the read; the rendering is just how it
+         is shown. (Anthony, 2026-09-09) */
+      markSeen(d);
       var news = forMe(d.entries).filter(function (e) { return e.type === 'new' && within3mo(e.date); }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
       var up = forMe(d.entries).filter(function (e) { return e.type === 'upcoming'; });
       var entry = function (e) {
@@ -120,8 +159,7 @@
       var close = function () { overlay.remove(); };
       modal.querySelector('#kt-wn-x').onclick = close;
       overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
-      markSeen(d);
-      badge(false);
+      badge(false);   // markSeen already ran, before any of this was built
     });
   }
 

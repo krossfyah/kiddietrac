@@ -725,7 +725,13 @@
   // (KT.ChatDock — the same floating window every other role uses), plus a top-bar
   // 💬 icon with an unread indicator that flashes the dock on new messages.
   function seenId() { try { return parseInt(localStorage.getItem('kt_sales_chat_seen') || '0', 10) || 0; } catch (e) { return 0; } }
-  function setSeen(id) { try { if (id > seenId()) localStorage.setItem('kt_sales_chat_seen', String(id)); } catch (e) {} paintChatBadge(0); }
+  /* Account-wide — see kt-markers.js. A numeric id, so the comparison is numeric on both
+     sides: "10" is not less than "9" here, whatever string ordering would say. */
+  function setSeen(id) {
+    if (window.KT && KT.markers) { KT.markers.set('kt_sales_chat_seen', String(id)); paintChatBadge(0); return; }
+    try { if (id > seenId()) { localStorage.setItem('kt_sales_chat_seen', String(id)); } } catch (e) {}
+    paintChatBadge(0);
+  }
   function paintChatBadge(n) {
     var b = document.getElementById('kt-sales-chat-badge'); if (!b) return;
     if (n > 0) { b.textContent = n > 99 ? '99+' : String(n); b.hidden = false; b.style.display = ''; }

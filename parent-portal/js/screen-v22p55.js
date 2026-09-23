@@ -30,6 +30,72 @@
     });
   };
 
+  /* WHICH CHILD? — the alerts list only shows children who already have something on
+     file, so adding a record means naming somebody who is not on it. A searchable list of
+     every enrolled child, rather than a free-text box: a health record has to attach to a
+     real child, and a typed name is how it attaches to the wrong one. */
+  async function pickChildForHealth(onSaved) {
+    const ov = document.createElement('div');
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;'
+      + 'justify-content:center;padding:20px;overflow-y:auto;background:rgba(8,20,40,.55);';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;margin:auto;'
+      + 'overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="padding:18px 22px;border-bottom:1px solid #EEF2F7;display:flex;align-items:center;gap:12px;">'
+      +   '<div><div style="font-size:17px;font-weight:800;color:#0F172A;">Which child?</div>'
+      +   '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">Pick a child to record an allergy, dietary need or health alert.</div></div>'
+      +   '<button class="cp-x" type="button" aria-label="Close" data-kt-iconized="1" style="margin-left:auto;background:#F1F5F9;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;cursor:pointer;color:#475569;">✕</button>'
+      + '</div>'
+      + '<div style="padding:14px 22px 18px;">'
+      +   '<input class="cp-q" placeholder="Search by name…" style="width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:13.5px;box-sizing:border-box;">'
+      +   '<div class="cp-list" style="margin-top:12px;max-height:min(52vh,460px);overflow-y:auto;" data-kt-scroll="1">'
+      +     '<div style="padding:20px;text-align:center;color:#94A3B8;font-size:13px;">Loading children…</div></div>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('.cp-x').addEventListener('click', () => ov.remove());
+
+    const listEl = ov.querySelector('.cp-list');
+    const q = ov.querySelector('.cp-q');
+    let kids = [];
+    try {
+      /* /admin/children is the agency-wide list — already scoped server-side to the
+         active agency's centres. There is no /director/children. */
+      const r = await Api.get('/admin/children');
+      kids = (r && (r.children || r.data)) || [];
+    } catch (e) {
+      listEl.innerHTML = '<div style="padding:18px;color:#B91C1C;font-size:13px;">Could not load children: '
+        + esc((e && e.message) || '') + '</div>';
+      return;
+    }
+
+    function paint() {
+      const term = (q.value || '').trim().toLowerCase();
+      const show = kids.filter(k => !term
+        || ((k.first_name || '') + ' ' + (k.last_name || '')).toLowerCase().indexOf(term) !== -1);
+      if (!show.length) {
+        listEl.innerHTML = '<div style="padding:18px;text-align:center;color:#64748B;font-size:13px;">No child matches that.</div>';
+        return;
+      }
+      listEl.innerHTML = show.map(k => `<button type="button" data-id="${k.id}"
+        style="display:flex;width:100%;align-items:center;gap:10px;padding:10px 12px;border:0;border-top:1px solid #F1F5F9;
+        background:none;cursor:pointer;font:inherit;text-align:left;">
+        <span style="font-weight:700;color:#0F172A;">${esc(((k.preferred_name || k.first_name) || '') + ' ' + (k.last_name || ''))}</span>
+        <span style="margin-left:auto;font-size:12px;color:#94A3B8;">${esc(k.room_name || k.centre_name || '')}</span>
+      </button>`).join('');
+      listEl.querySelectorAll('button[data-id]').forEach(b => {
+        b.addEventListener('click', () => {
+          const k = kids.filter(x => String(x.id) === b.getAttribute('data-id'))[0];
+          ov.remove();
+          if (KT.healthEditor) { KT.healthEditor.open(k, { onSaved: onSaved }); }
+        });
+      });
+    }
+    q.addEventListener('input', paint);
+    paint();
+    q.focus();
+  }
+
   // ============================ Allergy alerts (rewrite) ============================
   async function renderAllergyAlerts(main) {
     main.setAttribute('data-kt-pretty', '1');
@@ -49,8 +115,24 @@
         <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Dietary</div><div class="kt-kpi-value">${dietary}</div></div>
         <div class="kt-kpi"><div class="kt-kpi-label">Children affected</div><div class="kt-kpi-value">${list.length}</div></div>
       </div>
-      <div id="kt-allergy-list" data-kt-list="1">${list.length ? '' : '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No active alerts.</div>'}</div>
+      <div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;flex-wrap:wrap;">
+        <div style="font-size:13px;color:#64748B;">Anything recorded here reaches the educator's roster, the day brief and the weekly menu.</div>
+        <button id="kt-allergy-add" type="button" data-kt-iconized="1" style="margin-left:auto;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13.5px;cursor:pointer;">+ Add a record</button>
+      </div>
+      <div id="kt-allergy-list" data-kt-list="1">${list.length ? '' : '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No active alerts. Use <strong>+ Add a record</strong> to note an allergy, a dietary need or a health alert.</div>'}</div>
     </div>`;
+
+    /* ADDING A RECORD FROM HERE.
+
+       This screen could only ever READ. An allergy had to be typed into the child's record
+       at enrolment as a comma-separated string, and severity, reaction, EpiPen location
+       and action plan — all of which the data model has carried since v22p1 — had no way
+       in at all. The editor is the same one the child record opens, so the two cannot
+       describe a child differently. (Anthony, 2026-09-10) */
+    const addBtn = main.querySelector('#kt-allergy-add');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => pickChildForHealth(() => renderAllergyAlerts(main)));
+    }
     if (list.length) {
       const renderAllergyCard = (c) => `<div class="kt-alert">
         <div class="kt-alert-title">${esc(c.first_name)} ${esc(c.last_name)}</div>
@@ -58,15 +140,28 @@
           const sevDot = t.severity === 'anaphylactic' ? '🚨 ' : t.severity === 'severe' ? '⚠ ' : '';
           return `<span class="kt-tag severity-${esc(t.severity || 'note')} kind-${esc(t.kind || '')}">${sevDot}<strong>${esc((t.kind || '').toUpperCase())}</strong>&nbsp;${esc(t.label || '')}</span>`;
         }).join('')}</div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+        <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:8px;">
+          <button type="button" data-child-edit="${c.id}" class="kt-act-icon kt-icon-tip" data-kttip="Edit allergies &amp; dietary needs" aria-label="Edit allergies and dietary needs">✏️</button>
           <button type="button" data-child-view="${c.id}" class="kt-act-icon kt-act-info kt-icon-tip" data-kttip="View child record" aria-label="View child record">👁️</button>
         </div></div>`;
       const listEl = main.querySelector('#kt-allergy-list');
       (window.KT && KT.cardPager)
         ? KT.cardPager(listEl, list, renderAllergyCard, 10)
         : (listEl.innerHTML = list.map(renderAllergyCard).join(''));
-      // Each alert derives from a child's record — the kebab's action opens it.
       listEl.addEventListener('click', function (e) {
+        /* Edit in place — the reason somebody is on this screen is almost always to change
+           one of these, and sending them to the child record to do it loses the list they
+           were working through. */
+        const ed = e.target.closest && e.target.closest('[data-child-edit]');
+        if (ed) {
+          const id = ed.getAttribute('data-child-edit');
+          const row = list.filter(x => String(x.id) === String(id))[0] || { id: id };
+          if (KT.healthEditor) {
+            KT.healthEditor.open(row, { onSaved: () => renderAllergyAlerts(main) });
+          }
+          return;
+        }
+        // Each alert derives from a child's record — this opens it.
         const b = e.target.closest && e.target.closest('[data-child-view]');
         if (b) window.location.hash = '#child-detail?id=' + b.getAttribute('data-child-view');
       });
@@ -333,15 +428,50 @@
       <div class="kt-card">
         <div class="kt-card-header"><h3 class="kt-card-title">Recent feedback</h3></div>
         <table>
-          <thead><tr><th>When</th><th>Family</th><th>Rating</th><th>Comment</th></tr></thead>
+          <thead><tr><th>When</th><th>Family</th><th>Rating</th><th>Comment</th><th>Educator sees it?</th></tr></thead>
           <tbody>${ratings.slice(0, 50).map(f => `<tr>
             <td>${fmtDate(f.created_at)}</td>
             <td>${esc(f.family_name || 'Anonymous')}</td>
             <td>${'⭐'.repeat(f.rating || 0)}</td>
-            <td style="color:#475569;">${esc(f.comment || '')}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#64748B;">No feedback yet.</td></tr>'}</tbody>
+            <td style="color:#475569;">${esc(f.comment || '')}${
+              f.tomorrow_note
+                ? `<div style="margin-top:6px;font-size:12.5px;color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:6px 9px;"><strong>For tomorrow:</strong> ${esc(f.tomorrow_note)}</div>`
+                : ''
+            }</td>
+            <td style="white-space:nowrap;">${
+              /* Praise auto-releases; anything critical waits here until a director
+                 decides to pass it on. Without this control the hold had no key —
+                 held feedback would never have reached the educator at all. */
+              f.released_at
+                ? '<span style="font-size:12px;color:#16A34A;font-weight:700;">✓ Released</span>'
+                : `<button type="button" class="kt-fb-release" data-id="${f.id}" style="padding:5px 11px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;border-radius:7px;border:1px solid #BFDBFE;background:#EFF6FF;color:#1E40AF;">Release to educator</button>`
+            }</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:40px;color:#64748B;">No feedback yet.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
+
+    /* Wire the release buttons. Confirms first: releasing shows the educator words
+       written about them, and it cannot be taken back. */
+    main.querySelectorAll('.kt-fb-release').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        const ok = await KT.confirm({
+          title: 'Release this to the educator?',
+          description: 'They will see the parent\'s words as written. This cannot be undone.',
+          okLabel: 'Release',
+        });
+        if (!ok) return;
+        b.disabled = true; b.textContent = 'Releasing…';
+        try {
+          await Api.post('/feedback/' + b.getAttribute('data-id') + '/release', {});
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Released to the educator', 'success');
+          renderFeedback(main);
+        } catch (e) {
+          b.disabled = false; b.textContent = 'Release to educator';
+          const msg = (e && e.message) || 'Could not release that.';
+          if (KT.Dom && KT.Dom.toast) KT.Dom.toast(msg, 'error'); else alert(msg);
+        }
+      });
+    });
   }
 
   // ============================ AI doc auto-link UI (NEW) ============================

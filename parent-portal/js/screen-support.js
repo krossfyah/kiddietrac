@@ -138,6 +138,7 @@
           el('div', { style: 'font-size:14px;color:#64748b;line-height:1.5;max-width:320px;margin:0 auto 22px;' }, ['Your feedback has been sent to your centre team. They’ll follow up if needed.']),
         ]);
         var back = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6FB2;font-weight:700;border-radius:12px;padding:12px 22px;cursor:pointer;font-size:14px;' }, ['Back to home']);
+        back.dataset.ktInpage = '1';   // not history-back: it goes home, deliberately
         back.addEventListener('click', function () { location.hash = '#home'; });
         ok.appendChild(back);
         main.appendChild(ok);

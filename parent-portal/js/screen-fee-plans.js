@@ -14,7 +14,8 @@
     ['weekly', 'Weekly'], ['biweekly', 'Bi-weekly'], ['monthly', 'Monthly'], ['one_time', 'One-time'],
   ];
   function freqLabel(v) { var f = FREqS.filter(function (x) { return x[0] === v; })[0]; return f ? f[1] : v; }
-  function money(n) { n = Number(n) || 0; try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(n); } catch (e) { return '$' + n.toFixed(2); } }
+  function money(n) { n = Number(n) || 0; try { return new Intl.NumberFormat('en-CA', {  /* pinned: `undefined` follows the BROWSER, so CAD renders '$' on an en-CA
+                                       machine and 'CA$' on en-US — the same amount, two ways */ style: 'currency', currency: 'CAD' }).format(n); } catch (e) { return '$' + n.toFixed(2); } }
   function inputStyle() { return 'width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;'; }
   function label(t) { return Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;' }, t); }
 
@@ -22,7 +23,20 @@
 
   function render(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1100px;margin:0 auto;' });
+    /* LEFT-ALIGNED, AND NO HORIZONTAL PADDING WHEN HOSTED.
+
+       Two separate things pushed this pane out of line with everything else under
+       Billing. `margin:0 auto` CENTRED it, so on a wide screen the content drifted
+       right while the subtab strip above stayed left. And the pane is rendered INSIDE
+       #bs-pane, which already sits in a container with 24px of side padding — so its
+       own 24px stacked on top and the content started 48px in, a visible step to the
+       right of the tabs naming it.
+
+       Hosted: vertical padding only, and the host's own padding does the aligning.
+       Standalone (its own screen, no host): keep the 24px so it does not hug the
+       window edge. (Anthony, 2026-09-09) */
+    var _hosted = !!(container && container.closest && container.closest('#bs-pane'));
+    var wrap = Dom.el('div', { style: 'padding:24px ' + (_hosted ? '0' : '24px') + ';max-width:1100px;' });
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1F6080 0%,#16637A 70%,#0EA5A0 100%);' });

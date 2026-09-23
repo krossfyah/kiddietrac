@@ -73,16 +73,74 @@
         const ar = await Api.get(`/operations/allergy-alerts?centre_id=${forCid}`);
       const kids = (ar && ar.data) || [];
       if (kids.length) {
-        const chip = (t) => { const hot = t.severity === 'severe' || t.severity === 'high'; return `<span style="display:inline-block;background:${hot ? '#FEE2E2' : '#FEF3C7'};color:${hot ? '#991B1B' : '#92400E'};padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;margin:1px 4px 1px 0;">${esc(t.label)}</span>`; };
+        /* THE SEVERITIES IT WAS CHECKING FOR DO NOT EXIST.
+
+           This tested `severity === 'severe' || 'high'`. The values the health record
+           actually stores are mild / moderate / anaphylactic — so nothing ever matched,
+           and an ANAPHYLACTIC allergy was drawn in the same soft amber as a mild one on
+           the very screen where somebody chooses what to feed the child. On this screen,
+           of all of them, the worst case has to be the one that stands out.
+
+           Dietary needs are separated from allergies as well: "vegetarian" and "peanuts"
+           are different kinds of problem and were being shown identically.
+           (Anthony, 2026-09-10) */
+        const chip = (t) => {
+          const sev = String(t.severity || '').toLowerCase();
+          const dietary = t.kind === 'dietary';
+          let bg = '#FEF3C7', fg = '#92400E', mark = '';
+          if (sev === 'anaphylactic' || sev === 'severe' || sev === 'high') {
+            bg = '#FEE2E2'; fg = '#991B1B'; mark = '🚨 ';
+          } else if (sev === 'moderate') {
+            bg = '#FEF3C7'; fg = '#92400E'; mark = '⚠ ';
+          } else if (dietary) {
+            bg = '#E0F2FE'; fg = '#075985';
+          }
+          return `<span style="display:inline-block;background:${bg};color:${fg};padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;margin:1px 4px 1px 0;">${mark}${esc(t.label)}</span>`;
+        };
         allergyHtml = `<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:12px 14px;margin:12px 0;">
-          <div style="font-weight:800;font-size:13px;color:#9A3412;">⚠️ Allergy &amp; dietary reminders <span style="font-weight:600;color:#C2701C;">· ${kids.length} ${kids.length === 1 ? 'child' : 'children'}</span></div>
+          <div style="font-weight:800;font-size:13px;color:#9A3412;">⚠️ Allergy &amp; dietary reminders <span style="font-weight:600;color:#C2701C;">· ${kids.length} ${kids.length === 1 ? 'child' : 'children'}</span>${
+            (() => {
+              /* Said out loud rather than left to be counted off the chips below. */
+              const ana = kids.filter(k => (k.tags || []).some(t => String(t.severity || '').toLowerCase() === 'anaphylactic')).length;
+              return ana ? `<span style="margin-left:8px;background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;border-radius:999px;padding:1px 9px;font-size:11px;font-weight:800;">🚨 ${ana} anaphylactic</span>` : '';
+            })()
+          }</div>
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:7px;">
             ${kids.map(k => `<div style="font-size:12.5px;color:#7C2D12;"><strong>${esc((k.first_name || '') + ' ' + String(k.last_name || '').charAt(0) + (k.last_name ? '.' : ''))}</strong> — ${(k.tags || []).map(chip).join('') || '<span style="color:#9A3412;">alert on file</span>'}</div>`).join('')}
           </div>
         </div>`;
       }
+        /* An empty alert list is not a clean bill of health.
+           Nobody in this agency has any allergy or dietary information recorded, so this
+           panel simply did not render — and an educator planning a week of meals saw a
+           menu editor with no warnings on it, which reads as "nothing to avoid". The
+           honest statement is that we have not asked, and that belongs on the screen
+           where the food is being chosen. (Anthony, 2026-08-26) */
+        allergyHtml += unrecordedPanel(ar);
       } catch (e) {}
       return allergyHtml;
+    }
+
+    /**
+     * The children this centre has recorded nothing for.
+     *
+     * Deliberately amber, not red: this is not an emergency, it is an unanswered
+     * question — and styling it as an alert next to real allergy alerts would dilute
+     * the ones that mean a child could be harmed.
+     */
+    function unrecordedPanel(ar) {
+      const missing = (ar && ar.unrecorded) || [];
+      if (!missing.length) { return ''; }
+      const names = missing.map(k => esc((k.first_name || '') + ' '
+        + String(k.last_name || '').charAt(0) + (k.last_name ? '.' : ''))).join(', ');
+      return `<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:12px 14px;margin:12px 0;">
+        <div style="font-weight:800;font-size:13px;color:#92400E;">Allergy information not recorded
+          <span style="font-weight:600;color:#B45309;">· ${missing.length} ${missing.length === 1 ? 'child' : 'children'}</span></div>
+        <div style="margin-top:6px;font-size:12.5px;color:#78350F;line-height:1.55;">
+          Nothing has been recorded for ${names}. That is not the same as having no allergies —
+          please confirm with their parents before planning around it.
+        </div>
+      </div>`;
     }
 
     async function load() {
@@ -92,7 +150,11 @@
         Api.get(`/operations/menu?centre_id=${cid}&week_start=${weekStartStr}`).catch(() => ({})),
         allergyPanel(cid),
       ]);
-      const week = r.data || { status: 'draft', notes: '' };
+      /* A week nobody has created yet opens as PUBLISHED, so an educator who fills
+         it in and presses Save has actually submitted it to families. It used to
+         default to draft, which meant the menu was saved and then seen by no one.
+         Safe: the API refuses to publish a week with no meals. */
+      const week = r.data || { status: 'published', notes: '' };
       // Times live on the week, and a week that has not set its own inherits the last
       // week that did — a centre types its timetable once, not every Monday.
       const mealTimes = r.meal_times || {};
@@ -110,12 +172,12 @@
       const dateOf = (dow) => { const d = new Date(cur); d.setDate(d.getDate() + (dow - 1)); return d; };
       const HEAD = 'padding:9px 8px;border-bottom:2px solid #E2E8F0;font-size:12px;color:#475569;';
 
-      let table = `<table data-kt-no-bulk data-kt-no-filter style="min-width:${150 + cols.length * 116}px;width:100%;border-collapse:collapse;margin-top:12px;border:1px solid #E7EDF3;border-radius:12px;overflow:hidden;">
+      let table = `<table data-kt-no-bulk data-kt-no-filter data-kt-no-kebab style="min-width:${150 + cols.length * 116}px;width:100%;border-collapse:collapse;margin-top:12px;border:1px solid #E7EDF3;border-radius:12px;overflow:hidden;">
         <thead><tr style="background:#F1F5F9;"><th style="text-align:left;${HEAD}position:sticky;left:0;background:#F1F5F9;z-index:1;">Meal</th>`;
       cols.forEach(c => {
         const dt = dateOf(c.dow);
         const isToday = _ymd(dt) === todayStr;
-        table += `<th style="text-align:left;${HEAD}${isToday ? 'background:#E0F2FE;box-shadow:inset 0 3px 0 #1F6080;' : ''}">
+        table += `<th class="${isToday ? 'kt-today-cell' : ''}" style="text-align:left;${HEAD}">
           <div style="font-weight:800;color:${isToday ? '#1F6080' : '#0D1B2A'};">${c.label}${isToday ? ' · today' : ''}</div>
           <div style="font-size:11px;font-weight:600;color:#64748B;">${dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div>
         </th>`;
@@ -123,20 +185,47 @@
       table += `</tr></thead><tbody>`;
       // Banded rows. Five meals of identical boxes read as one grey field otherwise, and
       // losing your place mid-row is how Tuesday's lunch ends up under Wednesday.
+      /* A ROW YOU CAN FIND AGAIN. Banding on parity alone was nearly invisible and
+         said nothing about WHICH meal you were looking at, which is what you need when
+         your eye returns to a seven-column grid. Muted on purpose: these sit behind text
+         all day and must not compete with the "today" column, which stays the loudest
+         thing here. */
+      const MEAL_TINT = {
+        breakfast: '#FDF7EC', morning_snack: '#F4F9F0', lunch: '#EDF4FA',
+        afternoon_snack: '#F6F4FA', dinner: '#F1F5F7',
+      };
+      const MEAL_EDGE = {
+        breakfast: '#DFAE62', morning_snack: '#8FBE72', lunch: '#6F9CBD',
+        afternoon_snack: '#9C8FBE', dinner: '#8A9FAC',
+      };
       meals.forEach((m, mi) => {
-        const band = mi % 2 ? '#FFFFFF' : '#FAFCFE';
+        const band = MEAL_TINT[m] || '#FFFFFF';
+        const edge = MEAL_EDGE[m] || '#E5E7EB';
         table += `<tr style="background:${band};">
-          <td style="padding:8px;border-bottom:1px solid #EDF2F7;font-size:12px;position:sticky;left:0;background:${band};z-index:1;">
+          <td style="padding:8px 8px 8px 10px;border-bottom:1px solid #EDF2F7;border-left:4px solid ${edge};font-size:12px;position:sticky;left:0;background:${band};z-index:1;">
             <div style="font-weight:700;text-transform:capitalize;color:#0D1B2A;">${m.replace('_', ' ')}</div>
+            <!-- A bare clock under a meal name says nothing about what it is for. The
+                 aria-label always covered screen readers; this covers everyone else. -->
+            <div style="margin-top:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#94A3B8;">Serves at</div>
             <input data-meal-time="${m}" type="time" value="${esc(mealTimes[m] || '')}" aria-label="${m.replace('_', ' ')} serving time"
-                   style="margin-top:4px;width:104px;box-sizing:border-box;padding:3px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11.5px;color:#475569;background:#fff;">
+                   style="margin-top:2px;width:124px;box-sizing:border-box;padding:3px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11.5px;color:#475569;background:#fff;">
           </td>`;
         cols.forEach(c => {
           const it = itemsByDayMeal[`${c.dow}-${m}`] || {};
           const isToday = _ymd(dateOf(c.dow)) === todayStr;
-          table += `<td style="padding:6px 4px;border-bottom:1px solid #EDF2F7;min-width:112px;${isToday ? 'background:rgba(224,242,254,.45);' : ''}">
-            <input data-d="${c.dow}" data-m="${m}" data-f="name" placeholder="—" value="${esc(it.name || '')}" style="width:100%;box-sizing:border-box;padding:6px;border:1px solid #E5E7EB;border-radius:4px;font-size:12px;">
-            <input data-d="${c.dow}" data-m="${m}" data-f="allergens" placeholder="allergens" value="${esc(it.allergens || '')}" style="width:100%;box-sizing:border-box;padding:4px 6px;border:1px solid #FEF3C7;border-radius:4px;font-size:11px;margin-top:3px;color:#92400E;">
+          /* The inputs stay — hidden — because Save collects from
+             input[data-d][data-m][data-f=...] and a hidden input still has .value. The
+             dialog writes into these and repaints the button, so there is one source of
+             truth and the save path is untouched. */
+          table += `<td class="${isToday ? 'kt-today-cell' : ''}" style="padding:6px 4px;border-bottom:1px solid #EDF2F7;min-width:132px;">
+            <input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="name" value="${esc(it.name || '')}">
+            <input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="allergens" value="${esc(it.allergens || '')}">
+            <button type="button" class="mp-cell" data-cd="${c.dow}" data-cm="${m}"
+                    aria-label="${it.name ? 'Edit' : 'Add'} ${m.replace('_', ' ')} for ${c.label}"
+                    style="width:100%;min-height:48px;box-sizing:border-box;text-align:left;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:7px 8px;font:inherit;cursor:pointer;">
+              <span class="mp-cell-name" style="display:block;font-size:12px;line-height:1.25;color:${it.name ? '#0D1B2A' : '#94A3B8'};font-weight:${it.name ? '600' : '400'};">${it.name ? esc(it.name) : '+ Add'}</span>
+              <span class="mp-cell-alg" style="display:block;font-size:11px;line-height:1.2;color:#92400E;margin-top:2px;">${it.allergens ? '\u26A0 ' + esc(it.allergens) : ''}</span>
+            </button>
           </td>`;
         });
         table += '</tr>';
@@ -161,14 +250,15 @@
           ${isThis ? '' : `<button id="mp-today" style="height:28px;border:none;background:#fff;border-radius:7px;padding:0 10px;font-size:12px;cursor:pointer;color:#1F6080;font-weight:600;margin-left:4px;">This week</button>`}
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px;">
-          <label style="font-size:12.5px;color:#374151;font-weight:600;display:flex;align-items:center;gap:7px;">Status
-            <select id="mp-status" style="height:36px;padding:0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box;vertical-align:middle;">
+          ${!r.data ? '<span style="font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;background:#F1F5F9;color:#475569;padding:4px 10px;border-radius:20px;" title="Nothing has been saved for this week yet.">Not saved yet</span>' : `<span style="font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:4px 10px;border-radius:20px;background:${week.status === 'published' ? '#DCFCE7' : '#F1F5F9'};color:${week.status === 'published' ? '#166534' : '#475569'};">${week.status === 'published' ? 'Published' : (week.status === 'archived' ? 'Archived' : 'Draft')}</span>`}
+          <label style="font-size:12.5px;color:#374151;font-weight:600;display:flex;align-items:center;gap:7px;" title="Published weeks are visible to families. Draft is only visible to staff.">${!r.data ? 'Save as' : 'Status'}
+            <select id="mp-status" style="height:36px !important;min-height:36px !important;min-width:148px;flex:0 0 auto;padding:0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box;vertical-align:middle;">
               <option value="draft" ${week.status === 'draft' ? 'selected' : ''}>Draft</option>
               <option value="published" ${week.status === 'published' ? 'selected' : ''}>Published</option>
               <option value="archived" ${week.status === 'archived' ? 'selected' : ''}>Archived</option>
             </select>
           </label>
-          <button id="mp-save" class="kt-icon-tip" title="Save menu" data-kttip="Save menu" aria-label="Save menu" style="height:36px;width:36px;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;box-shadow:0 6px 14px -8px rgba(31,96,128,.85);">💾</button>
+          <button id="mp-edit" class="kt-btn kt-btn-secondary kt-btn-sm" data-kt-iconized="1" style="height:36px;flex:0 0 auto;margin-right:6px;white-space:nowrap;">✏️ Edit</button><button id="mp-save" title="Save menu" aria-label="Save menu" style="height:36px;flex:0 0 auto;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0 16px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:7px;justify-content:center;vertical-align:middle;white-space:nowrap;box-shadow:0 6px 14px -8px rgba(31,96,128,.85);">💾 Save menu</button>
         </div>
         <div id="mp-msg" style="font-size:12.5px;color:#047857;min-height:16px;margin-top:7px;"></div>
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">${table}</div>
@@ -191,6 +281,111 @@
         };
       }
 
+      /* The grid is READ far more often than it is changed, and a table made of form
+         controls invites an accidental edit — one stray keystroke rewrites the week.
+         The inputs stay exactly where they are; only their appearance and readOnly
+         flag change, so the save handler and every data-d/data-m attribute below are
+         untouched. */
+      var _menuEditing = false;
+      function applyMenuMode() {
+        /* EVERYTHING THAT CAN CHANGE THE WEEK, not just the text inputs. The dish cells
+           are BUTTONS (they open a dialog), so they sat outside the old input-only sweep
+           and were live before Edit was pressed. The serving times use
+           [data-meal-time], which [data-m] never matched, and the status select and
+           notes were never locked at all. (Anthony, 2026-09-08) */
+        Array.prototype.forEach.call(document.querySelectorAll('button.mp-cell'), function (b) {
+          b.disabled = !_menuEditing;
+          b.style.cursor = _menuEditing ? 'pointer' : 'default';
+          b.style.borderColor = _menuEditing ? '#E5E7EB' : 'transparent';
+          b.style.background = _menuEditing ? '#fff' : 'transparent';
+          var n = b.querySelector('.mp-cell-name');
+          if (n) {
+            var has = !!(b.parentElement.querySelector('input[data-f="name"]') || {}).value;
+            /* An empty slot in a read-only view is a FACT, not an invitation. */
+            if (!has) { n.textContent = _menuEditing ? '+ Add' : '—'; }
+          }
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('input[data-meal-time], #mp-notes'), function (t) {
+          t.readOnly = !_menuEditing;
+          t.style.border = _menuEditing ? '1px solid #E5E7EB' : '1px solid transparent';
+          t.style.background = _menuEditing ? '#fff' : 'transparent';
+        });
+        var st = document.getElementById('mp-status');
+        if (st) { st.disabled = !_menuEditing; st.style.opacity = _menuEditing ? '' : '.65'; }
+
+        Array.prototype.forEach.call(document.querySelectorAll('#mp-grid input, table input[data-m]'), function (i) {
+          i.readOnly = !_menuEditing;
+          if (_menuEditing) {
+            i.style.border = i.getAttribute('data-f') === 'allergens' ? '1px solid #FEF3C7' : '1px solid #E5E7EB';
+            i.style.background = '#fff';
+            i.style.cursor = '';
+          } else {
+            i.style.border = '1px solid transparent';
+            i.style.background = 'transparent';
+            i.style.cursor = 'default';
+          }
+        });
+        var eb = document.getElementById('mp-edit');
+        var sb = document.getElementById('mp-save');
+        if (eb) { eb.innerHTML = _menuEditing ? '✓ Done' : '✏️ Edit'; }
+        if (sb) { sb.style.display = _menuEditing ? '' : 'none'; }
+      }
+      var _eb = document.getElementById('mp-edit');
+      if (_eb) { _eb.onclick = function () { _menuEditing = !_menuEditing; applyMenuMode(); }; }
+      applyMenuMode();
+
+      /* EDIT A DISH IN A DIALOG. Two stacked inputs in each of 35 cells is unusable
+         on a phone, where a cell is ~132px wide. The dialog writes back into the hidden
+         inputs, so Save below still collects exactly what it always did. */
+      main.querySelectorAll('button.mp-cell').forEach(btn => {
+        btn.onclick = () => {
+          const dow = btn.getAttribute('data-cd'), meal = btn.getAttribute('data-cm');
+          const nameIn = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="name"]`);
+          const algIn  = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="allergens"]`);
+          const dayLbl = (cols.find(c => String(c.dow) === String(dow)) || {}).label || '';
+          const mealLbl = meal.replace('_', ' ');
+
+          const ov = document.createElement('div');
+          ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;';
+          ov.innerHTML = `<div role="dialog" aria-modal="true" style="background:#fff;border-radius:16px;max-width:420px;width:100%;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden;">
+            <div style="padding:16px 20px;border-bottom:1px solid #EDF2F7;">
+              <div style="font-size:16px;font-weight:800;color:#0D1B2A;text-transform:capitalize;">${esc(mealLbl)} &middot; ${esc(dayLbl)}</div>
+              <div style="font-size:12.5px;color:#64748B;margin-top:2px;">What is being served, and anything families need to know about.</div>
+            </div>
+            <div style="padding:16px 20px;">
+              <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;">Dish</label>
+              <input id="mp-dish" value="${esc(nameIn.value)}" placeholder="e.g. Chicken and rice"
+                     style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;">
+              <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">Allergens</label>
+              <input id="mp-alg" value="${esc(algIn.value)}" placeholder="e.g. dairy, wheat"
+                     style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #FEF3C7;border-radius:9px;font:inherit;font-size:14px;color:#92400E;">
+              <div style="font-size:11.5px;color:#94A3B8;margin-top:6px;">Leave the dish empty to clear this slot.</div>
+            </div>
+            <div style="padding:14px 20px;border-top:1px solid #EDF2F7;display:flex;gap:8px;justify-content:flex-end;">
+              <button id="mp-x" style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px 16px;font:inherit;font-size:14px;color:#475569;cursor:pointer;">Cancel</button>
+              <button id="mp-ok" style="background:linear-gradient(135deg,#1F6080,#2c7894);border:0;border-radius:10px;padding:10px 20px;font:inherit;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">Done</button>
+            </div>
+          </div>`;
+          document.body.appendChild(ov);
+          const dish = ov.querySelector('#mp-dish');
+          dish.focus(); dish.select();
+          const close = () => ov.remove();
+          ov.querySelector('#mp-x').onclick = close;
+          ov.addEventListener('click', e => { if (e.target === ov) close(); });
+          ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+          ov.querySelector('#mp-ok').onclick = () => {
+            const nm = dish.value.trim(), ag = ov.querySelector('#mp-alg').value.trim();
+            nameIn.value = nm; algIn.value = ag;
+            const nEl = btn.querySelector('.mp-cell-name'), aEl = btn.querySelector('.mp-cell-alg');
+            nEl.textContent = nm || '+ Add';
+            nEl.style.color = nm ? '#0D1B2A' : '#94A3B8';
+            nEl.style.fontWeight = nm ? '600' : '400';
+            aEl.textContent = ag ? '\u26A0 ' + ag : '';
+            close();
+          };
+        };
+      });
+
       document.getElementById('mp-save').onclick = async () => {
         const items = [];
         main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach(inp => {
@@ -208,6 +403,10 @@
           });
           await Api.post('/operations/menu', { centre_id: cid, week_start: weekStartStr, status, notes: document.getElementById('mp-notes').value, items, meal_times });
           msg.textContent = status === 'published' ? 'Published — families notified.' : 'Saved.'; msg.style.color = '#047857';
+          /* Save IS the completion — no second confirmation. Only on success: a failed
+             save keeps the grid editable, because the work is still in the boxes and
+             dropping to read-only would look like it saved. (Anthony, 2026-09-08) */
+          _menuEditing = false; applyMenuMode();
         } catch (e) { msg.textContent = 'Save failed.'; msg.style.color = '#B91C1C'; }
       };
     }
@@ -293,9 +492,20 @@
   async function renderAllergyAlerts(main) {
     main.innerHTML = '<div style="padding:24px;">Loading alerts…</div>';
     const r = await Api.get('/operations/allergy-alerts').catch(() => ({ data: [] }));
+    const unrec = (r && r.unrecorded) || [];
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <h2 style="margin:0 0 6px;color:#B91C1C;">⚠ Allergy & dietary alerts</h2>
       <p style="color:#6B7280;font-size:13px;">${r.count || 0} child(ren) with active alerts. Display on the Today screen and in the kitchen.</p>
+      ${unrec.length ? `<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px 16px;margin:14px 0;">
+        <div style="font-weight:800;font-size:14px;color:#92400E;">Nothing recorded for ${unrec.length} enrolled ${unrec.length === 1 ? 'child' : 'children'}</div>
+        <div style="margin-top:6px;font-size:13px;color:#78350F;line-height:1.6;">
+          An empty list above means no allergies have been <em>entered</em> — not that there are none.
+          Confirm with each family and record it on the child&rsquo;s record, even when the answer is none.
+        </div>
+        <div style="margin-top:9px;font-size:12.5px;color:#92400E;">
+          ${unrec.map(k => esc(k.first_name + ' ' + (k.last_name || ''))).join(' · ')}
+        </div>
+      </div>` : ''}
       <div style="margin-top:18px;">
         ${(r.data || []).map(c => `<div style="border-left:4px solid #B91C1C;background:#FEF2F2;padding:14px 18px;margin-bottom:10px;border-radius:0 8px 8px 0;">
           <strong style="color:#991B1B;font-size:16px;">${esc(c.first_name)} ${esc(c.last_name)}</strong>
@@ -307,7 +517,9 @@
               const c = colors[t.kind] || { bg: '#F3F4F6', fg: '#374151' };
               return `<span style="background:${c.bg};color:${c.fg};padding:4px 10px;border-radius:6px;margin-right:6px;margin-bottom:4px;font-size:13px;display:inline-block;font-weight:600;">${sevDot} ${esc((t.kind || '').toUpperCase())}: ${esc(t.label || '')}</span>`;
             }).join('')}
-          </div></div>`).join('') || '<div style="color:#64748B;padding:20px;">No active allergy or dietary alerts.</div>'}
+          </div></div>`).join('') || (unrec.length
+          ? '<div style="color:#64748B;padding:20px;">No allergy or dietary information has been entered yet — see above.</div>'
+          : '<div style="color:#64748B;padding:20px;">No active allergy or dietary alerts.</div>')}
       </div>
     </div>`;
   }

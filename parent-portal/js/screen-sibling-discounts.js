@@ -51,7 +51,20 @@
 
   function renderSiblingDiscounts(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1100px;margin:0 auto;' });
+    /* LEFT-ALIGNED, AND NO HORIZONTAL PADDING WHEN HOSTED.
+
+       Two separate things pushed this pane out of line with everything else under
+       Billing. `margin:0 auto` CENTRED it, so on a wide screen the content drifted
+       right while the subtab strip above stayed left. And the pane is rendered INSIDE
+       #bs-pane, which already sits in a container with 24px of side padding — so its
+       own 24px stacked on top and the content started 48px in, a visible step to the
+       right of the tabs naming it.
+
+       Hosted: vertical padding only, and the host's own padding does the aligning.
+       Standalone (its own screen, no host): keep the 24px so it does not hug the
+       window edge. (Anthony, 2026-09-09) */
+    var _hosted = !!(container && container.closest && container.closest('#bs-pane'));
+    var wrap = Dom.el('div', { style: 'padding:24px ' + (_hosted ? '0' : '24px') + ';max-width:1100px;' });
     container.appendChild(wrap);
 
     wrap.appendChild(Dom.el('h1', { style: 'font-size:24px;margin:0 0 6px;' }, '👨‍👩‍👧 Sibling discount tiers'));

@@ -140,7 +140,31 @@
 
   // ── Composer ───────────────────────────────────────────────────────
   function openComposer(existing, container) {
-    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;' });
+    /* ONE COMPOSER, AND IT DOES NOT OUTLIVE THE SCREEN.
+
+       The overlay is appended to <body>, not to #appMain, so navigating away left it
+       sitting on top of whatever you went to — and pressing "+ New campaign" again stacked
+       a second one over the first, with the older copy still holding its own state
+       underneath. Found while testing the asset pickers: two live composers, eight picker
+       cards, and typing going into whichever happened to be on top.
+
+       So: any stale composer is removed before a new one opens, and the overlay tears
+       itself down on the next hash change. Marked with an id so both checks have something
+       to find. (Anthony, 2026-09-10) */
+    var stale = document.getElementById('kt-campaign-composer');
+    if (stale) { stale.remove(); }
+
+    var overlay = Dom.el('div', { id: 'kt-campaign-composer', style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;' });
+
+    /* Leaving the screen closes it. Registered once per composer and removed with it, so
+       a closed composer leaves no listener behind. */
+    var closeOnNav = function () { overlay.remove(); };
+    window.addEventListener('hashchange', closeOnNav);
+    var _origRemove = overlay.remove.bind(overlay);
+    overlay.remove = function () {
+      window.removeEventListener('hashchange', closeOnNav);
+      _origRemove();
+    };
     var modal = Dom.el('div', { style: 'background:white;border-radius:16px;max-width:920px;width:100%;max-height:calc(100vh - 48px);overflow-y:auto;box-shadow:0 12px 36px rgba(0,0,0,.25);' });
     overlay.appendChild(modal);
 
@@ -189,35 +213,31 @@
     row2.appendChild(chWrap);
     body.appendChild(row2);
 
-    // Hero image
-    body.appendChild(labelEl('Hero image (optional)'));
-    var heroWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;margin-bottom:14px;' });
-    var heroPreview = Dom.el('div', { style: 'width:84px;height:60px;border-radius:8px;background:#F3F4F6;background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:22px;flex-shrink:0;' });
-    if (existing && existing.hero_image_url) {
-      heroPreview.style.backgroundImage = 'url(' + absUrl(existing.hero_image_url) + ')';
-    } else {
-      heroPreview.textContent = '🖼';
-    }
-    heroWrap.appendChild(heroPreview);
-    var heroBtn = Dom.el('button', { type: 'button', style: btnSecondary() }, existing && existing.hero_image_url ? 'Change image' : 'Upload image');
-    var heroFile = Dom.el('input', { type: 'file', accept: 'image/*', style: 'display:none;' });
+    /* Declared before the first picker, not after.
+
+       This used to sit further down, beside the header and footer selects that were its
+       only readers. Moving the hero onto the same picker made it the FIRST reader — and
+       `var` hoists the declaration without the assignment, so assetState was undefined
+       when the hero picker painted itself: "Cannot read properties of undefined (reading
+       'list')", and the whole composer failed to open. */
+    var assetState = { header: null, footer: null, list: [] };
+
+    /* HERO IMAGE — KEPT, NOT THROWN AWAY.
+
+       This used to post straight to /marketing/images, which returns a URL and keeps no
+       record: the picture existed, nothing listed it, and the next campaign that wanted
+       the same banner had to go and find the original file again. A hero is the same kind
+       of thing as a header — an image an agency reuses — so it is now saved as a marketing
+       asset and picked from the same library, with the picture itself on screen rather
+       than a filename in a dropdown. (Anthony, 2026-09-10) */
     var heroUrl = existing ? (existing.hero_image_url || '') : '';
-    heroBtn.addEventListener('click', function () { heroFile.click(); });
-    heroFile.addEventListener('change', function () {
-      var f = heroFile.files[0]; if (!f) return;
-      var fd = new FormData(); fd.append('image', f);
-      heroBtn.disabled = true; heroBtn.textContent = 'Uploading…';
-      Api.postForm('/marketing/images', fd).then(function (r) {
-        heroUrl = r.url;
-        heroPreview.style.backgroundImage = 'url(' + absUrl(r.url) + ')';
-        heroPreview.textContent = '';
-        heroBtn.textContent = 'Change image';
-      }).catch(function (e) { alert('Upload failed: ' + e.message); heroBtn.textContent = 'Upload image'; })
-        .finally(function () { heroBtn.disabled = false; });
-    });
-    heroWrap.appendChild(heroBtn);
-    heroWrap.appendChild(heroFile);
-    body.appendChild(heroWrap);
+    var heroPicker = assetPicker('hero', 'Hero image (optional)',
+      'The picture at the top of the message. Uploads are kept — pick one you have used before, or add a new one.',
+      {
+        selectedUrl: heroUrl,
+        onPick: function (a) { heroUrl = a ? (a.image_url || '') : ''; },
+      });
+    body.appendChild(heroPicker);
 
     // White-label status — driven by the agency's plan/package, NOT a manual
     // choice. The "Powered by Kiddietrac" footer (with privacy/terms) is always
@@ -237,6 +257,246 @@
 
     // Rich-text editor
     body.appendChild(labelEl('Body'));
+    /* Header and footer pickers. The saved blocks are fetched once and both selects
+       are filled from the same list, so uploading a header immediately shows up in the
+       footer list too if that is where it belongs. */
+
+    /* ONE PICKER FOR HERO, HEADER AND FOOTER.
+
+       Header and footer were a <select> of names with a preview underneath, and the hero
+       was a lone upload button. Three different answers to the same question, and none of
+       them let you SEE what you were choosing between — which is the whole difficulty with
+       a banner. This shows the library as cards: the image itself, its name, click to
+       choose. A footer that is words rather than a picture shows its text in the card, so
+       the two kinds sit in one list without one of them being invisible.
+
+       Reopening a campaign restores what it was saved with: `opts.selectedId` for the
+       header and footer, `opts.selectedUrl` for the hero — which is all the campaign row
+       keeps for it, since a hero is stored as a URL rather than an asset id.
+       (Anthony, 2026-09-10) */
+    function assetPicker(kind, label, hint, opts) {
+        opts = opts || {};
+        var wrap = Dom.el('div', { style: 'margin-top:14px;margin-bottom:4px;' });
+        wrap.appendChild(labelEl(label));
+        if (hint) {
+            wrap.appendChild(Dom.el('div', {
+                style: 'font-size:12px;color:#64748B;margin:-4px 0 8px;',
+            }, hint));
+        }
+
+        var strip = Dom.el('div', {
+            style: 'display:flex;gap:10px;overflow-x:auto;padding:2px 2px 8px;align-items:stretch;',
+            'data-kt-scroll': '1',
+        });
+        wrap.appendChild(strip);
+
+        var upBtn = Dom.el('button', { type: 'button', class: 'kt-btn kt-btn-secondary kt-btn-sm' },
+            kind === 'hero' ? '＋ Upload a hero image' : '＋ Upload new');
+        upBtn.setAttribute('data-kt-no-icon', '1');
+        wrap.appendChild(upBtn);
+
+        var chosenId = null;
+
+        function card(a) {
+            var isNone = !a;
+            var on = isNone ? (chosenId === null) : String(a.id) === String(chosenId);
+            var c = Dom.el('div', {
+                style: 'flex:0 0 auto;width:150px;border:2px solid ' + (on ? '#1F6080' : '#E2E8F0') + ';'
+                    + 'border-radius:10px;overflow:hidden;cursor:pointer;background:#fff;'
+                    + 'box-shadow:' + (on ? '0 0 0 3px rgba(31,96,128,.12)' : 'none') + ';',
+            });
+
+            var thumb = Dom.el('div', {
+                style: 'height:76px;background:#F3F4F6;background-size:cover;background-position:center;'
+                    + 'display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:12px;'
+                    + 'text-align:center;padding:6px;box-sizing:border-box;overflow:hidden;',
+            });
+            if (isNone) {
+                thumb.textContent = 'None';
+            } else if (a.image_url) {
+                thumb.style.backgroundImage = 'url(' + absUrl(a.image_url) + ')';
+            } else {
+                /* Text-only block: show the words, because "no image" is not the same as
+                   "nothing here" and a blank tile reads as broken. */
+                thumb.style.fontSize = '11px';
+                thumb.style.color = '#475569';
+                thumb.textContent = String(a.html || '').replace(/<[^>]*>/g, ' ').trim().slice(0, 90) || 'Text block';
+            }
+            c.appendChild(thumb);
+
+            c.appendChild(Dom.el('div', {
+                style: 'padding:6px 8px;font-size:12px;font-weight:700;color:' + (on ? '#1F6080' : '#334155') + ';'
+                    + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;',
+            }, isNone ? '— none —' : (a.name || 'Untitled')));
+
+            c.addEventListener('click', function () {
+                chosenId = isNone ? null : a.id;
+                apply();
+                paint();
+            });
+            return c;
+        }
+
+        /* Tell the outside world what is chosen. assetState is what the save and the
+           preview read; onPick is for the hero, which is stored on the campaign as a URL
+           rather than an id. */
+        function apply() {
+            var a = mine().filter(function (x) { return String(x.id) === String(chosenId); })[0] || null;
+            if (kind === 'hero') {
+                if (typeof opts.onPick === 'function') { opts.onPick(a); }
+            } else {
+                assetState[kind] = a ? a.id : null;
+            }
+        }
+
+        function mine() {
+            return assetState.list.filter(function (a) { return a.kind === kind; });
+        }
+
+        function paint() {
+            strip.innerHTML = '';
+            strip.appendChild(card(null));
+            var list = mine();
+            list.forEach(function (a) { strip.appendChild(card(a)); });
+            if (!list.length) {
+                strip.appendChild(Dom.el('div', {
+                    style: 'flex:0 0 auto;align-self:center;font-size:12.5px;color:#94A3B8;padding-left:4px;',
+                }, 'Nothing saved yet — upload one and it stays here for next time.'));
+            }
+        }
+
+        /* Restore what this campaign was saved with. By id for header/footer, by URL for
+           the hero — which is all the campaign row keeps for it. */
+        function restore() {
+            var list = mine();
+            if (kind === 'hero') {
+                if (opts.selectedUrl) {
+                    var hit = list.filter(function (a) {
+                        return a.image_url && absUrl(a.image_url) === absUrl(opts.selectedUrl);
+                    })[0];
+                    chosenId = hit ? hit.id : null;
+                }
+            } else if (opts.selectedId) {
+                chosenId = String(opts.selectedId);
+            }
+            apply();
+            paint();
+        }
+
+        upBtn.addEventListener('click', function () {
+            openAssetUpload(kind, function (created) {
+                if (created && created.id) { chosenId = created.id; }
+                apply();
+                paint();
+            });
+        });
+
+        wrap._paint = paint;
+        wrap._restore = restore;
+        paint();
+        return wrap;
+    }
+
+
+    var KIND_WORD = { header: 'header', footer: 'footer', hero: 'hero image' };
+
+    function openAssetUpload(kind, onSaved) {
+        var m = document.createElement('div');
+        m.setAttribute('data-no-modal-guard', '1');
+        m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;'
+            + 'display:flex;align-items:center;justify-content:center;padding:20px;';
+        m.innerHTML = '<div style="background:#fff;padding:26px;border-radius:14px;max-width:520px;width:100%;'
+            + 'max-height:calc(100vh - 40px);overflow-y:auto;">'
+            + '<h3 style="margin:0 0 14px;">New ' + (KIND_WORD[kind] || 'header') + '</h3>'
+            + '<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Name it</label>'
+            + '<input id="ma-name" placeholder="e.g. Spring 2026 banner" '
+            + 'style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">'
+            + '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Image</label>'
+            + '<input id="ma-file" type="file" accept="image/jpeg,image/png,image/gif" '
+            + 'style="width:100%;padding:9px;border:1px dashed #CBD5E1;border-radius:8px;font-size:13px;'
+            + 'background:#F8FAFC;box-sizing:border-box;">'
+            + '<div style="font-size:12px;color:#64748B;margin-top:4px;">'
+            + 'JPEG, PNG or GIF. Wide images are resized to 600px for email.</div>'
+            /* A hero is a picture by definition — offering it a text box would invite
+               somebody to save a "hero" with nothing to show. Headers and footers are
+               often words (an address, unsubscribe wording), so they keep it. */
+            + (kind === 'hero' ? ''
+                : '<label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Or text (optional)</label>'
+                  + '<textarea id="ma-html" rows="3" placeholder="Address, unsubscribe wording, a closing line…" '
+                  + 'style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;'
+                  + 'box-sizing:border-box;"></textarea>')
+            + '<div id="ma-msg" style="font-size:13px;margin-top:12px;min-height:18px;"></div>'
+            + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">'
+            + '<button id="ma-cancel" class="kt-btn kt-btn-secondary" type="button">Cancel</button>'
+            + '<button id="ma-save" class="kt-btn kt-btn-primary" type="button">Save</button>'
+            + '</div></div>';
+        document.body.appendChild(m);
+
+        var msg = m.querySelector('#ma-msg');
+        m.querySelector('#ma-cancel').onclick = function () { m.remove(); };
+
+        m.querySelector('#ma-save').onclick = function () {
+            var name = (m.querySelector('#ma-name').value || '').trim();
+            var file = m.querySelector('#ma-file').files[0];
+            var htmlEl = m.querySelector('#ma-html');
+            var htmlTxt = htmlEl ? (htmlEl.value || '').trim() : '';
+            if (!name) { msg.style.color = '#B91C1C'; msg.textContent = 'Give it a name so you can find it again.'; return; }
+            if (!file && !htmlTxt) {
+                msg.style.color = '#B91C1C';
+                msg.textContent = kind === 'hero' ? 'Choose an image.' : 'Add an image or some text.';
+                return;
+            }
+
+            var fd = new FormData();
+            fd.append('kind', kind);
+            fd.append('name', name);
+            if (htmlTxt) { fd.append('html', htmlTxt); }
+            if (file) { fd.append('image', file, file.name); }
+
+            var btn = m.querySelector('#ma-save');
+            btn.disabled = true;
+            msg.style.color = '#64748B';
+            msg.textContent = 'Saving…';
+
+            Api.post('/marketing/assets', fd).then(function (res) {
+                /* Reload first, THEN hand the new asset back: the picker selects by id
+                   from the library, so telling it about an asset the library has not
+                   heard of yet would select nothing. */
+                return loadAssets().then(function () {
+                    if (onSaved) { onSaved(res || null); }
+                    m.remove();
+                });
+            }).catch(function (e) {
+                btn.disabled = false;
+                msg.style.color = '#B91C1C';
+                msg.textContent = (e && e.message) || 'Could not save that.';
+            });
+        };
+    }
+
+    function loadAssets() {
+        return Api.get('/marketing/assets').then(function (r) {
+            assetState.list = (r && r.data) || [];
+        }).catch(function () { assetState.list = []; });
+    }
+
+    var headerBlock = assetPicker('header', 'Header (optional)',
+        'Sits above the message. Upload once and reuse it on every campaign.',
+        { selectedId: existing ? existing.header_asset_id : null });
+    var footerBlock = assetPicker('footer', 'Footer (optional)',
+        'Sits below the message — an address, a sign-off, unsubscribe wording.',
+        { selectedId: existing ? existing.footer_asset_id : null });
+    body.appendChild(headerBlock);
+    body.appendChild(footerBlock);
+
+    /* All three restore together, after the library has arrived — none of them can show a
+       selection before there is a list to select from. */
+    loadAssets().then(function () {
+        heroPicker._restore();
+        headerBlock._restore();
+        footerBlock._restore();
+    });
+
     body.appendChild(buildRichEditor(existing ? existing.body_html : '', function () { return null; }));
 
     // Schedule
@@ -270,7 +530,11 @@
       if (!payload.body_html) { alert('Add some body content to preview.'); return; }
       previewBtn.disabled = true; previewBtn.textContent = 'Loading…';
       loadFeatures().then(function (f) {
-        openPreview(payload, f.branding, f.whiteLabel);
+        /* assetState belongs to THIS function. openPreview is a sibling, so it could
+           never see it — the reference there threw ReferenceError on every preview
+           (ticket #58). Passed in, which also makes it obvious that the preview needs
+           the chosen header and footer to be worth looking at. */
+        openPreview(payload, f.branding, f.whiteLabel, assetState);
       }).finally(function () { previewBtn.disabled = false; previewBtn.innerHTML = '👁 Preview'; });
     });
     actions.appendChild(rightBtns);
@@ -282,6 +546,8 @@
         title: titleIn.value.trim(),
         subject: subjectIn.value.trim() || null,
         body_html: editor ? editor.innerHTML : '',
+        header_asset_id: assetState.header,
+        footer_asset_id: assetState.footer,
         hero_image_url: heroUrl || null,
         audience: audSel.value,
         channel: chSel.value,
@@ -472,8 +738,19 @@
   // Renders the campaign as recipients will see it: optional white-label
   // header (logo + agency details), the message body, and an always-present
   // "Powered by Kiddietrac" footer carrying the agency's privacy & terms links.
-  function openPreview(payload, brand, whiteLabel) {
+  /**
+   * The campaign as the reader will get it.
+   *
+   * `assets` is the composer's header/footer selection: { header, footer, list }. It used
+   * to be reached for as a bare `assetState`, which is declared inside openComposer — a
+   * sibling function — so every click on Preview threw ReferenceError and the overlay
+   * never opened (ticket #58, 2026-09-09). Passed in now, and defaulted, so a caller that
+   * has no assets gets a preview without header and footer rather than an exception.
+   */
+  function openPreview(payload, brand, whiteLabel, assets) {
     brand = brand || {};
+    assets = assets || { header: null, footer: null, list: [] };
+    if (!Array.isArray(assets.list)) { assets.list = []; }
     var color = brand.brand_primary_color || '#1F6080';
     var name = brand.brand_name || 'Your agency';
     var logo = brand.brand_logo_url ? absUrl(brand.brand_logo_url) : '';
@@ -517,7 +794,21 @@
         headerHtml +
         (payload.subject ? '<div style="padding:18px 28px 0;font-size:18px;font-weight:800;color:#111827;">' + esc(payload.subject) + '</div>' : '') +
         (hero ? '<div style="padding:16px 28px 0;"><img src="' + esc(hero) + '" alt="" style="width:100%;border-radius:8px;display:block;" /></div>' : '') +
+        /* The preview has to include the header and footer, or it is a preview of
+           something nobody receives. */
+        (function () {
+          var a = assets.list.filter(function (x) { return String(x.id) === String(assets.header); })[0];
+          if (!a) { return ''; }
+          return (a.image_url ? '<img src="' + esc(a.image_url) + '" alt="" style="display:block;width:100%;">' : '')
+            + (a.html || '');
+        })() +
         '<div style="padding:18px 28px 24px;font-size:14px;line-height:1.6;color:#1F2937;">' + (payload.body_html || '') + '</div>' +
+        (function () {
+          var a = assets.list.filter(function (x) { return String(x.id) === String(assets.footer); })[0];
+          if (!a) { return ''; }
+          return (a.image_url ? '<img src="' + esc(a.image_url) + '" alt="" style="display:block;width:100%;">' : '')
+            + (a.html ? '<div style="padding:0 28px 20px;font-size:13px;color:#64748B;">' + a.html + '</div>' : '');
+        })() +
         footerHtml +
       '</div>';
 

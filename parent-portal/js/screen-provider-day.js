@@ -20,13 +20,52 @@
     return '<span title="' + (p === 'available' ? 'Available' : 'Idle') + '" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + c + ';box-shadow:0 0 0 2px #fff;margin-right:7px;vertical-align:middle;"></span>';
   }
   function todayISO() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  /* Stepped in UTC on purpose — the same helper screen-care.js uses for the educator's
+     Daily log. A local-midnight Date lands on the wrong day across a daylight-saving
+     boundary, and "‹" quietly skipping a day is worse than no arrow at all. */
+  function shiftDate(iso, days) {
+    var d = new Date(iso + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+  /* Says WHICH day you are on. Flipping through a week by arrow with only a numeric
+     field to read means counting back to work out whether you are on Friday. */
+  function prettyDay(iso) {
+    if (iso === todayISO()) { return 'Today'; }
+    if (iso === shiftDate(todayISO(), -1)) { return 'Yesterday'; }
+    try {
+      // Numeric parts, never new Date('YYYY-MM-DD') — that parses as UTC and names the
+      // day before for anybody west of Greenwich.
+      var p = iso.split('-');
+      return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-CA', {
+        weekday: 'long', month: 'short', day: 'numeric',
+      });
+    } catch (e) { return iso; }
+  }
   function avatar(name, photo, sex, size, child) {
     if (window.KT && KT.avatar) return KT.avatar(name, { size: size, photoUrl: photo ? _abs(photo) : '', sex: sex, kind: child ? 'child' : undefined });
     return '<span style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:#E2E8F0;display:inline-block;"></span>';
   }
   function _abs(u) { if (!u) return ''; if (/^https?:\/\//.test(u)) return u; var b = (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; return b.replace(/\/api\/v1\/?$/, '') + (u.charAt(0) === '/' ? u : '/' + u); }
 
-  var state = { centres: [], centreId: null, date: todayISO() };
+  var state = { centres: [], centreId: null, date: todayISO(), gen: 0 };
+
+  /* THE ELEMENT THAT IS ACTUALLY ON THE PAGE, re-resolved after every await.
+
+     A reference taken before an await can be detached by the time the await resolves —
+     a cosmetic sweep that round-trips #appMain's innerHTML leaves the markup looking
+     identical but replaces every node. Writing to the old one succeeds silently and
+     shows nobody anything, which is how this screen sat on "Loading…" forever.
+
+     Prefer the copy inside our own container; fall back to whatever carries the id on
+     the live page; return null when neither is attached, which means the screen is gone
+     and the caller should stop. */
+  function liveEl(container, id) {
+    var el = (container && container.querySelector) ? container.querySelector('#' + id) : null;
+    if (el && document.contains(el)) { return el; }
+    el = document.getElementById(id);
+    return (el && document.contains(el)) ? el : null;
+  }
 
   // Donut: QR (teal) vs Manual (amber) share of check-ins.
   function donut(qr, manual) {
@@ -56,6 +95,52 @@
       + '<span><span style="color:#F59E0B;">●</span> ' + s.went_home + ' went home</span>'
       + '<span><span style="color:#CBD5E1;">●</span> ' + away + ' absent</span></div>';
   }
+  /**
+   * "Daily forms" for the provider being viewed, on the date being viewed.
+   *
+   * Submitting a form left no trace on any screen — the signoff went into the database
+   * and nothing said so — which is what Anthony asked to fix. What makes this worth a
+   * card rather than a number is the STARTED vs SUBMITTED split: opening a form saves a
+   * draft, only a signature counts, and on the day this was written 4 of 10 entries
+   * agency-wide were drafts nobody had finished.
+   */
+  function formsCardHtml(fd) {
+    if (!fd || !fd.expected) {
+      return '<div style="color:#94A3B8;font-size:12px;padding:16px 0;text-align:center;">'
+        + 'No daily forms are assigned to this provider.</div>';
+    }
+    var staff = fd.staff || [];
+    if (!staff.length) {
+      return '<div style="color:#94A3B8;font-size:12px;padding:16px 0;text-align:center;">'
+        + 'No educators at this provider.</div>';
+    }
+
+    return staff.map(function (p) {
+      var done = p.submitted >= p.expected;
+      var head = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+        + '<span style="flex:1;min-width:0;font-size:13.5px;font-weight:700;color:#0F172A;'
+          + 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(p.name) + '</span>'
+        + '<span style="font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;color:'
+          + (done ? '#166534' : (p.drafts ? '#92400E' : '#64748B')) + ';">'
+          + p.submitted + '/' + p.expected + '</span></div>';
+
+      var rows = (p.forms || []).map(function (f) {
+        var mark = f.state === 'submitted' ? '✓' : (f.state === 'draft' ? '◌' : '○');
+        var col = f.state === 'submitted' ? '#166534' : (f.state === 'draft' ? '#92400E' : '#94A3B8');
+        var note = f.state === 'submitted' ? esc(f.at)
+          : (f.state === 'draft' ? 'started ' + esc(f.at) + ', not submitted' : 'not started');
+        return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">'
+          + '<span style="width:13px;text-align:center;color:' + col + ';font-size:13px;">' + mark + '</span>'
+          + '<span style="flex:1;min-width:0;font-size:12.5px;color:#334155;overflow:hidden;'
+            + 'text-overflow:ellipsis;white-space:nowrap;">' + esc(f.title) + '</span>'
+          + '<span style="font-size:11px;color:' + col + ';white-space:nowrap;">' + note + '</span>'
+          + '</div>';
+      }).join('');
+
+      return '<div style="padding:9px 0;border-top:1px solid #F1F5F9;">' + head + rows + '</div>';
+    }).join('');
+  }
+
   function card(title, inner) {
     return '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px 18px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
       + '<div style="font-weight:800;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin-bottom:12px;">' + title + '</div>' + inner + '</div>';
@@ -97,35 +182,253 @@
       + '<div id="pd-body"></div></div>';
 
     if (!state.centres.length) {
-      try { var r = await Api.get('/admin/centres'); state.centres = (r && r.centres || []).map(function (c) { return { id: c.id, name: c.name }; }); }
-      catch (e) { state.centres = []; }
+      var got = await loadCentres();
+      state.noAgency = (got === null);
+      state.centres = got || [];
     }
     // Pre-select the provider when arriving via a "Review day" shortcut (one-shot).
     if (!state.centreId) { try { var pre = sessionStorage.getItem('kt_pd_centre'); if (pre) { sessionStorage.removeItem('kt_pd_centre'); if (state.centres.some(function (c) { return String(c.id) === String(pre); })) state.centreId = parseInt(pre, 10); } } catch (e) {} }
     if (!state.centreId && state.centres.length) state.centreId = state.centres[0].id;
 
-    var ctrl = container.querySelector('#pd-controls');
+    /* After the await above — see liveEl(). Without this the controls are built on a
+       detached node and the provider picker does nothing at all. */
+    var ctrl = liveEl(container, 'pd-controls');
+    if (!ctrl) { return; }
+    /* THE ARROWS MATCH THE FIELDS, NOT THE OTHER WAY ROUND.
+
+       The row was ragged because four controls had four heights: 30, 30, 35, 38. The
+       obvious fix — give them all height:38px — does not work and should not: kt-polish-v22
+       forces `height:auto !important` and compact padding on every input, textarea and
+       select in the product (v22p98), deliberately, because oversized fields have been
+       flagged here more than once. An inline height loses to it, silently, which is why
+       the first attempt measured 29.59px against an inline 38px.
+
+       So the fields keep the platform's compact sizing and everything else is sized to
+       THEM: the arrows stretch to whatever height the date input resolves to, and Today
+       gets the same padding and font the compact rule applies. Nothing is pinned to a
+       number that another stylesheet is entitled to change. (Anthony, 2026-09-10) */
     ctrl.innerHTML =
       '<div style="display:flex;flex-direction:column;gap:5px;"><span style="font-size:11.5px;font-weight:700;color:#475569;">Provider</span>'
-      + '<select id="pd-centre" style="padding:9px 12px;border:1px solid #DCE3EC;border-radius:10px;font-size:13.5px;min-width:220px;background:#fff;">'
+      + '<select id="pd-centre" style="border:1px solid #DCE3EC;border-radius:10px;min-width:220px;background:#fff;">'
       + state.centres.map(function (c) { return '<option value="' + c.id + '"' + (c.id == state.centreId ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select></div>'
-      + '<div style="display:flex;flex-direction:column;gap:5px;"><span style="font-size:11.5px;font-weight:700;color:#475569;">Date</span>'
-      + '<input id="pd-date" type="date" value="' + state.date + '" max="' + todayISO() + '" style="padding:9px 12px;border:1px solid #DCE3EC;border-radius:10px;font-size:13.5px;"></div>'
-      + '<button id="pd-today" style="padding:9px 14px;border:1px solid #CBD5E1;background:#fff;border-radius:10px;font-size:12.5px;font-weight:700;cursor:pointer;">Today</button>';
-    ctrl.querySelector('#pd-centre').addEventListener('change', function (e) { state.centreId = parseInt(e.target.value, 10); load(container); });
-    ctrl.querySelector('#pd-date').addEventListener('change', function (e) { state.date = e.target.value || todayISO(); load(container); });
-    ctrl.querySelector('#pd-today').addEventListener('click', function () { state.date = todayISO(); container.querySelector('#pd-date').value = state.date; load(container); });
-    load(container);
+      /* ‹ › EITHER SIDE OF THE DATE.
+
+         Reviewing a provider means walking back through the week, and picking each day
+         out of a native date picker is four taps for what should be one. The educator's
+         own Daily log has had these arrows for months; this screen — the one an admin
+         opens every morning — did not. Same shape, same order, so the two read alike.
+
+         › is disabled on today rather than hidden: a control that vanishes makes the row
+         jump, and the input is already capped at today so a forward step has nowhere to
+         go. (Anthony, 2026-09-10) */
+      /* THE DAY NAME GOES ON THE LABEL LINE, NOT UNDER THE FIELD.
+
+         Putting it below the input gave this column THREE rows where Provider has two,
+         and the controls row is aligned `flex-end` — so the extra line pushed the date
+         field up out of line with the provider dropdown and the Today button. Sitting it
+         beside the label keeps every column two rows tall and the controls on one line,
+         and it reads better there anyway: "Date · Yesterday" is a caption, not a field.
+         (Anthony, 2026-09-10) */
+      + '<div style="display:flex;flex-direction:column;gap:5px;">'
+      + '<span style="font-size:11.5px;font-weight:700;color:#475569;white-space:nowrap;">Date'
+      +   '<span id="pd-dayname" style="font-weight:600;color:#94A3B8;"></span></span>'
+      /* stretch, not center: the arrows take whatever height the date field resolves to,
+         so they cannot drift apart from it when that rule changes. */
+      + '<div style="display:flex;align-items:stretch;gap:6px;">'
+      +   '<button id="pd-prev" type="button" title="Previous day" aria-label="Previous day" data-kt-iconized="1" style="flex:0 0 auto;width:34px;padding:0;border:1px solid #DCE3EC;background:#fff;border-radius:10px;font-size:15px;line-height:1;cursor:pointer;color:#334155;">‹</button>'
+      +   '<input id="pd-date" type="date" value="' + state.date + '" max="' + todayISO() + '" style="flex:1;min-width:0;border:1px solid #DCE3EC;border-radius:10px;">'
+      +   '<button id="pd-next" type="button" title="Next day" aria-label="Next day" data-kt-iconized="1" style="flex:0 0 auto;width:34px;padding:0;border:1px solid #DCE3EC;background:#fff;border-radius:10px;font-size:15px;line-height:1;cursor:pointer;color:#334155;">›</button>'
+      + '</div></div>'
+      /* min-height rather than padding: the fields resolve to 30px from their own
+         line-height, and matching that with padding alone lands 2px short. */
+      + '<button id="pd-today" style="min-height:30px;padding:5px 14px;border:1.5px solid #CBD5E1;background:#fff;border-radius:8px;font-size:13px;line-height:1.2;font-weight:700;cursor:pointer;white-space:nowrap;">Today</button>';
+    ctrl.querySelector('#pd-centre').addEventListener('change', function (e) {
+      state.centreId = parseInt(e.target.value, 10);
+      load(container);
+    });
+    /* ONE PLACE that moves the day, so the input, the caption, the disabled state and the
+       reload cannot get out of step — which is exactly what happens when each control
+       does its own thing. */
+    function goToDate(iso) {
+      if (!iso) { iso = todayISO(); }
+      if (iso > todayISO()) { iso = todayISO(); }   // ISO dates compare as strings
+      state.date = iso;
+      var live = liveEl(container, 'pd-controls');
+      if (live) {
+        var inp = live.querySelector('#pd-date');
+        if (inp) { inp.value = iso; }
+        var nm = live.querySelector('#pd-dayname');
+        // Rendered as part of the label, so it carries its own separator.
+        if (nm) { nm.textContent = '  ·  ' + prettyDay(iso); }
+        var nx = live.querySelector('#pd-next');
+        if (nx) {
+          var atToday = iso >= todayISO();
+          nx.disabled = atToday;
+          nx.style.opacity = atToday ? '.4' : '1';
+          nx.style.cursor = atToday ? 'default' : 'pointer';
+        }
+      }
+      load(container);
+    }
+
+    ctrl.querySelector('#pd-date').addEventListener('change', function (e) { goToDate(e.target.value); });
+    ctrl.querySelector('#pd-prev').addEventListener('click', function () { goToDate(shiftDate(state.date, -1)); });
+    ctrl.querySelector('#pd-next').addEventListener('click', function () { goToDate(shiftDate(state.date, 1)); });
+    ctrl.querySelector('#pd-today').addEventListener('click', function () { goToDate(todayISO()); });
+
+    /* Paints the caption and the disabled arrow for the day we opened on, and does the
+       first load — goToDate is the only thing that ever sets them. */
+    goToDate(state.date);
+  }
+
+  /* A PLATFORM ADMIN HAS NO AGENCY OF THEIR OWN.
+     /admin/centres answers "No agency access" until one is selected, and the agency
+     switcher seeds kt_active_agency_id asynchronously at boot (it has to fetch
+     /auth/agencies first). This screen used to lose that race in silence: the catch set
+     an empty list and the page rendered "No providers found." — which reads as "this
+     provider has nothing today" rather than "no agency is selected yet" — and nothing
+     re-rendered once the agency did arrive, so it stayed broken until you changed the
+     date or navigated away and back.
+
+     On a desktop the switcher usually wins the race. On the phone it does not, which is
+     why Daily Overview worked for every role except the super admin, and only there.
+
+     Returns: an array of centres, [] for genuinely none, or null for "no agency yet".
+     (Anthony, 2026-09-08) */
+  function activeAgency() {
+    try { return sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) { return ''; }
+  }
+
+  /* Timed against the CLOCK, not by adding up the interval. A browser throttles timers
+     in a backgrounded or inactive tab — which is the normal state of a phone — so a
+     150ms interval fires roughly once a second, and counting ticks turned a 4-second
+     cap into 27 real seconds of "Loading…". Date.now() cannot be throttled. */
+  function waitForAgency(ms) {
+    return new Promise(function (resolve) {
+      var until = Date.now() + ms;
+      var t = setInterval(function () {
+        if (activeAgency() || Date.now() >= until) { clearInterval(t); resolve(!!activeAgency()); }
+      }, 150);
+    });
+  }
+
+  async function loadCentres() {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        var r = await Api.get('/admin/centres');
+        return (r && r.centres || []).map(function (c) { return { id: c.id, name: c.name }; });
+      } catch (e) {
+        // Only worth retrying for the one cause that fixes itself: the switcher is still
+        // booting and has not chosen an agency yet.
+        if (attempt === 0 && !activeAgency()) {
+          var arrived = await waitForAgency(4000);
+          if (arrived) { continue; }
+        }
+        return activeAgency() ? [] : null;
+      }
+    }
+    return null;
+  }
+
+  /* OPEN MEDIA IN THE APP, NOT IN A NEW TAB.
+     These tiles were plain <a target="_blank">. A browser opens a tab; the APK's WebView
+     opens nothing at all, so tapping an educator's photo on the phone did visibly
+     nothing — while the parent app, which has its own in-app lightbox, worked fine. That
+     asymmetry is the whole bug: it was never about the image or the URL (the API returns
+     absolute media URLs), only about how the tile tried to show it.
+
+     Images reuse KT.avatarZoom, which is loaded on every page and already does exactly
+     this. Video needs a <video> element, so it gets a small overlay of its own.
+     (Anthony, 2026-09-08) */
+  function openMedia(url, caption, isVideo) {
+    if (!url) { return; }
+    if (!isVideo && window.KT && KT.avatarZoom && typeof KT.avatarZoom.open === 'function') {
+      try { KT.avatarZoom.open(url, caption || 'Photo'); return; } catch (e) { /* fall through */ }
+    }
+    var ov = document.createElement('div');
+    ov.className = 'kt-av-zoom';   // the shared class every "is a dialog open?" check knows
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483200;background:rgba(8,20,35,.88);'
+      + 'display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out;';
+    var el;
+    if (isVideo) {
+      el = document.createElement('video');
+      el.src = url; el.controls = true; el.autoplay = true; el.playsInline = true;
+      el.setAttribute('playsinline', '');   // iOS refuses to play inline without it
+    } else {
+      el = document.createElement('img');
+      el.src = url; el.alt = caption || 'Photo';
+    }
+    el.style.cssText = 'max-width:94vw;max-height:88vh;border-radius:12px;background:#0b1626;cursor:default;';
+    el.addEventListener('click', function (e) { e.stopPropagation(); });
+    ov.appendChild(el);
+    ov.addEventListener('click', function () { close(); });
+    function close() {
+      try { if (ov.parentNode) { ov.parentNode.removeChild(ov); } } catch (e) {}
+      try { if (window.KT && KT.popOverlay) { KT.popOverlay(ov); } } catch (e) {}
+    }
+    document.body.appendChild(ov);
+    // Registered so the Android back button and the app's ‹ back close it first.
+    try { if (window.KT && KT.pushOverlay) { KT.pushOverlay(ov); } } catch (e) {}
   }
 
   async function load(container) {
-    var body = container.querySelector('#pd-body');
-    if (!state.centreId) { body.innerHTML = '<div style="color:#64748B;padding:20px;">No providers found.</div>'; return; }
+    /* Whose load this is. The provider picker, the date field and the Today button all
+       call load(), so a slow first request must not land after a fast second one and
+       leave the previous provider's roster under the new provider's name. */
+    var gen = ++state.gen;
+    var body = liveEl(container, 'pd-body');
+    if (!body) { return; }
+    if (!state.centreId) {
+      /* Say which of the two it is. "No providers found" for a super admin who simply
+         has not picked an agency sent people looking for missing data that was never
+         missing. */
+      body.innerHTML = state.noAgency
+        ? '<div style="color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;'
+          + 'padding:14px 16px;font-size:13.5px;font-weight:600;">Choose an agency first — use the agency '
+          + 'switcher, then reopen Daily Overview.</div>'
+        : '<div style="color:#64748B;padding:20px;">No providers found.</div>';
+      return;
+    }
     body.innerHTML = '<div style="color:#94A3B8;padding:24px;text-align:center;">Loading…</div>';
     var d;
     try { d = await Api.get('/provider/day-activity?centre_id=' + state.centreId + '&date=' + state.date); }
-    catch (e) { body.innerHTML = '<div style="color:#B91C1C;padding:20px;">Could not load: ' + esc(e.message) + '</div>'; return; }
+    catch (e) {
+      if (gen !== state.gen) { return; }
+      body = liveEl(container, 'pd-body');
+      if (body) { body.innerHTML = '<div style="color:#B91C1C;padding:20px;">Could not load: ' + esc(e.message) + '</div>'; }
+      return;
+    }
+    /* Superseded, or the screen has gone. Either way this result is no longer wanted. */
+    if (gen !== state.gen) { return; }
+    body = liveEl(container, 'pd-body');
+    if (!body) { return; }
     var s = d.summary || {};
+
+    /* The forms this provider was asked to submit on THIS day. Fetched here rather than
+       lazily inside the card so the whole overview paints in one pass — and non-fatal,
+       because a missing forms card must never cost somebody the attendance roster. */
+    var formsData = null;
+    try {
+      formsData = await Api.get('/admin/forms-today?provider_only=1&centre_id=' + state.centreId + '&date=' + state.date);
+    } catch (e) { formsData = null; }
+
+    /* Second await, same two guards — and this is the one that usually caught us, because
+       it runs while "Loading…" is already on screen and a phone pays for another full
+       round trip here. Everything below (the innerHTML at the end AND the .pd-fix /
+       .pd-act / walk-map bindings) has to happen on the attached node or the screen
+       paints nowhere and the buttons bind to a copy nobody can tap. */
+    if (gen !== state.gen) { return; }
+    body = liveEl(container, 'pd-body');
+    if (!body) { return; }
+
+    /* EVERYTHING BELOW IS GUARDED. Both requests have returned by here, so any failure
+       from this point is ours — building the markup or binding the buttons. Without a
+       catch that exception escapes an async function into a rejected promise nobody
+       reads, and the "Loading…" written before the await simply stays put, which
+       kt-polish then upgrades to a spinner. The screen ends up indistinguishable from
+       one still waiting on the network. (Anthony, 2026-09-07: Bruni Meeser spun forever
+       while every other provider painted.) */
+    try {
 
     // Summary cards
     var cards = [
@@ -159,16 +462,55 @@
       if (care.diapers) careBits.push('🧷 ' + care.diapers);
       var careHtml = careBits.length ? '<span style="font-size:11.5px;color:#475569;">' + careBits.join(' · ') + '</span>' : '<span style="color:#CBD5E1;">—</span>';
       return '<tr style="border-top:1px solid #F1F5F9;">'
-        + '<td style="padding:8px 6px;"><div style="display:flex;align-items:center;gap:9px;">' + avatar(r.name, r.photo_url, r.gender, 30, true) + '<span style="font-weight:700;font-size:13px;">' + esc(r.name) + '</span></div></td>'
+        /* NOT DUE IN TODAY.
+
+           A child's attendance days are set when the family is created and live on the
+           enrolment; the educator's own roster has always respected them, this screen did
+           not. Marked rather than hidden, deliberately: a child CAN be signed in on a day
+           they were not booked (a swap, a parent working late), and that is a real
+           attendance record — worth noticing, not worth concealing. Present only when the
+           server actually said so, so an older response reads as "no opinion" rather
+           than "not scheduled". */
+        + '<td style="padding:8px 6px;"><div style="display:flex;align-items:center;gap:9px;">' + avatar(r.name, r.photo_url, r.gender, 30, true)
+        +   '<span style="font-weight:700;font-size:13px;' + (r.scheduled === false ? 'color:#64748B;' : '') + '">' + esc(r.name) + '</span>'
+        +   (r.scheduled === false
+              ? '<span title="This child is not scheduled to attend on this day" style="font-size:10px;font-weight:800;color:#7C3AED;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:999px;padding:1px 7px;white-space:nowrap;">Not booked</span>'
+              : '')
+        + '</div></td>'
         + '<td style="padding:8px 6px;font-size:12.5px;font-variant-numeric:tabular-nums;">' + (r.in ? esc(r.in) : '<span style="color:#CBD5E1;">—</span>') + '</td>'
         + '<td style="padding:8px 6px;font-size:12.5px;font-variant-numeric:tabular-nums;">' + (r.out ? esc(r.out) : '<span style="color:#CBD5E1;">—</span>') + '</td>'
         + '<td style="padding:8px 6px;">' + careHtml + '</td>'
         + '<td style="padding:8px 6px;">' + srcBadge + '</td>'
-        + '<td style="padding:8px 6px;"><span style="font-size:11px;font-weight:800;color:' + t[0] + ';">● ' + t[1] + '</span></td></tr>';
+        + '<td style="padding:8px 6px;"><span style="font-size:11px;font-weight:800;color:' + t[0] + ';">● ' + t[1] + '</span></td>'
+        /* Manual sign in / out stays TODAY-only. Back-dating from a date picker would
+           quietly rewrite a licensing record, which is why this button was limited in
+           the first place (Anthony, 2026-08-26) — and that reasoning still holds for a
+           control that silently stamps "now".
+
+           An earlier day gets the correction tool instead, which is the opposite of
+           quiet: it asks for the real times and a reason, flags the entry as entered
+           late, records who typed it, and audits both timestamps. Directors and admins
+           only; the server checks that again. */
+        + '<td style="padding:8px 6px;text-align:right;">' + (
+            (state.date === todayISO() && r.room_id)
+              ? '<button type="button" class="pd-act" data-child="' + r.id + '" data-room="' + r.room_id + '"'
+                + ' data-going="' + (r.status === 'in' ? 'out' : 'in') + '"'
+                + ' style="padding:5px 10px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;border-radius:7px;border:1px solid '
+                + (r.status === 'in' ? '#E2E8F0;background:#fff;color:#475569;' : '#BFDBFE;background:#EFF6FF;color:#1E40AF;')
+                + '">' + (r.status === 'in' ? 'Sign out' : 'Sign in') + '</button>'
+              : (pdMayCorrect()
+                  ? '<button type="button" class="pd-fix" data-child="' + r.id + '"'
+                    + ' data-name="' + esc(r.name || 'this child') + '"'
+                    + ' title="Record a sign in or out that was missed"'
+                    + ' style="padding:5px 10px;font-size:11.5px;font-weight:700;font-family:inherit;'
+                    + 'cursor:pointer;border-radius:7px;border:1px dashed #CBD5E1;background:#fff;color:#64748B;">'
+                    + '⏱ Fix</button>'
+                  : '<span style="color:#CBD5E1;">—</span>')
+          ) + '</td></tr>';
     }).join('');
     var rosterTable = (d.roster && d.roster.length)
       ? '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
-        + '<thead><tr style="text-align:left;color:#94A3B8;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;"><th style="padding:0 6px 6px;">Child</th><th style="padding:0 6px 6px;">In</th><th style="padding:0 6px 6px;">Out</th><th style="padding:0 6px 6px;">Care today</th><th style="padding:0 6px 6px;">Via</th><th style="padding:0 6px 6px;">Status</th></tr></thead>'
+        + '<thead><tr style="text-align:left;color:#94A3B8;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;"><th style="padding:0 6px 6px;">Child</th><th style="padding:0 6px 6px;">In</th><th style="padding:0 6px 6px;">Out</th><th style="padding:0 6px 6px;">Care today</th><th style="padding:0 6px 6px;">Via</th><th style="padding:0 6px 6px;">Status</th><th style="padding:0 6px 6px;text-align:right;">Action</th></tr></thead>'
         + '<tbody>' + roster + '</tbody></table></div>'
       : '<div style="color:#94A3B8;font-size:12.5px;padding:12px 0;">No children enrolled.</div>';
 
@@ -239,7 +581,14 @@
       ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;">'
         + pics.map(function (p) {
           var isVid = /video/i.test(p.type || '');
-          return '<a href="' + esc(p.url) + '" target="_blank" rel="noopener" style="display:block;position:relative;border-radius:10px;overflow:hidden;padding-top:100%;background:#EEF2F6 center/cover no-repeat;background-image:url(' + esc(p.thumb || p.url) + ');text-decoration:none;" title="' + esc((p.caption || '') + ' · ' + (p.time || '')) + '">'
+          /* data-pd-media: opened IN-APP by the handler below. The href stays so a
+             desktop right-click / middle-click still works, but the click itself is
+             intercepted — see openMedia(). */
+          return '<a href="' + esc(p.url) + '" target="_blank" rel="noopener"'
+            + ' data-pd-media="' + esc(p.url) + '"'
+            + (isVid ? ' data-pd-vid="1"' : '')
+            + ' data-pd-cap="' + esc(p.caption || '') + '"'
+            + ' style="display:block;position:relative;border-radius:10px;overflow:hidden;padding-top:100%;background:#EEF2F6 center/cover no-repeat;background-image:url(' + esc(p.thumb || p.url) + ');text-decoration:none;cursor:zoom-in;" title="' + esc((p.caption || '') + ' · ' + (p.time || '')) + '">'
             + (isVid ? '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);">▶</span>' : '')
             + '<span style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.55));color:#fff;font-size:9.5px;padding:10px 5px 3px;">' + esc(p.time || '') + '</span></a>';
         }).join('') + '</div>'
@@ -355,6 +704,9 @@
       +   card('📸 Photos &amp; videos captured', photosHtml)
       +   card('💬 Educator ↔ parent chat', chatHtml)
       + '</div>'
+      + '<div style="margin-bottom:16px;">'
+      +   card('📝 Daily forms submitted', formsCardHtml(formsData))
+      + '</div>'
       + '<div style="margin-bottom:16px;">' + card('👀 Observations recorded', obsHtml) + '</div>'
       + '<div style="margin-bottom:16px;">' + card('This week’s meal plan', menuGrid) + '</div>'
       + card('Activities &amp; daily logs — ' + esc(d.date), feed)
@@ -371,6 +723,22 @@
       _cf.addEventListener('change', _applyFilter);
     }
 
+    /* Manual sign in / out. Re-bound on every load() because the roster is rebuilt
+       from an HTML string each time — binding once at boot would leave dead buttons. */
+    body.querySelectorAll('.pd-fix').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!(window.KT && KT.AttendanceFix)) { return; }
+        KT.AttendanceFix.open(
+          { id: Number(b.getAttribute('data-child')), name: b.getAttribute('data-name') },
+          function () { load(container); },
+          { date: state.date }          // the day they are already looking at
+        );
+      });
+    });
+    body.querySelectorAll('.pd-act').forEach(function (b) {
+      b.addEventListener('click', function () { pdCheckEvent(b, container); });
+    });
+
     // Walk map buttons + inline live maps for active walks.
     body.querySelectorAll('.kt-walk-map-btn').forEach(function (b) {
       b.onclick = function () { if (window.KT && KT.WalkTracker && KT.WalkTracker.openMap) KT.WalkTracker.openMap(+b.getAttribute('data-id'), b.getAttribute('data-t')); };
@@ -379,10 +747,91 @@
       try { if (window.KT && KT.WalkTracker && KT.WalkTracker.mountLiveMap) KT.WalkTracker.mountLiveMap(el, +el.getAttribute('data-id')); } catch (e) {}
     });
 
+    /* One delegated listener rather than one per tile, so it survives the grid being
+       rebuilt when the provider or date changes. */
+    if (body.getAttribute('data-pd-media-wired') !== '1') {
+      body.setAttribute('data-pd-media-wired', '1');
+      body.addEventListener('click', function (e) {
+        var a = e.target && e.target.closest ? e.target.closest('[data-pd-media]') : null;
+        if (!a) { return; }
+        e.preventDefault();
+        openMedia(a.getAttribute('data-pd-media'), a.getAttribute('data-pd-cap'),
+                  a.getAttribute('data-pd-vid') === '1');
+      });
+    }
+
     // responsive: stack 2-col grids on narrow screens
     if (window.innerWidth < 720) {
       body.querySelectorAll('[style*="grid-template-columns:1fr 1fr"],[style*="grid-template-columns:1.4fr 1fr"]').forEach(function (g) { g.style.gridTemplateColumns = '1fr'; });
     }
+
+    } catch (err) {
+      /* Say what happened, where the user is already looking. The console keeps the
+         stack for anyone who can reach it; the phone cannot, which is exactly why the
+         message has to be on screen. */
+      try { console.error('[Daily Overview] render failed for centre ' + state.centreId + ' on ' + state.date, err); } catch (e2) {}
+      if (gen !== state.gen) { return; }
+      var eb = liveEl(container, 'pd-body');
+      if (!eb) { return; }
+      eb.innerHTML = '<div style="padding:18px;color:#B91C1C;font-size:13px;line-height:1.55;">'
+        + '<b>This provider\'s day could not be displayed.</b><br>'
+        + 'The information loaded, but something went wrong drawing it.<br>'
+        + '<span style="color:#7F1D1D;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;">'
+        + esc((err && (err.message || err.name)) || String(err)) + '</span>'
+        + '</div>';
+    }
+  }
+
+  /**
+   * Manual sign in / out from the Daily Overview.
+   *
+   * The API always allowed this — /provider/check-in is gated on
+   * role:educator,centre_director,agency_admin,platform_admin, and requireClockIn()
+   * exempts supervisors. What was missing was a screen: the roster tap lives only on
+   * educator screens, and an agency admin has no "Today" nav item at all — their
+   * attendance screen is this one. (Anthony, 2026-08-26)
+   */
+  /* Mirrors the server's rule. An educator records attendance as it happens; changing
+     what is already on the record belongs with whoever answers for it. */
+  function pdMayCorrect() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var roles = u.roles || [];
+      return ['centre_director', 'agency_admin', 'platform_admin'].some(function (r) {
+        return roles.indexOf(r) !== -1;
+      });
+    } catch (e) { return false; }
+  }
+
+  function pdCheckEvent(btn, container) {
+    var childId = btn.getAttribute('data-child');
+    var roomId = btn.getAttribute('data-room');
+    var going = btn.getAttribute('data-going');   // 'in' | 'out'
+    var name = (btn.closest('tr') || {}).textContent || 'this child';
+    name = String(name).trim().split(/\s{2,}/)[0] || 'this child';
+
+    KT.confirm({
+      title: (going === 'in' ? 'Sign in ' : 'Sign out ') + name + '?',
+      description: going === 'in'
+        ? (name + ' will be marked present as of now, and their family is notified.')
+        : (name + ' will be marked as gone home as of now, and their family is notified.'),
+      okLabel: going === 'in' ? 'Sign in' : 'Sign out',
+    }).then(function (ok) {
+      if (!ok) return;
+      btn.disabled = true;
+      btn.textContent = going === 'in' ? 'Signing in\u2026' : 'Signing out\u2026';
+      KT.Api.post(going === 'in' ? '/provider/check-in' : '/provider/check-out', {
+        child_id: Number(childId), room_id: Number(roomId),
+      }).then(function () {
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast(name + (going === 'in' ? ' signed in' : ' signed out'), 'success');
+        load(container);   // repaint the roster so times and status catch up
+      }).catch(function (e) {
+        btn.disabled = false;
+        btn.textContent = going === 'in' ? 'Sign in' : 'Sign out';
+        var msg = (e && e.message) || 'Could not record that.';
+        if (KT.Dom && KT.Dom.toast) KT.Dom.toast(msg, 'error'); else alert(msg);
+      });
+    });
   }
 
   if (Shell && Shell.registerScreen) {
