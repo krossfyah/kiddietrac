@@ -37,6 +37,7 @@ final class AdminDigest
         foreach ([
             'late' => 'latePickups', 'timeoff' => 'timeOff', 'tasks' => 'tasks',
             'tours' => 'tours', 'incidents' => 'incidents', 'immunisations' => 'immunisations',
+            'immunRecords' => 'immunisationRecordsPending',
             'tickets' => 'tickets', 'invoicing' => 'invoicing', 'welcome' => 'welcome',
             'week' => 'weekAhead', 'reportCards' => 'reportCards', 'forms' => 'forms',
             'emergency' => 'emergencyContacts',
@@ -193,6 +194,17 @@ final class AdminDigest
     {
         if (! Schema::hasTable('immunizations')) return null;
         $have = DB::table('immunizations')->distinct()->pluck('child_id')->all();
+
+        /* A CHILD WHOSE CARD IS ON FILE BUT UNREAD HAS NO ROWS HERE EITHER, and this
+           section used to tell the director there was "nothing on file" for them - which
+           is wrong, and sends somebody to chase a family that already did their part.
+           Those children belong in immunisationRecordsPending below, so take them out of
+           this list and leave it meaning what it says: nobody has sent anything. */
+        $filed = Schema::hasTable('documents')
+            ? DB::table('documents')->where('scope_type', 'child')
+                ->where('category', 'immunization')->distinct()->pluck('scope_id')->all()
+            : [];
+        $have = array_values(array_unique(array_merge($have, $filed)));
         $missing = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
             ->whereIn('f.centre_id', $c['centres'])->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
@@ -210,6 +222,86 @@ final class AdminDigest
                 'what' => 'No immunisation record',
                 'detail' => 'nothing on file',
             ])->all(),
+        ];
+    }
+
+    /**
+     * UPLOADED, NOT YET READ.
+     *
+     * A parent photographs the card and sends it in; the document lands on the child's
+     * record and the compliance picture still shows nothing, because a photograph is not
+     * a dose. Somebody at the centre has to read it, and nothing was telling them to -
+     * the record simply sat there looking like a job finished.
+     *
+     * Newest first, because a card that arrived this morning is the one somebody is
+     * waiting on. Where the uploader ticked what they believed it shows, say so: that is
+     * a reading to confirm rather than a blank start.
+     */
+    private static function immunisationRecordsPending(array $c): ?array
+    {
+        if (! Schema::hasTable('documents') || ! Schema::hasTable('immunizations')) {
+            return null;
+        }
+
+        $childIds = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->whereIn('f.centre_id', $c['centres'])
+            ->where('ch.enrollment_status', 'enrolled')
+            ->whereNull('ch.deleted_at')
+            ->pluck('ch.id')->all();
+        if (! $childIds) {
+            return null;
+        }
+
+        $docs = DB::table('documents as d')
+            ->leftJoin('users as u', 'u.id', '=', 'd.uploaded_by_id')
+            ->leftJoin('children as ch', 'ch.id', '=', 'd.scope_id')
+            ->where('d.scope_type', 'child')
+            ->whereIn('d.scope_id', $childIds)
+            ->where('d.category', 'immunization')
+            ->orderByDesc('d.id')
+            ->get(['d.id', 'd.scope_id', 'd.file_url', 'd.created_at',
+                'u.first_name as up_first', 'u.last_name as up_last',
+                'ch.first_name as ch_first', 'ch.last_name as ch_last', 'ch.preferred_name as ch_pref']);
+        if ($docs->isEmpty()) {
+            return null;
+        }
+
+        /* READ means a dose carries this card's path - the same join the records list
+           uses. Counting rows on the CHILD would hide a second card that nobody has
+           opened yet just because an earlier one was transcribed. */
+        $transcribed = DB::table('immunizations')
+            ->whereIn('child_id', $childIds)
+            ->whereNotNull('proof_document_url')
+            ->pluck('proof_document_url')->unique()->flip();
+
+        $pending = $docs->filter(fn ($d) => ! $transcribed->has($d->file_url))->values();
+        if ($pending->isEmpty()) {
+            return null;
+        }
+
+        $claims = Schema::hasTable('immunization_record_claims')
+            ? DB::table('immunization_record_claims')
+                ->whereIn('document_id', $pending->pluck('id')->all())
+                ->whereNull('confirmed_at')
+                ->select('document_id', DB::raw('count(*) as n'))
+                ->groupBy('document_id')->pluck('n', 'document_id')
+            : collect();
+
+        return [
+            'count' => $pending->count(),
+            'rows' => $pending->take(8)->map(function ($d) use ($claims) {
+                $n = (int) ($claims[$d->id] ?? 0);
+                $who = trim((($d->ch_pref ?: $d->ch_first) . ' ' . $d->ch_last));
+                $by = trim(($d->up_first ?? '') . ' ' . ($d->up_last ?? ''));
+
+                return [
+                    'who' => $who !== '' ? $who : 'A child',
+                    'what' => 'Record on file, details not filled in',
+                    'detail' => ($by !== '' ? 'sent by ' . $by : 'uploaded')
+                        . ' ' . Carbon::parse($d->created_at)->diffForHumans()
+                        . ($n ? ' · ' . $n . ' tick' . ($n === 1 ? '' : 's') . ' to confirm' : ''),
+                ];
+            })->all(),
         ];
     }
 

@@ -52,7 +52,15 @@ class FcmService
 
             $ch = curl_init('https://oauth2.googleapis.com/token');
             curl_setopt_array($ch, [
-                CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+                CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true,
+                /* 15s was the cost of ONE push, and these are sent in a LOOP inside the
+                   request - one per guardian, then one per staff member. Three that hung
+                   made POST /parent/absences take 46s while a parent watched a spinner to
+                   report their child off sick. FCM answers in well under a second when it
+                   is healthy, so 5s is generous and 2s to connect is plenty; past that the
+                   push is not worth the person's time. Failing a notification is recoverable,
+                   blocking the action that caused it is not. */
+                CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 2,
                 CURLOPT_POSTFIELDS => http_build_query([
                     'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
                     'assertion' => $jwt,
@@ -164,7 +172,15 @@ class FcmService
             }
             $ch = curl_init($url);
             curl_setopt_array($ch, [
-                CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15,
+                CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true,
+                /* 15s was the cost of ONE push, and these are sent in a LOOP inside the
+                   request - one per guardian, then one per staff member. Three that hung
+                   made POST /parent/absences take 46s while a parent watched a spinner to
+                   report their child off sick. FCM answers in well under a second when it
+                   is healthy, so 5s is generous and 2s to connect is plenty; past that the
+                   push is not worth the person's time. Failing a notification is recoverable,
+                   blocking the action that caused it is not. */
+                CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 2,
                 CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token, 'Content-Type: application/json'],
                 CURLOPT_POSTFIELDS => json_encode($payload),
             ]);

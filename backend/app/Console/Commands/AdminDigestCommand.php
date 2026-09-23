@@ -108,6 +108,11 @@ class AdminDigestCommand extends Command
         if (! empty($s['timeoff']['count'])) { return $s['timeoff']['count'] . ' time-off request(s) to review'; }
         if (! empty($s['tickets']['count'])) { return $s['tickets']['count'] . ' open support ticket(s)'; }
         if (! empty($s['tasks']['count'])) { return $s['tasks']['count'] . ' task(s) still open'; }
+        // Below the urgent four, above the fallback: a record nobody has read is
+        // real work outstanding, but it is not today's emergency.
+        if (! empty($s['immunRecords']['count'])) {
+            return $s['immunRecords']['count'] . ' immunisation record(s) waiting to be filled in';
+        }
         return 'What needs your attention';
     }
 

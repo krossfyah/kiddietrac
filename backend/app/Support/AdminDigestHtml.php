@@ -22,6 +22,8 @@ final class AdminDigestHtml
         'openDays' => '#DC2626',
         'late' => '#DC2626', 'timeoff' => '#F59E0B', 'tasks' => '#7C3AED', 'tours' => '#0EA5E9',
         'incidents' => '#DC2626', 'immunisations' => '#F59E0B', 'tickets' => '#64748B',
+        // Amber, not red: it is somebody's work to do, not an incident.
+        'immunRecords' => '#F59E0B',
         'welcome' => '#16A34A', 'week' => '#1F6FB2', 'reportCards' => '#7C3AED',
         'emergency' => '#DC2626',
         'newFamilies' => '#16A34A',
@@ -72,6 +74,10 @@ final class AdminDigestHtml
         $html .= self::section('📋 Tasks still open', $s['tasks'] ?? null, 'tasks');
         $html .= self::section('🚸 New tour bookings', $s['tours'] ?? null, 'tours');
         $html .= self::section('⚠️ Incidents recorded', $s['incidents'] ?? null, 'incidents');
+        /* Before the 'no record' list on purpose: a card somebody has already sent
+           is closer to done, and it is the one with a person waiting on the centre. */
+        $html .= self::section('📄 Immunisation records waiting to be filled in',
+            $s['immunRecords'] ?? null, 'immunRecords');
         $html .= self::section('💉 Children with no immunisation record', $s['immunisations'] ?? null, 'immunisations');
         $html .= self::section('📅 The week ahead', $s['week'] ?? null, 'week');
         $html .= self::section('✉️ Families still to invite', $s['welcome'] ?? null, 'welcome',
