@@ -189,9 +189,21 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
 
+    /* A guardian's own children come from the PARENT route; the staff route is
+       agency-wide and role-gated, and asking for it as a parent only ever returns 403.
+       Keyed on the account's real roles — not a view-as preview — because it is the
+       account the server authorises. (Anthony, 2026-09-08) */
+    let _isGuardianOnly = false;
+    try {
+      var _u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var _r = (_u && _u.roles) || [];
+      _isGuardianOnly = _r.indexOf('guardian') !== -1
+        && !['educator', 'centre_director', 'agency_admin', 'platform_admin'].some(function (x) { return _r.indexOf(x) !== -1; });
+    } catch (e) {}
+
     let ov;
     try {
-      ov = await Api.get('/attendance/weekly-overview');
+      ov = await Api.get(_isGuardianOnly ? '/parent/attendance/weekly-overview' : '/attendance/weekly-overview');
     } catch (e) {
       main.innerHTML = '<div class="kt-card" style="margin:24px;padding:32px;text-align:center;color:#B45309;">'
         + 'Could not load attendance patterns' + (e && e.message ? ' — ' + esc(e.message) : '') + '.</div>';
@@ -205,6 +217,44 @@
     ];
     const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    /* Today's column, in the AGENCY's timezone -- a parent may open this from another
+       zone entirely and the device's idea of "today" can be a day out. Built from
+       numeric parts on purpose: new Date('YYYY-MM-DD') parses as UTC and names the
+       day before for anyone west of it. -1 simply means nothing is highlighted. */
+    const _todayIdx = (function () {
+      try {
+        const p = String((window.KT && KT.agencyToday) ? KT.agencyToday() : '').split('-');
+        if (p.length !== 3) return -1;
+        return (new Date(+p[0], +p[1] - 1, +p[2]).getDay() + 6) % 7;   // JS 0=Sun -> DAYS 0=Mon
+      } catch (e) { return -1; }
+    })();
+
+    /* PHONES DO NOT SHOW THIS AS A TABLE.
+       kt-mobile-tables.js restacks every #appMain table into cards: thead is hidden and
+       each <td> becomes a flex row "LABEL   control" with width:auto. That did two
+       things to this grid. The seven day fields sized to their own content, so every one
+       came out a different width; and the TODAY marker went with the hidden header.
+       Stack the label above a full-width control so every day is exactly the same size,
+       and mark today off the label, which is the only thing that survives into cards. */
+    (function ensureApCss() {
+      if (document.getElementById('ap-grid-css')) return;
+      var st = document.createElement('style');
+      st.id = 'ap-grid-css';
+      st.textContent = [
+        '#appMain table#ap-grid.kt-mcards td{display:block !important;width:100% !important;}',
+        '#appMain table#ap-grid.kt-mcards td:not([data-label=""])::before{display:block;margin-bottom:5px;}',
+        '#appMain table#ap-grid.kt-mcards td select{width:100% !important;min-width:0 !important;box-sizing:border-box;}',
+        '#appMain table#ap-grid.kt-mcards td[data-label*="TODAY"]{background:#E8F4FA !important;',
+        'border-left:3px solid #1F6080 !important;border-radius:8px;padding-left:9px !important;}',
+        '#appMain table#ap-grid.kt-mcards td[data-label*="TODAY"]::before{color:#0B4A63;}',
+        /* Beats [data-kt-pretty] table thead th, which is !important and was silently
+           discarding today's header colour on every render. */
+        '#appMain table#ap-grid thead th.ap-today{background:#1F6080 !important;}',
+        '#appMain table#ap-grid thead th.ap-today,',
+        '#appMain table#ap-grid thead th.ap-today div{color:#FFFFFF !important;}'
+      ].join('');
+      document.head.appendChild(st);
+    })();
     if (!rows.length) {
       main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children yet.</div>';
       return;
@@ -266,13 +316,22 @@
       +     '<div style="flex:1 1 150px;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Changes apply from</label>'
       +       '<input id="ap-from" type="date" value="' + (new Date().toISOString().slice(0, 10)) + '" '
       +       'style="width:100%;height:32px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;padding:0 8px;box-sizing:border-box;"></div>'
+      +     (_isGuardianOnly
+            /* data-kt-iconized: kt-icon-buttons.js rewrote this to a bare "✏️". That is
+               right for a row action sitting beside two siblings that explain it; it is
+               wrong for the only control telling a parent this screen can be edited at
+               all. The attribute is that engine's documented opt-out. */
+            ? '<button id="ap-edit" data-kt-iconized="1" style="height:32px;padding:0 16px;background:#fff;color:#1F6080;'
+              + 'border:1px solid #CBD5E1;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;">'
+              + '✏️ Edit days</button>'
+            : '')
       +     '<button id="ap-save" disabled style="height:32px;padding:0 16px;background:#1F6080;color:#fff;border:0;'
       +       'border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;opacity:.45;">Save changes</button>'
       +     '<span id="ap-msg" style="font-size:12.5px;font-weight:700;"></span>'
       +   '</div>'
       // Bulk fill: most children share one pattern, and setting it 77 times by
       // hand was the single biggest cost of the old screen.
-      +   '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #EDF2F7;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+      +   '<div id="ap-bulkrow" style="margin-top:12px;padding-top:12px;border-top:1px solid #EDF2F7;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
       +     '<span style="font-size:11.5px;font-weight:800;color:#64748B;">Apply to everyone shown:</span>'
       +     '<button class="ap-bulk" data-p="mf-full" style="' + BTN + '">Mon–Fri, full day</button>'
       +     '<button class="ap-bulk" data-p="mf-am" style="' + BTN + '">Mon–Fri, mornings</button>'
@@ -281,8 +340,12 @@
       +     '<button class="ap-bulk" data-p="clear" style="' + BTN + '">Clear all days</button>'
       +   '</div>'
       + '</div>'
+      + '<div id="ap-tabs" style="display:none;margin-top:16px;gap:8px;flex-wrap:wrap;"></div>'
       + '<div class="kt-card" style="margin-top:16px;padding:0;overflow-x:auto;">'
-      +   '<table id="ap-grid" style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px;"></table>'
+      /* table-layout:fixed -- the day columns were sized by their own content, so a
+         column holding "Before" came out wider than one holding "AM" and the week
+         read as ragged. Fixed layout gives the seven days one width. */
+      +   '<table id="ap-grid" style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px;table-layout:fixed;"></table>'
       + '</div>'
       + '<div id="ap-empty" style="display:none;padding:34px;text-align:center;color:#64748B;">No children match.</div>'
       + '</div>';
@@ -291,12 +354,104 @@
     const filter = document.getElementById('ap-filter');
     const grid = document.getElementById('ap-grid');
     const saveBtn = document.getElementById('ap-save');
+
+    /* PARENTS OPEN READ-ONLY. A parent came here to look; the rotation dropdowns, the
+       bulk buttons and Save are the office's tools, and a mis-tap here changes the days a
+       child is expected. Staff keep the live grid — editing these is their job and a
+       click per child would be a tax on it. (Anthony, 2026-09-08) */
+    /* A parent is not searching a roster -- they have one or two children and the tabs
+       name them. Two controls sized for an agency list sitting beside one date field is
+       also where the mismatched field widths came from. */
+    if (_isGuardianOnly) {
+      ['ap-q', 'ap-filter'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && el.parentElement) { el.parentElement.style.display = 'none'; }
+      });
+      /* The hidden filter still has a value, and its default is "Enrolled only" -- which
+         would have shown a waitlisted or withdrawn child's parent an empty grid. */
+      var _f = document.getElementById('ap-filter');
+      if (_f) { _f.value = 'all'; }
+      var _fr = document.getElementById('ap-from');
+      if (_fr && _fr.parentElement) { _fr.parentElement.style.flex = '0 1 200px'; }
+    }
+
+    let _apEditing = !_isGuardianOnly;
+    function applyApMode() {
+      /* Leave background and border ALONE. cell() colours each dropdown by the rotation
+         it holds, and that colour is the data on this grid. This ran immediately after
+         every draw(), so it blanked all seven days to white or transparent the instant
+         they were painted -- which is most of "the fields don't look right". Read-only
+         now shows the same colours, just without the caret or the pointer. */
+      Array.prototype.forEach.call(document.querySelectorAll('#ap-grid select[data-child]'), function (sel) {
+        sel.disabled = !_apEditing;
+        sel.style.cursor = _apEditing ? 'pointer' : 'default';
+        // A disabled <select> is greyed by the browser; keep the rotation's own ink.
+        try { sel.style.setProperty('-webkit-text-fill-color', sel.style.color || ''); } catch (e) {}
+        sel.style.appearance = _apEditing ? '' : 'none';
+        sel.style.webkitAppearance = _apEditing ? '' : 'none';
+      });
+      /* Hide the whole row, not just the buttons. Hiding the buttons alone left
+         "Apply to everyone shown:" hanging under a divider with nothing beneath it. */
+      var bulkRow = document.getElementById('ap-bulkrow');
+      if (bulkRow) { bulkRow.style.display = _apEditing ? 'flex' : 'none'; }
+      Array.prototype.forEach.call(document.querySelectorAll('.ap-bulk'), function (b) {
+        b.style.display = _apEditing ? '' : 'none';
+      });
+      /* "Changes apply from" is a question about a change being made. There isn't one
+         until a parent presses Edit, so it appears with the rest of the tools. */
+      var fromEl = document.getElementById('ap-from');
+      if (_isGuardianOnly && fromEl && fromEl.parentElement) {
+        fromEl.parentElement.style.display = _apEditing ? '' : 'none';
+      }
+      if (saveBtn) { saveBtn.style.display = _apEditing ? '' : 'none'; }
+      var eb = document.getElementById('ap-edit');
+      if (eb) { eb.textContent = _apEditing ? '✓ Done' : '✏️ Edit days'; }
+    }
+    var _apEb = document.getElementById('ap-edit');
+    if (_apEb) { _apEb.addEventListener('click', function () { _apEditing = !_apEditing; applyApMode(); }); }
+
+    /* ONE CHILD AT A TIME FOR PARENTS.
+       A parent with two children got two rows and a column of totals counting their own
+       family -- this grid's shape is built for an office reading a roster, not for a
+       family reading itself. A tab per child gives each one the full width and makes
+       "which child is this" unmissable. Staff keep every row: comparing children across
+       a week IS the job on that side. (Anthony, 2026-09-08) */
+    var _apChild = (_isGuardianOnly && rows.length > 1) ? rows[0].id : null;
+    function paintChildTabs() {
+      Array.prototype.forEach.call(document.querySelectorAll('.ap-tab'), function (b) {
+        var on = String(b.getAttribute('data-child-tab')) === String(_apChild);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        b.style.cssText = 'height:34px;padding:0 16px;border-radius:999px;font-weight:800;'
+          + 'font-size:13px;cursor:pointer;transition:background .12s,border-color .12s;'
+          + 'border:1px solid ' + (on ? '#1F6080' : '#CBD5E1') + ';'
+          + 'background:' + (on ? '#1F6080' : '#fff') + ';color:' + (on ? '#fff' : '#334155') + ';';
+      });
+    }
+    if (_apChild !== null) {
+      var _tabHost = document.getElementById('ap-tabs');
+      if (_tabHost) {
+        _tabHost.style.display = 'flex';
+        _tabHost.setAttribute('role', 'tablist');
+        rows.forEach(function (c) {
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'ap-tab';
+          b.setAttribute('role', 'tab');
+          b.setAttribute('data-child-tab', c.id);
+          b.textContent = nameOf(c);
+          b.addEventListener('click', function () { _apChild = c.id; paintChildTabs(); draw(); });
+          _tabHost.appendChild(b);
+        });
+        paintChildTabs();
+      }
+    }
     const msg = document.getElementById('ap-msg');
 
     function visible() {
       const term = (q.value || '').trim().toLowerCase();
       const mode = filter.value;
       return rows.filter((c) => {
+        if (_apChild !== null && c.id !== _apChild) return false;
         const st = String(c.enrollment_status || '').toLowerCase();
         if (mode === 'enrolled' && st !== 'enrolled') return false;
         if (mode === 'missing') {
@@ -308,7 +463,7 @@
       });
     }
 
-    function cell(c, d) {
+    function cell(c, d, i) {
       const cur = draft[c.id][d] || '';
       // A day with nothing set is dimmed and dashed rather than left white. White is the
       // table's own colour, so a gap in a child's week disappeared into the background —
@@ -316,7 +471,17 @@
       const bg = cur ? tintFor(cur) : '#F8FAFC';
       const fg = cur ? inkFor(cur) : '#CBD5E1';
       const border = cur ? '1px solid transparent' : '1px dashed #E2E8F0';
-      let html = '<td style="padding:4px;text-align:center;border-bottom:1px solid #F1F5F9;">'
+      // Today's column is banded the whole way down, so the header marker is not the
+      // only thing tying a row's cell to the day it belongs to. Skipped on an unsaved
+      // row, where the amber "you have changes here" is the more urgent signal.
+      /* Was #F2F9FC -- two shades off white, and invisible in practice. Today's column
+         is now tinted properly and fenced by the same accent as its header, so the eye
+         lands on it. An unsaved row keeps its amber; it still gets the fence. */
+      const todayBand = (i === _todayIdx)
+        ? 'background:' + (dirty[c.id] ? '#FBF0D9' : '#E8F4FA')
+          + ';border-left:2px solid #1F6080;border-right:2px solid #1F6080;'
+        : '';
+      let html = '<td style="padding:4px;text-align:center;border-bottom:1px solid #F1F5F9;' + todayBand + '">'
         + '<select data-child="' + c.id + '" data-day="' + d + '" '
         + 'style="width:100%;min-width:74px;height:30px;border:' + border + ';'
         + 'border-radius:7px;background:' + bg + ';color:' + fg + ';font-size:12px;font-weight:700;'
@@ -353,10 +518,36 @@
       const totals = DAYS.map((d) => list.filter((c) => draft[c.id][d]).length);
 
       let html = '<thead><tr>'
-        + '<th style="text-align:left;padding:10px 12px;position:sticky;left:0;background:#EEF3F8;z-index:2;">Child</th>';
+        + '<th style="width:250px;text-align:left;padding:10px 12px;position:sticky;left:0;'
+        + 'background:#EEF3F8;z-index:2;">Child</th>';
       DAY_SHORT.forEach((s, i) => {
-        html += '<th style="padding:8px 4px;text-align:center;min-width:80px;">' + s
-          + '<div style="font-size:10.5px;font-weight:700;color:#64748B;margin-top:1px;">' + totals[i] + ' in</div></th>';
+        const isToday = i === _todayIdx;
+        /* The day and its count were one line apart by a single pixel and read as one
+           smudged word. They are now two lines with real space, and the count is a pill
+           so it reads as a figure rather than as part of the day's name. The pill row
+           keeps its height when empty, so every header sits on the same baseline. */
+        /* "(TODAY)", inline, with a real space in front of it. The marker used to be a
+           pill on its own line, which read as two words jammed together on desktop --
+           and far worse on a phone, where kt-mobile-tables builds each field's label
+           from this cell's textContent: two adjacent divs concatenate with no
+           whitespace at all, so the label came out "TUETODAY". One string, spaced and
+           bracketed, is right in both places. */
+        const dayLabel = s + (isToday ? ' (TODAY)' : '');
+        html += '<th' + (isToday ? ' class="ap-today"' : '')
+          + ' style="padding:9px 6px 11px;text-align:center;vertical-align:top;'
+          + 'background:' + (isToday ? '#1F6080' : '#EEF3F8') + ';'
+          + (isToday ? 'border-left:2px solid #1F6080;border-right:2px solid #1F6080;' : '') + '">'
+          + '<div style="font-weight:800;font-size:12.5px;color:' + (isToday ? '#FFFFFF' : '#0F172A') + ';">'
+          +   esc(dayLabel) + '</div>'
+          + '<div style="margin-top:7px;display:flex;justify-content:center;gap:5px;min-height:17px;">'
+          // A parent's own child counted per day is not a figure anyone needs.
+          +   (_isGuardianOnly
+                ? ''
+                // Leading space so this does not run into the day name in a card label.
+                : '<span style="background:#fff;color:#64748B;border:1px solid #DDE6EE;border-radius:999px;'
+                  + 'padding:2px 8px;font-size:10px;font-weight:700;line-height:1.2;"> '
+                  + totals[i] + ' in</span>')
+          + '</div></th>';
       });
       html += '</tr></thead><tbody>';
 
@@ -373,10 +564,13 @@
           +     (c.room_name ? ' · ' + esc(c.room_name) : '')
           +   '</div>'
           + '</td>';
-        DAYS.forEach((d) => { html += cell(c, d); });
+        DAYS.forEach((d, i) => { html += cell(c, d, i); });
         html += '</tr>';
       });
       grid.innerHTML = html + '</tbody>';
+      /* AFTER the rows exist. draw() rebuilds them from a string, so the dropdowns are
+         new elements every time and anything set on the old ones is gone. */
+      try { applyApMode(); } catch (e) {}
 
       const n = Object.keys(dirty).length;
       saveBtn.textContent = n ? 'Save ' + n + ' change' + (n === 1 ? '' : 's') : 'Save changes';
@@ -443,6 +637,9 @@
       }
       msg.style.color = failed ? '#B91C1C' : '#16A34A';
       msg.textContent = failed ? (done + ' saved, ' + failed + ' failed') : ('✓ Saved ' + done);
+      /* Back to read-only for a parent once it is all saved — the save is the completion.
+         A partial save stays open so they can see and retry what did not go through. */
+      if (_isGuardianOnly && !failed) { _apEditing = false; }
       draw();
     });
 

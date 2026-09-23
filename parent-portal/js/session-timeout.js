@@ -24,6 +24,10 @@
 (function (window) {
   'use strict';
 
+  /* What floor staff get, and the least they may ever get. */
+  var FLOOR_SESSION_MS = 16 * 60 * 60 * 1000;   // 16h
+  var FLOOR_MIN_MS = 12 * 60 * 60 * 1000;       // never below a 12h shift
+
   var DEFAULTS = {
     idleMs: 30 * 60 * 1000,
     absoluteMs: 12 * 60 * 60 * 1000,
@@ -39,28 +43,59 @@
     return (isNaN(n) || n <= 0) ? fallback : n;
   }
 
-  function currentRole() {
+  /* EVERY role this person holds, not just the headline one.
+
+     This used to read a single role — `primary_role`, else `roles[0]` — and decide from
+     that. Two ways it quietly gave an educator the 30-minute admin timeout:
+
+       · pickPrimaryRole() ranks centre_director ABOVE educator, so anyone who is both
+         was treated as an office user and timed out on the floor;
+       · if kt_user could not be read at all it returned '' — no match, so the tighter
+         default applied to whoever it was.
+
+     Holding an educator or home-visitor role is what matters here, however the account
+     is otherwise labelled: it says this person is using the app on the floor all day. */
+  function roleSet() {
+    var out = [];
     try {
       var va = sessionStorage.getItem('kt_view_as');
-      if (va) return va;
+      if (va) { return [String(va)]; }
       var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
-      return u.primary_role || (u.roles && u.roles[0]) || '';
-    } catch (e) { return ''; }
+      if (u.primary_role) { out.push(String(u.primary_role)); }
+      if (u.role) { out.push(String(u.role)); }
+      if (Array.isArray(u.roles)) { out = out.concat(u.roles.map(String)); }
+    } catch (e) {}
+    return out;
+  }
+
+  function isFloorStaff() {
+    var r = roleSet();
+    return r.indexOf('educator') !== -1 || r.indexOf('home_visitor') !== -1;
   }
 
   function getConfig() {
-    // Floor staff (educators / home visitors) use the app as an all-day tool — a
-    // 30-minute idle logout mid-shift is wrong for them (phone in a pocket during
-    // nap time shouldn't sign them out). Keep them in through the day; the absolute
-    // cap still ends the session overnight. Admins/directors keep the tighter
-    // compliance idle. A per-device override always wins.
-    var role = currentRole();
-    var floorStaff = role === 'educator' || role === 'home_visitor';
-    var idleDefault = floorStaff ? (16 * 60 * 60 * 1000) : DEFAULTS.idleMs;
-    var absDefault = floorStaff ? (16 * 60 * 60 * 1000) : DEFAULTS.absoluteMs;
+    /* Floor staff use the app as an all-day tool — a 30-minute idle logout mid-shift is
+       wrong for them (a phone in a pocket through nap time should not sign anyone out).
+       Keep them in through the day; the absolute cap still ends the session overnight.
+       Admins and directors keep the tighter compliance idle. A per-device override
+       always wins.
+
+       FLOOR_MIN_MS is a floor, not a default: whatever else changes here, somebody
+       working a shift is guaranteed a session longer than the shift. (Anthony asked for
+       at least 12 hours, 2026-09-08.) */
+    var floorStaff = isFloorStaff();
+    var idleDefault = floorStaff ? FLOOR_SESSION_MS : DEFAULTS.idleMs;
+    var absDefault = floorStaff ? FLOOR_SESSION_MS : DEFAULTS.absoluteMs;
+    var idle = readOverride('kt_session_idle_ms', idleDefault);
+    var abs = readOverride('kt_session_abs_ms', absDefault);
+    if (floorStaff) {
+      // A per-device override must not be able to cut a shift short either.
+      if (idle < FLOOR_MIN_MS) { idle = FLOOR_MIN_MS; }
+      if (abs < FLOOR_MIN_MS) { abs = FLOOR_MIN_MS; }
+    }
     return {
-      idleMs: readOverride('kt_session_idle_ms', idleDefault),
-      absoluteMs: readOverride('kt_session_abs_ms', absDefault),
+      idleMs: idle,
+      absoluteMs: abs,
       warnMs: DEFAULTS.warnMs,
       checkIntervalMs: DEFAULTS.checkIntervalMs,
     };

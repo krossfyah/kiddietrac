@@ -17,8 +17,19 @@
 
   // ─── State ─────────────────────────────────────────────────────────
   var state = {
-    view: localStorage.getItem('kt_cal_view') || 'week',
-    centreId: parseInt(sessionStorage.getItem('kt_cal_centre_id') || '0', 10),
+    /* Week is right on a desktop and unusable on a phone: it is a 64px gutter plus
+       seven columns, ~41px a day at 390px, so every chip ellipsises away. Phones start
+       on DAY instead — one column, full width. Only the default moves; a stored choice
+       still wins, and the switcher is unchanged. */
+    view: localStorage.getItem('kt_cal_view')
+      || ((window.matchMedia && window.matchMedia('(max-width: 600px)').matches) ? 'day' : 'week'),
+    /* 'all' must survive a reload. parseInt('all') is NaN, and a NaN centre id going out
+       on the wire is how a filter silently stops filtering -- so the stored sentinel is
+       preserved as a string and only real ids go through parseInt. */
+    centreId: (function () {
+      var v = sessionStorage.getItem('kt_cal_centre_id') || '0';
+      return v === 'all' ? 'all' : parseInt(v, 10);
+    })(),
     cursor: new Date(),
     roleFilter: '',
     // WHO a shift belongs to, which is what people mean by "filter by educator".
@@ -34,7 +45,10 @@
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function pad2(n) { return n < 10 ? '0' + n : '' + n; }
   function ymd(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
-  function startOfWeek(d) { var c = new Date(d); var dow = c.getDay(); var diff = dow === 0 ? -6 : 1 - dow; c.setDate(c.getDate() + diff); c.setHours(0,0,0,0); return c; }
+  /* Sunday, to match the rest of the portal's calendars. getDay() is Sunday-based
+     already, so the offset is the day number — no special case for Sunday, which is what
+     the old `dow === 0 ? -6 : 1 - dow` was working around. */
+  function startOfWeek(d) { var c = new Date(d); c.setDate(c.getDate() - c.getDay()); c.setHours(0,0,0,0); return c; }
   function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
   function endOfMonth(d)   { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
   function addDays(d, n)   { var c = new Date(d); c.setDate(c.getDate() + n); return c; }
@@ -246,12 +260,24 @@
     // Centre filter
     if (state.centres.length > 1) {
       var sel = Dom.el('select', { style: selectStyle() });
+      /* Everyone, across every centre in the agency -- the whole-agency week or month in
+         one view. First in the list because it is the overview you reach for; the
+         individual centres follow. */
+      var oAll = Dom.el('option', { value: 'all' }, 'All centres \u2014 every staff member');
+      if (String(state.centreId) === 'all') oAll.selected = true;
+      sel.appendChild(oAll);
       state.centres.forEach(function (c) {
         var o = Dom.el('option', { value: c.id }, c.name);
-        if (c.id === state.centreId) o.selected = true;
+        if (String(c.id) === String(state.centreId)) o.selected = true;
         sel.appendChild(o);
       });
-      sel.addEventListener('change', function () { state.centreId = parseInt(sel.value, 10); sessionStorage.setItem('kt_cal_centre_id', String(state.centreId)); reload(calRoot); });
+      sel.addEventListener('change', function () {
+        /* Keep 'all' as the string. parseInt('all') is NaN, and a NaN centre id on the
+           wire is how a filter silently stops filtering. */
+        state.centreId = sel.value === 'all' ? 'all' : parseInt(sel.value, 10);
+        sessionStorage.setItem('kt_cal_centre_id', String(state.centreId));
+        reload(calRoot);
+      });
       toolbar.appendChild(sel);
     }
 
@@ -431,6 +457,18 @@
   function reload(calRoot) {
     var titleEl = document.getElementById('kt-cal-title');
     if (titleEl) titleEl.textContent = titleForCursor();
+    /* HOLD THE HEIGHT across the swap. Clearing a week grid and putting a one-line
+       "Loading…" in its place collapses the document by thousands of pixels; the browser
+       clamps the scroll, and when the grid returns the reader is somewhere else — which
+       reads as the banner jumping. The shell does exactly this for #appMain during
+       navigation; a filter change deserves the same. Released once the grid is back. */
+    var _pinH = 0;
+    try { _pinH = calRoot.getBoundingClientRect().height; } catch (e) {}
+    if (_pinH > 0) { calRoot.style.minHeight = _pinH + 'px'; }
+    var _release = function () { try { calRoot.style.minHeight = ''; } catch (e) {} };
+    // Backstop: a pin left on after an unexpected path would leave a tall empty box.
+    setTimeout(_release, 8000);
+
     Dom.clear(calRoot);
     calRoot.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading shifts…'));
 
@@ -484,9 +522,11 @@
         shell.appendChild(renderAgenda(calRoot));
         calRoot.appendChild(shell);
       }
+      _release();          // the grid is back; let the box size itself again
     }).catch(function (e) {
       Dom.clear(calRoot);
       calRoot.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
+      _release();          // never leave a tall empty box under a short message
     });
   }
 
@@ -554,7 +594,7 @@
        inside a 1279px card, and the card clips, so Sunday was cut in half. The chips
        already ellipsis, so there is nothing to lose by letting the columns shrink. */
     var header = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-bottom:1px solid #E5E7EB;background:#FAFBFC;' });
-    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function (n) {
+    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function (n) {
       header.appendChild(Dom.el('div', { style: 'padding:10px;text-align:center;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, n));
     });
     grid.appendChild(header);
@@ -792,7 +832,12 @@
     });
     pill.appendChild(Dom.el('div', { style: 'font-weight:700;color:' + color + ';' }, s.starts_hm + '–' + s.ends_hm));
     pill.appendChild(Dom.el('div', { style: 'color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, s.user_name));
-    pill.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, s.room_name + ' · ' + s.role));
+    /* The centre only when the grid spans several. In a single-centre view it is the
+       same word on every pill, and a label that never varies is noise. */
+    var where = (state.centreId === 'all' && s.centre_name && s.centre_name !== s.room_name)
+      ? (s.centre_name + ' · ' + s.room_name)
+      : s.room_name;
+    pill.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, where + ' · ' + s.role));
     pill.addEventListener('click', function (e) { e.stopPropagation(); openShiftModal(s, calRoot); });
     return pill;
   }
@@ -801,7 +846,9 @@
     var color = ROLE_COLORS[s.role] || '#1F6080';
     var chip = Dom.el('div', {
       style: 'background:color-mix(in srgb,' + color + ' 14%, white);border-left:3px solid ' + color + ';border-radius:4px;padding:2px 5px;margin-bottom:2px;font-size:10px;color:#374151;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:relative;z-index:1;',
-      title: s.user_name + ' · ' + s.starts_hm + '–' + s.ends_hm + ' · ' + s.role,
+      // One line only, so the centre goes in the tooltip rather than squeezing the name.
+      title: s.user_name + ' · ' + s.starts_hm + '–' + s.ends_hm + ' · ' + s.role
+        + (s.centre_name ? ' · ' + s.centre_name : ''),
     }, s.starts_hm + ' ' + s.user_name);
     chip.addEventListener('click', function (e) { e.stopPropagation(); openShiftModal(s, calRoot); });
     return chip;
@@ -875,6 +922,9 @@
   var ADD_ITEMS = [
     { icon: '🧑‍🏫', label: 'Shift',            sub: 'On this calendar',   shift: true },
     { icon: '🚫',         label: 'Closure',          sub: 'Closures',           nav: 'closures' },
+    /* The only entry that opens its own dialog rather than handing off, because the
+       Closures screen closes ONE centre and a holiday is never one centre. */
+    { icon: '🎉',         label: 'Holiday',          sub: 'Close several providers', holiday: true },
     { icon: '🏖',         label: 'Vacation hold',    sub: 'Vacation holds',     nav: 'vacation-holds' },
     { icon: '🚐',         label: 'Field trip',       sub: 'Field trips',        nav: 'field-trips' },
     { icon: '🗣',         label: 'Conference slots', sub: 'Conferences',        nav: 'conferences' },
@@ -937,6 +987,7 @@
       row.addEventListener('click', function () {
         menu.remove();
         if (it.shift) { openShiftModal(null, calRoot); return; }
+        if (it.holiday) { openHolidayModal(when, calRoot); return; }
         // noDialog: a start date is edited on a child's own record, so there is no add
         // dialog to open — this is a way through to the right screen, nothing more.
         window.location.hash = '#' + dest + (it.noDialog ? '' : '?add=1&date=' + when);
@@ -963,6 +1014,224 @@
       document.addEventListener('mousedown', away);
       document.addEventListener('keydown', esc2);
     }, 0);
+  }
+
+  /* ── Holiday: pick people, close their centres ──────────────────────────
+     Posts to /operations/closures/bulk, which writes exactly the row a single closure
+     writes and runs the same announcements — so the holiday routine already in place
+     (schedule bands, autofill, educator hours, closures:remind) applies with no new
+     path to keep in step.
+
+     The dialog lists STAFF because that is how the decision is made ("Cassandra and Amna
+     are off"), and names the CENTRES that will close because that is what is stored. At
+     iLearn the two coincide; at a centre-based agency they do not, and the preview is
+     what stops that being a surprise. */
+  function openHolidayModal(whenDate, calRoot) {
+    var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;' });
+    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;max-width:560px;width:100%;box-shadow:0 12px 36px rgba(0,0,0,.25);max-height:calc(100vh - 48px);overflow-y:auto;' });
+    overlay.appendChild(modal);
+
+    function close() { document.removeEventListener('keydown', onEsc); overlay.remove(); }
+    function onEsc(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onEsc);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+
+    var head = Dom.el('div', { style: 'background:#FEF3C7;border-left:5px solid #D97706;border-radius:14px 14px 0 0;padding:18px 20px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;' });
+    var hcol = Dom.el('div', { style: 'min-width:0;' });
+    hcol.appendChild(Dom.el('div', { style: 'font-size:17px;font-weight:800;color:#78350F;line-height:1.25;' }, '🎉 Add a holiday'));
+    hcol.appendChild(Dom.el('div', { style: 'font-size:13px;color:#78350F;opacity:.85;margin-top:3px;line-height:1.4;' },
+      'Closes the day for everyone you choose, and tells their families the same way every other closure does.'));
+    head.appendChild(hcol);
+    var xb = Dom.el('button', { type: 'button', 'aria-label': 'Close', style: 'background:transparent;border:none;font-size:22px;line-height:1;color:#78350F;opacity:.6;cursor:pointer;padding:0 2px;flex-shrink:0;' }, '\u00d7');
+    xb.addEventListener('click', close);
+    head.appendChild(xb);
+    modal.appendChild(head);
+
+    var body = Dom.el('div', { style: 'padding:18px 20px;' });
+    modal.appendChild(body);
+
+    function label(t) {
+      return Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin:0 0 5px;' }, t);
+    }
+    var inputCss = 'width:100%;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;box-sizing:border-box;';
+
+    // Dates
+    var dates = Dom.el('div', { style: 'display:flex;gap:10px;margin-bottom:14px;' });
+    var d1wrap = Dom.el('div', { style: 'flex:1;min-width:0;' });
+    d1wrap.appendChild(label('Date'));
+    var dFrom = Dom.el('input', { type: 'date', value: whenDate, style: inputCss });
+    d1wrap.appendChild(dFrom);
+    var d2wrap = Dom.el('div', { style: 'flex:1;min-width:0;' });
+    d2wrap.appendChild(label('Until (optional)'));
+    var dTo = Dom.el('input', { type: 'date', style: inputCss });
+    d2wrap.appendChild(dTo);
+    dates.appendChild(d1wrap); dates.appendChild(d2wrap);
+    body.appendChild(dates);
+
+    // Reason
+    body.appendChild(label('Holiday'));
+    var reason = Dom.el('input', { type: 'text', placeholder: 'e.g. Civic Holiday', maxlength: '200', style: inputCss + 'margin-bottom:14px;' });
+    body.appendChild(reason);
+
+    // Staff picker
+    var pickHead = Dom.el('div', { style: 'display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:5px;' });
+    pickHead.appendChild(label('Who is off'));
+    var allBtn = Dom.el('button', { type: 'button', style: 'background:none;border:none;color:#2563EB;font-size:12px;font-weight:700;cursor:pointer;padding:0;' }, 'Select everyone');
+    pickHead.appendChild(allBtn);
+    body.appendChild(pickHead);
+
+    var search = Dom.el('input', { type: 'text', placeholder: 'Search staff\u2026', style: inputCss + 'margin-bottom:8px;' });
+    body.appendChild(search);
+
+    var list = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;max-height:210px;overflow-y:auto;margin-bottom:10px;' });
+    list.appendChild(Dom.el('div', { style: 'padding:18px;text-align:center;color:#94A3B8;font-size:13px;' }, 'Loading staff\u2026'));
+    body.appendChild(list);
+
+    /* What will ACTUALLY close. The dialog picks people; the closure is per centre, and
+       at a centre-based agency several people share one. Saying so here is the whole
+       reason this preview exists. */
+    var preview = Dom.el('div', { style: 'font-size:12.5px;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:9px 11px;margin-bottom:14px;line-height:1.45;' }, 'Choose who is off.');
+    body.appendChild(preview);
+
+    // Options
+    var opts = Dom.el('div', { style: 'display:flex;flex-direction:column;gap:8px;margin-bottom:16px;' });
+    function checkRow(checked, text, hint) {
+      var w = Dom.el('label', { style: 'display:flex;align-items:flex-start;gap:9px;font-size:13px;color:#334155;cursor:pointer;' });
+      var cb = Dom.el('input', { type: 'checkbox', style: 'margin-top:2px;flex-shrink:0;' });
+      cb.checked = checked;
+      var col = Dom.el('div', {});
+      col.appendChild(Dom.el('div', {}, text));
+      if (hint) { col.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;' }, hint)); }
+      w.appendChild(cb); w.appendChild(col);
+      return { wrap: w, box: cb };
+    }
+    var notify = checkRow(true, 'Tell families and staff now',
+      'Uses the same closure notice as every other closure. Leave off while drafting a calendar.');
+    var billing = checkRow(true, 'Pause billing for these days',
+      'Unticked, families are still charged \u2014 for a holiday that is usually what you want.');
+    opts.appendChild(notify.wrap); opts.appendChild(billing.wrap);
+    body.appendChild(opts);
+
+    // Footer
+    var foot = Dom.el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;' });
+    var cancel = Dom.el('button', { type: 'button', style: 'background:white;color:#475569;border:1px solid #CBD5E1;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Cancel');
+    cancel.addEventListener('click', close);
+    var save = Dom.el('button', { type: 'button', style: 'background:#D97706;color:white;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Add holiday');
+    save.disabled = true; save.style.opacity = '.55';
+    foot.appendChild(cancel); foot.appendChild(save);
+    body.appendChild(foot);
+
+    document.body.appendChild(overlay);
+
+    // ── data ──────────────────────────────────────────────────────────────
+    var staff = [], centreName = {}, chosen = {};
+
+    function centresChosen() {
+      var out = {};
+      staff.forEach(function (p) {
+        if (!chosen[p.user_id]) { return; }
+        (p.centre_ids || []).forEach(function (c) { out[c] = true; });
+      });
+      return Object.keys(out).map(Number);
+    }
+
+    function paintPreview() {
+      var ids = centresChosen();
+      var n = Object.keys(chosen).filter(function (k) { return chosen[k]; }).length;
+      save.disabled = !ids.length;
+      save.style.opacity = ids.length ? '1' : '.55';
+      if (!n) { preview.textContent = 'Choose who is off.'; return; }
+      clearNode(preview);
+      preview.appendChild(Dom.el('strong', {}, n + (n === 1 ? ' person' : ' people') + ' \u2192 closes '
+        + ids.length + (ids.length === 1 ? ' centre' : ' centres') + ':'));
+      preview.appendChild(Dom.el('div', { style: 'margin-top:3px;' },
+        ids.map(function (c) { return centreName[c] || ('Centre ' + c); }).join(', ')));
+      if (ids.length < n) {
+        // Several people at one centre is one closure, not several. Say so.
+        preview.appendChild(Dom.el('div', { style: 'margin-top:4px;color:#64748B;' },
+          'Some of them share a centre, so one closure covers them.'));
+      }
+    }
+
+    function paintList() {
+      var q = search.value.trim().toLowerCase();
+      clearNode(list);
+      var shown = staff.filter(function (p) {
+        return !q || p.name.toLowerCase().indexOf(q) !== -1
+          || (p.centre_ids || []).some(function (c) { return (centreName[c] || '').toLowerCase().indexOf(q) !== -1; });
+      });
+      if (!shown.length) {
+        list.appendChild(Dom.el('div', { style: 'padding:18px;text-align:center;color:#94A3B8;font-size:13px;' }, 'No staff match.'));
+        return;
+      }
+      shown.forEach(function (p) {
+        var row = Dom.el('label', { style: 'display:flex;align-items:center;gap:9px;padding:8px 11px;border-bottom:1px solid #F1F5F9;cursor:pointer;font-size:13px;' });
+        var cb = Dom.el('input', { type: 'checkbox', style: 'flex-shrink:0;' });
+        cb.checked = !!chosen[p.user_id];
+        cb.addEventListener('change', function () { chosen[p.user_id] = cb.checked; paintPreview(); });
+        var col = Dom.el('div', { style: 'min-width:0;' });
+        col.appendChild(Dom.el('div', { style: 'font-weight:700;color:#0D1B2A;' }, p.name));
+        var where = (p.centre_ids || []).map(function (c) { return centreName[c] || ('Centre ' + c); }).join(', ');
+        col.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;' },
+          (p.roles || []).map(roleWord).join(', ') + (where ? ' \u00b7 ' + where : '')));
+        row.appendChild(cb); row.appendChild(col);
+        list.appendChild(row);
+      });
+    }
+
+    function roleWord(r) {
+      return ({ educator: 'Educator', home_visitor: 'Home visitor', centre_director: 'Director', agency_admin: 'Admin' })[r] || r;
+    }
+
+    search.addEventListener('input', paintList);
+    allBtn.addEventListener('click', function () {
+      var anyOff = staff.some(function (p) { return !chosen[p.user_id]; });
+      staff.forEach(function (p) { chosen[p.user_id] = anyOff; });
+      allBtn.textContent = anyOff ? 'Clear all' : 'Select everyone';
+      paintList(); paintPreview();
+    });
+
+    Api.get('/operations/closure-targets').then(function (r) {
+      (r.centres || []).forEach(function (c) { centreName[c.id] = c.name; });
+      // Somebody with no centre cannot be closed, so they are not offered.
+      staff = (r.staff || []).filter(function (p) { return (p.centre_ids || []).length; });
+      paintList(); paintPreview();
+    }).catch(function (e) {
+      clearNode(list);
+      list.appendChild(Dom.el('div', { style: 'padding:18px;text-align:center;color:#DC2626;font-size:13px;' },
+        'Could not load staff: ' + (e && e.message ? e.message : 'error')));
+    });
+
+    // ── save ──────────────────────────────────────────────────────────────
+    save.addEventListener('click', function () {
+      var ids = centresChosen();
+      if (!ids.length) { return; }
+      if (!dFrom.value) { dFrom.focus(); return; }
+
+      save.disabled = true; save.textContent = 'Adding\u2026';
+      Api.post('/operations/closures/bulk', {
+        centre_ids: ids,
+        closure_date: dFrom.value,
+        end_date: dTo.value || null,
+        closure_type: 'holiday',
+        reason: reason.value.trim() || 'Holiday',
+        affects_billing: billing.box.checked,
+        notify: notify.box.checked,
+      }).then(function (res) {
+        close();
+        var made = res.created_count || 0, skip = res.skipped_count || 0;
+        if (KT.toast) {
+          KT.toast(made ? '🎉' : '⚠️',
+            made ? ('Holiday added at ' + made + (made === 1 ? ' centre' : ' centres')) : 'Nothing added',
+            skip ? (skip + (skip === 1 ? ' centre was' : ' centres were') + ' already closed that day') : '',
+            made ? '#16A34A' : '#B45309');
+        }
+        reload(calRoot);        // the closure bands appear on the grid immediately
+      }).catch(function (e) {
+        save.disabled = false; save.textContent = 'Add holiday';
+        if (KT.toast) { KT.toast('⚠️', 'Could not add holiday', (e && e.message) || '', '#DC2626'); }
+      });
+    });
   }
 
   function openEventModal(ev, calRoot) {

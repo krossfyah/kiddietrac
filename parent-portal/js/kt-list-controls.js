@@ -40,6 +40,29 @@
     return raw.toLowerCase();
   }
 
+  /* HOW WELL a row matches, not merely WHETHER it does.
+
+     Both list filters tested `row.textContent.includes(q)` and hid the rest. Everything
+     that survived kept its original position, so searching a name showed it wherever it
+     already happened to sit — often below rows that merely mention the word in an
+     address, a note or a status. On a phone, where only a few rows are on screen, the
+     thing you searched for is then simply not visible, which reads as "the search does
+     not work".
+
+     Ranked lowest-first: the identifying text IS the term, then begins with it, then
+     begins a WORD in it, then contains it, and last a row that matched only in some
+     other column. Ties keep their original order, so the list never shuffles for rows
+     that are equally good. (Anthony, 2026-09-08) */
+  function ktRankOf(primary, whole, q) {
+    if (whole.indexOf(q) === -1) { return -1; }
+    if (primary === q) { return 0; }
+    if (primary.indexOf(q) === 0) { return 1; }
+    var esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try { if (new RegExp('(^|[^a-z0-9])' + esc).test(primary)) { return 2; } } catch (e) {}
+    if (primary.indexOf(q) !== -1) { return 3; }
+    return 4;
+  }
+
   function attach(container) {
     // Opt-out, mirroring kt-row-actions' data-kt-no-kebab. Some lists want ONLY the
     // shared bottom "N records" bar (kt-table-export keys off the same
@@ -104,14 +127,33 @@
     function reindex() { elChildren(container).forEach(function (c, i) { if (c.dataset.ktOrigIdx == null) c.dataset.ktOrigIdx = i; }); }
     reindex();
 
+    /* See kt-table-filter: the order in place when the search began, so clearing the
+       box does not undo whatever the reader had sorted by. */
+    var baseOrder = null;
     function applyFilter() {
       var q = input.value.trim().toLowerCase();
+
+      if (!q && baseOrder) {
+        baseOrder.forEach(function (r) { if (r.parentNode === container) { container.appendChild(r); } });
+        baseOrder = null;
+      }
+      if (q && !baseOrder) { baseOrder = elChildren(container); }
+
       var all = elChildren(container), vis = 0;
-      all.forEach(function (row) {
-        var show = !q || (row.textContent || '').toLowerCase().indexOf(q) !== -1;
-        row.style.display = show ? '' : 'none';
-        if (show) vis++;
-      });
+      if (!q) {
+        all.forEach(function (row) { row.style.display = ''; });
+        vis = all.length;
+      } else {
+        var scored = [];
+        all.forEach(function (row) {
+          var sc = ktRankOf(primaryText(row), (row.textContent || '').toLowerCase(), q);
+          if (sc < 0) { row.style.display = 'none'; return; }
+          scored.push({ row: row, sc: sc, i: +row.dataset.ktOrigIdx || 0 });
+        });
+        scored.sort(function (a, b) { return (a.sc - b.sc) || (a.i - b.i); });
+        scored.forEach(function (m) { m.row.style.display = ''; container.appendChild(m.row); });
+        vis = scored.length;
+      }
       counter.textContent = vis + ' / ' + all.length;
       counter.style.color = vis ? '#64748B' : '#EF4444';
     }

@@ -16,20 +16,15 @@
    actually apply.
    ═══════════════════════════════════════════════════════════════════ */
 :root {
-  /* ── Brand ─────────────────────────────────────────────────────────
-     --brand-blue / --kt-primary = the KiddieTrac primary teal (the value
-     used 32× across the stylesheets and in the brand-blue inline fallbacks).
-     --brand-green = the secondary "green" which in this codebase means teal
-     (`--kt-green: var(--kt-teal)`); the deep #0E7C90 is the same teal already
-     used for chat bubbles / toasts / buttons and is legible under white text. */
-  --kt-primary:  #1F6080;
-  --brand-blue:  #1F6080;
-  --brand-green: #0E7C90;
+  /* Every custom property the portal uses, in one place. The grouping below
+     records which stylesheet each value came from, because that file is where
+     the value was chosen and where its history lives. */
 
-  /* ── Ink / neutral text + surface ramp (slate) ─────────────────────
-     Anchored by the codebase's own fallbacks: --ink-500 #64748b, --ink-900
-     #0f172a. 50→900 = lightest surface → darkest text. */
-  --ink-50:  #F8FAFC;
+  /* ── from kt-tokens.css ────────────────────────────────── */
+  --kt-primary: #1F6080;
+  --brand-blue: #1F6080;
+  --brand-green: #0E7C90;
+  --ink-50: #F8FAFC;
   --ink-100: #F1F5F9;
   --ink-200: #E2E8F0;
   --ink-300: #CBD5E1;
@@ -39,6 +34,105 @@
   --ink-700: #334155;
   --ink-800: #1E293B;
   --ink-900: #0F172A;
+  --kt-scrim: rgba(15,23,42,.52);
+  --kt-scrim-blur: blur(2px);
+
+  /* ── from kt-polish-v22.css ────────────────────────────── */
+  --kt-hero-grad: linear-gradient(135deg, #1F6080 0%, #2C8AAC 55%, #8EC73C 130%);
+  --kt-hero-grad-warm: linear-gradient(135deg, #FF8A65 0%, #F9A26C 50%, #FFC07A 100%);
+
+  /* ── Hero identity palette (2026-09-06) ───────────────────────────────
+     Every banner used to be --kt-hero-grad, so screens differed only by a floating
+     emoji — and the nav reuses those, leaving four billing screens identical. A
+     screen now takes one of these by a stable hash of its title, so the same screen
+     always looks the same and neighbouring screens do not.
+
+     KEPT INSIDE THE BRAND. The first version of this used eight clearly different
+     hues — a magenta, an amber, a rust — which separated the screens and stopped them
+     looking like the same product ("too bright and standsout", 2026-09-06). These stay
+     in the brand's own range: teals, ocean and steel blues, sage and forest greens,
+     slate, one soft indigo at the furthest reach. Separation comes from VALUE and from
+     position on the teal-to-green axis, not from unrelated colour.
+
+     -a IS the brand gradient, unchanged, so a screen that lands on it is untouched.
+     All are dark at the left, where white title text sits, and all run at 135deg so
+     they read as one family. */
+  --kt-hero-grad-a: linear-gradient(135deg, #1F6080 0%, #2C8AAC 55%, #8EC73C 130%);
+  --kt-hero-grad-b: linear-gradient(135deg, #1B4F72 0%, #2E7BA6 55%, #6FB3D2 130%);
+  --kt-hero-grad-c: linear-gradient(135deg, #14665E 0%, #1E9184 55%, #7FCBB8 130%);
+  --kt-hero-grad-d: linear-gradient(135deg, #2F4858 0%, #46697F 55%, #8FAEC2 130%);
+  --kt-hero-grad-e: linear-gradient(135deg, #3D5A45 0%, #5C8560 55%, #A8C98F 130%);
+  --kt-hero-grad-f: linear-gradient(135deg, #1F4B6E 0%, #3A7CA5 55%, #9BC7D9 130%);
+  --kt-hero-grad-g: linear-gradient(135deg, #4A4E69 0%, #6B7099 55%, #A9AECC 130%);
+  --kt-hero-grad-h: linear-gradient(135deg, #2B5E4F 0%, #3F8A6E 55%, #9AD1A5 130%);
+  --kt-elev-1: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kt-elev-2: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.05);
+  --kt-elev-3: 0 12px 28px rgba(15, 23, 42, 0.12), 0 4px 10px rgba(15, 23, 42, 0.06);
+  --kt-radius-lg: 18px;
+  --kt-easing: cubic-bezier(0.4, 0.0, 0.2, 1);
+
+  /* ── from kt-design-v22p64.css ─────────────────────────── */
+  --kt-brand: #1F6080;
+  --kt-brand-light: #4A90B8;
+  --kt-brand-dark: #0F4258;
+  --kt-success: #059669;
+  --kt-warning: #D97706;
+  --kt-danger: #DC2626;
+  --kt-info: #4F46E5;
+  --kt-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kt-shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
+  --kt-shadow-lg: 0 20px 40px -12px rgba(15, 23, 42, 0.12), 0 8px 16px -8px rgba(15, 23, 42, 0.08);
+  --kt-brand-vibrant: #2D7BA8;
+  --kt-accent: #F97316;
+  --kt-accent-hover: #EA580C;
+  --kt-purple: #9333EA;
+  --kt-pink: #DB2777;
+  --kt-bg: #F7F9FC;
+  --kt-bg-elevated: #FFFFFF;
+  --kt-text: #0F172A;
+  --kt-text-muted: #475569;
+  --kt-text-subtle: #94A3B8;
+  --kt-border: #E2E8F0;
+  --kt-border-light: #F1F5F9;
+  --kt-shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --kt-shadow-glow: 0 0 0 4px rgba(74, 144, 184, 0.12);
+
+  /* ── from kt-design-v22p65.css ─────────────────────────── */
+  --kt-space-1: 4px;
+  --kt-space-2: 8px;
+  --kt-space-3: 12px;
+  --kt-space-4: 16px;
+  --kt-space-5: 20px;
+  --kt-space-6: 24px;
+  --kt-space-8: 32px;
+  --kt-space-10: 40px;
+  --kt-space-14: 56px;
+  --kt-r-sm: 6px;
+  --kt-r-md: 10px;
+  --kt-r-lg: 14px;
+  --kt-r-xl: 18px;
+  --kt-input-border: #CBD5E1;
+  --kt-input-border-hover: #94A3B8;
+  --kt-input-border-focus: #1F6080;
+  --kt-input-bg: #FDFEFF;
+  --kt-input-bg-focus: #FFFFFF;
+  --kt-input-shadow-focus: 0 0 0 4px rgba(31, 96, 128, 0.14), 0 1px 4px rgba(31, 96, 128, 0.06);
+
+  /* ── from kt-consistency-v22p71.css ────────────────────── */
+  --kt-font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;
+  --kt-font-display: 'DM Sans', 'Inter', -apple-system, sans-serif !important;
+  --kt-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* ── from kt-cards-v22p72.css ──────────────────────────── */
+  --kt-card-radius: 16px;
+  --kt-card-border: 1px solid #EAEFF3;
+  --kt-card-shadow: 0 1px 2px rgba(16,40,64,.04), 0 6px 16px -8px rgba(16,40,64,.12);
+  --kt-card-shadow-hover: 0 4px 10px rgba(16,40,64,.08), 0 16px 32px -12px rgba(16,40,64,.22);
+  --kt-card-accent: linear-gradient(90deg, #1F6080 0%, #2D7BA8 45%, #4A90B8 70%, #F97316 100%);
+
+  /* ── from kt-consistency-polish.css ────────────────────── */
+  --kt-today-bg: #DCEEF7;
+  --kt-today-edge: #1F6080;
 }
 
 /* ── Modal scrim ──────────────────────────────────────────────────────────────
@@ -50,12 +144,29 @@
    behind it, though still not clickable - the overlay swallows every event until the
    agreement is signed.
    ──────────────────────────────────────────────────────────────────────────── */
-:root{
-  --kt-scrim: rgba(15,23,42,.52);
-  --kt-scrim-blur: blur(2px);
-}
+
 .kt-scrim{
   background: var(--kt-scrim) !important;
   -webkit-backdrop-filter: var(--kt-scrim-blur);
   backdrop-filter: var(--kt-scrim-blur);
 }
+
+/* ── Why this file is the only :root ──────────────────────────────────────────
+   Nine stylesheets used to define :root. Whichever loaded last won, so the value
+   a token carried was set by <link> order in dashboard.html rather than by any
+   decision — and seven tokens genuinely disagreed between files (--kt-danger was
+   #D85A6C in one and #EF4444 in another). Editing the "wrong" copy changed
+   nothing, which is how a fix could look applied and do nothing.
+
+   Every value here is the one that ALREADY WON before consolidation, so this
+   change is invisible on screen. That was the point: make the source of truth
+   unambiguous without moving anything.
+
+   styles.css keeps its own :root ON PURPOSE — index.html and enroll.html load it
+   WITHOUT this file, so it is the only tokens those pages get. Anything defined
+   there and here is overridden here (this file loads second), which is why the
+   portal and the login page can legitimately differ.
+
+   Adding a token: put it here. Do not add :root to another stylesheet —
+   `php artisan css:tokens --check` fails the build if you do.
+   ───────────────────────────────────────────────────────────────────────────── */

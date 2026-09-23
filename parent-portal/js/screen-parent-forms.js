@@ -340,7 +340,8 @@
 
   function fmtMoney(n) {
     n = Number(n) || 0;
-    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(n); }
+    try { return new Intl.NumberFormat('en-CA', {  /* pinned: `undefined` follows the BROWSER, so CAD renders '$' on an en-CA
+                                       machine and 'CA$' on en-US — the same amount, two ways */ style: 'currency', currency: 'CAD' }).format(n); }
     catch (e) { return '$' + n.toFixed(2); }
   }
 

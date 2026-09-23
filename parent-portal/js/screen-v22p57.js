@@ -383,8 +383,15 @@
     });
   }
 
+  /* From numeric parts, not from the string: 'YYYY-MM-DDT00:00:00' parses as UTC and
+     lands on the previous day locally, and getDay()/setDate() below are local — so a
+     Monday worked out from a Sunday-shifted date could name the WEEK BEFORE. */
+  function _parseYmd(s) {
+    var p = String(s || '').split('-');
+    return p.length === 3 ? new Date(+p[0], +p[1] - 1, +p[2]) : new Date();
+  }
   function _mondayISO(d) {
-    d = d ? new Date(d + 'T00:00:00') : new Date();
+    d = d ? _parseYmd(d) : new Date();
     var day = d.getDay(); var diff = (day === 0 ? -6 : 1) - day; d.setDate(d.getDate() + diff);
     var mm = String(d.getMonth() + 1).padStart(2, '0'); var dd = String(d.getDate()).padStart(2, '0');
     return d.getFullYear() + '-' + mm + '-' + dd;

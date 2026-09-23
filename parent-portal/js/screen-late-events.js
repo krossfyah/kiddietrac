@@ -22,7 +22,8 @@
   function money(n) {
     var v = Number(n);
     if (!isFinite(v)) return '—';
-    try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(v); }
+    try { return new Intl.NumberFormat('en-CA', {  /* pinned: `undefined` follows the BROWSER, so CAD renders '$' on an en-CA
+                                       machine and 'CA$' on en-US — the same amount, two ways */ style: 'currency', currency: 'CAD' }).format(v); }
     catch (e) { return '$' + v.toFixed(2); }
   }
 

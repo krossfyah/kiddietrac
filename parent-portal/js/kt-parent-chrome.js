@@ -12,6 +12,22 @@
 
   var API = (w.KT_CONFIG && w.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
   function isDesktop() { return w.matchMedia && w.matchMedia('(min-width: 769px)').matches; }
+
+  /**
+   * Who gets the greeting eyebrow ("Good evening · 12:38").
+   *
+   * Wider than roleOf() on purpose, and used ONLY by the greeting. boot() also calls
+   * ensure(), the desktop top-bar builder, which is gated on roleOf() — widening that
+   * would rebuild the admin DESKTOP into the parent top bar. Admins and directors want
+   * the phone eyebrow, not a new desktop.
+   */
+  function roleOfGreet() {
+    var r = roleOf();
+    if (r) { return r; }
+    var c = document.body.className || '';
+    /* Hyphens: app-v2-shell builds the class as 'role-' + role.replace('_','-'). */
+    return /\brole-(agency-admin|centre-director|platform-admin)\b/.test(c) ? 'admin' : '';
+  }
   function roleOf() {
     var c = document.body.className || '';
     if (/\brole-guardian\b/.test(c)) return 'guardian';
@@ -230,15 +246,31 @@
   // Mobile top header: a compact date + time (the desktop bar has weather/date/clock;
   // phones just get date + time, right-aligned before the floating settings gear).
   function ensureMobileMeta() {
-    if (isDesktop() || !roleOf()) return;
+    if (isDesktop() || !roleOfGreet()) return;
     // Date/time is folded into the greeting eyebrow now — remove any old right block.
     var old = document.getElementById('kt-pc-mobmeta'); if (old) old.remove();
     injectStyle();
     paintGreeting();
   }
 
+  /* NOT ON THE DESKTOP ADMIN SIDEBAR — and nowhere else.
+
+     Anthony, 2026-09-06: "on the side bar where it shows my name at the bottom remove the
+     good night and the good night icon and role and just leave my display pic/avatar and
+     first name". That is the admin/director/platform DESKTOP sidebar, where the user block
+     sits at the foot of a real sidebar.
+
+     It is NOT the parent/educator chrome, where this same user block IS the top bar, and
+     it is NOT the phone. An earlier version of this returned unconditionally and took the
+     greeting from guardians, educators, home visitors and sales reps on desktop, and from
+     EVERY role on mobile — because ensureGreeting() is called from boot() for any role,
+     and because paintGreeting() (which the phone eyebrow depends on) returns immediately
+     when the element this function creates is missing.
+
+     roleOf() null + desktop == the admin sidebar layout: roleOfGreet() is deliberately
+     wider than roleOf() precisely so admins still get the phone eyebrow. */
   function ensureGreeting() {
-    if (!roleOf()) return;
+    if (isDesktop() && !roleOf()) { return; }   // admin/director desktop sidebar only
     injectStyle();
     var navUser = document.querySelector('#appSidebar #navUser, #appSidebar .nav-user');
     if (!navUser) return;

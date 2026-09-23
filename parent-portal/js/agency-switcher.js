@@ -124,12 +124,11 @@
 
     var wrap = document.createElement('div');
     wrap.id = 'kt-agency-switcher';
-    wrap.setAttribute('style', [
-      'position:relative',
-      'margin:6px 10px 4px',
-      'border-top:1px solid rgba(0,0,0,.06)',
-      'padding-top:8px',
-    ].join(';'));
+    /* position:relative is load-bearing — the dropdown is absolutely positioned
+       against it. The margins and the divider are NOT: #kt-sidebar-foot supplies the
+       padding and the gap now, and a rule halfway up a group of three separated
+       controls that belong together. */
+    wrap.setAttribute('style', 'position:relative');
 
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -141,6 +140,10 @@
       'background:rgba(31,96,128,0.06)',
       'border:1px solid rgba(31,96,128,0.18)',
       'border-radius:8px',
+      /* The BUTTON is the visible box — the wrapper around it is a bare
+         position:relative anchor for the dropdown, so a height set there would be
+         invisible slack. 40px matches the two controls beneath it. */
+      'min-height:40px',
       'padding:8px 10px',
       'font-size:12px',
       'color:#1F6080',
@@ -196,13 +199,59 @@
     wrap.appendChild(btn);
     wrap.appendChild(dropdown);
 
+    /* Place the menu against the button, in whichever direction has room, using fixed
+       coordinates so no ancestor's overflow can clip it. Called on every open because the
+       switcher sits at the bottom of the sidebar on a desktop and in the top bar on a
+       phone, and the answer differs. */
+    function placeMenu() {
+      var r = btn.getBoundingClientRect();
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      var vw = window.innerWidth || document.documentElement.clientWidth;
+      var openDown = r.top < vh / 2;
+      var gap = 6;
+      // Never taller than the room available on the chosen side, and always scrollable.
+      var room = (openDown ? (vh - r.bottom) : r.top) - gap - 10;
+
+      dropdown.style.position = 'fixed';
+      dropdown.style.left = Math.max(8, Math.min(r.left, vw - Math.max(200, r.width) - 8)) + 'px';
+      dropdown.style.width = Math.max(200, Math.min(r.width, vw - 16)) + 'px';
+      dropdown.style.right = 'auto';
+      dropdown.style.maxHeight = Math.max(140, room) + 'px';
+      dropdown.style.overflowY = 'auto';
+      dropdown.style.webkitOverflowScrolling = 'touch';
+      if (openDown) {
+        dropdown.style.top = (r.bottom + gap) + 'px';
+        dropdown.style.bottom = 'auto';
+      } else {
+        dropdown.style.bottom = (vh - r.top + gap) + 'px';
+        dropdown.style.top = 'auto';
+      }
+    }
+
+    function closeMenu() { dropdown.style.display = 'none'; }
+
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
-      dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
+      if (dropdown.style.display === 'none') {
+        // Measure with it laid out but not yet painted, so maxHeight is right first time.
+        dropdown.style.visibility = 'hidden';
+        dropdown.style.display = 'block';
+        placeMenu();
+        dropdown.style.visibility = '';
+      } else {
+        closeMenu();
+      }
     });
     document.addEventListener('click', function (e) {
-      if (!wrap.contains(e.target)) dropdown.style.display = 'none';
+      if (!wrap.contains(e.target) && !dropdown.contains(e.target)) closeMenu();
     });
+    /* A fixed menu does not travel with its button, so anything that moves the button
+       must close it rather than leave it stranded mid-screen. */
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('orientationchange', closeMenu);
+    window.addEventListener('scroll', function () {
+      if (dropdown.style.display !== 'none') placeMenu();
+    }, true);
 
     Array.prototype.forEach.call(dropdown.querySelectorAll('button[data-aid]'), function (b) {
       b.addEventListener('click', async function () {
@@ -301,7 +350,14 @@
         'border-radius:12px;padding:6px 8px;box-shadow:0 8px 24px rgba(0,0,0,.18);min-width:190px;');
       document.body.appendChild(widget);
     } else {
-      navUser.parentNode.insertBefore(widget, navUser);
+      /* BELOW the name, in the shared sidebar foot (slot 10 — first of the three).
+         It used to sit above the user pill, which broke the run of nav links with an
+         unrelated control and pushed the name down. The dropdown opens upward, so the
+         bottom is where it belongs: `.app-sidebar` is overflow:hidden and a downward
+         menu would be clipped. */
+      if (!(window.KT && KT.sidebarFoot && KT.sidebarFoot(10, widget))) {
+        navUser.insertAdjacentElement('afterend', widget);
+      }
     }
 
     // First login: the initial screen may have rendered BEFORE the active agency

@@ -393,11 +393,106 @@
       html += '<div data-kt-list="1" style="background:white;border-radius:14px;padding:18px;margin-bottom:14px;">' +
         '<h3 style="margin:0 0 10px;font-size:17px;">' + esc(k.first_name + ' ' + k.last_name) + '</h3>' +
         (meds.length === 0 ? '<p style="color:#6B7280;">No medications on file.</p>' : meds.map(parentMedRow).join('')) +
+        '<div class="pm-slot" data-child="' + k.id + '"></div>' +
+        '<button type="button" class="pm-add" data-child="' + k.id + '" style="margin-top:12px;' +
+          'background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:9px 14px;font:inherit;' +
+          'font-size:13px;font-weight:700;color:#1E40AF;cursor:pointer;">' +
+          '\uD83D\uDC8A Ask the centre to administer a medication</button>' +
         '</div>';
     }
     html += '</div>';
     container.innerHTML = html;
+
+    /* The request form lives HERE, on the screen the "Health" nav item actually opens
+       (#medications). It was originally built into the Today card in screen-parent.js,
+       which no parent reaches from Health — so the feature existed and was unreachable.
+       One form, two entry points: the Today card now links here rather than carrying a
+       second copy that would drift out of step. (Anthony, 2026-09-08) */
+    Array.prototype.forEach.call(container.querySelectorAll('.pm-add'), function (btn) {
+      btn.addEventListener('click', function () { parentMedForm(btn); });
+    });
   }
+
+  function pmToday() {
+    try { if (window.KT && KT.agencyToday) return KT.agencyToday(); } catch (e) {}
+    var d = new Date();
+    var p = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  function pmField(label, id, attrs) {
+    return '<label style="display:block;margin-top:9px;">'
+      + '<span style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:3px;">' + esc(label) + '</span>'
+      + '<input id="' + id + '" ' + (attrs || '') + ' style="width:100%;box-sizing:border-box;padding:9px 11px;'
+      + 'border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;"></label>';
+  }
+
+  function parentMedForm(btn) {
+    var childId = btn.getAttribute('data-child');
+    var slot = btn.parentElement.querySelector('.pm-slot[data-child="' + childId + '"]');
+    if (!slot) return;
+    if (slot.getAttribute('data-open') === '1') { return; }
+    slot.setAttribute('data-open', '1');
+    btn.style.display = 'none';
+
+    slot.innerHTML =
+      '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:13px;margin-top:6px;">'
+      + '<div style="font-size:12.5px;color:#475569;">The centre has to authorise a medication before an educator can give it. '
+      +   'Fill this in and they will be notified.</div>'
+      + pmField('Medication *', 'pm-name-' + childId, 'placeholder="e.g. Amoxicillin"')
+      + pmField('Strength', 'pm-strength-' + childId, 'placeholder="e.g. 250 mg/5 ml"')
+      + pmField('Dose *', 'pm-dosage-' + childId, 'placeholder="e.g. 5 ml"')
+      + pmField('How often *', 'pm-freq-' + childId, 'placeholder="e.g. twice daily, after meals"')
+      + pmField('Starts *', 'pm-start-' + childId, 'type="date" value="' + esc(pmToday()) + '"')
+      + pmField('Ends', 'pm-end-' + childId, 'type="date"')
+      + pmField('Reason', 'pm-reason-' + childId, 'placeholder="e.g. ear infection"')
+      + pmField('Prescribed by', 'pm-doc-' + childId, 'placeholder="Doctor\'s name, if prescribed"')
+      + '<label style="display:block;margin-top:9px;"><span style="display:block;font-size:12px;font-weight:700;'
+      +   'color:#475569;margin-bottom:3px;">Anything the educator should know</span>'
+      + '<textarea id="pm-notes-' + childId + '" rows="2" style="width:100%;box-sizing:border-box;padding:9px 11px;'
+      +   'border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;"></textarea></label>'
+      + '<div id="pm-err-' + childId + '" style="color:#B91C1C;font-size:12.5px;margin-top:8px;"></div>'
+      + '<div style="display:flex;gap:8px;margin-top:11px;">'
+      + '<button type="button" id="pm-save-' + childId + '" style="flex:1;background:#159FB4;border:0;border-radius:10px;'
+      +   'padding:11px;font:inherit;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">Send request</button>'
+      + '<button type="button" id="pm-cancel-' + childId + '" style="background:#fff;border:1px solid #E2E8F0;'
+      +   'border-radius:10px;padding:11px 16px;font:inherit;font-size:14px;color:#475569;cursor:pointer;">Cancel</button>'
+      + '</div></div>';
+
+    var g = function (p) { var e = document.getElementById(p + '-' + childId); return e ? e.value.trim() : ''; };
+    var err = document.getElementById('pm-err-' + childId);
+
+    document.getElementById('pm-cancel-' + childId).addEventListener('click', function () {
+      slot.innerHTML = ''; slot.removeAttribute('data-open'); btn.style.display = '';
+    });
+
+    document.getElementById('pm-save-' + childId).addEventListener('click', async function () {
+      var payload = {
+        name: g('pm-name'), strength: g('pm-strength'), dosage: g('pm-dosage'),
+        frequency: g('pm-freq'), starts_on: g('pm-start'), expires_on: g('pm-end') || null,
+        reason: g('pm-reason'), prescribing_physician: g('pm-doc'),
+        special_instructions: g('pm-notes'),
+        is_prescription: !!g('pm-doc'),
+      };
+      if (!payload.name || !payload.dosage || !payload.frequency || !payload.starts_on) {
+        err.textContent = 'Medication, dose, how often and the start date are all needed.';
+        return;
+      }
+      var save = document.getElementById('pm-save-' + childId);
+      save.disabled = true; save.textContent = 'Sending\u2026'; err.textContent = '';
+      try {
+        await api('POST', '/parent/children/' + childId + '/medications', payload);
+        slot.innerHTML = '<div style="margin-top:8px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;'
+          + 'padding:10px 12px;color:#065F46;font-size:13px;font-weight:600;">'
+          + 'Request sent \u2014 the centre has been notified and will authorise it before any dose is given.</div>';
+        slot.removeAttribute('data-open');
+      } catch (e) {
+        save.disabled = false; save.textContent = 'Send request';
+        err.textContent = (e && e.message) || 'Could not send that request.';
+      }
+    });
+  }
+
   function parentMedRow(m) {
     return '<div style="padding:12px;border-top:1px solid #F3F4F6;">' +
       '<div style="font-weight:700;color:#111827;">' + esc(m.name) + (m.strength ? ' ' + esc(m.strength) : '') + ' ' + statusBadge(m.status) + '</div>' +

@@ -81,7 +81,7 @@
         + (cfg.url ? '<div style="margin-top:20px;font-size:12px;color:#64748B;word-break:break-all;font-family:ui-monospace,monospace;">' + esc(cfg.url) + '</div>' : '')
         + (cfg.footer ? '<div style="margin-top:12px;font-size:12px;color:#64748B;">' + esc(cfg.footer) + '</div>' : '')
         + '</div>'
-        + '<div class="kt-qrposter-ctl" style="position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);right:14px;display:flex;gap:10px;">'
+        + '<div class="kt-qrposter-ctl" style="position:fixed;top:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 12px);right:14px;display:flex;gap:10px;">'
         +   '<button id="kt-qrposter-print" style="background:#1F6080;color:#fff;border:0;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;">🖨️ Print</button>'
         +   '<button id="kt-qrposter-x" aria-label="Close" style="background:#fff;color:#111827;border:1px solid #E5E7EB;width:44px;height:44px;border-radius:50%;font-size:22px;line-height:1;cursor:pointer;">✕</button>'
         + '</div>';

@@ -37,6 +37,18 @@
 
   .app-sidebar .nav-user {
     flex: 0 0 auto;
+    /* STRETCH, DO NOT CENTRE. #appSidebar is a column flex container with
+       align-items:center, so any child that does not claim a width is sized by its
+       content and parked in the middle — which left the avatar and name floating in
+       the centre of a 232px sidebar while every nav link above them was left aligned
+       (measured: navUser 119px wide at x=56). align-self is what overrides the
+       parent's align-items; the width/box-sizing pair keeps it right if a later rule
+       gives it a definite width, exactly as #kt-sidebar-foot already needed.
+       Not role-specific — every role with the desktop sidebar had it.
+       (Anthony, 2026-09-08) */
+    align-self: stretch;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   /* Thin scrollbar for the nav list */

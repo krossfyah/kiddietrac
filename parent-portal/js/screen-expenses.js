@@ -14,7 +14,8 @@
   var _tab = 'summary';
 
   // ── helpers ────────────────────────────────────────────────────────
-  function money(n) { n = Number(n) || 0; try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'CAD' }).format(n); } catch (e) { return '$' + n.toFixed(2); } }
+  function money(n) { n = Number(n) || 0; try { return new Intl.NumberFormat('en-CA', {  /* pinned: `undefined` follows the BROWSER, so CAD renders '$' on an en-CA
+                                       machine and 'CA$' on en-US — the same amount, two ways */ style: 'currency', currency: 'CAD' }).format(n); } catch (e) { return '$' + n.toFixed(2); } }
   function inputStyle() { return 'width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;box-sizing:border-box;'; }
   function label(t) { return Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;color:#374151;margin-bottom:4px;' }, t); }
   function btnPrimary() { return 'background:#1F6080;color:white;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;'; }

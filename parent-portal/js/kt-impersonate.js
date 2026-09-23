@@ -46,13 +46,54 @@
   }
 
   // ── launcher (platform admin, not impersonating) ────────────────────
+  /* A row at the foot of the sidebar, under the name and the agency switcher.
+
+     It used to be a fixed pill at bottom-left on z-index 2147483500 — floating over
+     whatever screen you were reading, on every page, forever. Anthony, 2026-09-06:
+     "the view as 'impersonation' clickable feature should also go on the bottom of the
+     sidebar". It is an occasional administrative action, not a permanent overlay.
+
+     Styled to match the agency switcher directly above it so the foot of the sidebar
+     reads as one block rather than three unrelated things.
+
+     The floating pill survives only as a fallback for the layouts that have no sidebar
+     (guardian/educator top-nav). A platform admin never sees those, but a launcher that
+     silently fails to mount would be worse than one in the wrong place. */
   function showLauncher() {
     if (document.getElementById('kt-imp-fab')) return;
-    var b = document.createElement('button'); b.id = 'kt-imp-fab'; b.type = 'button'; b.title = 'View as another user';
-    b.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:2147483500;background:#1F6080;color:#fff;border:0;border-radius:999px;padding:10px 16px;font:800 13px system-ui,-apple-system,sans-serif;box-shadow:0 6px 18px -6px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;gap:7px;';
-    b.innerHTML = '<span style="font-size:15px;">👁</span> View as…';
-    document.body.appendChild(b);
+
+    var b = document.createElement('button');
+    b.id = 'kt-imp-fab';
+    b.type = 'button';
+    b.title = 'View as another user';
+    b.innerHTML = '<span style="font-size:14px;">\uD83D\uDC41</span>'
+      + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">View as\u2026</span>';
     b.onclick = openPicker;
+
+    var sidebar = document.getElementById('appSidebar');
+    var navUser = document.getElementById('navUser');
+
+    if (sidebar && navUser) {
+      // Same shape as the agency switcher's button, one step quieter.
+      // Width and margin come from #kt-sidebar-foot; this only says how it looks.
+      b.style.cssText = 'display:flex;align-items:center;gap:8px;min-height:40px;'
+        + 'background:rgba(31,96,128,0.06);border:1px solid rgba(31,96,128,0.18);'
+        + 'border-radius:8px;padding:8px 10px;font:600 12px system-ui,-apple-system,sans-serif;'
+        + 'color:#1F6080;cursor:pointer;text-align:left;transition:background .15s;';
+      b.addEventListener('mouseenter', function () { b.style.background = 'rgba(31,96,128,0.12)'; });
+      b.addEventListener('mouseleave', function () { b.style.background = 'rgba(31,96,128,0.06)'; });
+      /* Slot 30 — last of the three controls under the name. The shared foot keeps
+         them ordered no matter which mounts first; this one waits on DOMContentLoaded
+         and the agency switcher on an async fetch. */
+      if (!(window.KT && KT.sidebarFoot && KT.sidebarFoot(30, b))) {
+        sidebar.appendChild(b);
+      }
+      return;
+    }
+
+    // No sidebar (top-nav roles): the original floating pill.
+    b.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:2147483500;background:#1F6080;color:#fff;border:0;border-radius:999px;padding:10px 16px;font:800 13px system-ui,-apple-system,sans-serif;box-shadow:0 6px 18px -6px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;gap:7px;';
+    document.body.appendChild(b);
   }
 
   // ── picker modal ────────────────────────────────────────────────────
