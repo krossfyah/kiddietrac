@@ -32,6 +32,20 @@ Eight types, each a one-tap button:
 
 The entry appears immediately in the **Today's log** feed below and updates the parent's portal in real time.
 
+## Logging for the whole room at once
+
+Sunscreen before going out, or the afternoon snack, is one action about a whole room —
+not ten identical ones. Choose **All children** at the top of the child list instead of
+a single child, and the entry is filed for **everyone currently checked in**.
+
+Available for: **outdoor play, snack, meal, bottle, sunscreen, mood and nap**.
+
+**Diaper and bathroom are deliberately excluded.** Those describe one child's body, and
+filing them for a whole room would record things that did not happen.
+
+If nobody is checked in you are told so, and nothing is logged — logging a room-wide
+entry for an empty room is a typo, not an intention.
+
 ## What parents see
 
 Each child's parent gets a rolled-up view of every entry from the day, with timestamps and the educator's name. Parents can scroll back 7 days by default.

@@ -1,6 +1,6 @@
 ---
 title: Assigning tasks to your team
-category: Staff
+category: Staff Management
 order: 30
 ---
 

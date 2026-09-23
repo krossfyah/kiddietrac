@@ -10,7 +10,7 @@ Childcare data is sensitive. Here's how Kiddietrac handles it.
 
 ## What we collect
 
-For **children**: name, date of birth, room enrollment, medical notes (allergies, conditions), dietary restrictions, daily activity logs, photos shared by educators, immunization records (if added by the centre).
+For **children**: name, date of birth, room enrolment, medical notes (allergies, conditions), dietary restrictions, daily activity logs, photos shared by educators, immunization records (if added by the centre).
 
 For **parents/guardians**: name, email, phone, address, relationship to child, billing preferences.
 

@@ -17,7 +17,12 @@
    ═══════════════════════════════════════════════════════════════════ */
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer');
+/* puppeteer-core against the Chrome already on this machine. The HOST has no node at
+   all, so capture has always run locally and the PNGs are uploaded; pulling a second
+   ~150MB Chromium to do it would buy nothing. */
+const puppeteer = require('puppeteer-core');
+const CHROME = process.env.CHROME_PATH
+  || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const cleanupInPage = require('./clean');
 
 const TOKEN = process.env.KT_TOKEN;
@@ -30,20 +35,14 @@ const OUT = path.join(__dirname, 'out');
 
 // Each shot: the hash to open, the file to write, and how long its data needs.
 const SHOTS = [
-  { file: 'tour/overview.png',   hash: 'dashboard',           wait: 6000 },
-  { file: 'provider-map.png',    hash: 'provider-map',        wait: 9000 },
-  { file: 'tour/children.png',   hash: 'admin-children',      wait: 6500 },
-  { file: 'tour/families.png',   hash: 'admin-families',      wait: 6500 },
-  { file: 'tour/daily-log.png',  hash: 'care-log',            wait: 6500 },
-  { file: 'campaigns.png',       hash: 'marketing-campaigns', wait: 6000 },
-  { file: 'tour/billing.png',    hash: 'billing-settings',    wait: 6000 },
-  { file: 'tour/help.png',       hash: 'help',                wait: 6500 },
-  { file: 'tour/branding.png',   hash: 'admin-branding',      wait: 6000 },
-  { file: 'edit-agency.png',     hash: 'dashboard',           wait: 6000 },
-  { file: 'calendar.png',        hash: 'staff-calendar',      wait: 7000 },
-  { file: 'menu.png',            hash: 'menu',                wait: 7000 },
-  { file: 'room-assignments.png',hash: 'educator-rooms',      wait: 6000 },
-  { file: 'tickets.png',         hash: 'tickets',             wait: 6000 },
+  // The screens rebuilt in September 2026. Test Agency only — see the header.
+  { file: 'account-ledger.png',      hash: 'account-ledgers',  wait: 9000 },
+  { file: 'payroll.png',             hash: 'payroll',          wait: 9000 },
+  { file: 'contacts.png',            hash: 'contacts',         wait: 7000 },
+  { file: 'refunds.png',             hash: 'refunds',          wait: 8000 },
+  { file: 'payment-schedules.png',   hash: 'payment-plans',    wait: 7000 },
+  { file: 'invoices-scheduled.png',  hash: 'external-billing', wait: 8000 },
+  { file: 'audit-log.png',           hash: 'audit-logs',       wait: 8000 },
 ];
 
 // Chrome shown to a customer should not display the platform-admin furniture: the
@@ -56,6 +55,7 @@ const SHOTS = [
   fs.mkdirSync(path.join(OUT, 'tour'), { recursive: true });
 
   const browser = await puppeteer.launch({
+    executablePath: CHROME,
     headless: 'new',
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--force-device-scale-factor=2'],
   });

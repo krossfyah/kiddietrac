@@ -29,7 +29,7 @@ Check who's actually clocked in. Look at **Staff → Schedule** for today. If yo
 
 A few things to check:
 
-- Is the child's **enrollment status** "enrolled"? (Not "waitlist" or "withdrawn")
+- Is the child's **enrolment status** "enrolled"? (Not "waitlist" or "withdrawn")
 - Is the **start date** today or earlier? (Future start dates won't show until that date)
 - Is the **room** correct? Look at the child's profile.
 
@@ -47,7 +47,7 @@ You can verify in **Families → [family name]** — the child should appear in 
 
 Either:
 
-- They have no enrolled children with monthly fees set — check that the enrollment has a monthly_fee
+- They have no enrolled children with monthly fees set — check that the enrolment has a monthly_fee
 - An invoice already exists for this month — check **Families → Invoices** filtered by family
 - Email didn't go through — check your SMTP setup and the family's email
 

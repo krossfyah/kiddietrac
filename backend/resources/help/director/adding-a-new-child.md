@@ -1,6 +1,6 @@
 ---
 title: Adding a new child
-category: Enrollment
+category: Enrolment
 order: 1
 ---
 
@@ -51,7 +51,7 @@ The child is automatically enrolled in the room you selected. Their family will 
 Leave it on (the default). You can update it later. The subsidy is applied to invoices when they're generated.
 
 **What if they're moving rooms next month?**
-Add them to their current room now. When they move, you can update the enrollment.
+Add them to their current room now. When they move, you can update the enrolment.
 
 **Can I add a child without enrolling them in a room?**
 Not yet — every child must be enrolled in a room when created. If they're on a waitlist, ask your account manager about the waitlist feature.

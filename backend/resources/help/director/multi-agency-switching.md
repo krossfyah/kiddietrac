@@ -19,7 +19,7 @@ Click it to see every agency you have admin access to. The currently active one 
 Each agency keeps its own data fully isolated:
 
 - Centres, rooms, and capacity
-- Families, children, and enrollments
+- Families, children, and enrolments
 - Staff and role assignments
 - Invoices and billing
 - Compliance reports

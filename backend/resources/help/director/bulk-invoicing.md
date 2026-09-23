@@ -46,7 +46,7 @@ The invoice header carries the rolled-up `subtotal`, `subsidy_amount`, `discount
 If a run returns 0 generated, check:
 
 - Are any children at the centre currently `enrolled` (not waitlist / withdrawn / graduated)?
-- Do those children have an active enrollment row (`enrollments.end_date IS NULL`)?
+- Do those children have an active enrolment row (`enrollments.end_date IS NULL`)?
 - Did the families already have a v22p42 invoice for this exact month? Existing rows are skipped.
 
 The Bulk invoice screen calls the same backend the director-portal "Generate this month" button uses — same logic, same outputs, just operable centre-by-centre across an agency.

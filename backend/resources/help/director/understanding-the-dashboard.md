@@ -31,7 +31,7 @@ If any room shows BREACH, you need to address it immediately. Either an educator
 ## Sidebar navigation
 
 - **Dashboard** — this screen
-- **Children** — your enrollment roster, filterable by room and status
+- **Children** — your enrolment roster, filterable by room and status
 - **Families** — list of all families with primary contact info
 - **Staff** — your team, certifications, schedules
 - **Live roster (Today)** — see who's present right now, room by room

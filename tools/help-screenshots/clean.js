@@ -33,8 +33,14 @@ module.exports = function cleanupInPage() {
   // heading is an icon span plus a caret plus the word, so a leaf test misses it. The
   // guard is "contains no link", which keeps this from ever swallowing a whole group
   // that still has navigation in it.
-  document.querySelectorAll('.app-sidebar *, .kt-topbar *, header *').forEach((el) => {
+  /* Searched across the DOCUMENT, not just `.app-sidebar`. If the sidebar does not
+     carry that class in the current build the sweep visited nothing and every heading
+     survived — which is exactly what the last run showed. The guards that make this
+     safe were already here and still apply: the element must contain no link, so a
+     group with real navigation in it can never be swallowed. */
+  document.querySelectorAll('div,span,li,h1,h2,h3,h4,h5,h6,p,button').forEach((el) => {
     if (el.querySelector('a')) return;
+    if (el.children.length > 3) return;
     if (LABELS.indexOf(letters(el.textContent)) === -1) return;
     hide(el);
   });
@@ -49,12 +55,21 @@ module.exports = function cleanupInPage() {
   // Only an element that is ITSELF pinned and whose OWN text begins "View as". The
   // previous version climbed to the nearest pinned ancestor, which is the app shell —
   // it hid the entire page and produced 19KB of blank white.
-  Array.prototype.forEach.call(document.querySelectorAll('body > *, body > * > *'), (el) => {
-    if (el.children.length > 3) return;
-    if (!/^View as/i.test((el.textContent || '').trim())) return;
-    const cs = getComputedStyle(el);
-    if (cs.position === 'fixed') { hide(el); }
-  });
+  /* LETTERS ONLY, for the same reason the nav headings are. The pill renders as
+     "👁 View as…", so /^View as/i never matched it and it survived every run. The
+     greeting card pinned beside it names the person who took the shot, so it goes too.
+
+     Still matched by what the element IS — pinned, small, and carrying that text — and
+     still never by climbing to a pinned ancestor: the app shell is pinned, and hiding
+     that produces 19KB of blank white for every screenshot. */
+  Array.prototype.forEach.call(
+    document.querySelectorAll('body > *, body > * > *, body > * > * > *'), (el) => {
+      if (el.children.length > 4) return;
+      const L = letters(el.textContent);
+      if (!/^VIEWAS/.test(L) && L.indexOf('PLATFORMADMIN') === -1) return;
+      const cs = getComputedStyle(el);
+      if (cs.position === 'fixed' || cs.position === 'sticky') { hide(el); }
+    });
 
   // Welcome toasts pop in a second after load and are not part of any screen.
   document.querySelectorAll('[class*="toast" i],[id*="toast" i],[class*="snackbar" i]').forEach(hide);

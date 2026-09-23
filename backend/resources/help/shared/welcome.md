@@ -10,7 +10,7 @@ Kiddietrac is a modern childcare management platform built for Ontario centres. 
 
 ## What Kiddietrac does
 
-For **directors**, Kiddietrac handles enrollment, billing, ratio compliance, staff certifications, incident reporting, and CCEYA-style compliance exports.
+For **directors**, Kiddietrac handles enrolment, billing, ratio compliance, staff certifications, incident reporting, and CCEYA-style compliance exports.
 
 For **educators**, the tablet view lets you quickly log meals, naps, diaper changes, activities, and observations. Photos taken on the tablet are instantly shared with parents. Daily ratios are tracked in real time.
 

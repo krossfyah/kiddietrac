@@ -46,7 +46,7 @@ Day-to-day management of one centre:
 - Schedule + time-clock + payroll for their staff
 - Observations + lesson plans + curriculum
 - Daily care logs, photos, videos
-- Approve time-off + vacation holds + reenrollment + permission slips
+- Approve time-off + vacation holds + reenrolment + permission slips
 - CACFP meal tracking, wellness screening review
 - Field-trip GPS monitoring, plus **plan and delete field trips** (Field trips → ⋮)
 - Marketing campaigns (no global setting changes)

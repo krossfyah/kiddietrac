@@ -1,6 +1,6 @@
 ---
 title: Billing setup & settings
-category: Billing & Payments
+category: Billing
 order: 10
 roles: agency_admin, platform_admin
 ---

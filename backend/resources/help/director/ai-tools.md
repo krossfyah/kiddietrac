@@ -32,7 +32,7 @@ Uses Claude with the child's observations + activities tracked this week. Comes 
 
 **Sidebar → AI doc extract** (admin / director).
 
-Upload a photo or scan of a document — immunization record, certification, VSS check, ID, enrollment form — and we extract structured fields into JSON.
+Upload a photo or scan of a document — immunization record, certification, VSS check, ID, enrolment form — and we extract structured fields into JSON.
 
 1. Paste the document URL (the doc must be publicly reachable — use the **MediaController** upload first if you have it on disk, then copy the returned URL).
 2. Pick the document type.

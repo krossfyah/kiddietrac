@@ -19,7 +19,7 @@ The Messages tab is your way to communicate with your child's room. Each child h
 ## What NOT to use messages for
 
 - **Emergencies** — call the centre directly (your director's phone is on the centre profile)
-- **Booking absences or changing enrollment** — talk to the director, not the educators
+- **Booking absences or changing enrolment** — talk to the director, not the educators
 - **Complaints** — direct these to the director, not the room educator
 
 ## How to send a message

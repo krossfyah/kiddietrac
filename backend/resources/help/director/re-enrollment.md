@@ -1,16 +1,16 @@
 ---
 roles: agency_admin, platform_admin
-title: Re-enrollment campaigns
-category: Enrollment
+title: Re-enrolment campaigns
+category: Enrolment
 order: 60
 ---
-# Re-enrollment campaigns
+# Re-enrolment campaigns
 
 Confirm next term's enrolment with a one-tap parent action.
 
 ## Launching a campaign (admin)
 
-1. Sidebar → **Re-enrollment**.
+1. Sidebar → **Re-enrolment**.
 2. Tap **+ Launch campaign**.
 3. Enter: campaign name (e.g. "Fall 2026"), target term, deadline (when responses are due).
 4. Optionally restrict to one centre, or send agency-wide.

@@ -18,7 +18,7 @@ Changes apply immediately.
 
 ## Available widgets
 
-Attendance today, Staff on floor, Capacity utilisation, Outstanding receivables, Centre occupancy, Compliance snapshot, Pending approvals, Activity feed, Recurring/Annualised revenue, Users by role, Enrollment & revenue, and more.
+Attendance today, Staff on floor, Capacity utilisation, Outstanding receivables, Centre occupancy, Compliance snapshot, Pending approvals, Activity feed, Recurring/Annualised revenue, Users by role, Enrolment & revenue, and more.
 
 ## The top bar
 

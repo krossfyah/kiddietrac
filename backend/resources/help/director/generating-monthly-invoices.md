@@ -12,7 +12,7 @@ At the start of each month (or whenever you prefer), generate invoices for every
 
 When you click **Generate invoices**, Kiddietrac:
 
-1. Finds every active enrollment in your centre
+1. Finds every active enrolment in your centre
 2. Groups them by family
 3. For each family, creates one invoice with one line per child
 4. Applies any active CWELCC subsidy to reduce the amount the family owes
@@ -35,7 +35,7 @@ The system won't create duplicates. If you already ran it this month, it will sk
 
 For each child enrolled:
 
-- **Subtotal** = monthly fee from the enrollment
+- **Subtotal** = monthly fee from the enrolment
 - **Subsidy** = CWELCC monthly amount, if eligible (default $1,650 for infants, $1,450 for toddlers, $1,250 for preschool)
 - **Net** = subtotal − subsidy
 

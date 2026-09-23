@@ -14,7 +14,7 @@ Auto-send follow-up emails N days after a trigger event. Useful for nurturing to
 2. Tap **+ New drip**.
 3. Pick a trigger:
    - **After tour booked** (e.g. send a "thanks for visiting" email 1 day after)
-   - **After enrollment complete** (e.g. welcome packet 3 days after)
+   - **After enrolment complete** (e.g. welcome packet 3 days after)
    - **On birthday** (e.g. age-appropriate program suggestion)
    - **After 30 days inactive** (re-engagement)
 4. Pick the delay in days (0-365).
