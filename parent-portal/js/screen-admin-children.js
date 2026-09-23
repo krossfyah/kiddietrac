@@ -6,6 +6,21 @@
    ============================================================ */
 (function (window) {
   'use strict';
+
+  /* One way in, used by the card, the row and the Open button alike. */
+  function _openChild(c, centreIdHint) {
+    var KT2 = window.KT || {};
+    if (KT2.ChildDetail && KT2.ChildDetail.openModal) {
+      KT2.ChildDetail.openModal(c.id, {
+        centreId: centreIdHint || '',
+        title: ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.display_name || 'Child record',
+      });
+
+      return;
+    }
+    window.location.hash = '#child-detail?id=' + c.id + (centreIdHint ? '&centre_id=' + centreIdHint : '');
+  }
+
   if (!window.KT) return;
   var KT = window.KT;
   var Api = KT.Api;
@@ -175,10 +190,19 @@
       // Grid of cards
       var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;' });
       children.forEach(function (c) {
+        /* The href stays so the card is still a real link (middle-click, copy link
+           address); the click handler below opens the popup instead of navigating. */
         var card = Dom.el('a', {
           href: '#child-detail?id=' + c.id + (centreSelect.value ? '&centre_id=' + centreSelect.value : ''),
           class: 'kt-lift',
           style: 'display:block;background:white;padding:14px 16px;border-radius:12px;text-decoration:none;color:#111827;box-shadow:0 1px 3px rgba(0,0,0,.04);border-left:4px solid ' + (c.room_color || '#1F6080') + ';',
+        });
+        card.addEventListener('click', function (ev) {
+          /* Let a deliberate new-tab through: ctrl/cmd/middle-click on a real link is a
+             habit worth keeping, and the href above still points at the full screen. */
+          if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1) { return; }
+          ev.preventDefault();
+          _openChild(c, centreSelect.value || '');
         });
         var header = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;' });
         // v22p83: child avatar (photo or initials) next to the name
@@ -272,8 +296,14 @@
     var tbody = Dom.el('tbody');
     children.forEach(function (c) {
       var tr = Dom.el('tr', { style: 'border-top:1px solid #E5E7EB;cursor:pointer;' });
+      /* THE RECORD OPENS IN A POPUP (2026-09-21). Anthony: "view children record should
+         be a popup which includes archived records". Opening it used to LEAVE this list -
+         and coming back landed at the top of it, having lost the filter and the scroll.
+         KT.ChildDetail.openModal renders the same record into a dialog; if an old cached
+         build has no opener it falls back to the hash, so nothing can become a dead
+         click. */
       tr.addEventListener('click', function () {
-        window.location.hash = '#child-detail?id=' + c.id + (centreIdHint ? '&centre_id=' + centreIdHint : '');
+        _openChild(c, centreIdHint);
       });
 
       var nameCell = Dom.el('td', { style: 'padding:11px 14px;' });
@@ -343,7 +373,7 @@
       }, 'Open');
       viewBtn.addEventListener('click', function (ev) {
         ev.stopPropagation();
-        window.location.hash = '#child-detail?id=' + c.id + (centreIdHint ? '&centre_id=' + centreIdHint : '');
+        _openChild(c, centreIdHint);
       });
       actTd.appendChild(viewBtn);
       tr.appendChild(actTd);

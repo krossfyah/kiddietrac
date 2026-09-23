@@ -39,7 +39,56 @@ class CheckEventNotifier
      *        the door by her mother" answer different questions, and the second is the one
      *        asked when something looks wrong. (Anthony, 2026-08-26)
      */
+    /* SIX SECONDS, STANDING IN A DOORWAY (2026-09-21).
+
+       Cassandra's check-in took 6250ms and Eisha checked the same child in twice, six
+       seconds apart - the second refused "Already checked in at 8:51 AM", with the
+       browser recording that the reply never arrived at all. Three reports, one endpoint.
+
+       The work was all here. notify() ran INSIDE the check-in request and, per guardian,
+       made outbound HTTP calls that the educator had to wait for: FcmService to Google,
+       then WebPushService to whatever endpoint the browser registered, then Telnyx if SMS
+       is on - and Telnyx has been answering "Tollfree number is not verified" since
+       mid-September, so that one is a round trip to a refusal. Two guardians is four to
+       six blocking calls before the child is shown as arrived.
+
+       An educator with a queue of families at the door taps, sees nothing happen, and
+       taps again. That is where the duplicate came from.
+
+       afterResponse(), NOT the queue. The email below already goes to the queue, and the
+       queue here is a one-minute cron running --stop-when-empty: measured today, a job
+       dispatched at 13:49:20 ran at 13:50:05, forty-five seconds later. That is fine for
+       an email and wrong for "your child has arrived". afterResponse runs the moment the
+       response has been handed to the educator's phone - measured in the SAME SECOND it
+       was dispatched - so the tap is instant and the parent's push is not delayed at all.
+
+       Console callers run it inline: a command or the queue worker has no HTTP response
+       to come after, so deferring there would drop the notification entirely. */
     public function notify(int $childId, string $eventType, ?int $byUserId, $occurredAt = null, ?string $source = null): void
+    {
+        /* A timestamp, not "now" read later on: the deferred closure runs after the
+           response and would otherwise stamp the notification a moment late. */
+        $at = Carbon::parse($occurredAt ?: now())->toIso8601String();
+
+        if (app()->runningInConsole()) {
+            $this->deliver($childId, $eventType, $byUserId, $at, $source);
+
+            return;
+        }
+
+        try {
+            dispatch(function () use ($childId, $eventType, $byUserId, $at, $source) {
+                app(self::class)->deliver($childId, $eventType, $byUserId, $at, $source);
+            })->afterResponse();
+        } catch (\Throwable $e) {
+            /* If deferring is not available for any reason, send it the slow way rather
+               than not at all - a late check-in notice beats a missing one. */
+            $this->deliver($childId, $eventType, $byUserId, $at, $source);
+        }
+    }
+
+    /** The part that talks to Google, the push endpoints and the carrier. Never in a request. */
+    public function deliver(int $childId, string $eventType, ?int $byUserId, $occurredAt = null, ?string $source = null): void
     {
         try {
             $child = DB::table('children as c')
@@ -132,7 +181,29 @@ class CheckEventNotifier
      * child had arrived. Separate method rather than a flag inside notify(), because the
      * audience, the wording and the delivery are all different.
      */
+    /* The staff-side twin of notify(), and it blocks in exactly the same way: it ends in
+       push() per recipient, which is an HTTP call to Google and another to the browser's
+       push endpoint. Its callers are the kiosk and the QR scanner - the two places where
+       somebody is standing at a door holding a phone up to a code - so it gets the same
+       treatment. Deferred past the response; run inline from the console, where there is
+       no response to come after. (2026-09-21) */
     public function notifyStaff(int $childId, ?int $roomId, ?int $centreId, string $eventType, ?int $byUserId, ?string $source = null): void
+    {
+        if (! app()->runningInConsole()) {
+            try {
+                dispatch(function () use ($childId, $roomId, $centreId, $eventType, $byUserId, $source) {
+                    app(self::class)->deliverStaff($childId, $roomId, $centreId, $eventType, $byUserId, $source);
+                })->afterResponse();
+
+                return;
+            } catch (\Throwable $e) { /* fall through and send it inline */ }
+        }
+
+        $this->deliverStaff($childId, $roomId, $centreId, $eventType, $byUserId, $source);
+    }
+
+    /** The part that talks to Google and the push endpoints. Never in a request. */
+    public function deliverStaff(int $childId, ?int $roomId, ?int $centreId, string $eventType, ?int $byUserId, ?string $source = null): void
     {
         try {
             $child = DB::table('children')->where('id', $childId)

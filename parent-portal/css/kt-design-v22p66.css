@@ -154,7 +154,7 @@
     box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
     display: flex;
     justify-content: space-around;
-    padding: 8px 4px max(8px, env(safe-area-inset-bottom));
+    padding: 8px 4px max(8px, var(--kt-safe-bottom, env(safe-area-inset-bottom)));
     z-index: 900; /* v22p78: was 99998 — kept below modals/overlays so popups (waitlist, tours, etc.) are not covered on mobile */
   }
   .kt-mobile-bottom-nav a {
@@ -315,9 +315,16 @@
     align-items: stretch !important;
   }
 
-  /* Larger tap targets */
-  [data-kt-pretty] .kt-btn,
-  [data-kt-pretty] button {
+  /* Larger tap targets.
+
+     EXCLUDING SWITCHES. A toggle is a <button>, so it matched this and was handed a
+     44px floor and 12px/18px of padding — both !important, so the switch's own inline
+     48x28 could not win, and it rendered as a fat rounded square with the knob adrift.
+     That is the "toggle cosmetic issue" that kept coming back: every previous fix
+     adjusted the switch, which cannot outrank an !important rule aimed at all buttons.
+     A switch already IS a 48x28 target and needs no enlarging. 2026-09-01. */
+  [data-kt-pretty] .kt-btn:not([role="switch"]):not([aria-pressed]),
+  [data-kt-pretty] button:not([role="switch"]):not([aria-pressed]) {
     min-height: 44px !important;
     padding: 12px 18px !important;
   }

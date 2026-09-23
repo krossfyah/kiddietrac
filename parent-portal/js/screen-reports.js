@@ -153,88 +153,45 @@
     catch (e) { host.innerHTML = '<div style="color:#B91C1C;font-size:13px;">Could not load schedules: ' + esc(e.message || '') + '</div>'; return; }
     var list = d.schedules || [];
     if (!list.length) { host.innerHTML = '<div style="color:#94A3B8;font-size:13px;padding:6px 0;">No schedules yet. Click “＋ Schedule a report” to create one.</div>'; return; }
-    host.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + list.map(function (s) {
+    /* data-kt-list gets these cards the shared ⋮ from kt-row-actions.js.
+       data-kt-no-controls because the marker also invites a search + A–Z bar from
+       kt-list-controls.js, and this list already sits under the Reports toolbar. */
+    host.innerHTML = '<div data-kt-list data-kt-no-controls style="display:flex;flex-direction:column;gap:8px;">' + list.map(function (s) {
       var fmt = s.format === 'both' ? 'PDF + CSV' : String(s.format || 'pdf').toUpperCase();
       return '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #EEF2F7;border-radius:10px;padding:10px 12px;' + (s.active ? '' : 'opacity:.55;') + '">' +
         '<div style="flex:1;min-width:180px;"><div style="font-weight:700;color:#0D1B2A;font-size:14px;">' + esc(s.report_title) + ' <span style="font-weight:500;color:#64748B;font-size:12px;">· ' + esc(fmt) + '</span></div>' +
         '<div style="font-size:12px;color:#64748B;">' + esc(s.schedule_label) + ' → ' + esc(s.recipient) + (s.centre_name ? ' · ' + esc(s.centre_name) : '') + '</div>' +
         (s.last_sent_on ? '<div style="font-size:11px;color:#94A3B8;">Last sent ' + esc(s.last_sent_on) + '</div>' : '') + '</div>' +
         '<label style="font-size:11px;color:#64748B;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" data-toggle="' + s.id + '"' + (s.active ? ' checked' : '') + '> Active</label>' +
-        // Actions behind a kebab. Delete was sitting in red on every row of a list
-        // somebody reads weekly; one slip removed a schedule with no way back.
-        // Just the button. The menu is built on <body> when opened — see openKebab —
-        // because an absolutely positioned menu lives inside whatever the row lives
-        // inside, and something up that chain was cutting it off.
-        '<button data-kebab="' + s.id + '" title="Actions" aria-label="Actions" aria-haspopup="true" aria-expanded="false" ' +
-          'style="width:32px;height:32px;border-radius:9px;border:1px solid #E2E8F0;background:#fff;cursor:pointer;font-size:16px;line-height:1;color:#475569;">⋮</button>' +
+        /* Plain buttons in an actions bar that is the row's LAST element child —
+           that is what cardActionCell() looks for, and kt-row-actions collapses
+           them into the standard ⋮. The text IS the menu item, so each is labelled;
+           "Delete" picks up the destructive red automatically. */
+        '<div>' +
+          '<button class="btn" data-act="run" data-id="' + s.id + '">📤 Send now</button>' +
+          '<button class="btn" data-act="edit" data-id="' + s.id + '">✏️ Edit</button>' +
+          '<button class="btn" data-act="del" data-id="' + s.id + '">🗑 Delete</button>' +
+        '</div>' +
         '</div>';
     }).join('') + '</div>';
-    // One menu at a time, on <body>, so nothing up the DOM can clip it.
-    var openMenu = null;
-    function closeMenus() {
-      if (openMenu && openMenu.parentNode) { openMenu.parentNode.removeChild(openMenu); }
-      openMenu = null;
-      host.querySelectorAll('[data-kebab]').forEach(function (b) { b.setAttribute('aria-expanded', 'false'); });
-    }
-
-    function openKebab(btn, sched) {
-      closeMenus();
-      var menu = document.createElement('div');
-      menu.style.cssText = 'position:fixed;z-index:9998;background:#fff;border:1px solid #E2E8F0;border-radius:10px;' +
-        'box-shadow:0 10px 30px rgba(15,23,42,.16);min-width:180px;overflow:hidden;padding:4px 0;';
-      var item = function (label, colour, fn) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.textContent = label;
-        b.dataset.ktIconized = '1';
-        b.style.cssText = 'display:block;width:100%;text-align:left;border:none;background:none;padding:10px 14px;' +
-          'font-size:13px;color:' + colour + ';cursor:pointer;';
-        b.addEventListener('mouseenter', function () { b.style.background = '#F8FAFC'; });
-        b.addEventListener('mouseleave', function () { b.style.background = 'none'; });
-        b.addEventListener('click', function (e) { e.stopPropagation(); closeMenus(); fn(b); });
-        menu.appendChild(b);
-        return b;
-      };
-
-      item('📤 Send now', '#0F172A', function () { runSchedule(sched.id); });
-      item('✏️ Edit', '#0F172A', function () { openScheduleModal(sched); });
-      var del = item('🗑 Delete', '#B91C1C', function () { deleteSchedule(sched); });
-      del.style.borderTop = '1px solid #F1F5F9';
-
-      document.body.appendChild(menu);
-
-      // Placed from the button's own rectangle, and flipped above it when there is no
-      // room below — which is exactly the case for the last row in the list, the one
-      // most likely to have been cut off.
-      var r = btn.getBoundingClientRect();
-      var h = menu.offsetHeight || 132;
-      var w = menu.offsetWidth || 180;
-      var top = (r.bottom + 6 + h > window.innerHeight) ? Math.max(8, r.top - h - 6) : r.bottom + 6;
-      var left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
-      menu.style.top = top + 'px';
-      menu.style.left = left + 'px';
-
-      menu.addEventListener('click', function (e) { e.stopPropagation(); });
-      btn.setAttribute('aria-expanded', 'true');
-      openMenu = menu;
-    }
-
-    host.querySelectorAll('[data-kebab]').forEach(function (b) {
-      b.dataset.ktIconized = '1';
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        var wasOpen = b.getAttribute('aria-expanded') === 'true';
-        var id = b.getAttribute('data-kebab');
-        var sched = list.filter(function (x) { return String(x.id) === String(id); })[0];
-        if (wasOpen || !sched) { closeMenus(); return; }
-        openKebab(b, sched);
-      });
+    /* Delegated, so it survives the re-render this list does on every toggle.
+       kt-row-actions forwards a REAL click to the original hidden button, so a
+       click arrives here whether the action was taken from the kebab or, on a
+       phone, from the button itself. */
+    host.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-act]') : null;
+      if (!b || !host.contains(b)) { return; }
+      e.stopPropagation();
+      var sched = list.filter(function (x) { return String(x.id) === String(b.getAttribute('data-id')); })[0];
+      if (!sched) { return; }
+      var act = b.getAttribute('data-act');
+      if (act === 'run')  { runSchedule(sched.id); }
+      if (act === 'edit') { openScheduleModal(sched); }
+      if (act === 'del')  { deleteSchedule(sched); }
     });
-    // A fixed menu does not travel with the page, so it closes rather than floating
-    // away from the row it belongs to.
-    document.addEventListener('click', closeMenus);
-    window.addEventListener('resize', closeMenus);
-    window.addEventListener('scroll', closeMenus, true);
+
+    // The cards were just rebuilt — collapse them now rather than on the next sweep.
+    if (window.KT && KT.sweepRowActions) { KT.sweepRowActions(); }
 
     host.querySelectorAll('[data-toggle]').forEach(function (cb) {
       cb.addEventListener('change', async function () {
@@ -270,7 +227,7 @@
     var isM = window.matchMedia && window.matchMedia('(max-width:768px)').matches;
     var inp = 'width:100%;padding:9px 11px;border:1.5px solid #E2E8F0;border-radius:9px;font-size:14px;box-sizing:border-box;font-family:inherit;';
     var ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:9999;display:flex;align-items:center;justify-content:center;' + (isM ? 'padding:10px 12px calc(84px + env(safe-area-inset-bottom,0px)) 12px;' : 'padding:16px;');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:9999;display:flex;align-items:center;justify-content:center;' + (isM ? 'padding:10px 12px calc(84px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px))) 12px;' : 'padding:16px;');
     ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;padding:22px;max-height:' + (isM ? 'calc(100vh - 150px)' : '92vh') + ';overflow:auto;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><div style="font-weight:800;font-size:18px;color:#0F172A;">' + (editing ? '✏️ Edit schedule' : '📅 Schedule a report') + '</div><button type="button" data-x style="background:none;border:none;font-size:22px;color:#94A3B8;cursor:pointer;line-height:1;">×</button></div>' +
       '<div style="display:grid;gap:12px;">' +

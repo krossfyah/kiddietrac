@@ -67,6 +67,12 @@
       + '<div style="display:flex;gap:14px;margin:0 0 18px;">'
       +   '<div style="background:#fff;border:1px solid #E7EBF0;border-left:4px solid ' + (data.open ? '#BE4038' : '#1E8E60') + ';border-radius:12px;padding:14px 18px;min-width:140px;"><div style="font:600 30px/1 ui-monospace,monospace;color:' + (data.open ? '#BE4038' : '#1E8E60') + ';">' + data.open + '</div><div style="font-size:12.5px;color:#64748B;margin-top:6px;">Open alerts</div></div>'
       +   '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:12px;padding:14px 18px;min-width:140px;"><div style="font:600 30px/1 ui-monospace,monospace;color:#0F2540;">' + data.total + '</div><div style="font-size:12.5px;color:#64748B;margin-top:6px;">Total recorded</div></div>'
+      + '<div style="margin-left:auto;display:flex;align-items:center;gap:8px;">'
+      +   (data.open
+          ? '<button id="ktsa-ack-all" style="font-size:12.5px;font-weight:600;padding:9px 14px;border-radius:9px;border:1px solid #D6DEE7;background:#fff;color:#1E293B;cursor:pointer;">Acknowledge all (' + data.open + ')</button>'
+          : '')
+      +   '<button id="ktsa-clear" style="font-size:12.5px;font-weight:600;padding:9px 14px;border-radius:9px;border:1px solid #F2C9C3;background:#fff;color:#BE4038;cursor:pointer;" title="Removes acknowledged alerts only. Open alerts are never cleared.">Clear log</button>'
+      + '</div>'
       + '</div>'
       + '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;overflow:hidden;">'
       +   '<table style="width:100%;border-collapse:separate;border-spacing:0;">'
@@ -76,6 +82,71 @@
       +     '<tbody>' + rowsHtml + '</tbody>'
       +   '</table>'
       + '</div></div>';
+
+    /* CLEARING THE LOG IS TWO ACTS, NOT ONE (2026-09-21).
+
+       Anthony: "add a clear log button to remove the alerts once acknowledged/read".
+       Acknowledged is the operative word, and the SERVER enforces it - clearAlerts()
+       deletes resolved rows only. These are the SOC 2 CC7 monitoring trail, so one button
+       that wiped unread warnings would destroy exactly the evidence an incident review
+       needs, and would be the first thing worth pressing by whoever had just triggered
+       them. Acknowledge, then clear. Both are written to the audit log with the types and
+       counts, so emptying this list cannot itself be done quietly. */
+    var ackAll = main.querySelector('#ktsa-ack-all');
+    if (ackAll) {
+      ackAll.onclick = async function () {
+        var ok = await KT.confirm({
+          title: 'Acknowledge all open alerts?',
+          description: 'They stay in the log and stay readable - this only marks them seen, '
+            + 'so that they can then be cleared.',
+          okLabel: 'Acknowledge all',
+        });
+        if (!ok) { return; }
+        ackAll.disabled = true;
+        try { await Api.post('/platform/security-alerts/resolve-all', {}); render(main); }
+        catch (e) {
+          ackAll.disabled = false;
+          if (KT.toast) { KT.toast('!', 'Could not acknowledge', (e && e.message) || 'error', '#DC2626'); }
+        }
+      };
+    }
+
+    var clearBtn = main.querySelector('#ktsa-clear');
+    if (clearBtn) {
+      clearBtn.onclick = async function () {
+        var resolvedCount = alerts.filter(function (a) { return a.resolved; }).length;
+        if (!resolvedCount) {
+          if (KT.toast) {
+            KT.toast('i', 'Nothing to clear',
+              data.open
+                ? 'Acknowledge the open alerts first - unread alerts are never cleared.'
+                : 'The log is already empty.', '#0369A1');
+          }
+          return;
+        }
+        var ok = await KT.confirm({
+          title: 'Clear ' + resolvedCount + ' acknowledged alert' + (resolvedCount === 1 ? '' : 's') + '?',
+          description: 'They are deleted from the log permanently. '
+            + (data.open ? ('The ' + data.open + ' alert' + (data.open === 1 ? '' : 's')
+                + ' still open will be left in place. ') : '')
+            + 'Clearing is itself recorded in the audit log.',
+          okLabel: 'Clear log',
+        });
+        if (!ok) { return; }
+        clearBtn.disabled = true;
+        try {
+          var r = await Api.post('/platform/security-alerts/clear', {});
+          if (KT.toast) {
+            KT.toast('OK', 'Log cleared',
+              (r && r.cleared ? r.cleared : resolvedCount) + ' acknowledged alert(s) removed.', '#16A34A');
+          }
+          render(main);
+        } catch (e) {
+          clearBtn.disabled = false; clearBtn.textContent = 'Clear log';
+          if (KT.toast) { KT.toast('!', 'Could not clear', (e && e.message) || 'error', '#DC2626'); }
+        }
+      };
+    }
 
     main.querySelectorAll('.ktsa-resolve').forEach(function (b) {
       b.onclick = function () {

@@ -52,7 +52,7 @@
 
   /* ── Shell density — reclaim the wasted outer padding ── */
   .app-shell--sidebar .app-main,
-  .app-main { padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 74px) !important; }
+  .app-main { padding: 8px 10px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 74px) !important; }
   #appMain > div[style*="max-width"] { max-width: 100% !important; }
   /* This is how a screen's own desktop page padding is flattened on a phone: the
      shell's 10px gutter is the only one wanted, and a second one nested inside it
@@ -227,7 +227,7 @@
   body:has(.kt-thread-compose) #kt-mobilenav { display: none !important; }
   .kt-thread-header { flex: 0 0 auto !important; padding-top: calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 10px) !important; }
   .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
-  .kt-thread-compose { flex-shrink: 0 !important; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px) !important; }
+  .kt-thread-compose { flex-shrink: 0 !important; padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 8px) !important; }
   .kt-compose-input { font-size: 16px !important; }  /* no iOS zoom while typing */
 
   /* ── Native-feeling screen transitions: on navigation, kt-mobilenav.js tags the
@@ -415,7 +415,7 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (max-width: 768px) {
   #appMain .kt-thread-compose {
     gap: 6px !important;
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 8px 10px calc(8px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
     align-items: center !important;
   }
   #appMain .kt-thread-compose .kt-attach-btn,
@@ -473,7 +473,7 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (max-width: 768px) {
   .app-shell--sidebar .app-main,
   .app-main,
-  #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 100px) !important; }
+  #appMain { padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 100px) !important; }
 }
 
 /* ── Sign out: make it findable, not a grey whisper ── */
@@ -1503,7 +1503,7 @@ html.kt-ios-inset-fallback #appMain {
 
   /* ── Shell density — reclaim the wasted outer padding ── */
   .app-shell--sidebar .app-main,
-  .app-main { padding: 8px 10px calc(env(safe-area-inset-bottom, 0px) + 74px) !important; }
+  .app-main { padding: 8px 10px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 74px) !important; }
   #appMain > div[style*="max-width"] { max-width: 100% !important; }
   /* This is how a screen's own desktop page padding is flattened on a phone: the
      shell's 10px gutter is the only one wanted, and a second one nested inside it
@@ -1678,7 +1678,7 @@ html.kt-ios-inset-fallback #appMain {
   body:has(.kt-thread-compose) #kt-mobilenav { display: none !important; }
   .kt-thread-header { flex: 0 0 auto !important; padding-top: calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 10px) !important; }
   .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
-  .kt-thread-compose { flex-shrink: 0 !important; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px) !important; }
+  .kt-thread-compose { flex-shrink: 0 !important; padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 8px) !important; }
   .kt-compose-input { font-size: 16px !important; }  /* no iOS zoom while typing */
 
   /* ── Native-feeling screen transitions: on navigation, kt-mobilenav.js tags the
@@ -1866,7 +1866,7 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (max-width: 768px) {
   #appMain .kt-thread-compose {
     gap: 6px !important;
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 8px 10px calc(8px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
     align-items: center !important;
   }
   #appMain .kt-thread-compose .kt-attach-btn,
@@ -1924,7 +1924,7 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (max-width: 768px) {
   .app-shell--sidebar .app-main,
   .app-main,
-  #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 100px) !important; }
+  #appMain { padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 100px) !important; }
 }
 
 /* ── Sign out: make it findable, not a grey whisper ── */

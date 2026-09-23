@@ -36,6 +36,21 @@
       blurb: 'Card payments and saved payment methods. Keys come from your Stripe '
         + 'dashboard, under Developers → API keys.',
     },
+    helcim: {
+      title: '🍁 Helcim',
+      save: 'Helcim',
+      blurb: 'Credit and debit cards, refunds and voids. One API token does everything — '
+        + 'create it in Helcim under All Tools → Integrations → API Access, with the '
+        + 'Payment API permissions enabled. Cards are entered inside Helcim&rsquo;s own '
+        + 'window, so a card number never reaches KiddieTrac.',
+      /* Helcim has no separate sandbox host: test and live traffic both go to
+         api.helcim.com and the TOKEN decides which it is. Saying so here matters,
+         because the Mode control above reads as though it routes somewhere safe. */
+      modeNote: 'Helcim has no separate sandbox address — a test token and a live token '
+        + 'both talk to api.helcim.com. Set this to match the kind of token you pasted; '
+        + 'it labels what staff see, it does not keep real money away.',
+      test: true,
+    },
   };
 
   async function render(main) {
@@ -151,8 +166,9 @@
       + '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;'
       +   'padding:10px 0;border-bottom:1px solid #F1F5F9;">'
       +   '<div><div style="font-size:14px;font-weight:600;color:#334155;">Mode</div>'
-      +     '<div style="font-size:12.5px;color:#64748B;">Use sandbox until you have tested a real '
-      +     'payment end to end.</div></div>'
+      +     '<div style="font-size:12.5px;color:#64748B;">'
+      +     (meta.modeNote || 'Use sandbox until you have tested a real payment end to end.')
+      +     '</div></div>'
       +   '<select data-pp-mode style="padding:6px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;">'
       +     '<option value="sandbox"' + (p.mode === 'sandbox' ? ' selected' : '') + '>Sandbox</option>'
       +     '<option value="production"' + (p.mode === 'production' ? ' selected' : '') + '>Production</option>'
@@ -168,11 +184,46 @@
             + 'Payments are only confirmed when they call it — a wrong URL fails quietly at settlement.</div></div>'
           : '')
       + '<div style="display:flex;align-items:center;gap:12px;margin-top:16px;">'
-      +   '<button data-pp-save class="kt-btn kt-btn-primary">Save ' + esc(key === 'stripe' ? 'Stripe' : 'Zum Rails') + '</button>'
+      +   '<button data-pp-save class="kt-btn kt-btn-primary">Save '
+      +     esc(meta.save || (key === 'stripe' ? 'Stripe' : key === 'helcim' ? 'Helcim' : 'Zum Rails'))
+      +     '</button>'
+      +   (meta.test ? '<button data-pp-test class="kt-btn" style="border:1px solid #CBD5E1;background:#fff;">Test connection</button>' : '')
       +   '<span data-pp-msg style="font-size:13px;"></span>'
       +   '<span style="margin-left:auto;font-size:12px;color:' + (p.configured ? '#1E8E60' : '#94A3B8') + ';">'
       +     (p.configured ? '● Ready' : '○ Not configured yet') + '</span>'
       + '</div>';
+
+    /* TEST, rather than find out from a parent who cannot pay.
+
+       A wrong or under-permissioned API token looks exactly like a right one on this
+       screen - it is stored, it shows ••••last4, the dot goes green. "Configured" only
+       ever meant "a value is present". This asks Helcim. */
+    var testBtn = box.querySelector('[data-pp-test]');
+    if (testBtn) {
+      testBtn.addEventListener('click', function () {
+        var msg = box.querySelector('[data-pp-msg]');
+        testBtn.disabled = true;
+        msg.style.color = '#64748B';
+        msg.textContent = 'Asking Helcim…';
+
+        Api.post('/admin/payment-providers/helcim/test', {}).then(function (r) {
+          testBtn.disabled = false;
+          if (r && r.ok) {
+            msg.style.color = '#1E8E60';
+            msg.textContent = '✓ Helcim accepted this token'
+              + (r.live ? ' — LIVE, real cards will be charged' : ' — labelled as sandbox')
+              + (r.currency ? ' · ' + r.currency : '');
+          } else {
+            msg.style.color = '#B91C1C';
+            msg.textContent = '✗ ' + ((r && r.error) || 'Helcim did not accept that token');
+          }
+        }).catch(function (e) {
+          testBtn.disabled = false;
+          msg.style.color = '#B91C1C';
+          msg.textContent = (e && e.message) || 'Could not reach Helcim';
+        });
+      });
+    }
 
     box.querySelector('[data-pp-save]').addEventListener('click', function () {
       var btn = box.querySelector('[data-pp-save]');

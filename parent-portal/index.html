@@ -32,7 +32,7 @@
   <link rel="stylesheet" href="/css/kt-brand-v16.css">
   <link rel="stylesheet" href="/css/kt-login-v22.css">
   <link rel="stylesheet" href="/css/kt-login-pop.css">
-  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260729logo">
+  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260921ios">
   <!-- Mark the native APK on <html> as early as possible. kt-app = the app at any
        size; kt-native = the app on a PHONE-shaped device, which is what the navy
        mobile login below is keyed to. A tablet gets neither the phone login nor a
@@ -43,7 +43,7 @@
        phone is still correctly a phone. -->
   <script>try{var C=window.Capacitor;var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)));var d=document.documentElement;function ktPhone(){try{var s=window.screen||{},e=(s.width&&s.height)?Math.min(s.width,s.height):(s.width||0);var w=window.innerWidth||0;if(e)return e<=600||(w>0&&w<=768);return w>0?w<=768:true;}catch(x){return true;}}function ktSync(){d.classList.toggle('kt-app',nat);d.classList.toggle('kt-native',nat&&ktPhone());}ktSync();window.__KT_NATIVE=nat;window.__KT_PHONE=ktPhone();window.addEventListener('resize',ktSync);window.addEventListener('orientationchange',ktSync);}catch(e){}</script>
   <!-- Bold navy mobile/APK login (layered over the redesign above). -->
-  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260812tablet3">
+  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260921ios">
 </head>
 <body class="auth-body">
 <!-- Launch splash REMOVED (2026-08-11): opening the app must land on the login
@@ -364,6 +364,29 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
           sessionStorage.setItem('kt_last_activity', nowMs);
         }
 
+        /* A PENDING PASSWORD CHANGE GOES STRAIGHT TO THE CHANGE SCREEN (2026-09-21).
+
+           Anthony: "it allowed Safia to login but cannot see pages as it indicated a
+           password reset is required - why did it even allow Safia to login earlier."
+
+           The token IS issued deliberately - changing the password needs an authenticated
+           call - and the server has always returned must_change_password so the client
+           could route accordingly. Its own comment says so: "this flag is only so the
+           client can go straight to the change screen instead of painting a dashboard
+           that will 403."
+
+           Nothing ever read it. The contract was written on one side only, so she signed
+           in, landed on a dashboard, and every request came back 403. From where she sat
+           the sign-in worked and the app was broken. */
+        if (body.must_change_password) {
+          try { sessionStorage.setItem('kt_force_password_change', '1'); } catch (e) {}
+          /* The Security tab, not just Settings: landing on Profile and expecting
+             somebody to find the password form is the same failure as a notification
+             that drops you on a list. */
+          window.location.href = '/dashboard.html#settings?tab=security';
+          return;
+        }
+
         // Redirect based on role
         if (body.user.roles.includes('guardian')) {
           window.location.href = '/dashboard.html';
@@ -419,5 +442,17 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
        is still a lock-up, and it was the one screen it could not see. -->
   <script src="/js/kt-freeze-watch.js?v=20260831frz2" defer></script>
   <script src="/js/kt-i18n.js?v=20260808i24" defer></script>
+  <!-- A dialog is left on purpose, not by tapping past it (2026-09-21).
+       kt-modal-safety stops a backdrop click (and a text-selection drag that merely
+       ENDED on the backdrop) from closing a popup that offers a way out; kt-modal-guard
+       grafts a visible close into any popup lacking one, which is what makes taking the
+       backdrop away safe rather than a trap.
+
+       Both already existed and were loaded ONLY by dashboard.html - so every popup on a
+       signed-out page, the password-reset dialog on this one included, still closed on a
+       stray click and lost whatever had been typed. Both files are standalone (no shell,
+       no Api, no Dom), so they load anywhere. -->
+  <script src="/js/kt-modal-guard.js?v=20260921ms" defer></script>
+  <script src="/js/kt-modal-safety.js?v=20260921ms" defer></script>
 </body>
 </html>

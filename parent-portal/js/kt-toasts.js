@@ -30,9 +30,9 @@
       // transformed/offset ancestor became its containing block (mobile
       // slide-in screen transitions do exactly this) — verified in the DOM.
       // left/right anchoring is immune to that.
-      c.style.cssText = 'position:fixed;top:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);left:12px;right:12px;transform:none;z-index:2147483600;display:flex;flex-direction:column;align-items:stretch;gap:10px;width:auto;max-width:none;max-height:66vh;pointer-events:none;';
+      c.style.cssText = 'position:fixed;top:auto;bottom:calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 96px);left:12px;right:12px;transform:none;z-index:2147483600;display:flex;flex-direction:column;align-items:stretch;gap:10px;width:auto;max-width:none;max-height:66vh;pointer-events:none;';
     } else {
-      var topPad = 'max(env(safe-area-inset-top, 0px), 34px)';
+      var topPad = 'max(var(--kt-safe-top, env(safe-area-inset-top, 0px)), 34px)';
       c.style.cssText = 'position:fixed;top:calc(' + topPad + ' + 10px);right:12px;left:auto;bottom:auto;transform:none;z-index:2147483600;display:flex;flex-direction:column;align-items:flex-end;gap:10px;width:min(360px, calc(100vw - 24px));max-width:calc(100vw - 24px);pointer-events:none;';
     }
   }
@@ -76,10 +76,32 @@
       (body ? '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + body + '</div>' : '') + '</div>';
     var x = document.createElement('button'); x.textContent = '×'; x.setAttribute('aria-label', 'Dismiss');
     x.style.cssText = 'margin-left:auto;border:none;background:transparent;color:#94A3B8;font-size:17px;cursor:pointer;line-height:1;flex-shrink:0;';
+    /* Same toast already up? Refresh it rather than stack a copy. Repeat taps on
+       the APK were leaving a column of identical toasts covering the screen. */
+    try {
+      var sig = [icon, title, body].join('');
+      var dup = c.querySelector('[data-kt-sig="' + CSS.escape(sig) + '"]');
+      if (dup && dup.ktReset) { dup.ktReset(); t.remove(); return dup; }
+      t.setAttribute('data-kt-sig', sig);
+    } catch (e) { /* CSS.escape is missing on very old webviews — just stack */ }
+
     var timer = setTimeout(function () { dismiss(); }, 6000);
+    /* Lets a repeat tap restart this toast's countdown from the outside. */
+    t.ktReset = function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () { dismiss(); }, 6000);
+      t.style.animation = 'none';
+      void t.offsetWidth;                       // force a reflow so it replays
+      t.style.animation = 'kt-toast-in .18s ease';
+    };
     function dismiss() { clearTimeout(timer); t.style.animation = 'kt-toast-out .3s ease forwards'; setTimeout(function () { t.remove(); }, 320); }
     x.onclick = dismiss; t.appendChild(x);
     c.appendChild(t);
+    /* Hard ceiling. Different messages should stack, but not without limit — on a
+       phone a handful already fills the screen. Oldest goes first. */
+    try {
+      while (c.children.length > 4) { c.removeChild(c.firstElementChild); }
+    } catch (e) {}
     return t;
   }
   window.KT = window.KT || {}; window.KT.toast = toast;
@@ -94,6 +116,70 @@
   }
 
   var lastCount = null;
+
+  /* Open the thread the newest unread message belongs to.
+     Deliberately conservative:
+       • desktop only — the dock is a desktop window, and hijacking a phone screen
+         mid-task would be hostile
+       • never while a thread is already open, so it cannot yank you out of a
+         conversation you are in the middle of
+       • never on the Messenger screen itself, which is already showing the list */
+  function popOpenNewest() {
+    if (popOpenNewest.off) { return; }
+    try {
+      if (!(window.matchMedia && window.matchMedia('(min-width: 769px)').matches)) { return; }
+      var KTx = window.KT;
+      if (!KTx || !KTx.ChatDock || !KTx.ChatDock.isActive) { return; }
+      // Already showing a thread — never yank somebody out of a live conversation.
+      if (KTx.ChatDock.isActive()) { return; }
+      if ((location.hash || '').indexOf('chat') !== -1) { return; }
+
+      var t = tok(); if (!t) { return; }
+
+      // A parent has no provider surface — asking for it returns 403 and the window
+      // pops open onto an error. Same choice the rest of the app makes.
+      var role = (user() || {}).role || '';
+      var path = (role === 'guardian') ? '/parent/chats' : '/provider/chats';
+
+      fetch(API + path + '?per_page=1&page=1', {
+        headers: { 'Authorization': 'Bearer ' + t, 'X-Active-Agency-Id': agencyId() || '' },
+      })
+        .then(function (r) {
+          if (!r.ok) {
+            // Do not keep retrying a call that is not allowed — once is a glitch,
+            // every twelve seconds is a fault the user has to watch.
+            if (r.status === 401 || r.status === 403) { popOpenNewest.off = true; }
+            return null;
+          }
+          return r.json();
+        })
+        .then(function (d) {
+          var c = d && d.conversations && d.conversations[0];
+          if (!c || !c.unread_count) { return; }
+          // screen-chat exposes openThread once Messenger has been mounted at least
+          // once this session. Before that there is nothing to open into, so fall back
+          // to navigating — which still puts the conversation in front of them.
+          /* openThread(cid, container) — the container was missing here, unlike
+             every other caller. Passing the Messenger mount keeps it consistent, and a
+             conversation that will not open is skipped rather than shown as a raw API
+             error the moment somebody logs in. */
+          if (KTx.Chat && KTx.Chat.openThread) {
+            try {
+              var mount = document.querySelector('#appMain') || document.body;
+              var p = KTx.Chat.openThread(c.id, mount);
+              if (p && typeof p.catch === 'function') { p.catch(function () {}); }
+            } catch (e) { /* a convenience must never break the login */ }
+          }
+          else { location.hash = '#chat'; }
+        })
+        .catch(function () {});
+    } catch (e) { /* never let a convenience break the poller */ }
+  }
+
+  function agencyId() {
+    try { return sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) { return ''; }
+  }
+
   function pollMessages() {
     var t = tok(); if (!t) return;
     fetch(API + '/chats/unread-count', { headers: { 'Authorization': 'Bearer ' + t } })
@@ -105,6 +191,10 @@
         if (lastCount !== null && n > lastCount) {
           var diff = n - lastCount;
           toast('💬', diff === 1 ? 'New message' : diff + ' new messages', 'Open Messages to read.', '#1F6080');
+          // Pop the conversation open rather than only announcing it. The dock already
+          // survives SPA navigation, so this puts the sender's thread in front of you
+          // the way a desktop chat client would.
+          try { popOpenNewest(); } catch (e) {}
         }
         lastCount = n;
       }).catch(function () {});

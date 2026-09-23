@@ -351,7 +351,22 @@
     var isEditSubmitted = existing && existing.form.status === 'submitted';
 
     clear(container);
-    var wrap = el('div', { style: 'max-width:900px;margin:0 auto;padding:16px 14px 120px;' });
+    /* THE FORM KEPT CLEARING (2026-09-18).
+
+       Lloydene: "the form keeps clearing for her and she needs to start over and over."
+
+       Nothing was wrong with the form - it was being torn down under her. Every answer
+       on this screen lives in the DOM and nowhere else, and kt-live.js calls
+       KT.Shell.renderScreen() after any write this tab makes, which clears #appMain and
+       re-runs this function from the top: an empty form. The refreshers defer while
+       KT.uiBusy(), but uiBusy only asked "is a field focused" and "is a dialog open", so
+       the refresh was not cancelled while she typed - it was WAITING for her to stop.
+       Tapping a radio, scrolling to the next section or closing the phone keyboard was
+       enough to let it through.
+
+       data-kt-guard-unsaved tells kt-unsaved-guard.js that this container holds work
+       that is not saved yet, and every refresher defers while it does. */
+    var wrap = el('div', { 'data-kt-guard-unsaved': '1', style: 'max-width:900px;margin:0 auto;padding:16px 14px 120px;' });
     wrap.appendChild(el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1F6080,#159FB4);color:#fff;border-radius:16px;padding:18px 22px;margin-bottom:8px;' }, [
       el('div', { style: 'font-size:12px;opacity:.85;letter-spacing:.5px;' }, [isEditSubmitted ? 'EDIT SUBMITTED FORM' : (isDraft ? 'CONTINUE DRAFT' : 'INSPECTION FORM')]),
       el('div', { style: 'font-size:19px;font-weight:800;' }, [schema.title + (schema.title2 ? ' ' + schema.title2 : '')]),
@@ -414,6 +429,61 @@
       applyAnswers(schema, existing.answers || {});
     }
 
+    /* AND KEEP A COPY ON THE DEVICE.
+
+       The guard above stops the portal from clearing the form. It cannot help with a
+       browser reload, a flat battery, a tab closed by mistake, or the phone deciding to
+       reclaim the app - and on a home visit, in somebody's house, on a phone, those are
+       not rare. So every answer is also written to this device as it is typed.
+
+       Keyed by form type and the record being edited, so two half-finished forms do not
+       overwrite each other, and by user id, so a shared tablet does not hand the next
+       person someone else's visit. Cleared the moment the server has the work. */
+    var draftKey = 'kt_hccdraft:' + (user().id || 0) + ':' + type + ':' + (editId || 'new');
+
+    function saveLocal() {
+      try { localStorage.setItem(draftKey, JSON.stringify({
+        at: Date.now(), centre: centreSel.value || '', date: dateInp.value || '',
+        answers: collectAnswers(schema),
+      })); } catch (e) { /* a full or blocked store must not stop her working */ }
+    }
+    function dropLocal() {
+      try { localStorage.removeItem(draftKey); } catch (e) {}
+    }
+
+    try {
+      var savedRaw = localStorage.getItem(draftKey);
+      var saved = savedRaw ? JSON.parse(savedRaw) : null;
+      /* A fortnight. Long enough to cover a visit interrupted over a weekend, short
+         enough that a draft nobody came back to does not resurface months later against
+         a form that has since been submitted. */
+      if (saved && saved.answers && (Date.now() - (saved.at || 0)) < 14 * 24 * 3600 * 1000) {
+        applyAnswers(schema, saved.answers);
+        if (saved.centre) centreSel.value = saved.centre;
+        if (saved.date) dateInp.value = saved.date;
+        var note = el('div', { style: 'margin:0 0 12px;padding:10px 13px;border-radius:9px;background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;' }, [
+          el('span', {}, ['We kept what you had already filled in on this device. ']),
+        ]);
+        var discard = el('button', { style: 'background:transparent;border:1px solid #6EE7B7;border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer;color:#065F46;' }, ['Start fresh instead']);
+        discard.addEventListener('click', function () {
+          dropLocal();
+          if (KT.clearUnsaved) KT.clearUnsaved();
+          renderFillable(container);
+        });
+        note.appendChild(discard);
+        wrap.insertBefore(note, card);
+      }
+    } catch (e) { /* a bad draft is not worth failing the screen over */ }
+
+    /* Debounced: a keystroke should not touch storage, but a pause should. */
+    var saveTimer = null;
+    wrap.addEventListener('input', function () {
+      clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 700);
+    });
+    wrap.addEventListener('change', function () {
+      clearTimeout(saveTimer); saveTimer = setTimeout(saveLocal, 200);
+    });
+
     function payloadFrom() {
       var answers = collectAnswers(schema);
       return {
@@ -454,6 +524,12 @@
           if (status === 'draft') KT.toast('💾', 'Draft saved', 'Come back any time to finish.', '#0891A6');
           else KT.toast('✅', isEditSubmitted ? 'Changes saved' : 'Form submitted', isEditSubmitted ? 'Audit trail updated.' : 'Sent to your director/admin.', '#059669');
         }
+        /* Saved for real, so the local copy has done its job and the screen is free to
+           be refreshed again. Both must happen BEFORE the hash change, or the guard
+           keeps deferring refreshes on a screen that has already gone. */
+        dropLocal();
+        if (KT.clearUnsaved) KT.clearUnsaved();
+
         location.hash = '#inspection-forms';
       } catch (e) {
         btn.disabled = false; if (draftBtn) draftBtn.disabled = false; btn.textContent = oldTxt;
@@ -530,6 +606,18 @@
     clear(container);
     var wrap = el('div', { style: 'max-width:1160px;margin:0 auto;padding:6px 16px 90px;' });
     if (!enabled) { wrap.appendChild(el('div', { style: 'padding:26px;text-align:center;color:#64748B;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:12px;' }, ['Home-visitor forms aren’t enabled for this agency.'])); container.appendChild(wrap); return; }
+
+    /* START ONE FROM HERE. This screen is where an admin already comes to look at
+       inspections, so it is where they will look to do one - the home-visitor picker is
+       on a hash they have no nav item for. */
+    var newBar = el('div', { style: 'display:flex;justify-content:flex-end;margin:0 0 12px;' });
+    var newBtn = el('button', {
+      style: 'padding:9px 15px;border-radius:9px;border:1px solid #1F6080;background:#1F6080;'
+           + 'color:#fff;font-size:13px;font-weight:700;cursor:pointer;',
+    }, ['➕ New inspection']);
+    newBtn.addEventListener('click', function () { window.location.hash = 'inspection-forms'; });
+    newBar.appendChild(newBtn);
+    wrap.appendChild(newBar);
 
     var isDesktop = window.matchMedia && window.matchMedia('(min-width:701px)').matches;
     var state = { q: '', type: '', status: '', sortKey: 'visit_date', sortDir: 'desc' };
@@ -718,8 +806,22 @@
   }
 
   // ── Registrations ────────────────────────────────────────────────────
-  KT.Shell.registerScreen('home_visitor:inspection-forms', renderPicker);
-  KT.Shell.registerScreen('home_visitor:inspection-form', renderFillable);
+  /* AN ADMIN OR DIRECTOR CAN RUN THEIR OWN INSPECTION (2026-09-22).
+
+     Anthony: "for inspection forms section add a button to allow admin/director to do
+     their own inspection if required".
+
+     The BACKEND already allowed it - the whole inspection-forms prefix is
+     role:home_visitor,agency_admin,centre_director,platform_admin, and store() records
+     home_visitor_id = the signed-in user, so an admin who fills one is correctly recorded
+     as the person who did it. Only the front end was home-visitor-only: admins got the
+     reviewer table and no way to start one. Nothing in the fill screen is specific to a
+     home visitor - it renders the schema - so the same screens simply register for more
+     roles. */
+  ['home_visitor', 'agency_admin', 'centre_director', 'platform_admin'].forEach(function (role) {
+    KT.Shell.registerScreen(role + ':inspection-forms', renderPicker);
+    KT.Shell.registerScreen(role + ':inspection-form', renderFillable);
+  });
   ['home_visitor', 'agency_admin', 'centre_director', 'platform_admin'].forEach(function (role) {
     KT.Shell.registerScreen(role + ':hcc-form-view', renderDetail);
   });

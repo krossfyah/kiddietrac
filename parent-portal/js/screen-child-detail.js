@@ -385,9 +385,17 @@
       });
   }
 
-  function renderChildDetail(container) {
+  function renderChildDetail(container, opts) {
     Dom.clear(container);
-    var params = parseQuery(window.location.hash);
+    /* THE RECORD CAN NOW OPEN IN A POPUP (2026-09-21).
+
+       Anthony: "view children record should be a popup which includes archived records".
+
+       The hash was the only way in, which is why opening a child meant LEAVING the list
+       you were working through - and coming back to the top of it. `opts.params` lets a
+       caller hand the id (and archived flag) straight in; with no opts this behaves
+       exactly as it always has, so the #child-detail route is untouched. */
+    var params = (opts && opts.params) ? opts.params : parseQuery(window.location.hash);
     var childId = params.id;
     if (String(childId) !== String(editModeFor)) {
       editMode = false;
@@ -422,7 +430,19 @@
       var header = Dom.el('div', {
         style: 'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;',
       });
-      if (child.is_archived) {
+      /* HAS THIS CHILD LEFT? is_archived ALONE IS NOT THE ANSWER (2026-09-21).
+
+         A child leaves two different ways and only one of them sets is_archived:
+           - REMOVED  -> the row is soft-deleted, is_archived true;
+           - WITHDRAWN -> enrollment_status 'withdrawn' and a departed_at date, row intact.
+         The Archived list counts both (its State column literally says Removed or
+         Withdrawn), so a withdrawn child appeared there and then opened as a perfectly
+         live record - no banner, and Edit and Archive on the header. Measured: child 85
+         came back is_archived=false, departed_at='2026-09-22'; a live child has
+         departed_at null, so the date is the honest discriminator. */
+      var _departed = !!child.is_archived || !!child.departed_at;
+
+      if (_departed) {
         container.appendChild(Dom.el('div', {
           style: 'background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px;color:#9A3412;line-height:1.55;',
         }, '\ud83d\uddc4\ufe0f This child has left'
@@ -462,7 +482,7 @@
       }, _hasTimes
           ? ('🕗 Usual drop-off ' + t12(child.expected_dropoff_time)
              + '  ·  pick-up ' + t12(child.expected_pickup_time))
-          : '🕗 Usual drop-off / pick-up times not set — add them with Edit'));
+          : '🕗 Usual drop-off / pick-up times not set — ' + (_departed ? 'not recorded' : 'add them with Edit') + ''));
       header.appendChild(headerLeft);
 
 
@@ -472,7 +492,25 @@
       /* Edit is now a MODE, not a single modal. The modal still owns the core fields
          and is reachable from inside the mode — but the tabs' own editors only come
          alive once the mode is on. */
-      if (editMode) {
+      /* AN ARCHIVED RECORD IS READ-ONLY, AND MUST LOOK IT (2026-09-21).
+
+         Anthony: "archived children and when I am viewing the archived record it has the
+         button to archive again, remove that."
+
+         is_archived was consulted in exactly one place - the banner a few lines above,
+         which tells the reader this is "read-only history" - and nowhere else. So the
+         screen said read-only while offering Edit and a red Archive button on a child who
+         had already left. Pressing Archive would DELETE /director/children/{id} a second
+         time on a row that is already soft-deleted.
+
+         Read-only actions stay: the emergency card and the compliance report are exactly
+         what an archived record is kept FOR. */
+      var _readOnly = _departed;   // see the note on _departed above
+
+      if (_readOnly) {
+        /* Nothing to add: the banner has already explained why. An explanation beats a
+           row of disabled buttons nobody can act on. */
+      } else if (editMode) {
         headerActions.appendChild(btn('📝 Edit details…', btnSecondary(), function () {
           showEditModal(child, function () { renderChildDetail(container); });
         }));
@@ -539,11 +577,16 @@
           w.document.close();
         }).catch(function (e) { alert('Could not load emergency card: ' + e.message); });
       }));
-      headerActions.appendChild(btn('🗄️ Archive', btnDanger(), function () {
-        showArchiveConfirm(child, function () {
-          window.location.hash = backHash(params);
-        });
-      }));
+      if (! _readOnly) {
+        headerActions.appendChild(btn('🗄️ Archive', btnDanger(), function () {
+          showArchiveConfirm(child, function () {
+            /* In the popup there is no list to navigate back TO - the list is still
+             behind it. Close and let the caller refresh in place. */
+          if (opts && typeof opts.onDone === 'function') { opts.onDone(); }
+          else { window.location.hash = backHash(params); }
+          });
+        }));
+      }
       headerActions.appendChild(btn('📋 Compliance report', btnSecondary(), function () {
         var _e = function (s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
         var hf = (child.health_flags && child.health_flags.length) ? child.health_flags.map(function (f) { return '<li>' + _e(f.label || f.type || f.note || 'Health flag') + '</li>'; }).join('') : '<li>None on file</li>';
@@ -1650,6 +1693,42 @@
     Shell.registerScreen('agency_admin:child-detail', renderChildDetail);
   }
 
+  /**
+   * Open a child's record in a popup, live or archived.
+   *
+   * Same renderer as the full screen - one record, one implementation. Archived records
+   * work because the only thing that made them different was the `archived=1` flag in the
+   * hash, and that is now just a parameter.
+   */
+  function openChildModal(childId, opts) {
+    opts = opts || {};
+    if (!Shell || !Shell.Modal || !Shell.Modal.open) {
+      /* No modal host (an old cached shell): fall back to the screen rather than doing
+         nothing at all. */
+      window.location.hash = '#child-detail?id=' + childId + (opts.archived ? '&archived=1' : '');
+      return;
+    }
+
+    var host = Dom.el('div', {});
+    Shell.Modal.open({
+      title: opts.title || 'Child record',
+      body: host,
+      large: true,
+    });
+
+    renderChildDetail(host, {
+      params: {
+        id: String(childId),
+        archived: opts.archived ? '1' : '',
+        centre_id: opts.centreId || '',
+      },
+      onDone: function () {
+        try { Shell.Modal.close(); } catch (e) {}
+        if (typeof opts.onChanged === 'function') { opts.onChanged(); }
+      },
+    });
+  }
+
   // Expose for tests / debug.
-  KT.ChildDetail = { render: renderChildDetail };
+  KT.ChildDetail = { render: renderChildDetail, openModal: openChildModal };
 })(window);

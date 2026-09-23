@@ -241,7 +241,7 @@
       var n = document.createElement('div');
       n.id = 'kt-crash-note';
       n.setAttribute('role', 'status');
-      n.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 84px);'
+      n.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 84px);'
         + 'z-index:2147481000;background:#0D1B2A;color:#fff;font-family:system-ui,-apple-system,sans-serif;'
         + 'font-size:13px;line-height:1.45;padding:10px 16px;border-radius:12px;max-width:86vw;'
         + 'box-shadow:0 10px 30px -8px rgba(0,0,0,.5);opacity:0;transition:opacity .25s ease;';

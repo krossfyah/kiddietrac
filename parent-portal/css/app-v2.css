@@ -319,9 +319,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
-  padding: 24px;
+  /* ABOVE THE MOBILE CHROME. This was 1000 — the lowest overlay in the portal — while
+     the bottom nav sits at 9500, the agency switcher at 9999 and the notification panel
+     at 10050. On a phone the nav drew straight over the dialog's footer, taking the
+     action buttons with it; worst for a super admin, who carries the most fixed chrome
+     (agency switcher and view-as on top, nav below) so the dialog was clipped at both
+     ends. 100000 is the value kt-qr, kt-walk-tracker and screen-awards already use for
+     their own dialogs: clear of all chrome (99999), below the toast host (999999) and
+     the blocking overlay (9999999), and below the select-sheet band (2147483000) so a
+     dropdown opened inside a modal still renders above it. (Anthony, 2026-09-07) */
+  z-index: 100000;
+  /* Keep clear of the notch and the home indicator. */
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+           max(24px, var(--kt-safe-bottom, env(safe-area-inset-bottom))) max(16px, env(safe-area-inset-left));
   animation: fade-in 0.15s ease;
+}
+
+/* Track the VISIBLE viewport. `inset: 0` follows the large viewport — the height with
+   the browser's URL bar hidden — so while that bar is showing, a dialog sized against it
+   is taller than the screen and loses its top and bottom. dvh follows the bar as it comes
+   and goes; browsers without it keep the inset:0 behaviour unchanged. */
+@supports (height: 100dvh) {
+  .modal-backdrop { height: 100dvh; }
 }
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
@@ -332,7 +351,10 @@
   box-shadow: var(--kt-shadow-lg);
   max-width: 680px;
   width: 100%;
-  max-height: 92vh;
+  /* 92vh measured the LARGE viewport, so on a phone with the URL bar showing the dialog
+     was taller than the screen. 100% is the padded backdrop, which by definition fits;
+     the vh cap is kept for wide screens where a full-height dialog looks wrong. */
+  max-height: min(92vh, 100%);
   /* ONE scroll region, and it is .modal-body below. The shell used to scroll too,
      so long content showed two scrollbars side by side and the outer one carried
      the header and footer away with it. */

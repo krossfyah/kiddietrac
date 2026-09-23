@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <meta name="theme-color" content="#1F6080">
   <title>Kiddietrac Kiosk</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="icon" href="/favicon.ico">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
+  <link rel="icon" href="/favicon.ico?v=20260901b">
   <style>
     :root {
       --kt-blue: #1F6080;
@@ -230,5 +230,17 @@
       setInterval(fetchRoster, 30000);
     })();
   </script>
+  <!-- A dialog is left on purpose, not by tapping past it (2026-09-21).
+       kt-modal-safety stops a backdrop click (and a text-selection drag that merely
+       ENDED on the backdrop) from closing a popup that offers a way out; kt-modal-guard
+       grafts a visible close into any popup lacking one, which is what makes taking the
+       backdrop away safe rather than a trap.
+
+       Both already existed and were loaded ONLY by dashboard.html - so every popup on a
+       signed-out page, the password-reset dialog on this one included, still closed on a
+       stray click and lost whatever had been typed. Both files are standalone (no shell,
+       no Api, no Dom), so they load anywhere. -->
+  <script src="/js/kt-modal-guard.js?v=20260921ms" defer></script>
+  <script src="/js/kt-modal-safety.js?v=20260921ms" defer></script>
 </body>
 </html>

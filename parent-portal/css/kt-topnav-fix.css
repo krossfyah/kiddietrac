@@ -76,14 +76,14 @@ body.role-educator  #appSidebar #navBrand { cursor: pointer; }
      floated OVER the hero title (the "back button overlaps text" report). Content
      reserves bottom space so the arrow never sits on top of the last card. */
   #kt-role-back {
-    top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 78px); left: 12px;
+    top: auto; bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 78px); left: 12px;
     width: 46px; height: 46px; padding: 0; gap: 0;
     justify-content: center; border-radius: 50%; font-size: 21px;
     box-shadow: 0 4px 14px rgba(13,27,42,.2);
   }
   body.kt-show-back.role-guardian #appMain,
   body.kt-show-back.role-educator #appMain,
-  body.kt-show-back.role-auditor  #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px); }
+  body.kt-show-back.role-auditor  #appMain { padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 150px); }
 }
 
 body.role-guardian #appMain,
@@ -174,7 +174,7 @@ body.role-home-visitor #appMain { width: 100% !important; max-width: 1200px; mar
 body.role-home-visitor #appSidebar #navLinks { display: none !important; }
 body.role-home-visitor #appSidebar .kt-v5a-actions { display: none !important; }
 body.role-home-visitor #appSidebar #navBrand { cursor: pointer; }
-body.kt-show-back.role-home-visitor #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px); }
+body.kt-show-back.role-home-visitor #appMain { padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 150px); }
 
 /* Sales rep gets the IDENTICAL slim top-bar + icon-tile layout as
    guardian/educator/auditor/home-visitor. Its home (#home) is a kt-tilehome, so
@@ -192,7 +192,7 @@ body.role-sales-rep #appMain { width: 100% !important; max-width: none; margin: 
 body.role-sales-rep #appSidebar #navLinks { display: none !important; }
 body.role-sales-rep #appSidebar .kt-v5a-actions { display: none !important; }
 body.role-sales-rep #appSidebar #navBrand { cursor: pointer; }
-body.kt-show-back.role-sales-rep #appMain { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px); }
+body.kt-show-back.role-sales-rep #appMain { padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 150px); }
 
 /* ── Parent/educator HOME launcher paints all at once — NO entrance animation.
       (Belt-and-suspenders copy of the chrome-injected rule so it applies even if

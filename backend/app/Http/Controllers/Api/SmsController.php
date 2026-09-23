@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\Audit;
 use App\Support\BroadcastAudience;
 use App\Support\SmsGateway;
 use Illuminate\Http\JsonResponse;
@@ -65,17 +66,104 @@ final class SmsController extends Controller
             $ok = $this->sendOne($agencyId, (int) $r->id, (string) ($r->phone ?? ''), $data['body'], $data['category'] ?? 'broadcast');
             if ($ok) $sent++; else $skipped++;
         }
-        return response()->json(['sent' => $sent, 'skipped' => $skipped, 'total' => $recipients->count()]);
+
+        /* SAY WHY IT REACHED NOBODY (2026-09-18).
+
+           This used to answer {sent:0, skipped:0, total:0} and the screen printed it in
+           GREEN, so an agency-wide send that reached nobody looked exactly like one that
+           worked. The audience filter drops people before the send loop runs, so unlike
+           every other way a message can be dropped it left no skipped row and no reason
+           anywhere. The breakdown is the reason. */
+        $breakdown = BroadcastAudience::breakdown($agencyId, $data, 'sms');
+
+        if ($sent === 0) {
+            Audit::write([
+                'user_id' => $request->user()->id,
+                'agency_id' => $agencyId,
+                'action' => 'sms.broadcast_reached_nobody',
+                'entity_type' => 'agency',
+                'entity_id' => $agencyId,
+                'payload' => json_encode([
+                    'summary' => 'An SMS broadcast to ' . $data['audience'] . ' reached nobody: '
+                        . $breakdown['in_audience'] . ' in the audience, '
+                        . $breakdown['no_phone'] . ' with no mobile number, '
+                        . $breakdown['not_consented'] . ' who have not agreed to texts.',
+                    'audience' => $data['audience'],
+                    'breakdown' => $breakdown,
+                ]),
+                'ip_address' => $request->ip(),
+                'created_at' => now(),
+            ]);
+        }
+
+        return response()->json([
+            'sent' => $sent,
+            'skipped' => $skipped,
+            'total' => $recipients->count(),
+            'breakdown' => $breakdown,
+        ]);
+    }
+
+    /**
+     * GET /admin/sms/audience - who WOULD this reach, before anyone presses send.
+     *
+     * "Text the whole agency" and "text the one person who consented" are different
+     * decisions, and nothing on the compose screen made clear which one was about to
+     * happen. Read-only; sends nothing.
+     */
+    public function audience(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAccess($request, $agencyId);
+        $data = $request->validate([
+            'audience' => 'required|string|in:centre,room,agency,family,role',
+            'centre_id' => 'nullable|integer',
+            'room_id' => 'nullable|integer',
+            'family_id' => 'nullable|integer',
+            'role' => 'nullable|string',
+            'channel' => 'nullable|string|in:sms,voice',
+            'category' => 'nullable|string|max:40',
+        ]);
+
+        if ($missing = BroadcastAudience::missingSelector($data)) {
+            return response()->json(['message' => 'Choose which one to send to first.', 'needs' => $missing], 422);
+        }
+        BroadcastAudience::assertOwned($agencyId, $data);
+
+        return response()->json(BroadcastAudience::breakdown(
+            $agencyId, $data, $data['channel'] ?? 'sms', $data['category'] ?? null
+        ));
     }
 
     public function listMessages(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $rows = DB::table('sms_messages')
-            ->where('agency_id', $agencyId)
-            ->orderByDesc('created_at')
+        /* WHO WAS THAT NUMBER? (2026-09-22)
+
+           Anthony: "add the parents name associated to the phone # in the table".
+
+           sms_messages holds to_user_id and to_phone and NO name, so the list could only
+           ever print a bare number - and a column of phone numbers tells nobody whether
+           the right people were reached. VoiceController::calls() has joined users for
+           its own list all along; this is the same join, so the two channels finally
+           answer the same question the same way.
+
+           LEFT join, and the name is only ever a label: a row whose user has since been
+           deleted still shows its number and its outcome rather than vanishing. Measured
+           before shipping: all 118 rows resolve to a user, so in practice it is populated
+           everywhere. */
+        $rows = DB::table('sms_messages as m')
+            ->leftJoin('users as u', 'u.id', '=', 'm.to_user_id')
+            ->where('m.agency_id', $agencyId)
+            ->orderByDesc('m.created_at')
             ->limit(200)
+            ->select(
+                'm.id', 'm.to_user_id', 'm.to_phone', 'm.body', 'm.category', 'm.provider',
+                'm.provider_ref', 'm.twilio_sid', 'm.status', 'm.error', 'm.sent_at', 'm.created_at',
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as to_name")
+            )
             ->get();
+
         return response()->json(['data' => $rows]);
     }
 
@@ -94,6 +182,27 @@ final class SmsController extends Controller
         // Do-not-contact: never text a parent at a live agency while we are testing.
         if (\App\Support\Suppression::isUser($userId)) {
             \App\Support\Suppression::note('sms', $userId, $category);
+
+            /* AND LEAVE A ROW (2026-09-18).
+
+               note() writes to the Laravel log and nothing else, so a suppressed text was
+               invisible in the portal: the broadcast said "skipped 1" and the message list
+               showed nothing at all to explain it. Every other gate on this path - the
+               agency switch, consent - records a skipped row precisely so that "why did
+               that not send?" has an answer, and this one is no different. Found while
+               testing the audience breakdown, which reported one reachable person and one
+               skipped send with no trace of either. */
+            DB::table('sms_messages')->insert([
+                'agency_id' => $agencyId,
+                'to_user_id' => $userId,
+                'to_phone' => $phone,
+                'body' => $body,
+                'category' => $category,
+                'status' => 'skipped',
+                'error' => 'do-not-contact (suppressed account or agency)',
+                'created_at' => now(),
+            ]);
+
             return false;
         }
 

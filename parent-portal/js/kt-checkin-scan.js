@@ -25,6 +25,16 @@
   var TEAL = '#0E7C90', NAVY = '#0D1B2A';
   var stream = null, rafId = null, detector = null, busy = false;
 
+  /* Has a scan already finished during THIS visit to the screen?
+     render() used to call startCamera() unconditionally, so anything that re-rendered
+     the screen re-opened the camera. Returning from the native scanner fires resize /
+     visibilitychange on Android, the shell re-renders the current hash, and the camera
+     comes straight back — the reported "it keeps switching back to the camera and never
+     returns to the app". A completed scan must not be restarted by a repaint.
+     (Anthony, 2026-08-26) */
+  var scanDone = false;
+  var lastResult = null;
+
   function stopCamera() {
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     if (stream) { try { stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} stream = null; }
@@ -33,7 +43,11 @@
   // Whenever we leave #scan, kill the camera.
   window.addEventListener('hashchange', function () {
     var h = (location.hash || '').replace('#', '').split('?')[0];
-    if (h !== 'scan') stopCamera();
+    if (h !== 'scan') {
+      stopCamera();
+      // Leaving the screen is the only thing that arms it again.
+      scanDone = false; lastResult = null; busy = false;
+    }
   });
 
   function el(tag, style, text) {
@@ -56,13 +70,20 @@
   }
 
   function render(main) {
-    stopCamera(); busy = false;
+    stopCamera();
+    /* A re-render after a completed scan shows the RESULT again, never the camera. */
+    if (scanDone) {
+      main.innerHTML = '';
+      showDone(main);
+      return;
+    }
+    busy = false;
     main.innerHTML = '';
 
     var ov = el('div', 'position:fixed;inset:0;z-index:9700;background:' + NAVY + ';display:flex;flex-direction:column;overflow:hidden;');
 
     // Header
-    var head = el('div', 'position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 12px;color:#fff;');
+    var head = el('div', 'position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 12px) 14px 12px;color:#fff;');
     var close = el('button', 'background:rgba(255,255,255,.16);color:#fff;border:none;width:38px;height:38px;border-radius:50%;font-size:22px;line-height:1;cursor:pointer;flex-shrink:0;', '‹');
     close.setAttribute('aria-label', 'Back');
     close.addEventListener('click', function () { stopCamera(); location.hash = '#home'; });
@@ -95,7 +116,7 @@
     ov.appendChild(frameWrap);
 
     // Status / footer
-    var foot = el('div', 'position:absolute;left:0;right:0;bottom:0;z-index:3;padding:20px 20px calc(env(safe-area-inset-bottom,0px) + 24px);text-align:center;color:#fff;');
+    var foot = el('div', 'position:absolute;left:0;right:0;bottom:0;z-index:3;padding:20px 20px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 24px);text-align:center;color:#fff;');
     var status = el('div', 'font-size:15px;font-weight:600;line-height:1.5;text-shadow:0 1px 6px rgba(0,0,0,.6);min-height:44px;', 'Point your camera at the centre’s check-in QR code.');
     foot.appendChild(status);
     ov.appendChild(foot);
@@ -189,12 +210,13 @@
 
   function submit(code, status, foot) {
     if (busy) return; busy = true;
+    scanDone = true;          // from here on, a repaint must not reopen the camera
     stopCamera();
     status.textContent = 'Checking you in…';
     if (navigator.vibrate) { try { navigator.vibrate(40); } catch (e) {} }
     post(code).then(function (res) {
       if (res && res.needs_selection) { showSelect(code, res.children || []); return; }
-      showResult((res && res.results) || [], status, foot);
+      showResult((res && res.results) || [], status, foot, (res && res.scanned_by) || null);
     }).catch(function (e) {
       fail(status, (e && e.message) || 'Could not check in — please try again.', foot);
       retryBtn(foot);
@@ -207,7 +229,7 @@
     var main = document.getElementById('appMain'); if (!main) return;
     main.innerHTML = '';
     var wrap = el('div', 'position:fixed;inset:0;z-index:9700;background:linear-gradient(160deg,#0E7C90,#0D1B2A);overflow-y:auto;color:#fff;');
-    var sheet = el('div', 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(env(safe-area-inset-top,0px) + 28px) 24px calc(env(safe-area-inset-bottom,0px) + 28px);box-sizing:border-box;');
+    var sheet = el('div', 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 28px) 24px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 28px);box-sizing:border-box;');
     sheet.appendChild(el('div', 'font-size:52px;line-height:1;margin-bottom:8px;', '\uD83D\uDC4B'));
     sheet.appendChild(el('div', 'font-weight:800;font-size:21px;margin-bottom:4px;', 'Who are you here for?'));
     sheet.appendChild(el('div', 'font-size:13.5px;opacity:.85;margin-bottom:18px;max-width:320px;', 'Tap to include or leave out a child, then confirm — you can do them both at once.'));
@@ -254,12 +276,66 @@
     main.appendChild(wrap);
   }
 
-  function showResult(results, status, foot) {
+  /**
+   * The person who scanned, shown big enough to check from arm's length.
+   *
+   * The educator's job at the door is to confirm the right adult is collecting the
+   * right child. A tick and a time does not help them do that — a face, a full name
+   * and the relationship does. Photo when there is one, initials when there is not.
+   * (Anthony, 2026-08-26)
+   */
+  function verifyCard(who, results) {
+    var box = el('div', 'background:rgba(255,255,255,.16);border-radius:18px;padding:16px;max-width:320px;width:100%;margin-bottom:14px;display:flex;align-items:center;gap:14px;text-align:left;');
+
+    var size = 62;
+    if (who && who.photo_url) {
+      var url = String(who.photo_url);
+      if (url.charAt(0) === '/') {
+        var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+        url = base.replace(/\/api\/v1\/?$/, '') + url;
+      }
+      var img = el('img', 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.5);');
+      img.src = url;
+      img.alt = '';
+      box.appendChild(img);
+    } else {
+      var nm = (who && who.name) || '?';
+      var initials = nm.split(/\s+/).map(function (w) { return w.charAt(0); }).slice(0, 2).join('').toUpperCase();
+      box.appendChild(el('div',
+        'width:' + size + 'px;height:' + size + 'px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;'
+        + 'font-weight:800;font-size:22px;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.5);', initials));
+    }
+
+    var txt = el('div', 'min-width:0;');
+    txt.appendChild(el('div', 'font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;opacity:.75;', 'Scanned by'));
+    txt.appendChild(el('div', 'font-weight:800;font-size:18px;line-height:1.25;', (who && who.name) || 'A guardian'));
+    var kids = (results || []).map(function (r) { return r.name; }).filter(Boolean).join(', ');
+    var sub = [];
+    if (who && who.relationship) sub.push(who.relationship);
+    if (kids) sub.push('for ' + kids);
+    if (sub.length) {
+      txt.appendChild(el('div', 'font-size:13px;opacity:.9;margin-top:2px;', sub.join(' · ')));
+    }
+    box.appendChild(txt);
+    return box;
+  }
+
+  function showResult(results, status, foot, scannedBy) {
     var main = document.getElementById('appMain'); if (!main) return;
+    /* Remembered so a repaint can show what happened instead of reopening the camera. */
+    var summary = 'All set!';
+    try {
+      if (results && results.length) {
+        summary = results.map(function (r) { return r.name + ' ' + r.label; }).join(', ');
+      }
+    } catch (e) {}
+    lastResult = summary;
     main.innerHTML = '';
     var wrap = el('div', 'position:fixed;inset:0;z-index:9700;background:linear-gradient(160deg,#0E7C90,#0D1B2A);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;color:#fff;');
     wrap.appendChild(el('div', 'font-size:74px;line-height:1;margin-bottom:10px;', '✅'));
-    wrap.appendChild(el('div', 'font-weight:800;font-size:22px;margin-bottom:18px;', 'All set!'));
+    wrap.appendChild(el('div', 'font-weight:800;font-size:22px;margin-bottom:14px;', 'All set!'));
+    // Who scanned, first — this is the bit the educator reads.
+    wrap.appendChild(verifyCard(scannedBy, results));
     var card = el('div', 'background:rgba(255,255,255,.12);border-radius:18px;padding:16px 20px;max-width:320px;width:100%;');
     if (!results.length) {
       card.appendChild(el('div', 'font-size:15px;', 'Check-in recorded.'));
@@ -311,6 +387,32 @@
     row.appendChild(inp); row.appendChild(go);
     box.appendChild(row);
     foot.appendChild(box);
+  }
+
+  /**
+   * What a repaint shows once a scan has completed: the outcome, and an explicit way to
+   * scan again. Never the camera — reopening it is what made the app feel like it was
+   * fighting the user.
+   */
+  function showDone(main) {
+    var wrap = el('div', 'position:fixed;inset:0;z-index:9700;background:linear-gradient(160deg,' + TEAL + ',' + NAVY + ');display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;');
+    var box = el('div', 'max-width:340px;');
+    box.appendChild(el('div', 'font-size:52px;line-height:1;margin-bottom:10px;', '\u2705'));
+    box.appendChild(el('div', 'font-weight:800;font-size:20px;margin-bottom:6px;',
+      lastResult || 'All done'));
+    box.appendChild(el('div', 'font-size:13.5px;opacity:.85;margin-bottom:20px;',
+      'You can close this, or scan again if you need to.'));
+
+    var again = el('button', 'background:#fff;color:' + NAVY + ';border:none;border-radius:12px;padding:13px 22px;font-size:15px;font-weight:800;cursor:pointer;margin-right:8px;', 'Scan again');
+    again.addEventListener('click', function () {
+      scanDone = false; lastResult = null; busy = false;
+      render(document.getElementById('appMain'));
+    });
+    var home = el('button', 'background:rgba(255,255,255,.16);color:#fff;border:none;border-radius:12px;padding:13px 22px;font-size:15px;font-weight:800;cursor:pointer;', 'Done');
+    home.addEventListener('click', function () { location.hash = '#home'; });
+    box.appendChild(again); box.appendChild(home);
+    wrap.appendChild(box);
+    main.appendChild(wrap);
   }
 
   Shell.registerScreen('guardian:scan', render);

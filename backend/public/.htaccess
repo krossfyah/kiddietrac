@@ -36,3 +36,21 @@
 <FilesMatch "^(\.env|\.git|composer\.(json|lock))$">
     Require all denied
 </FilesMatch>
+
+# ─── Blocked sources ──────────────────────────────────────────
+# 2026-09-21. A coordinated probe on 20 Sep, 07:56–08:31, from two addresses:
+#   202.61.157.28  109 failed logins in 18 minutes, SQL-injection payloads
+#                  (a' OR '1'='1--), enumeration of guessed addresses, 42
+#                  unauthenticated POSTs to /admin/branding/logo, and 14 password
+#                  guesses against info@ilearnhcc.com (a live agency-admin account).
+#   23.154.84.231  266 hits probing for login endpoints that do not exist
+#                  (/api/v1/login, /parent/login, /auth/signin) and 3 password-reset
+#                  attempts for addresses we do not hold.
+# Nothing succeeded — every attempt came back 401/403/422 — and neither address had
+# ever been seen before that morning. Confirmed with Anthony as NOT an authorised test.
+# Denied here rather than in PHP so the request costs nothing and never reaches Laravel.
+<RequireAll>
+    Require all granted
+    Require not ip 202.61.157.28
+    Require not ip 23.154.84.231
+</RequireAll>

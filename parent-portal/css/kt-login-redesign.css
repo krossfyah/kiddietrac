@@ -185,7 +185,7 @@ html, body.auth-body { margin: 0; padding: 0; min-height: 100vh; background: #ff
   .ktl-form-side {
     min-height: 100dvh; position: relative; overflow: hidden;
     display: flex; flex-direction: column; justify-content: center; align-items: center;
-    padding: calc(env(safe-area-inset-top, 0px) + 44px) 28px calc(env(safe-area-inset-bottom, 0px) + 30px);
+    padding: calc(env(safe-area-inset-top, 0px) + 44px) 28px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 30px);
     background: #FFFFFF;
   }
   .ktl-form-side::before, .ktl-form-side::after { display: none !important; }

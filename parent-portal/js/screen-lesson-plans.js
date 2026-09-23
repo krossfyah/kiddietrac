@@ -23,6 +23,31 @@
   function $$(s, r) { return (r || document).querySelectorAll(s); }
 
   const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+
+  /* Opens read-only. Editing is a deliberate act, not the default state of a
+     screen people mostly come to in order to READ. */
+  var lpReadOnly = true;
+  var lpStatus = 'published';
+
+  /** Weekday name in the AGENCY's timezone — never the device's. A tablet left on
+     UTC must not tint Tuesday's column on a Monday evening. */
+  function agencyWeekdayKey() {
+    try {
+      var t = (window.KT && KT.agencyToday) ? KT.agencyToday()
+        : new Date().toISOString().slice(0, 10);
+      var names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      return names[new Date(t + 'T12:00:00').getDay()] || null;
+    } catch (e) { return null; }
+  }
+
+  /** Is the week on screen the one we are actually in? */
+  function viewingCurrentWeek() {
+    try {
+      var t = (window.KT && KT.agencyToday) ? KT.agencyToday()
+        : new Date().toISOString().slice(0, 10);
+      return String(activeWeek) === String(mondayOf(new Date(t + 'T12:00:00')));
+    } catch (e) { return false; }
+  }
   const DAY_LABELS = { monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri' };
   const DOMAINS = [
     { v: 'social_emotional',  l: '💛 Social/Emotional',   c: '#FCD34D' },
@@ -63,6 +88,28 @@
     } else {
       d = new Date(date);
     }
+
+    /* AN UNPARSEABLE DATE MUST NOT BECOME THE WEEK. (2026-09-21)
+
+       `<input type="date">` hands back '' the moment it is cleared, and new Date('') is
+       an Invalid Date whose getDay() is NaN. Every line below then propagated it and this
+       returned the literal string 'NaN-NaN-NaN'.
+
+       That string became activeWeek, and activeWeek is sticky: the loader asked the
+       server for week NaN-NaN-NaN (empty grid), the pager could not step off it because
+       new Date('NaN-NaN-NaN' + 'T12:00:00') is Invalid too, and every save posted it and
+       came back 422. The planner was wedged until the page was reloaded.
+
+       Amna Ahsan hit exactly this on 2026-09-21 at 14:25 — a published save rejected with
+       week_starting 'NaN-NaN-NaN' and an empty plan — and only got her lesson plan in at
+       23:12, after a reload. Falling back to the current week keeps the screen usable:
+       clearing the field now just returns you to this week. */
+    if (! date || ! d || isNaN(d.getTime())) {
+      /* `! date` as well as the NaN check: new Date(null) is epoch 0, which is a VALID
+         date, so a null slipped past and planted the week of 29 Dec 1969. */
+      d = new Date();
+    }
+
     const day = d.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff);
@@ -248,6 +295,9 @@
 
     currentPlan = plan.plan;
     currentTheme = plan.theme || '';
+    /* Follow the saved state rather than assuming: a week left as a draft must not
+       silently republish itself the next time somebody saves. */
+    lpStatus = plan.status || 'published';
 
     container.innerHTML = `
       <div style="padding:24px;max-width:1800px;">
@@ -267,6 +317,11 @@
             <input type="date" id="kt-week" value="${activeWeek}" style="${selectStyle()};width:160px;">
             <button id="kt-next-week" style="${navBtnStyle()}">›</button>
             <button id="kt-ai" class="kt-icon-tip" title="Draft with AI" data-kttip="Draft this week with AI" aria-label="Draft with AI" style="height:36px;padding:0 12px;box-sizing:border-box;background:#fff;color:#1F6080;border:1px solid #CFE3EB;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:6px;">✨ Draft with AI</button>
+            <select id="kt-lp-status" title="Published plans are visible to families. Draft is staff-only." style="${selectStyle()};display:${lpReadOnly ? 'none' : 'inline-block'};">
+              <option value="draft" ${lpStatus === 'draft' ? 'selected' : ''}>Draft</option>
+              <option value="published" ${lpStatus === 'published' ? 'selected' : ''}>Published</option>
+            </select>
+            <button id="kt-lp-edit" style="height:36px;padding:0 14px;box-sizing:border-box;border:1px solid #D1D5DB;background:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:${lpReadOnly ? 'inline-block' : 'none'};">✏️ Edit</button>
             <button id="kt-save" class="kt-icon-tip" title="Save" data-kttip="Save" aria-label="Save" style="height:36px;width:36px;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;">💾</button>
           </div>
         </div>
@@ -302,9 +357,31 @@
       renderProvider(container);
     });
     $('#kt-week', container).addEventListener('change', (e) => { activeWeek = mondayOf(e.target.value); renderProvider(container); });
-    $('#kt-prev-week', container).addEventListener('click', () => { const d = new Date(activeWeek); d.setDate(d.getDate()-7); activeWeek = mondayOf(d); renderProvider(container); });
-    $('#kt-next-week', container).addEventListener('click', () => { const d = new Date(activeWeek); d.setDate(d.getDate()+7); activeWeek = mondayOf(d); renderProvider(container); });
+    /* NOON, not midnight. `new Date('2026-09-07')` parses as UTC midnight, which in
+       Toronto is Sep 6 at 20:00 — so getDate() answered 6, +7 landed on Sunday the
+       13th, and mondayOf() (which reads LOCAL parts) snapped that straight back to
+       Sep 7. The forward button could not move the week at all, and back skipped two.
+       Parsing at local noon is the same trick viewingCurrentWeek() above already uses,
+       and it is immune to both the UTC offset and DST. */
+    const weekCursor = () => new Date(activeWeek + 'T12:00:00');
+    const stepWeek = (days) => { const d = weekCursor(); d.setDate(d.getDate() + days); activeWeek = mondayOf(d); renderProvider(container); };
+    $('#kt-prev-week', container).addEventListener('click', () => stepWeek(-7));
+    $('#kt-next-week', container).addEventListener('click', () => stepWeek(7));
     $('#kt-save', container).addEventListener('click', () => save(container));
+
+    /* Edit is a deliberate act. Re-rendering rather than toggling attributes in
+       place keeps one render path responsible for both modes. */
+    var lpEditBtn = $('#kt-lp-edit', container);
+    if (lpEditBtn) {
+      lpEditBtn.addEventListener('click', function () {
+        lpReadOnly = false;
+        renderProvider(container);
+      });
+    }
+    var lpStatusEl = $('#kt-lp-status', container);
+    if (lpStatusEl) {
+      lpStatusEl.addEventListener('change', function () { lpStatus = lpStatusEl.value; });
+    }
     $('#kt-ai', container).addEventListener('click', () => openAiDialog(container));
   }
 
@@ -346,39 +423,52 @@
 
     grid.innerHTML = DAYS.map(day => dayColumn(day, currentPlan.days[day])).join('');
 
-    grid.querySelectorAll('.kt-add-activity').forEach(b => b.addEventListener('click', () => {
-      const day = b.dataset.day;
+    /* Read-only shows the SAME cards, just not tappable — activityCard() decides that
+       from lpReadOnly, so the two modes render from one path and cannot drift apart.
+       Only the add button has to be taken away. */
+    if (lpReadOnly) {
+      grid.querySelectorAll('.kt-add-activity').forEach(function (b) { b.style.display = 'none'; });
+    }
 
-      currentPlan.days[day].push({ time: '', title: '', domain: null, notes: '' });
-      renderGrid();
+    // Adding and editing are the same dialog; -1 means "new".
+    grid.querySelectorAll('.kt-add-activity').forEach(b => b.addEventListener('click', () => {
+      openActivityDialog(b.dataset.day, -1);
     }));
-    grid.querySelectorAll('.kt-activity input, .kt-activity select, .kt-activity textarea').forEach(el => {
-      el.addEventListener('change', (e) => {
-        const day = e.target.closest('.kt-activity').dataset.day;
-        const idx = parseInt(e.target.closest('.kt-activity').dataset.idx, 10);
-        const field = e.target.dataset.field;
-        currentPlan.days[day][idx][field] = e.target.value;
+    grid.querySelectorAll('.kt-activity-tap').forEach(card => {
+      const open = () => openActivityDialog(card.dataset.day, parseInt(card.dataset.idx, 10));
+      card.addEventListener('click', open);
+      // Keyboard parity: the card is role="button", so it must answer to one.
+      card.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
       });
     });
-    grid.querySelectorAll('.kt-del-activity').forEach(b => b.addEventListener('click', () => {
-      const day = b.dataset.day;
-      const idx = parseInt(b.dataset.idx, 10);
-      currentPlan.days[day].splice(idx, 1);
-      renderGrid();
-    }));
   }
 
   function dayColumn(day, activities) {
     const dc = DAY_COLORS[day] || '#64748B';
+    /* Only tint when the week on screen contains today — otherwise every week
+       would highlight a Wednesday, which tells the reader nothing. */
+    const isToday = viewingCurrentWeek() && agencyWeekdayKey() === day;
+    const todayBg = isToday ? 'background:#FFFBEB;box-shadow:0 0 0 2px #FDE68A;' : '';
     return `
-      <div style="background:white;border-radius:12px;padding:12px;min-height:240px;box-shadow:0 1px 3px rgba(0,0,0,.04);border-top:4px solid ${dc};">
-        <div style="font-weight:800;font-size:14px;color:${dc};margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">${DAY_LABELS[day]}</div>
+      <div style="background:white;border-radius:12px;padding:12px;min-height:240px;box-shadow:0 1px 3px rgba(0,0,0,.04);border-top:4px solid ${dc};${todayBg}">
+        <div style="font-weight:800;font-size:14px;color:${dc};margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">${DAY_LABELS[day]}${isToday ? ' <span style="font-size:10px;background:#F59E0B;color:#fff;padding:1px 6px;border-radius:8px;letter-spacing:0;vertical-align:middle;">TODAY</span>' : ''}</div>
         ${activities.map((a, i) => activityCard(day, i, a)).join('')}
         <button class="kt-add-activity" data-day="${day}" style="width:100%;background:#F3F4F6;color:#6B7280;border:1px dashed #D1D5DB;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:4px;">+ Add</button>
       </div>
     `;
   }
 
+  /* A SUMMARY, NOT FOUR CONTROLS.
+
+     Every activity used to be a time picker, a title box, a domain select and a notes
+     textarea, all live, stacked inside a column one fifth of the screen wide. On a phone
+     that is four fiddly targets per activity and five activities per column — the reason
+     the weekly menu was moved to a dialog, and the same answer applies here.
+
+     The card now shows what is planned; tapping it while editing opens one dialog with
+     room to actually type. Read-only shows the identical card, just not tappable, so the
+     two modes cannot drift apart. (Anthony, 2026-09-08) */
   function activityCard(day, idx, a) {
     const domain = DOMAINS.find(d => d.v === a.domain);
     // Domain colour when set; otherwise a distinct palette colour by position so
@@ -386,28 +476,97 @@
     const colour = domain ? domain.c : ACTIVITY_PALETTE[idx % ACTIVITY_PALETTE.length];
     const bg = colour + '33';
     const border = colour;
+    const title = (a.title || '').trim();
+    const when = (a.time || '').trim();
+    const notes = (a.notes || '').trim();
+    const tappable = !lpReadOnly;
     return `
-      <div class="kt-activity" data-day="${day}" data-idx="${idx}" style="background:${bg};border-left:3px solid ${border};border-radius:6px;padding:8px;margin-bottom:6px;font-size:12px;">
-        <div style="display:flex;gap:4px;margin-bottom:4px;">
-          ${(function () {
-            // A picker when the value is a time (or blank), a text box when it is not,
-            // so an existing "after lunch" is not silently discarded by type="time".
-            var hhmm = toHHMM(a.time);
-            var isTime = hhmm !== '' || !(a.time || '').trim();
-            return isTime
-              ? `<input data-field="time" type="time" value="${esc(hhmm)}" style="width:104px;padding:3px 6px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;">`
-              : `<input data-field="time" type="text" placeholder="9:00" value="${esc(a.time || '')}" title="Not a clock time — clear it to use the time picker." style="width:104px;padding:3px 6px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;">`;
-          })()}
-          <button class="kt-del-activity" data-day="${day}" data-idx="${idx}" title="Delete" style="margin-left:auto;background:transparent;border:none;color:#64748B;cursor:pointer;font-size:14px;line-height:1;">×</button>
+      <div class="kt-activity${tappable ? ' kt-activity-tap' : ''}" data-day="${day}" data-idx="${idx}"
+           ${tappable ? 'role="button" tabindex="0"' : ''}
+           style="background:${bg};border-left:3px solid ${border};border-radius:6px;padding:9px 10px;margin-bottom:6px;font-size:12px;${tappable ? 'cursor:pointer;' : ''}">
+        <div style="display:flex;align-items:baseline;gap:6px;">
+          ${when ? `<span style="font-size:11px;font-weight:800;color:#334155;font-variant-numeric:tabular-nums;white-space:nowrap;">${esc(when)}</span>` : ''}
+          <span style="font-weight:700;color:${title ? '#0D1B2A' : '#94A3B8'};font-size:12.5px;line-height:1.3;">${title ? esc(title) : (tappable ? 'Tap to fill in' : '—')}</span>
         </div>
-        <input data-field="title" placeholder="Activity name" value="${esc(a.title||'')}" style="width:100%;padding:4px;border:1px solid #D1D5DB;border-radius:4px;font-size:12px;margin-bottom:4px;font-weight:600;">
-        <select data-field="domain" style="width:100%;padding:3px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;margin-bottom:4px;">
-          <option value="">— Domain —</option>
-          ${DOMAINS.map(d => `<option value="${d.v}" ${d.v===a.domain?'selected':''}>${esc(d.l)}</option>`).join('')}
-        </select>
-        <textarea data-field="notes" placeholder="Notes (optional)" rows="2" style="width:100%;padding:4px;border:1px solid #D1D5DB;border-radius:4px;font-size:11px;font-family:inherit;resize:vertical;">${esc(a.notes||'')}</textarea>
+        ${domain ? `<div style="margin-top:4px;"><span style="display:inline-block;background:#fff;border:1px solid ${border};color:#334155;border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:700;">${esc(domain.l)}</span></div>` : ''}
+        ${notes ? `<div style="margin-top:4px;color:#475569;font-size:11.5px;line-height:1.35;">${esc(notes.length > 90 ? notes.slice(0, 90) + '…' : notes)}</div>` : ''}
       </div>
     `;
+  }
+
+  /* ONE DIALOG for an activity — new (idx === -1) or existing. Mirrors the weekly
+     menu's dish dialog so the two screens behave the same way. */
+  function openActivityDialog(day, idx) {
+    const isNew = idx < 0;
+    const a = isNew ? { time: '', title: '', domain: null, notes: '' }
+                    : (currentPlan.days[day][idx] || { time: '', title: '', domain: null, notes: '' });
+    const hhmm = toHHMM(a.time);
+    // A picker when the value is a clock time (or blank), a text box when it is not, so
+    // an existing "after lunch" is not silently discarded by type="time".
+    const isTime = hhmm !== '' || !(a.time || '').trim();
+
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML = `<div role="dialog" aria-modal="true" style="background:#fff;border-radius:16px;max-width:440px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(15,23,42,.35);">
+      <div style="padding:16px 20px;border-bottom:1px solid #EDF2F7;">
+        <div style="font-size:16px;font-weight:800;color:#0D1B2A;">${isNew ? 'Add an activity' : 'Edit activity'} &middot; ${esc(DAY_LABELS[day] || day)}</div>
+        <div style="font-size:12.5px;color:#64748B;margin-top:2px;">What is planned, and when.</div>
+      </div>
+      <div style="padding:16px 20px;">
+        <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;">Time</label>
+        ${isTime
+          ? `<input id="lp-time" type="time" value="${esc(hhmm)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;">`
+          : `<input id="lp-time" type="text" value="${esc(a.time || '')}" placeholder="9:00" title="Not a clock time — clear it to use the time picker." style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;">`}
+        <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">Activity</label>
+        <input id="lp-title" value="${esc(a.title || '')}" placeholder="e.g. Playdough"
+               style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;">
+        <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">Domain</label>
+        <select id="lp-domain" style="width:100%;box-sizing:border-box;height:42px;padding:0 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;background:#fff;">
+          <option value="">— Domain —</option>
+          ${DOMAINS.map(d => `<option value="${d.v}" ${d.v === a.domain ? 'selected' : ''}>${esc(d.l)}</option>`).join('')}
+        </select>
+        <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">Notes</label>
+        <textarea id="lp-notes" rows="3" placeholder="Optional"
+                  style="display:block;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;resize:vertical;">${esc(a.notes || '')}</textarea>
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid #EDF2F7;display:flex;gap:8px;align-items:center;">
+        ${isNew ? '' : '<button id="lp-del" style="background:#fff;border:1px solid #FECACA;color:#B91C1C;border-radius:10px;padding:10px 14px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;">Delete</button>'}
+        <button id="lp-x" style="margin-left:auto;background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px 16px;font:inherit;font-size:14px;color:#475569;cursor:pointer;">Cancel</button>
+        <button id="lp-ok" style="background:linear-gradient(135deg,#1F6080,#2c7894);border:0;border-radius:10px;padding:10px 20px;font:inherit;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">Done</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    try { if (window.KT && KT.pushOverlay) { KT.pushOverlay(ov); } } catch (e) {}
+
+    const close = () => {
+      try { if (window.KT && KT.popOverlay) { KT.popOverlay(ov); } } catch (e) {}
+      ov.remove();
+    };
+    const t = ov.querySelector('#lp-title');
+    if (t) { t.focus(); t.select(); }
+    ov.querySelector('#lp-x').onclick = close;
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+    const del = ov.querySelector('#lp-del');
+    if (del) {
+      del.onclick = () => { currentPlan.days[day].splice(idx, 1); close(); renderGrid(); };
+    }
+    ov.querySelector('#lp-ok').onclick = () => {
+      const next = {
+        time: ov.querySelector('#lp-time').value.trim(),
+        title: ov.querySelector('#lp-title').value.trim(),
+        domain: ov.querySelector('#lp-domain').value || null,
+        notes: ov.querySelector('#lp-notes').value.trim(),
+      };
+      /* An empty new activity is not worth a card. An existing one emptied out is a
+         deliberate clear, and Delete is right there for removing it outright. */
+      if (isNew && !next.time && !next.title && !next.notes && !next.domain) { close(); return; }
+      if (isNew) { currentPlan.days[day].push(next); }
+      else { currentPlan.days[day][idx] = next; }
+      close();
+      renderGrid();
+    };
   }
 
   async function save(container) {
@@ -416,12 +575,19 @@
     status.textContent = 'Saving…';
     currentTheme = $('#kt-theme', container).value;
     try {
-      const payload = { week_starting: activeWeek, theme: currentTheme, plan: currentPlan };
+      const payload = { week_starting: activeWeek, theme: currentTheme, plan: currentPlan,
+                        status: lpStatus };
       if (activeScope === 'centre') payload.centre_id = activeCentreId;
       else payload.room_id = activeRoomId;
       await api('PUT', '/provider/lesson-plans', payload);
       status.style.color = '#16A34A';
-      status.textContent = '✓ Saved ' + (activeScope === 'centre' ? '(whole centre) ' : '') + 'at ' + new Date().toLocaleTimeString();
+      status.textContent = (lpStatus === 'published' ? '✓ Published ' : '✓ Saved as draft ')
+        + (activeScope === 'centre' ? '(whole centre) ' : '')
+        + 'at ' + new Date().toLocaleTimeString();
+      /* Back to reading once it is saved, so the week cannot be edited by accident
+         after the person has finished with it. */
+      lpReadOnly = true;
+      renderProvider(container);
     } catch (e) {
       status.style.color = '#DC2626';
       status.textContent = '✗ ' + e.message;

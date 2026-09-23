@@ -179,7 +179,7 @@ html.kt-native .ktl-wrap #submitBtn { background: linear-gradient(135deg,#13b7cc
 @media (max-width: 768px) {
   .ktl-form-side {
     padding-top: calc(env(safe-area-inset-top, 0px) + 3.2vh) !important;
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px) !important;
+    padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 12px) !important;
     justify-content: center !important;
   }
   .ktl-mobile-hero { margin-bottom: 16px !important; }

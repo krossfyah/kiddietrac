@@ -228,7 +228,18 @@
     }
 
     var state = {
-      step: 0,
+      /* Pick up where they left off. This used to be a hard 0: every sign-in
+         restarted the wizard at step 1, and because nothing reached the server
+         until the final step, an interrupted run lost everything typed along the
+         way. Progress is now saved after each step and the furthest step kept in
+         profile_extras.onboarding_step. Clamped to the current step list — that
+         list is built from the user's role, so a stored index can outlive it. */
+      step: (function () {
+        var pe = user.profile_extras || {};
+        var n = parseInt(pe.onboarding_step, 10);
+        if (!(n > 0)) { return 0; }
+        return Math.min(n, steps.length - 1);
+      })(),
       steps: steps,
       data: {
         first_name:    user.first_name || '',
@@ -329,6 +340,9 @@
     }
 
     container.querySelector('#kt-back').addEventListener('click', function () {
+      // Hold on to what was typed on the step being left. Back used to discard
+      // it, so a Back/Next round trip quietly emptied the fields again.
+      collectCurrentStep(state, container);
       if (state.step > 0) { state.step--; drawStep(); }
     });
     container.querySelector('#kt-next').addEventListener('click', async function () {
@@ -339,6 +353,7 @@
       if (state.step < steps.length - 1) {
         state.step++;
         drawStep();
+        saveProgress(state);
       } else {
         await submit(state, container);
       }
@@ -385,22 +400,24 @@
   }
   function combinePhone(area, num) {
     var a = digits(area), n = digits(num);
-    if (!a && !n) return '';
+    // A value with no digits is a note ('call the office') -- returning '' deleted it.
+    if (!a && !n) return num ? String(num) : '';
     if (a && n) return '(' + a + ') ' + (n.length >= 7 ? n.slice(0, 3) + '-' + n.slice(3, 7) : n);
     return (a ? '(' + a + ') ' : '') + (num || '');
   }
   function phoneInput(label, key, value, required) {
-    var p = splitPhone(value);
+    /* One field. The separate "Area" box was the wizard's own copy of a split that
+       nothing else in the portal does any more; KT.Phone formats as you type. */
+    var shown = (window.KT && KT.Phone) ? KT.Phone.format(value) : (value || '');
     var req = required ? ' data-req="1"' : '';
     var star = required ? ' <span style="color:#DC2626;font-weight:800;" title="Required">*</span>' : '';
     var wrap = document.createElement('div');
     wrap.style.cssText = 'margin-bottom:14px;';
     wrap.innerHTML =
       '<label style="display:block;font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;">' + esc(label) + star + '</label>'
-      + '<div style="display:grid;grid-template-columns:88px 1fr;gap:8px;">'
-      +   '<input data-parea="' + esc(key) + '" inputmode="numeric" maxlength="3" placeholder="Area" value="' + esc(p.area) + '" style="' + inputStyle() + 'text-align:center;letter-spacing:1px;">'
-      +   '<input data-pnum="' + esc(key) + '"' + req + ' inputmode="tel" placeholder="Phone number" value="' + esc(p.num) + '" style="' + inputStyle() + '">'
-      + '</div>';
+      + '<input data-pnum="' + esc(key) + '"' + req + ' inputmode="tel" placeholder="(416) 555-0199" value="' + esc(shown) + '" style="' + inputStyle() + '">';
+    var f = wrap.querySelector('[data-pnum]');
+    if (f && window.KT && KT.Phone) KT.Phone.attach(f);
     return wrap;
   }
 
@@ -495,6 +512,42 @@
        'Indigenous (First Nations, Métis, Inuit)', 'Mixed / multiple', 'Other', 'Prefer not to say'], false));
     box.appendChild(input('Preferred name (optional, what we call you)', 'preferred_name', state.data.preferred_name));
     box.appendChild(phoneInput('Mobile phone', 'phone', state.data.phone, true));
+
+    /* ASK ABOUT TEXT ALERTS WHILE THEY ARE TYPING THE NUMBER (2026-09-18).
+
+       Anthony: "what can we do to allow everyone to opt in for SMS going forward."
+
+       Texts are consent-gated per person, and the only place to say yes was a toggle
+       inside Settings > Notifications behind a confirm dialog - somewhere a parent never
+       goes. iLearn ended up with 52 people, 42 mobile numbers and ONE opt-in, so an
+       agency-wide broadcast reached one person and reported it as a success.
+
+       So it is asked here, directly under the mobile number, because that is the moment
+       the question makes sense. UNTICKED by default and it stays that way unless they
+       tick it: a pre-ticked box is not consent, and a carrier complaint is the agency's
+       problem, not ours to create for them. The exact wording shown is stored with the
+       answer (AuthController::updateOnboarding). */
+    var smsWrap = document.createElement('div');
+    smsWrap.style.cssText = 'margin:-4px 0 14px;padding:12px 14px;background:#F8FAFC;'
+      + 'border:1px solid #E2E8F0;border-radius:10px;';
+    var smsLab = document.createElement('label');
+    smsLab.style.cssText = 'display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13.5px;color:#334155;line-height:1.5;';
+    var smsBox = document.createElement('input');
+    smsBox.type = 'checkbox';
+    smsBox.setAttribute('data-sms-consent', '1');
+    smsBox.style.cssText = 'width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;cursor:pointer;';
+    smsBox.checked = state.data.sms_opt_in === true;
+    smsLab.appendChild(smsBox);
+    var smsTxt = document.createElement('span');
+    smsTxt.innerHTML = '<b>Text me alerts</b> when my child is signed in or out, and for urgent notices.'
+      + '<span style="display:block;color:#64748B;font-size:12px;margin-top:4px;">'
+      + 'Message frequency varies. Message and data rates may apply. Reply STOP at any time to '
+      + 'stop them. Optional &mdash; leave this unticked and you will still get email and in-app notices.'
+      + '</span>';
+    smsLab.appendChild(smsTxt);
+    smsWrap.appendChild(smsLab);
+    box.appendChild(smsWrap);
+
     var phRow = document.createElement('div');
     phRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
     phRow.appendChild(phoneInput('Direct phone (optional)', 'direct_phone', state.data.direct_phone));
@@ -559,7 +612,9 @@
       pre = pre || {};
       var row = document.createElement('div');
       row.setAttribute('data-team-row', '1');
-      row.style.cssText = 'display:grid;grid-template-columns:150px 1fr 1fr 1fr 28px;gap:8px;align-items:center;margin-bottom:8px;';
+      /* Columns in kt-mobile-app.css, keyed off [data-team-row] — inline they could not
+   be collapsed, and 150px + three fields + a button does not fit a phone. */
+      row.style.cssText = 'display:grid;gap:8px;align-items:center;margin-bottom:8px;';
       row.innerHTML =
         '<select data-tk="role" style="' + inputStyle() + 'background:white;padding:9px 10px;">' +
           '<option value="centre_director"' + (pre.role === 'centre_director' ? ' selected' : '') + '>Centre director</option>' +
@@ -683,7 +738,8 @@
       var idx = extraWrap.querySelectorAll('.kt-ec-row').length;
       var r = document.createElement('div');
       r.className = 'kt-ec-row';
-      r.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-top:8px;';
+      // Columns in kt-mobile-app.css, keyed off .kt-ec-row.
+      r.style.cssText = 'display:grid;gap:8px;align-items:end;margin-top:8px;';
       r.innerHTML =
         '<div><label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin-bottom:5px;">Contact name</label>'
         + '<input data-ec="name" value="' + esc((preset && preset.name) || '') + '" style="' + inputStyle() + '"></div>'
@@ -750,6 +806,13 @@
       if (id === 'profile') state.data[key] = combined;
       else if (id === 'address') state.address[key] = combined;
     });
+    /* An explicit true or false either way, never absent: the API leaves the column
+       alone when the key is missing, so a wizard that forgot to send it would look
+       exactly like a client too old to ask. */
+    if (id === 'profile') {
+      var smsEl = body.querySelector('[data-sms-consent]');
+      if (smsEl) state.data.sms_opt_in = !!smsEl.checked;
+    }
     // Provider bio lives on the role step (its own attribute so it doesn't land
     // in role_extras) → store on state.data.provider_bio.
     if (id === 'role') {
@@ -828,6 +891,9 @@
       }
       wrap.innerHTML = '';
       state.kids.list.forEach(function (kid, i) { wrap.appendChild(card(kid, i)); });
+      /* The cards are rebuilt on every paint, so the allergy rows are painted and wired
+         after them rather than inside card() — which runs before they are in the DOM. */
+      wireAllergies();
     }
 
     function card(kid, idx) {
@@ -835,7 +901,7 @@
       box.style.cssText = 'border:1px solid #E2E8F0;border-radius:14px;padding:14px;margin-bottom:14px;background:#fff;';
 
       var photo = kid.photo_url
-        ? '<img src="' + kid.photo_url + '" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">'
+        ? '<img decoding="sync" src="' + kid.photo_url + '" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">'
         : '<div style="width:64px;height:64px;border-radius:50%;background:#F1F5F9;display:flex;align-items:center;'
           + 'justify-content:center;font-size:26px;color:#94A3B8;">🧒</div>';
 
@@ -857,13 +923,27 @@
         +       (kid.photo_url ? 'Photo added' : 'Required — staff use this to recognise them') + '</div>'
         +   '</div>'
         + '</div>'
+        /* THE ALLERGY QUESTIONNAIRE, ASKED OF THE PARENT.
+
+           This was one comma-separated box. The parent knows the things the box could not
+           hold — how bad the reaction is, whether there is an EpiPen and where it lives —
+           and staff were left to chase all of it afterwards, or not. The one row per
+           allergy asks for exactly that, and no more: severity is a choice, the EpiPen
+           question only appears once it is relevant, and a parent with nothing to declare
+           does nothing at all.
+
+           Dietary needs stay a simple list — "vegetarian" has no severity, and asking for
+           one would be a form pretending to be careful. (Anthony, 2026-09-10) */
         + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:14px 0 4px;">Allergies</label>'
-        + '<input data-kid-allergies value="' + esc((kid.allergies || []).join(', ')) + '"'
-        +   ' placeholder="e.g. Peanuts, Dairy — separate with commas"'
-        +   ' style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13px;">'
-        + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:12px 0 4px;">Dietary needs</label>'
-        + '<input data-kid-diet value="' + esc((kid.dietary_restrictions || []).join(', ')) + '"'
-        +   ' placeholder="e.g. Vegetarian, No pork"'
+        + '<div data-kid-allergies data-kid-index="' + idx + '"></div>'
+        + '<button type="button" data-kid-add-allergy="' + idx + '" style="margin-top:6px;background:#fff;'
+        +   'border:1.5px solid #BFDBFE;color:#1F6FB2;border-radius:9px;padding:6px 13px;font-size:12.5px;'
+        +   'font-weight:800;cursor:pointer;">＋ Add an allergy</button>'
+        + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:14px 0 4px;">Dietary needs</label>'
+        + '<input data-kid-diet value="' + esc((kid.dietary_restrictions || []).map(function (d) {
+              return typeof d === 'string' ? d : (d && d.restriction) || '';
+            }).filter(Boolean).join(', ')) + '"'
+        +   ' placeholder="e.g. Vegetarian, No pork — separate with commas"'
         +   ' style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #E2E8F0;border-radius:9px;font-size:13px;">'
         + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:12px 0 4px;">Anything else the room should know</label>'
         + '<textarea data-kid-notes rows="2" placeholder="Medication, a condition to watch for, how they settle…"'
@@ -896,7 +976,7 @@
             note.textContent = 'Photo added';
             var holder = box.querySelector('[data-kid-photo]');
             if (holder) {
-              holder.innerHTML = '<img src="' + kid.photo_url + '" alt="" style="width:64px;height:64px;'
+              holder.innerHTML = '<img decoding="sync" src="' + kid.photo_url + '" alt="" style="width:64px;height:64px;'
                 + 'border-radius:50%;object-fit:cover;">';
             }
             btn.textContent = 'Change photo';
@@ -934,6 +1014,132 @@
         + rows + '</div>';
     }
 
+    /* Rows live on state so a repaint of the step (a photo upload, say) does not lose
+       what has been typed. Seeded from whatever is on file, in either shape — a record a
+       director already filled in must open with its detail intact, not as a blank form
+       that would then overwrite it. */
+    function allergyRowsFor(i) {
+      var kid = (state.kids.list || [])[i] || {};
+      state.kids.allergyRows = state.kids.allergyRows || {};
+      if (!state.kids.allergyRows[i]) {
+        state.kids.allergyRows[i] = (kid.allergies || []).map(function (a) {
+          if (typeof a === 'string') { return { allergen: a, severity: '' }; }
+          return {
+            allergen: a.allergen || '',
+            severity: a.severity || '',
+            reaction: a.reaction || '',
+            epipen_required: !!a.epipen_required,
+            epipen_location: a.epipen_location || '',
+            action_plan: a.action_plan || '',
+          };
+        }).filter(function (a) { return a.allergen; });
+      }
+      return state.kids.allergyRows[i];
+    }
+
+    function paintAllergies(host, i) {
+      var rows = allergyRowsFor(i);
+      host.innerHTML = '';
+      if (!rows.length) {
+        var none = document.createElement('div');
+        none.style.cssText = 'font-size:12.5px;color:#94A3B8;padding:4px 0;';
+        none.textContent = 'None — leave this empty if your child has no allergies.';
+        host.appendChild(none);
+        return;
+      }
+      rows.forEach(function (row, ri) {
+        var severe = row.severity === 'anaphylactic';
+        var box = document.createElement('div');
+        box.style.cssText = 'border:1.5px solid ' + (severe ? '#FECACA' : '#E2E8F0') + ';background:'
+          + (severe ? '#FEF2F2' : '#fff') + ';border-radius:10px;padding:10px 11px;margin-bottom:8px;';
+
+        var top = document.createElement('div');
+        top.style.cssText = 'display:grid;grid-template-columns:1fr 140px 30px;gap:8px;align-items:center;';
+        var IN2 = 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;';
+
+        var name = document.createElement('input');
+        name.style.cssText = IN2;
+        name.placeholder = 'What are they allergic to?';
+        name.value = row.allergen || '';
+        name.addEventListener('input', function () { row.allergen = this.value; });
+        top.appendChild(name);
+
+        var sev = document.createElement('select');
+        sev.style.cssText = IN2 + 'background:#fff;';
+        [['', 'How severe?'], ['mild', 'Mild'], ['moderate', 'Moderate'], ['anaphylactic', 'Anaphylactic']]
+          .forEach(function (o) {
+            var op = document.createElement('option');
+            op.value = o[0]; op.textContent = o[1];
+            if ((row.severity || '') === o[0]) { op.selected = true; }
+            sev.appendChild(op);
+          });
+        sev.addEventListener('change', function () { row.severity = this.value; paintAllergies(host, i); });
+        top.appendChild(sev);
+
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.textContent = '✕';
+        rm.setAttribute('data-kt-no-icon', '1');
+        rm.style.cssText = 'background:none;border:0;color:#DC2626;font-size:15px;cursor:pointer;';
+        rm.addEventListener('click', function () { rows.splice(ri, 1); paintAllergies(host, i); });
+        top.appendChild(rm);
+        box.appendChild(top);
+
+        /* Only once it is serious. Asking every parent about an EpiPen for a mild
+           intolerance is how a form teaches people to skim it. */
+        if (row.severity === 'anaphylactic' || row.severity === 'moderate') {
+          var epi = document.createElement('div');
+          epi.style.cssText = 'margin-top:8px;display:flex;align-items:center;gap:9px;flex-wrap:wrap;';
+          var lab = document.createElement('label');
+          lab.style.cssText = 'display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:#334155;cursor:pointer;';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = !!row.epipen_required;
+          cb.style.cssText = 'width:16px;height:16px;accent-color:#DC2626;';
+          lab.appendChild(cb);
+          lab.appendChild(document.createTextNode('They carry an EpiPen'));
+          epi.appendChild(lab);
+
+          var loc = document.createElement('input');
+          loc.style.cssText = IN2 + 'flex:1;min-width:170px;';
+          loc.placeholder = 'Where will it be kept?';
+          loc.value = row.epipen_location || '';
+          loc.style.display = cb.checked ? '' : 'none';
+          loc.addEventListener('input', function () { row.epipen_location = this.value; });
+          cb.addEventListener('change', function () {
+            row.epipen_required = cb.checked;
+            loc.style.display = cb.checked ? '' : 'none';
+            if (!cb.checked) { row.epipen_location = ''; loc.value = ''; }
+          });
+          epi.appendChild(loc);
+          box.appendChild(epi);
+
+          var rx = document.createElement('input');
+          rx.style.cssText = IN2 + 'margin-top:8px;';
+          rx.placeholder = 'What happens when they react? (optional)';
+          rx.value = row.reaction || '';
+          rx.addEventListener('input', function () { row.reaction = this.value; });
+          box.appendChild(rx);
+        }
+
+        host.appendChild(box);
+      });
+    }
+
+    /* Wired after every paint of the step, because the cards are rebuilt each time. */
+    function wireAllergies() {
+      wrap.querySelectorAll('[data-kid-allergies]').forEach(function (host) {
+        paintAllergies(host, parseInt(host.getAttribute('data-kid-index'), 10));
+      });
+      wrap.querySelectorAll('[data-kid-add-allergy]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var i = parseInt(b.getAttribute('data-kid-add-allergy'), 10);
+          allergyRowsFor(i).push({ allergen: '', severity: '' });
+          paintAllergies(wrap.querySelector('[data-kid-allergies][data-kid-index="' + i + '"]'), i);
+        });
+      });
+    }
+
     return wrap;
   }
 
@@ -961,9 +1167,26 @@
         shots.push({ vaccine: parts[0], dose_label: parts[1] || null, administered_on: d.value });
       });
 
+      /* ALLERGIES COME FROM THE ROWS, NOT A TEXT BOX.
+
+         allergyEl is now the container the questionnaire paints into; its rows live on
+         state so they survive a repaint. Blank rows are dropped — somebody who pressed
+         "Add an allergy" and thought better of it has not declared anything. */
+      var rows = ((state.kids && state.kids.allergyRows) || {})[i] || [];
+      var allergies = rows.map(function (r) {
+        var out = { allergen: String(r.allergen || '').trim() };
+        if (r.severity) { out.severity = r.severity; }
+        if (r.reaction) { out.reaction = r.reaction; }
+        if (r.epipen_required) {
+          out.epipen_required = true;
+          if (r.epipen_location) { out.epipen_location = r.epipen_location; }
+        }
+        return out;
+      }).filter(function (r) { return r.allergen; });
+
       list.push({
         id: kid.id,
-        allergies: split(allergyEl.value),
+        allergies: allergies,
         dietary_restrictions: split((card.querySelector('[data-kid-diet]') || {}).value),
         medical_notes: ((card.querySelector('[data-kid-notes]') || {}).value || '').trim() || null,
         immunizations: shots,
@@ -1060,6 +1283,24 @@
     }
     msg.textContent = '';
     return true;
+  }
+
+  /* Save what has been filled in so far WITHOUT finishing onboarding, and record
+     the step reached so the next sign-in resumes here. Deliberately fire-and-
+     forget: the wizard must not stall behind a slow network, and a failed save
+     costs only the resume point, never the run in progress. The username is left
+     out because it is uniqueness-checked on save and a half-typed one would 422
+     the whole partial save; it goes up with the final submit. */
+  function saveProgress(state) {
+    try {
+      var payload = Object.assign({}, state.data, state.address, {
+        role_extras: state.role_extras,
+        onboarding_step: state.step,
+        complete: false,
+      });
+      delete payload.username;
+      api('PATCH', '/auth/me/onboarding', payload).catch(function () {});
+    } catch (e) { /* never block the wizard on a progress save */ }
   }
 
   async function submit(state, container) {
@@ -1184,11 +1425,61 @@
     var u = getUser();
     return !!(u && u.id && !u.onboarded_at);
   }
+  /* A BOUNCE BUDGET, SO A DISAGREEMENT CANNOT LOCK THE BROWSER.
+
+     This gate rewrites the hash on every hashchange. That is self-terminating on its own —
+     the bounce sets #onboarding, the next hashchange sees #onboarding and returns — but it
+     is only self-terminating while nothing else is writing the hash. If anything does, the
+     two take turns forever, and each turn runs all 47 hashchange listeners in the portal
+     plus a full renderScreen. Every one of those tasks is short, so nothing registers as a
+     long task; the main thread simply never gets a gap. That is exactly the shape of
+     ticket #55 — 14 seconds unresponsive on #today, "no long task recorded", with the
+     breadcrumbs showing today → onboarding → # → today → onboarding → today.
+
+     So the gate now gives up rather than fights. Ten bounces inside two seconds is not a
+     user navigating, it is a loop; past that the gate stops rewriting until things settle.
+     The gate still did its job — the first bounce landed on #onboarding — and the failure
+     mode becomes "the hash is wrong" instead of "the browser is frozen".
+
+     A crumb is left naming what it was fighting with, because that is the one fact this
+     ticket did not have and the next one will. (Anthony, 2026-09-10) */
+  var _bounces = [];
+  var _bounceGaveUp = false;
+  var BOUNCE_LIMIT = 10;
+  var BOUNCE_WINDOW_MS = 2000;
+
   function forceGate() {
     if (!token()) return;                 // not signed in → nothing to gate
     if (!onboardingIncomplete()) return;  // done (or impersonating) → free to navigate
     var hash = (window.location.hash || '').replace('#', '').split('?')[0];
-    if (hash !== 'onboarding') window.location.hash = '#onboarding'; // bounce back
+    if (hash === 'onboarding') {
+      /* Settled where it should be. Anything counted before this was ordinary
+         navigation, not a fight, so the budget resets. */
+      _bounces.length = 0;
+      _bounceGaveUp = false;
+      return;
+    }
+    if (_bounceGaveUp) { return; }
+
+    var now = Date.now();
+    _bounces.push({ t: now, from: hash });
+    while (_bounces.length && now - _bounces[0].t > BOUNCE_WINDOW_MS) { _bounces.shift(); }
+
+    if (_bounces.length > BOUNCE_LIMIT) {
+      _bounceGaveUp = true;
+      var fighting = _bounces.map(function (b) { return b.from || '(empty)'; })
+        .filter(function (v, i, a) { return a.indexOf(v) === i; }).join(' ↔ ');
+      try {
+        if (window.KT && KT.crumb) {
+          KT.crumb('onboarding-gate', 'gave up after ' + _bounces.length
+            + ' bounces in ' + BOUNCE_WINDOW_MS + 'ms — fighting: ' + fighting);
+        }
+        console.warn('[onboarding gate] stopped bouncing; something else keeps setting the hash:', fighting);
+      } catch (e) {}
+      return;
+    }
+
+    window.location.hash = '#onboarding'; // bounce back
   }
   // Kept for back-compat (called eagerly + by the shell); now the full gate.
   function maybeAutoTrigger() { forceGate(); }

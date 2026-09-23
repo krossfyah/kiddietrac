@@ -129,7 +129,9 @@
     // Safe against self-triggering: normalize() mutates the banner it just found, which
     // trips this observer, but the next pass sees data-kt-banner and returns without
     // mutating. It settles after one extra frame.
-    new MutationObserver(sweepSoon).observe(main0, { childList: true, subtree: true });
+    /* Re-binds when the shell swaps #appMain (kt:main-swapped); a MutationObserver follows a NODE, and this one used to die silently at the first render. */
+    if (w.KT && KT.observeMain) { KT.observeMain(sweepSoon, { childList: true, subtree: true }); }
+    else { new MutationObserver(sweepSoon).observe(main0, { childList: true, subtree: true }); }
   }
   // Safety net for async screen renders that swap the banner in late.
   (window.KT && KT.sweepBus) ? KT.sweepBus.on(sweep) : setInterval(sweep, 4000);

@@ -7,6 +7,82 @@
    ═══════════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
+
+  /* ── THE CHROME STEPS ASIDE FOR A DIALOG ───────────────────────────────────
+     ~65 hand-rolled overlays across the screens carry a z-index below the mobile
+     chrome: 18 under the bottom nav (9500), and another 11 under the agency switcher
+     and "Viewing as" pill (9001) that only a super admin has — which is why this reads
+     as a role bug when nothing in the dialogs is role-aware. Fixing 65 call sites would
+     not hold; the next hand-rolled dialog would land under the chrome again. So the
+     chrome yields.
+
+     Only the PERSISTENT furniture moves — bottom nav, gear, agency switcher. The drawer,
+     its scrim, the select sheet and toasts are meant to sit above a dialog and are left
+     alone. Everything returns the moment the dialog closes. (Anthony, 2026-09-07) */
+  var DUCK_CSS = 'body.kt-dialog-open #kt-mobilenav,'
+    + 'body.kt-dialog-open #kt-gear,'
+    + 'body.kt-dialog-open #kt-agency-switcher{z-index:500 !important;}';
+
+  /* Is a dialog on screen? The same shape test KT.uiBusy() uses, so the portal keeps ONE
+     definition of "a dialog is open" rather than two that drift. uiBusy() itself is not
+     called: it also answers true for a focused input, which is about deferring refreshes,
+     not about furniture. */
+  function dialogOnScreen() {
+    try {
+      if (document.querySelector('.kt-modal, .kt-modal-overlay, .modal-backdrop, .kt-scrim,'
+          + ' .kt-lightbox, .kt-doc-viewer, .kt-av-zoom, [role="dialog"]')) { return true; }
+      var mr = document.getElementById('modalRoot');
+      if (mr && mr.firstElementChild) { return true; }
+      var kids = document.body ? document.body.children : [];
+      for (var i = 0; i < kids.length; i++) {
+        var el = kids[i];
+        if (el.id === 'appMain' || el.id === 'kt-mobilenav' || el.id === 'kt-gear'
+            || el.id === 'kt-agency-switcher') { continue; }
+        if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') { continue; }
+        if (el.hidden) { continue; }
+        var cs = window.getComputedStyle(el);
+        if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') { continue; }
+        if (parseFloat(cs.opacity || '1') < 0.05) { continue; }
+        var z = parseInt(cs.zIndex, 10);
+        if (isNaN(z) || z < 900) { continue; }
+        var r = el.getBoundingClientRect();
+        if (r.width < 200 || r.height < 120) { continue; }   // a badge, not a dialog
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  var duckArmed = false;
+  function duckChromeForDialogs() {
+    if (duckArmed) { return; }
+    duckArmed = true;
+    if (!document.getElementById('kt-duck-css')) {
+      var st = document.createElement('style');
+      st.id = 'kt-duck-css';
+      st.textContent = DUCK_CSS;
+      document.head.appendChild(st);
+    }
+    var pending = 0;
+    var apply = function () {
+      pending = 0;
+      try { document.body.classList.toggle('kt-dialog-open', dialogOnScreen()); } catch (e) {}
+    };
+    /* Coalesced: opening a dialog adds several nodes at once, and the shape test walks
+       body's children with getComputedStyle. One pass per frame, not one per node. */
+    var schedule = function () {
+      if (pending) { return; }
+      pending = window.requestAnimationFrame
+        ? window.requestAnimationFrame(apply)
+        : window.setTimeout(apply, 16);
+    };
+    try {
+      new MutationObserver(schedule).observe(document.body, { childList: true });
+    } catch (e) {
+      window.setInterval(apply, 1200);   // WebViews without MutationObserver
+    }
+    apply();
+  }
   if (window.__ktMobileNav) return; window.__ktMobileNav = true;
   try { window.__KT_NAV_VER = 'eduhome'; } catch (e) {}   // stamp: proves which nav JS actually ran (read by the diag chip)
   function tok() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
@@ -27,6 +103,16 @@
       if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KtBio) return true;
     } catch (e) {}
     return false;
+  }
+  /* RE-EVALUATED, not frozen. This used to be read once at script parse; if
+     Capacitor injects its bridge afterwards — more likely on iOS than Android — the
+     answer stayed false for the whole session and every rule gated on `kt-app` was
+     inert. Cached once it turns true, because a native app never stops being one. */
+  var _native = null;
+  function NATIVE_NOW() {
+    if (_native) return true;
+    _native = isNativeApp() || null;
+    return !!_native;
   }
   var NATIVE = isNativeApp();
 
@@ -66,7 +152,7 @@
   function syncNativeClasses() {
     try {
       var d = document.documentElement;
-      d.classList.toggle('kt-app', NATIVE);
+      d.classList.toggle('kt-app', NATIVE_NOW());
       d.classList.toggle('kt-native', NATIVE && isPhoneSized());
     } catch (e) {}
   }
@@ -99,7 +185,7 @@
       '@media(max-width:' + BP + 'px){',
         '#kt-mobilenav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:9500;background:#fff;',
         'border-top:1px solid #E5E7EB;box-shadow:0 -4px 16px -8px rgba(15,23,42,.2);',
-        'padding:5px 4px calc(env(safe-area-inset-bottom,0px) + 5px);justify-content:space-around;}',
+        'padding:5px 4px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 5px);justify-content:space-around;}',
         '#kt-mobilenav button{position:relative;flex:1;background:transparent;border:none;display:flex;flex-direction:column;',
         'align-items:center;gap:2px;padding:8px 2px 6px;cursor:pointer;color:#64748B;font-weight:600;font-size:10.5px;line-height:1.2;min-height:52px;}',
         '#kt-mobilenav button .ic{font-size:21px;line-height:1;transition:transform .12s ease;}',
@@ -129,7 +215,7 @@
         // on a screen — the Sign out button on the home launcher — sitting
         // UNDERNEATH the bar and untappable. Clear the real height, with room to
         // spare; pinToVisualViewport() refines it from the measured bar.
-        '.app-main,#appMain{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 100px) !important;min-height:0 !important;}',
+        '.app-main,#appMain{padding-bottom:calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 100px) !important;min-height:0 !important;}',
         // Kill browser scroll-anchoring — as tall screens (Home tiles) render in
         // stages it shoves the scroll down, then our reset yanks it up = the flash.
         'html,body,#appMain{overflow-anchor:none !important;}',
@@ -162,6 +248,71 @@
   // gear. Stylesheet rules get out-specified by the sidebar's own #navUser rule,
   // so we force it inline (inline !important always wins) and re-apply as the SPA
   // re-renders the header.
+  /* WHERE THE GEAR GOES: centred in the header, measured.
+
+     It used to be positioned at `env(safe-area-inset-top) + 8px` — a value the iOS
+     WebView reports as 0 — and then at `--kt-safe-top + 8px`, which is a guess at
+     where the header ENDS rather than where it actually does. When the header grows
+     (logo + greeting + role badge, or a wrapped name) the gear floated below it, over
+     the banner. Reading the box cannot be wrong, and it re-centres on rotation, on a
+     re-render, and when the greeting wraps. */
+  /* Docking was wrong — the gear belongs BESIDE the name, not inside the controls
+     row. Any previously docked gear (from a cached build) is floated again. */
+  function undockGear(g) {
+    if (!g || !g.getAttribute('data-kt-docked')) return;
+    g.removeAttribute('data-kt-docked');
+    g.style.position = 'fixed';
+    g.style.right = '12px';
+    document.body.appendChild(g);
+  }
+
+  function placeGear() {
+    var g = document.getElementById('kt-gear');
+    if (!g) return;
+    undockGear(g);
+
+    /* BESIDE THE NAME ROW — the one row every role has.
+
+       "It should be like how the educator and other users see it in mobile view"
+       (Anthony, 2026-09-06). For an educator the phone header IS the name row: logo,
+       avatar, greeting, name, with the gear at its top right. A super admin has that
+       same row with a controls row stacked above it.
+
+       Aiming at #appSidebar (the whole header) or at the foot (the controls row) put the
+       gear beside the wrong things — on the selectors, or between them. #navUser is the
+       row the reference actually describes, and it exists for every role, so ONE rule
+       reproduces the educator's placement for everybody. */
+    var bar = document.getElementById('navUser') || document.getElementById('appSidebar');
+    if (!bar) return;
+    var r = bar.getBoundingClientRect();
+    // A hidden or drawer-mode sidebar measures nothing useful; leave the last value.
+    if (!(r.height > 0) || r.bottom <= 0) return;
+    var top = Math.round(r.top + (r.height - 40) / 2);
+    if (top < 4) top = 4;                       // never above the status bar
+    var want = top + 'px';
+
+    /* !important, or this does nothing at all.
+
+       Seven rules in kt-mobile-app.css pin #kt-gear's top with !important
+       (html.kt-app, html.kt-ios-inset-fallback, html.kt-native-fullscreen, each
+       duplicated across that file's repeated blocks). An !important declaration in a
+       stylesheet BEATS a plain inline style, so every value this function wrote was
+       discarded by the cascade and the gear stayed at `max(safe-top,22px)+6px` — about
+       28px down, on top of whatever the header put there.
+
+       That is why four different anchors all measured correctly and nothing moved on
+       screen: the number being verified was never the number being applied. */
+    if (g.style.getPropertyValue('top') !== want
+        || g.style.getPropertyPriority('top') !== 'important') {
+      g.style.setProperty('top', want, 'important');
+    }
+    // Same treatment for right: nothing marks it !important today, and the next rule
+    // that does must not bring this bug back.
+    if (g.style.getPropertyPriority('right') !== 'important') {
+      g.style.setProperty('right', '12px', 'important');
+    }
+  }
+
   function padGearClearance() {
     if (!NATIVE && window.innerWidth > 768) return;
     if (!document.getElementById('kt-gear')) return;
@@ -220,6 +371,74 @@
   // Fullscreen check-in QR for the educator's centre — parents scan it off the
   // educator's phone (or print it). The code is fetched fresh and rotates daily
   // server-side (CheckinScanController::centreCode → KTCHK.<centre>.<Ymd>.<sig>).
+  /**
+   * The quick-add sheet for admins and directors.
+   *
+   * Reads the actions out of .kt-v5a-actions (screen-director-v5a builds it in the
+   * sidebar, hidden on phones since 2026-09-02) and forwards each tap to the original
+   * button. Nothing about what "New family" does is duplicated here — a second copy
+   * would be a second thing to keep in step with the modals.
+   *
+   * If the section has not been built yet — it is injected by the director screen — the
+   * sheet says so rather than opening empty.
+   */
+  function openAdminQuickAdd() {
+    if (document.getElementById('kt-qa-sheet')) return;
+    var src = document.querySelectorAll('.kt-v5a-actions button');
+    var items = [];
+    for (var i = 0; i < src.length; i++) {
+      var t = (src[i].textContent || '').trim();
+      if (!t || /Quick add/i.test(t)) { continue; }   // the collapse header, not an action
+      items.push(src[i]);
+    }
+
+    var ov = document.createElement('div');
+    ov.id = 'kt-qa-sheet';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(15,23,42,.5);'
+      + 'display:flex;align-items:flex-end;';
+    var card = document.createElement('div');
+    card.style.cssText = 'width:100%;background:#fff;border-radius:18px 18px 0 0;padding:14px 14px '
+      + 'calc(14px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));box-shadow:0 -8px 24px rgba(15,23,42,.18);';
+    var h = document.createElement('div');
+    h.style.cssText = 'font:800 14px/1.2 system-ui,sans-serif;color:#0F172A;margin:2px 0 10px;';
+    h.textContent = '\u26A1 Quick add';
+    card.appendChild(h);
+
+    if (!items.length) {
+      var none = document.createElement('div');
+      none.style.cssText = 'font-size:13px;color:#64748B;padding:6px 2px 12px;';
+      none.textContent = 'Nothing to add from here yet — open a centre screen first.';
+      card.appendChild(none);
+    }
+    items.forEach(function (b) {
+      var row = document.createElement('button');
+      row.type = 'button';
+      row.textContent = (b.textContent || '').trim();
+      row.style.cssText = 'display:block;width:100%;text-align:left;background:#F8FAFC;border:1px solid #E7EBF0;'
+        + 'border-radius:10px;padding:0 12px;height:44px;margin-bottom:8px;font:600 14px/1 system-ui,sans-serif;color:#0F172A;cursor:pointer;';
+      row.addEventListener('click', function () { close(); b.click(); });
+      card.appendChild(row);
+    });
+
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Cancel';
+    cancel.style.cssText = 'display:block;width:100%;background:none;border:0;padding:10px;'
+      + 'font:700 13px/1 system-ui,sans-serif;color:#64748B;cursor:pointer;';
+    card.appendChild(cancel);
+    ov.appendChild(card);
+
+    function close() {
+      document.removeEventListener('keydown', onKey, true);
+      ov.remove();
+    }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+    cancel.addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(ov);
+  }
+
   function showCheckinQr() {
     // Guard: a stale/second overlay stacking made the button feel unresponsive
     // ("kept clicking"). If one's already up, don't build another.
@@ -248,7 +467,7 @@
     // + code + helper text could be taller than the viewport, so the top was
     // clipped and it looked off-centre. Wrap it all in a min-height flex box.
     var _qrInner = document.createElement('div');
-    _qrInner.style.cssText = 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(env(safe-area-inset-top,0px) + 24px) 24px calc(env(safe-area-inset-bottom,0px) + 24px);box-sizing:border-box;';
+    _qrInner.style.cssText = 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 24px) 24px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 24px);box-sizing:border-box;';
     while (ov.firstChild) _qrInner.appendChild(ov.firstChild);
     ov.appendChild(_qrInner);
     document.body.appendChild(ov);
@@ -287,6 +506,7 @@
     if (!tok() || document.getElementById('kt-mobilenav')) return;
     injectStyle();
     var scrim = document.createElement('div'); scrim.id = 'kt-mnav-scrim'; scrim.addEventListener('click', closeMenu); document.body.appendChild(scrim);
+    duckChromeForDialogs();
     var nav = document.createElement('div'); nav.id = 'kt-mobilenav';
     var btn = function (icon, label, fn, badgeId, hash) {
       var b = document.createElement('button'); b.type = 'button'; if (hash) b.setAttribute('data-hash', hash);
@@ -317,10 +537,43 @@
       // to the roster/"today" screen and never back to their launcher home.
       var homeH = 'dashboard';
       try { if (window.KT && KT.Shell && KT.Shell.homeHashForRole) homeH = KT.Shell.homeHashForRole(activeRole()) || 'dashboard'; } catch (e) {}
+      /* Admins and directors now have a launcher too (screen-admin-home.js), so Home
+         goes there rather than to the dashboard — on a phone the launcher IS how you
+         reach anything, which is the whole reason it exists. Only the phone bar is
+         changed; homeHashForRole still decides where the DESKTOP lands, where the
+         sidebar is present and the dashboard is the right first screen. */
+      var _adminRole = ['agency_admin', 'platform_admin', 'centre_director'].indexOf(activeRole()) !== -1;
+      if (_adminRole) { homeH = 'home'; }
       nav.appendChild(btn('🏠', 'Home', (function (h) { return function () { go('#' + h); }; })(homeH), null, homeH));
       // Daily log is the thing an educator reaches for most times in a day —
       // it belongs on the bar, not two taps deep in the launcher.
-      nav.appendChild(btn('📝', 'Daily log', function () { go('#care-log'); }, null, 'care-log'));
+      /* Daily log is an EDUCATOR's tool — it is what they reach for a dozen times a
+         day. An admin or director almost never writes one, so on their bar it was a
+         wasted slot out of five. They get Children instead, which is the record they
+         actually open. The hash differs by role: the admin nav calls it admin-children,
+         the director nav calls it children. */
+      /* Quick add, moved off the top bar (2026-09-02).
+         The actions themselves stay in screen-director-v5a — this reads its buttons and
+         forwards the tap, so there is one implementation of "new child" and it is the
+         one that already works. */
+      if (_adminRole) {
+        /* Daily Overview, not Children: it is the screen an admin or director opens each
+           morning to see the day across the agency. Children is one tap away on the
+           launcher, and #provider-day is registered for all three admin roles
+           (screen-provider-day.js). */
+        nav.appendChild(btn('🗓️', 'Daily', function () { go('#provider-day'); }, null, 'provider-day'));
+      } else {
+        nav.appendChild(btn('📝', 'Daily log', function () { go('#care-log'); }, null, 'care-log'));
+      }
+
+      /* Third of five, so it lands in the middle — the raised slot the parent bar
+         uses for its camera. Order: Home · Children · Add · Messenger · Inbox. */
+      if (_adminRole) {
+        var qaBtn = btn('\u26A1', 'Add', function () { openAdminQuickAdd(); }, null, '__qadd');
+        qaBtn.classList.add('scan');   // the raised centre treatment the parent bar uses
+        nav.appendChild(qaBtn);
+      }
+
       if (isEducatorView()) {
         // The educator's check-in QR, as a raised centre button — the same
         // affordance parents get for scanning. A 🔳 glyph floating in the corner
@@ -357,7 +610,20 @@
           return ADMIN.some(function (x) { return r.indexOf(x) > -1; });
         } catch (e) { return false; }
       })();
-      if (_isAdminNav) {
+      /* The drawer is only drawn when there is no launcher to send people to.
+
+         It existed because admins and directors had no tile launcher: it revealed the
+         DESKTOP sidebar as an overlay — 94 items for an agency admin, one scrolling
+         list, no search. They have a launcher as of 2026-09-01 (screen-admin-home.js),
+         and Home opens it, so a Menu button would be a second and worse route to the
+         same places: same items, same order, without the search or the grouping.
+
+         KT.AdminHome is the launcher's own export, so this asks the thing itself
+         whether it is there rather than assuming a file loaded. If it is missing —
+         cached build, 404, rename — the drawer comes back exactly as it was, and its
+         CSS and scrim were left in place for that reason. */
+      var _hasLauncher = !!(window.KT && KT.AdminHome);
+      if (_isAdminNav && !_hasLauncher) {
         var menuBtn = btn('☰', 'Menu', function () {
           var open = document.body.classList.toggle('kt-mnav-open');
           menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -373,11 +639,18 @@
     // Settings gear — top-right of the parent/educator mobile app (change
     // password, biometrics, PIN, photo, contact). Hidden on desktop (the top bar
     // covers it). Educators are phone-first too and had no gear before.
-    var showGear = parent || isEducatorView();
+    /* Admins and directors get the gear too. They were excluded because they had no
+       personal profile screen to send it to; screen-settings registers
+       agency_admin and centre_director as of 2026-09-01, so it now goes somewhere
+       — and it is where their two-factor lives. */
+    var showGear = parent || isEducatorView() || _adminRole;
     if (showGear && !document.getElementById('kt-gear')) {
       var gear = document.createElement('button');
       gear.id = 'kt-gear'; gear.type = 'button'; gear.setAttribute('aria-label', 'Settings'); gear.textContent = '⚙️';
-      gear.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:12px;z-index:9450;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.94);box-shadow:0 2px 10px rgba(15,23,42,.2);font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
+      /* top is set by placeGear() from the header's MEASURED box — never from
+         env(safe-area-inset-top), which is the value this WebView reports as 0 and
+         the reason kt-ios-safearea.js has to exist at all. */
+      gear.style.cssText = 'position:fixed;top:8px;right:12px;z-index:9450;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.94);box-shadow:0 2px 10px rgba(15,23,42,.2);font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;';
       gear.addEventListener('click', function () { go('#settings'); });
       document.body.appendChild(gear);
     }
@@ -391,6 +664,7 @@
     // a cached page can't leave the body stuck in the open state.
     document.body.classList.remove('kt-mnav-open');
     padGearClearance();
+    placeGear();
 
     // Highlight the active section.
     var updateActive = function () {
@@ -412,12 +686,78 @@
   // `bottom:0` fixed bar lands hundreds of px below the fold, invisible. We offset
   // it up by the difference so it's always glued to the visible bottom (and it
   // rides up with the on-screen keyboard instead of hiding behind it).
+  /* iPadOS 13+ reports itself as a Macintosh, so the touch count matters. */
+  function isIOS() {
+    var ua = navigator.userAgent || '';
+    return /iPad|iPhone|iPod/.test(ua)
+      || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  }
+
+  /* The bottom inset, as whatever is authoritative on this device: kt-ios-safearea.js
+     writes --kt-safe-bottom where iOS reports env() as zero, and env() itself elsewhere. */
+  function bottomInset() {
+    try {
+      var v = parseFloat(getComputedStyle(document.documentElement)
+        .getPropertyValue('--kt-safe-bottom'));
+      if (v > 0) { return v; }
+    } catch (e) {}
+    try {
+      var probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;'
+        + 'padding-bottom:env(safe-area-inset-bottom, 0px);';
+      document.documentElement.appendChild(probe);
+      var b = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+      probe.remove();
+      return b;
+    } catch (e) { return 0; }
+  }
+
   function pinToVisualViewport() {
     var nav = document.getElementById('kt-mobilenav'); if (!nav) return;
     var vv = window.visualViewport;
     if (vv) {
       var offset = window.innerHeight - (vv.offsetTop + vv.height);
-      nav.style.bottom = (offset > 1 ? Math.round(offset) : 0) + 'px';
+      if (!(offset > 1)) { offset = 0; }
+
+      /* THE BAR MUST NOT BE LIFTED BY SPACE IT ALREADY COVERS ITSELF. (2026-09-21)
+
+         Anthony, on the iPhone: "bottom bar still not at the very bottom there is a gap."
+
+         Two things were each paying for the home indicator, so it got paid for twice.
+         The bar reserves it as its own padding-bottom (--kt-safe-bottom, so the labels
+         clear the indicator), and this lift THEN raised the whole bar by the same amount
+         again - leaving exactly one inset of page background showing underneath it.
+
+         That double count is an iOS-only shape, and for the same reason the navy bottom
+         strip is Android-only: on Android the bottom inset is an opaque system nav bar
+         drawn over us, and the bar genuinely has to sit above it. On iOS it is the home
+         indicator, a pill floating OVER the app - Apple's own tab bars run underneath it,
+         which is what "bring the bar right to the bottom to fill the area" asks for.
+
+         Subtracting rather than zeroing keeps the KEYBOARD case right, which is the other
+         half of this function's job: with a 300pt keyboard up the bar lifts 300-34, and
+         its own 34 of padding makes up the difference, so it still sits exactly on the
+         keyboard. With no keyboard the offset IS the inset and the bar goes flush. */
+      var _inset = bottomInset();
+      if (isIOS()) {
+        offset = Math.max(0, offset - _inset);
+      }
+
+      nav.style.bottom = Math.round(offset) + 'px';
+
+      /* THE NUMBERS, WHERE SOMEBODY CAN READ THEM.
+
+         Every previous round of this was argued from screenshots, which cannot tell a
+         bar lifted by 34px from one padded by 34px - they look identical. Same reasoning
+         as data-kt-insets on <html>: one attribute turns "still a gap" into a reading.
+         Visible in a crash report and in the DOM. */
+      try {
+        nav.setAttribute('data-kt-pin',
+          'vv ' + Math.round(vv.height) + '+' + Math.round(vv.offsetTop)
+          + ' vs inner ' + window.innerHeight
+          + ' | inset ' + _inset + (isIOS() ? ' (ios, subtracted)' : ' (kept)')
+          + ' -> bottom ' + Math.round(offset));
+      } catch (e) {}
     } else {
       nav.style.bottom = '0px';
     }
@@ -446,7 +786,7 @@
   }
   window.addEventListener('resize', pinToVisualViewport);
   window.addEventListener('orientationchange', pinToVisualViewport);
-  setInterval(function () { pinToVisualViewport(); padGearClearance(); }, 700);   // catch SPA navigations / URL-bar changes
+  setInterval(function () { pinToVisualViewport(); padGearClearance(); placeGear(); }, 700);   // catch SPA navigations / URL-bar changes
 
   // ── Screen-transition animation (phones only) ───────────────────────
   // A real navigation (hashchange) arms a one-shot; the first #appMain childList
@@ -492,8 +832,16 @@
     var m = document.getElementById('appMain');
     if (!m) { setTimeout(watchAppMain, 300); return; }
     if (m.__ktAnimObs) return; m.__ktAnimObs = true;
-    new MutationObserver(function () { playScreenAnim(m); })
-      .observe(m, { childList: true });
+
+    /* Re-binds when the shell swaps #appMain. The callback resolves the node itself
+       rather than closing over `m`, or after the first swap it would animate the node
+       that was thrown away. */
+    var play = function () {
+      var live = document.getElementById('appMain');
+      if (live) { playScreenAnim(live); }
+    };
+    if (window.KT && KT.observeMain) { KT.observeMain(play, { childList: true }); }
+    else { new MutationObserver(play).observe(m, { childList: true }); }
   })();
 
   // ── Unread counters on the bottom bar ──────────────────────────────
@@ -541,7 +889,7 @@
       _setBadge('kt-b-inbox', sec === 'notifications' ? 0 : totalUnread);
     });
   }
-  setInterval(refreshBadges, 60000);
+  setInterval(refreshBadges, 15000);   // was 60s, and it disagreed with the top bar's 15s figure
   // On entering a section, instantly clear its badge, then re-sync shortly after
   // (the screen marks its notifications read on open).
   window.addEventListener('hashchange', function () {
@@ -553,7 +901,7 @@
     setTimeout(refreshBadges, 1500);
   });
 
-  setInterval(ensure, 1500);
+  (window.KT && KT.sweepBus) ? KT.sweepBus.on(ensure) : setInterval(ensure, 1500);
   function boot() { ensure(); setTimeout(refreshBadges, 1200); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 

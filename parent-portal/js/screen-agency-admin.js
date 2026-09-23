@@ -73,12 +73,22 @@
       title: 'Capacity utilisation',
       build: (ctx) => widgetCapacityUtilization(ctx.data),
     },
+    'agency-revenue': {
+      title: 'Revenue',
+      build: (ctx) => widgetAgencyRevenue(ctx.data),
+    },
     'receivables': {
       title: 'Outstanding receivables',
       build: (ctx) => widgetReceivables(ctx.data),
     },
   };
-  const DEFAULT_WIDGETS = ['mrr-sparkline', 'arr-agencies', 'users-by-role', 'enrollment-delta'];
+  /* Agency-facing by default. The previous four led with mrr-sparkline,
+     arr-agencies and enrollment-delta, all of which read /admin/mrr/overview —
+     KiddieTrac's subscription income, not this agency's. A director cannot even
+     load that route, so those cards read "No data yet" for every one of them. */
+  /* staff-on-floor removed: it duplicated the "Team on the floor" card already on
+     this screen. Revenue answers something nothing else here does. */
+  const DEFAULT_WIDGETS = ['attendance-today', 'agency-revenue', 'centre-occupancy', 'users-by-role'];
 
   function getEnabledWidgets() {
     try {
@@ -288,7 +298,7 @@
         '<div style="color:#64748B;font-size:11px;margin-top:2px;">' + esc(a.display_time) + (a.centre_name ? ' · ' + esc(a.centre_name) : '') + '</div>' +
       '</div>';
     }).join('');
-    return widgetCard('Activity feed', 'Latest 5 events', rows + '<div style="margin-top:auto;text-align:center;padding-top:10px;"><a href="#admin-billing" style="color:#1F6080;font-size:12px;font-weight:600;">See all activity →</a></div>');
+    return widgetCard('Activity feed', 'Latest 5 events', rows + '<div style="margin-top:auto;text-align:center;padding-top:10px;"><a href="#billing-settings" style="color:#1F6080;font-size:12px;font-weight:600;">See all activity →</a></div>');
   }
 
   function widgetAttendanceToday(data) {
@@ -319,6 +329,42 @@
       '<div style="font-size:13px;color:#64748B;line-height:1.5;">' + enrolled + ' enrolled<br>of ' + cap + ' licensed spaces<br><b style="color:' + color + ';">' + Math.max(0, cap - enrolled) + ' spaces open</b></div></div>';
     return widgetCard('Capacity utilisation', 'Enrolled vs. licensed spaces', html);
   }
+  /** The agency's own money: collected this month, outstanding, and what is late.
+      Not to be confused with the MRR widgets, which show what this agency pays
+      KiddieTrac. */
+  function widgetAgencyRevenue(data) {
+    const r = data && data.revenue;
+    if (!r) {
+      return widgetCard('Revenue', 'No data yet',
+        '<div style="color:#64748B;font-size:13px;flex:1;display:flex;align-items:center;">'
+        + 'No invoices found for this agency.</div>');
+    }
+    const cur = r.currency || 'CAD';
+    const money = (v) => {
+      try {
+        return new Intl.NumberFormat('en-CA', { style: 'currency', currency: cur, maximumFractionDigits: 0 })
+          .format(Number(v) || 0);
+      } catch (e) { return '$' + (Number(v) || 0).toFixed(0); }
+    };
+    /* Overdue is the only figure worth colouring — it is the one that needs an action.
+       Making all three loud would mean none of them stands out. */
+    const overdueRed = (Number(r.overdue) || 0) > 0;
+    const line = (label, value, colour, sub) =>
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:5px 0;">'
+      + '<span style="font-size:12.5px;color:#64748B;">' + label
+      + (sub ? '<span style="color:#94A3B8;"> ' + sub + '</span>' : '') + '</span>'
+      + '<span style="font-size:15px;font-weight:700;color:' + (colour || '#0F172A') + ';'
+      + 'font-variant-numeric:tabular-nums;">' + value + '</span></div>';
+
+    return widgetCard('Revenue', money(r.collected_this_month) + ' this month',
+      '<div style="flex:1;">'
+      + line('Collected this month', money(r.collected_this_month), '#166534')
+      + line('Outstanding', money(r.outstanding))
+      + line('Overdue', money(r.overdue), overdueRed ? '#B91C1C' : '#0F172A',
+             r.overdue_count ? '(' + r.overdue_count + ')' : '')
+      + '</div>');
+  }
+
   function widgetReceivables(data) {
     // Defensive: use whichever outstanding-balance field the dashboard provides.
     const cents = (data && (data.receivables_cents != null ? data.receivables_cents
@@ -328,7 +374,7 @@
     const amt = dollars != null ? '$' + Number(dollars).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
     const html = '<div style="font-size:clamp(20px,6.2vw,34px);font-weight:800;color:#B45309;line-height:1.05;overflow-wrap:anywhere;word-break:break-word;max-width:100%;">' + amt + '</div>' +
       '<div style="font-size:12px;color:#64748B;margin-top:8px;">Total unpaid balance across all families.</div>' +
-      '<div style="margin-top:auto;padding-top:12px;"><a href="#admin-billing" style="color:#1F6080;font-size:12px;font-weight:600;">Open billing →</a></div>';
+      '<div style="margin-top:auto;padding-top:12px;"><a href="#billing-settings" style="color:#1F6080;font-size:12px;font-weight:600;">Open billing →</a></div>';
     return widgetCard('Outstanding receivables', 'Money owed to your agency', html);
   }
 
@@ -479,6 +525,9 @@
     const _roomsSum = (data.centres || []).reduce((acc, c) => acc + (c.room_count || 0), 0);
     const _breachSum = (data.centres || []).reduce((acc, c) => acc + (c.rooms_in_breach || 0), 0);
     const _overdue = t.overdue_invoices ?? 0;
+    const _onboarded = t.parents_onboarded ?? 0;
+    const _pending = t.parents_pending ?? 0;
+    const _payday = t.next_payday || null;
     return [
       { key: 'enrolled', icon: '👶', value: t.enrolled ?? 0, label: 'Total enrolled', sub: capacityPct + '% of capacity', c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
       { key: 'present', icon: '📍', value: t.present_now ?? 0, label: 'Here right now', sub: presentPct + '% of enrolled', c1: '#93C5FD', c2: '#2563EB', tint: '#EFF6FF', ink: '#1D4ED8' },
@@ -490,6 +539,30 @@
       { key: 'team', icon: '👥', value: t.staff_total ?? 0, label: 'Team members', sub: 'educators + directors', c1: '#F9A8D4', c2: '#DB2777', tint: '#FDF2F8', ink: '#BE185D' },
       { key: 'overdue', icon: '🧾', value: _overdue, label: 'Overdue invoices', sub: _overdue > 0 ? 'Need follow-up' : 'All current', c1: _overdue > 0 ? '#FCA5A5' : '#86EFAC', c2: _overdue > 0 ? '#DC2626' : '#16A34A', tint: _overdue > 0 ? '#FEF2F2' : '#F0FDF4', ink: _overdue > 0 ? '#B91C1C' : '#15803D' },
       { key: 'ratio', icon: '⚖️', value: _breachSum, label: 'Ratio alerts', sub: _breachSum > 0 ? 'Rooms over ratio' : 'All within ratio', c1: _breachSum > 0 ? '#FCA5A5' : '#86EFAC', c2: _breachSum > 0 ? '#DC2626' : '#16A34A', tint: _breachSum > 0 ? '#FEF2F2' : '#F0FDF4', ink: _breachSum > 0 ? '#B91C1C' : '#15803D' },
+
+      /* Parents who never finished onboarding have no working login, so every photo,
+         message and invoice sent to them goes nowhere. Amber while any are outstanding,
+         because it is a to-do rather than a statistic. */
+      { key: 'onboarded', icon: '🙋', value: _onboarded,
+        label: 'Parents onboarded',
+        sub: _pending > 0 ? _pending + ' still to finish' : (_onboarded > 0 ? 'Everyone is set up' : 'No parents yet'),
+        c1: _pending > 0 ? '#FCD34D' : '#86EFAC', c2: _pending > 0 ? '#D97706' : '#16A34A',
+        tint: _pending > 0 ? '#FFFBEB' : '#F0FDF4', ink: _pending > 0 ? '#B45309' : '#15803D' },
+
+      { key: 'payroll_paid', icon: '💵',
+        value: '$' + Number(t.payroll_paid_ytd || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        label: 'Payroll paid out',
+        sub: (t.payroll_paid_count || 0) + ' payment' + ((t.payroll_paid_count || 0) === 1 ? '' : 's') + ' this year',
+        c1: '#A5B4FC', c2: '#4F46E5', tint: '#EEF2FF', ink: '#4338CA' },
+
+      /* No schedule configured means no date — an agency that pays fortnightly must
+         never be shown an invented monthly one. The tile says how to fix it instead. */
+      { key: 'next_payday', icon: '📆',
+        value: _payday ? _payday.label : 'Not set',
+        label: 'Next payroll',
+        sub: _payday ? _payday.when : 'Set your pay schedule',
+        c1: _payday ? '#7DD3FC' : '#CBD5E1', c2: _payday ? '#0284C7' : '#64748B',
+        tint: _payday ? '#F0F9FF' : '#F8FAFC', ink: _payday ? '#0369A1' : '#475569' },
     ];
   }
 
@@ -559,7 +632,7 @@
       <div class="kt-hero">
         <div style="display:flex;align-items:center;gap:14px;">
           ${data.agency?.logo_url
-            ? `<img src="${esc(absUrl(data.agency.logo_url))}" alt="${esc(data.agency.name || '')}" style="width:54px;height:54px;border-radius:12px;object-fit:contain;background:rgba(255,255,255,.92);padding:5px;box-shadow:0 2px 8px rgba(0,0,0,.16);flex-shrink:0;">`
+            ? `<img decoding="sync" src="${esc(absUrl(data.agency.logo_url))}" alt="${esc(data.agency.name || '')}" style="width:54px;height:54px;border-radius:12px;object-fit:contain;background:rgba(255,255,255,.92);padding:5px;box-shadow:0 2px 8px rgba(0,0,0,.16);flex-shrink:0;">`
             : ''}
           <h1 style="margin:0;">${esc(data.agency?.name || 'Agency overview')}</h1>
         </div>
@@ -574,7 +647,7 @@
           </div>
         </div>
         <div class="kt-hero-actions">
-          <button class="kt-hero-btn primary" id="kt-add-centre-btn">+ Add centre</button>
+
           <button class="kt-hero-btn" id="kt-edit-agency-btn">✏️ Edit agency</button>
           <button class="kt-hero-btn" id="kt-refresh-btn" title="Refresh">↻ Refresh</button>
         </div>
@@ -588,7 +661,10 @@
     // belongs inside Edit agency (and Branding & settings) rather than sitting on
     // the overview, which is a dashboard — something you read, not something you
     // configure.
-    wrap.querySelector('#kt-add-centre-btn')?.addEventListener('click', () => openAddCentre(main));
+    /* The "+ Add centre" button here is retired. It opened a second, thinner form that
+       could not set the owner's name, opening hours, open days or country — so which of
+       the two you happened to use decided how complete the record was. Adding a provider
+       now happens in one place. */
     wrap.querySelector('#kt-edit-agency-btn')?.addEventListener('click', () => openEditAgency(main, data.agency || {}));
 
     // This screen re-renders itself (the ↻ Refresh button rebuilds the hero with the
@@ -669,8 +745,22 @@
 
     // Render widgets asynchronously. Pull both endpoints once and pass results
     // to every widget builder — each ignores what it doesn't need.
+    /* /admin/mrr/overview is role:platform_admin — it is KiddieTrac's OWN recurring
+       revenue, not the agency's. Calling it for an agency admin returned 403 on every
+       dashboard load: swallowed by the catch, so nothing looked broken, while quietly
+       writing a failure into the audit log under that admin's name. Not requested at all
+       now; the widget builders already cope with a null mrr. */
+    const _isPlat = (function () {
+      try { if (sessionStorage.getItem('kt_is_platform_admin') === '1') { return true; } } catch (e) {}
+      try {
+        const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
+        return !!(u.is_platform_admin || u.role === 'platform_admin' || u.role_key === 'platform_admin'
+          || (Array.isArray(u.roles) && u.roles.indexOf('platform_admin') !== -1));
+      } catch (e) { return false; }
+    }());
+
     Promise.all([
-      Api.get('/admin/mrr/overview').catch(() => null),
+      _isPlat ? Api.get('/admin/mrr/overview').catch(() => null) : Promise.resolve(null),
       Api.get('/admin/analytics').catch(() => null),
     ]).then(([mrr, an]) => {
       renderWidgetsGrid(widgetsSection, { mrr: mrr, analytics: an, data: data });
@@ -697,7 +787,10 @@
           <button class="btn btn-primary" id="kt-add-centre-empty">+ Add your first centre</button>
         </div>
       `);
-      centresSection.querySelector('#kt-add-centre-empty')?.addEventListener('click', () => openAddCentre(main));
+      // The empty state keeps a button, but it sends people to the real form.
+      centresSection.querySelector('#kt-add-centre-empty')?.addEventListener('click', () => {
+        window.location.hash = '#admin-centres';
+      });
     } else {
       const grid = document.createElement('div');
       grid.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:16px;';
@@ -713,7 +806,16 @@
         // v22p3.4: render the centre logo + brand_color on the card. Falls back
         // to the initial-in-a-tile when no logo is uploaded. Each centre gets a
         // distinct colour band (its brand colour, or a deterministic one by name).
-        const brand = c.brand_color || cardColour(c.name);
+        /* Same colour as the Providers screen. '#1f6080' is the seeded default every
+           centre carries — honouring it gave nine identical navy cards here too, so
+           it is treated as "unset" exactly as the Providers screen treats it. */
+        const _seeded = '#1f6080';
+        const _own = c.brand_color ? String(c.brand_color).trim().toLowerCase() : '';
+        const brand = (_own && _own !== _seeded)
+          ? c.brand_color
+          : ((window.KT && KT.providerBand)
+              ? KT.providerBand(c, data.centres)
+              : cardColour(c.name));
         // Provider (home childcare person) avatar: their logo when set, else an
         // adult emoji face — sex assumed from the provider name (a person), never
         // an initial. A rounded tile, not a circle, so the global emoji sweeper
@@ -723,17 +825,28 @@
         // centre LOGO (branding → contain), then an emoji face. Consistent with the
         // Providers & rooms list so a provider's uploaded photo shows everywhere.
         const logoBlock = c.provider_photo_url
-          ? `<img src="${esc(absUrl(c.provider_photo_url))}" alt="${esc(c.name)}" loading="lazy" style="width:44px;height:44px;border-radius:10px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
+          ? `<img decoding="sync" src="${esc(absUrl(c.provider_photo_url))}" alt="${esc(c.name)}" style="width:44px;height:44px;border-radius:10px;object-fit:cover;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
           : (c.logo_url
-            ? `<img src="${esc(absUrl(c.logo_url))}" alt="${esc(c.name)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
+            ? `<img decoding="sync" src="${esc(absUrl(c.logo_url))}" alt="${esc(c.name)}" style="width:44px;height:44px;border-radius:10px;object-fit:contain;background:white;box-shadow:0 1px 3px rgba(0,0,0,.08);">`
             : `<div style="width:44px;height:44px;border-radius:10px;background:${brand};display:flex;align-items:center;justify-content:center;font-size:26px;line-height:1;">${provEmoji}</div>`);
-        // Capacity donut (circle graph). Shows capacity % when a licence cap is
-        // set, else the enrolled count with a full ring.
-        const _ringPct = c.license_capacity ? cap : (c.enrolled ? 100 : 0);
-        const _centerTxt = c.license_capacity ? (cap + '%') : (c.enrolled || 0);
+        /* Occupancy donut — how full this provider is RIGHT NOW: children currently
+           checked in against the most they may have at one time.
+
+           It used to read `capacity_pct`, which is enrolled ÷ licensed. Those share a
+           denominator, so the ring looked entirely reasonable while reporting the wrong
+           thing: a provider with an empty house still showed 83% because five children
+           are on her roster. `occupancy_pct` is the live figure. `capacity_pct` is
+           still correct for the admin Centres list, which is asking about enrolment. */
+        const _occ = c.occupancy_pct || 0;
+        const _present = c.present_now || 0;
+        const _ringPct = c.license_capacity ? _occ : (_present ? 100 : 0);
+        const _centerTxt = c.license_capacity ? (_occ + '%') : _present;
+        const _occTip = c.license_capacity
+          ? _present + ' of ' + c.license_capacity + ' spaces filled right now'
+          : _present + ' children checked in right now (no licensed capacity set)';
         const _circ = 2 * Math.PI * 20;
         const donutSvg =
-          `<svg width="56" height="56" viewBox="0 0 56 56" style="flex-shrink:0;" aria-hidden="true">` +
+          `<svg width="56" height="56" viewBox="0 0 56 56" style="flex-shrink:0;" role="img" aria-label="${esc(_occTip)}"><title>${esc(_occTip)}</title>` +
           `<circle cx="28" cy="28" r="20" fill="none" stroke="#EEF0F4" stroke-width="6"/>` +
           `<circle cx="28" cy="28" r="20" fill="none" stroke="${brand}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${_circ.toFixed(1)}" stroke-dashoffset="${(_circ * (1 - Math.max(0, Math.min(100, _ringPct)) / 100)).toFixed(1)}" transform="rotate(-90 28 28)"/>` +
           `<text x="28" y="32" text-anchor="middle" font-size="13" font-weight="800" fill="#0D1B2A">${_centerTxt}</text>` +
@@ -745,7 +858,7 @@
         // avatar + status + check-in/out times, present-first.
         const _roster = c.roster || [];
         const _av = (r) => r.photo_url
-          ? `<img src="${esc(absUrl(r.photo_url))}" alt="" loading="lazy" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;background:#EEF2F7;">`
+          ? `<img decoding="sync" src="${esc(absUrl(r.photo_url))}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;background:#EEF2F7;">`
           : `<div style="width:26px;height:26px;border-radius:50%;background:${cardColour(r.name)};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${esc((r.name || '?').charAt(0).toUpperCase())}</div>`;
         const _statusHtml = (r) => {
           if (r.status === 'in') return `<span style="color:#16A34A;font-weight:700;white-space:nowrap;">✓ In ${esc(r.check_in_at || '')}</span>`;
@@ -806,6 +919,7 @@
               <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
                 <button class="review-day-btn" data-centre-id="${c.id}" title="Open this provider's daily overview" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#13B7CC,#1F6080);color:#fff;border:0;border-radius:10px;padding:8px 15px;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 10px -4px rgba(31,96,128,.6);white-space:nowrap;">📅 Review day</button>
                 <button class="manage-btn" data-centre-id="${c.id}">Manage this centre →</button>
+                <span class="kt-live-kebab" data-centre-id="${c.id}"></span>
               </div>
             </div>
           </div>
@@ -818,6 +932,44 @@
       // visibly didn't change. Now we route to the admin Centres tab and
       // stash an auto-open hint so the centre's edit modal opens on arrival.
       // Shortcut → this provider's Daily Overview, pre-selected to their centre.
+      /* The live list gets the same ⋮ so the two read alike. Restore is absent here
+         because an active provider has nothing to restore; Archive is the counterpart,
+         and it is the action that moves a record INTO the list below. */
+      (data.centres || []).forEach(function (c) {
+        const host = centresSection.querySelector('.kt-live-kebab[data-centre-id="' + c.id + '"]');
+        if (!host) { return; }
+        host.appendChild(providerKebab([
+          { label: '👁  View details', run: function () { showProviderView(c, false); } },
+          {
+            label: '📅  Review day',
+            run: function () {
+              try { sessionStorage.setItem('kt_pd_centre', String(c.id)); } catch (e) {}
+              window.location.hash = 'provider-day';
+            },
+          },
+          {
+            label: '🗄  Archive',
+            danger: true,
+            run: async function () {
+              const ok = await KT.confirm({
+                title: 'Archive “' + (c.name || 'this provider') + '”?',
+                description: 'They stop appearing in the live lists. Nothing is deleted and you can '
+                  + 'restore them from Archived providers below.',
+                okLabel: 'Archive',
+              });
+              if (!ok) { return; }
+              try {
+                await Api.delete('/admin/centres/' + c.id);
+                if (window.KT && KT.toast) { KT.toast('🗄', 'Archived', (c.name || 'The provider') + ' moved to Archived.', '#B45309'); }
+                renderAgencyDashboard(main);
+              } catch (err) {
+                if (window.KT && KT.toast) { KT.toast('⚠️', 'Could not archive', (err && err.message) || 'error', '#DC2626'); }
+              }
+            },
+          },
+        ]));
+      });
+
       centresSection.querySelectorAll('.review-day-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           try { sessionStorage.setItem('kt_pd_centre', btn.getAttribute('data-centre-id')); } catch (e) {}
@@ -850,37 +1002,127 @@
     }
     wrap.appendChild(centresSection);
 
-    // ─── Archived centres (restore / permanently delete) ──────
-    const archived = data.archived_centres || [];
-    if (archived.length) {
-      const archSection = document.createElement('div');
-      archSection.style.cssText = 'margin:4px 0 26px;';
-      archSection.innerHTML = `
-        <h2 style="font-family:var(--kt-font-display);font-weight:700;font-size:16px;margin:0 0 10px;color:var(--kt-text-muted);">🗄️ Archived centres (${archived.length})</h2>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          ${archived.map(c => `
-            <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;">
-              <div style="flex:1;font-weight:600;color:#374151;">${esc(c.name)}${c.city ? ` <span style="font-weight:400;color:#64748B;font-size:13px;">· ${esc(c.city)}</span>` : ''}</div>
-              <button class="kt-restore-centre" data-centre-id="${c.id}" style="background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Restore</button>
-              <button class="kt-delete-centre" data-centre-id="${c.id}" data-centre-name="${esc(c.name)}" style="background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Delete</button>
-            </div>`).join('')}
-        </div>`;
-      archSection.addEventListener('click', async (e) => {
-        const rBtn = e.target.closest && e.target.closest('.kt-restore-centre');
-        const dBtn = e.target.closest && e.target.closest('.kt-delete-centre');
-        if (rBtn) {
-          const id = rBtn.getAttribute('data-centre-id');
-          try { await Api.post('/admin/centres/' + id + '/restore'); if (window.KT && KT.Dom && KT.Dom.toast) KT.Dom.toast('Centre restored', 'success'); renderAgencyDashboard(main); }
-          catch (err) { alert('Could not restore: ' + (err.message || err)); }
-        } else if (dBtn) {
-          const id = dBtn.getAttribute('data-centre-id'), nm = dBtn.getAttribute('data-centre-name') || 'this centre';
-          if (!await KT.confirm({ title: 'Permanently delete “' + nm + '”?', description: 'This cannot be undone.', tone: 'danger' })) return;
-          try { await Api.delete('/admin/centres/' + id + '/permanent'); if (window.KT && KT.Dom && KT.Dom.toast) KT.Dom.toast('Centre permanently deleted', 'success'); renderAgencyDashboard(main); }
-          catch (err) { alert('Could not delete: ' + (err.message || err)); }
-        }
+    /* A KEBAB ON BOTH PROVIDER LISTS (2026-09-21).
+
+       Anthony: "under providers and archived providers there should be a kebab to
+       restore and view".
+
+       HAND-ROLLED, and that is the documented exception rather than a lapse.
+       kt-row-actions.js builds the ⋮ automatically from the last cell of a TABLE, and
+       neither of these lists is one: the live providers are rich dashboard cards with
+       occupancy and staffing, and flattening them into a table to win a kebab would cost
+       far more than it gained. CONVENTIONS.md says a hand-rolled menu is correct exactly
+       here - "where there is no table (e.g. a card list)" - and asks for it to be
+       commented as such. This is that comment.
+
+       One builder for both lists so the two cannot drift into different shapes; what
+       differs is only which items are passed in. */
+    function providerKebab(items) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:relative;display:inline-block;';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'More actions');
+      btn.textContent = '⋮';
+      btn.style.cssText = 'background:transparent;border:1px solid #E2E8F0;border-radius:8px;'
+        + 'width:32px;height:32px;line-height:1;font-size:17px;cursor:pointer;color:#475569;';
+      const menu = document.createElement('div');
+      menu.hidden = true;
+      /* Above the agency chrome. Dialogs that sat at z-index 1000 ended up underneath
+         the nav on a phone, which reads as the menu not opening at all. */
+      menu.style.cssText = 'position:absolute;right:0;top:36px;z-index:2147483000;background:#fff;'
+        + 'border:1px solid #E2E8F0;border-radius:10px;box-shadow:0 12px 30px rgba(15,23,42,.16);'
+        + 'min-width:190px;overflow:hidden;';
+
+      items.filter(Boolean).forEach(function (it) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = it.label;
+        b.style.cssText = 'display:block;width:100%;text-align:left;background:transparent;border:0;'
+          + 'padding:10px 14px;font-size:13.5px;cursor:pointer;color:' + (it.danger ? '#B91C1C' : '#334155') + ';';
+        b.addEventListener('mouseenter', function () { b.style.background = '#F8FAFC'; });
+        b.addEventListener('mouseleave', function () { b.style.background = 'transparent'; });
+        b.addEventListener('click', function (e) {
+          e.stopPropagation();
+          menu.hidden = true;
+          it.run();
+        });
+        menu.appendChild(b);
       });
-      wrap.appendChild(archSection);
+
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        /* Only one open at a time, and it closes on the next click anywhere - a menu
+           left open behind a dialog is how people end up clicking the wrong row. */
+        document.querySelectorAll('[data-kt-provider-menu]').forEach(function (m) {
+          if (m !== menu) { m.hidden = true; }
+        });
+        menu.hidden = !menu.hidden;
+      });
+      menu.setAttribute('data-kt-provider-menu', '1');
+      document.addEventListener('click', function () { menu.hidden = true; });
+
+      wrap.appendChild(btn);
+      wrap.appendChild(menu);
+
+      return wrap;
     }
+
+    /* Read-only, and built from the record already in hand rather than a new endpoint.
+       An archived provider has no live screen to open - that is what being archived
+       means - so "View" has to be able to answer "what was this?" from the list itself. */
+    function showProviderView(c, archivedAt) {
+      const rows = [
+        ['Name', c.name || '—'],
+        ['City', c.city || '—'],
+        ['Status', archivedAt ? 'Archived' : (c.status || 'Active')],
+        ['Children enrolled', c.enrolled != null ? String(c.enrolled) : '—'],
+        ['Licensed capacity', c.license_capacity != null ? String(c.license_capacity) : '—'],
+        ['Email', c.email || '—'],
+        ['Phone', c.phone || '—'],
+      ];
+      const o = document.createElement('div');
+      o.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483640;'
+        + 'display:flex;align-items:center;justify-content:center;padding:16px;';
+      o.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:460px;width:100%;'
+        + 'box-shadow:0 20px 60px rgba(15,23,42,.25);overflow:hidden;">'
+        + '<div style="padding:20px 22px 14px;border-bottom:1px solid #E5E7EB;">'
+        + '<div style="font-size:17px;font-weight:700;color:#0F172A;">' + esc(c.name || 'Provider') + '</div>'
+        + (archivedAt ? '<div style="font-size:12.5px;color:#B45309;margin-top:4px;">Archived</div>' : '')
+        + '</div><table style="width:100%;border-collapse:collapse;">'
+        + rows.map(function (r) {
+            return '<tr><td style="padding:10px 22px;font-size:12.5px;color:#64748B;font-weight:700;'
+              + 'width:44%;border-bottom:1px solid #F1F5F9;">' + esc(r[0]) + '</td>'
+              + '<td style="padding:10px 22px;font-size:13.5px;color:#0F172A;'
+              + 'border-bottom:1px solid #F1F5F9;">' + esc(r[1]) + '</td></tr>';
+          }).join('')
+        + '</table><div style="padding:14px 22px;text-align:right;">'
+        + '<button data-a="close" style="background:#F1F5F9;border:0;padding:9px 18px;border-radius:8px;'
+        + 'cursor:pointer;font-weight:600;color:#475569;font-size:14px;">Close</button></div></div>';
+      function close() { o.remove(); document.removeEventListener('keydown', esc); }
+      function esc2(e) { if (e.key === 'Escape') close(); }
+      var esc = esc2;
+      document.addEventListener('keydown', esc);
+      o.addEventListener('click', function (e) { if (e.target === o) close(); });
+      o.querySelector('[data-a="close"]').onclick = close;
+      document.body.appendChild(o);
+    }
+
+    /* THE ARCHIVED PROVIDERS LIST USED TO SIT HERE (removed 2026-09-21).
+
+       Anthony: "agency overview section has a archived providers section which i dont
+       know why thats there - pls remove as we are handling this under the providers
+       section."
+
+       It now lives in Administration > Centres > Archived, which is the tab beside the
+       live list and the place somebody already goes to manage providers. Two lists of
+       the same records, each with its own Restore button, is how the two drift: this
+       one confirmed the restore and that one did not, until today.
+
+       data.archived_centres is still returned by the dashboard endpoint and simply not
+       drawn. Left alone deliberately - it is a couple of rows, other callers may read
+       it, and removing a field from a shared payload to tidy a screen is how something
+       unrelated breaks. */
 
     // ─── Team & family demographics (onboarding analytics) ────
     // Self-reported race/ethnicity + auto-detected device type, captured at
@@ -1016,7 +1258,7 @@
         const nm = a.name || a.text || '?';
         const badge = `<span style="position:absolute;right:-3px;bottom:-3px;font-size:13px;line-height:1;background:#fff;border-radius:50%;box-shadow:0 0 0 1.5px #fff;">${esc(a.icon || '•')}</span>`;
         const inner = a.photo_url
-          ? `<img src="${esc(absUrl(a.photo_url))}" alt="" loading="lazy" style="width:32px;height:32px;border-radius:50%;object-fit:cover;background:#EEF2F7;">`
+          ? `<img decoding="sync" src="${esc(absUrl(a.photo_url))}" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover;background:#EEF2F7;">`
           : `<div style="width:32px;height:32px;border-radius:50%;background:${cardColour(nm)};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;">${esc(String(nm).trim().charAt(0).toUpperCase() || '•')}</div>`;
         return `<div style="position:relative;flex-shrink:0;">${inner}${badge}</div>`;
       };
@@ -1055,6 +1297,13 @@
     return fallback || null;
   }
 
+  /* RETIRED 2026-09-02 — nothing calls this any more.
+     It was the second "Add centre" form, reached from Agency overview, and it could not
+     set the owner's name, opening hours, open days or country. Which of the two forms
+     somebody happened to use decided how complete the provider record was. Adding a
+     provider now happens only on #admin-centres (showCentreModal in screen-admin.js).
+     Left in place rather than deleted so the wording can be lifted if it is wanted, but
+     DO NOT wire it back up. */
   function openAddCentre(main) {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;overflow:auto;';
@@ -1082,7 +1331,7 @@
           ${fld('Licensed capacity', 'kt-ac-cap', 'e.g. 24', 'number')}
         </div>
         ${fld('Address', 'kt-ac-addr', 'Street address')}
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;">
+        <div class="kt-addr-row" style="display:grid;gap:12px;">
           ${fld('City', 'kt-ac-city', '')}
           ${fld('Province', 'kt-ac-prov', 'ON')}
           ${fld('Postal code', 'kt-ac-postal', '')}
@@ -1153,15 +1402,32 @@
 
     // Prefill from the agencies list (name/contact_email/subdomain). contact_phone
     // is not in that payload, so it starts blank and is only saved if edited.
-    const rec = { name: agency.name || '', contact_email: '', contact_phone: '', subdomain: '' };
+    const rec = {
+      name: agency.name || '', contact_email: '', contact_phone: '', subdomain: '',
+      // Same columns the platform editor writes, so the two stay in step.
+      address_line1: '', address_line2: '', city: '', province: '', postal_code: '',
+      legal_name: '', website: '', timezone: '', schedule_autofill: false,
+    };
     try {
-      const list = await Api.get('/agencies');
+      // /agencies is a 404 — the route is /admin/agencies, like every other call in
+      // this file. The surrounding try/catch is why the empty prefill looked normal.
+      const list = await Api.get('/admin/agencies');
       const arr = (list && list.agencies) || [];
       const found = arr.find(a => Number(a.id) === Number(agencyId));
       if (found) {
         rec.name = found.name || rec.name;
         rec.contact_email = found.contact_email || '';
+        rec.contact_phone = found.contact_phone || '';
         rec.subdomain = found.subdomain || '';
+        rec.address_line1 = found.address_line1 || '';
+        rec.address_line2 = found.address_line2 || '';
+        rec.city = found.city || '';
+        rec.province = found.province || '';
+        rec.postal_code = found.postal_code || '';
+        rec.legal_name = found.legal_name || '';
+        rec.website = found.website || '';
+        rec.timezone = found.timezone || '';
+        rec.schedule_autofill = !!(found.settings && found.settings.schedule_autofill);
       }
     } catch (e) { /* prefill is best-effort */ }
 
@@ -1183,7 +1449,12 @@
         <h2 style="margin:0;font-size:18px;">✏️ Edit agency</h2>
         <button id="kt-ea-close" style="background:transparent;border:none;font-size:22px;color:#6B7280;cursor:pointer;line-height:1;padding:4px 10px;">×</button>
       </div>
+      <div style="padding:0 24px;border-bottom:1px solid #E5E7EB;display:flex;gap:2px;flex-wrap:wrap;">
+        ${[['details','Details'],['address','Address'],['automation','Automation']].map(([k,l],i) =>
+          `<button type="button" data-eatab="${k}" style="border:none;background:none;padding:11px 14px;font-size:13px;font-weight:700;cursor:pointer;border-bottom:2px solid ${i===0?'#1F6080':'transparent'};color:${i===0?'#1F6080':'#64748B'};">${l}</button>`).join('')}
+      </div>
       <div style="padding:20px 24px;">
+        <div data-eapane="details">
         ${fld('Agency name', 'kt-ea-name', rec.name, 'Your agency name')}
         ${fld('Contact email', 'kt-ea-email', rec.contact_email, 'info@youragency.com')}
         ${fld('Contact phone', 'kt-ea-phone', rec.contact_phone, '(555) 123-4567')}
@@ -1195,7 +1466,7 @@
           var contactLine = (o.contact_email || o.contact_phone) ? [o.contact_email, o.contact_phone].filter(Boolean).join(' · ') : '';
           var avatar = hasPerson
             ? (o.photo_url
-                ? '<img src="' + esc(absUrl(o.photo_url)) + '" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;background:#EEF2F7;flex-shrink:0;">'
+                ? '<img decoding="sync" src="' + esc(absUrl(o.photo_url)) + '" alt="" style="width:38px;height:38px;border-radius:50%;object-fit:cover;background:#EEF2F7;flex-shrink:0;">'
                 : '<div style="width:38px;height:38px;border-radius:50%;flex-shrink:0;background:' + cardColour(o.name || '?') + ';color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;">' + esc((o.name || '?').charAt(0).toUpperCase()) + '</div>')
             : '<div style="width:38px;height:38px;border-radius:50%;flex-shrink:0;background:#E2E8F0;display:flex;align-items:center;justify-content:center;font-size:18px;">🏢</div>';
           return '<div style="margin:2px 0 16px;padding:12px 14px;background:#F8FAFC;border:1px solid #E5E7EB;border-radius:10px;">'
@@ -1229,10 +1500,47 @@
           <div style="font-size:11px;color:#64748B;margin-top:4px;">Sets currency, locale, compliance pack, and address fields — e.g. <strong>State / ZIP code</strong> (US) vs <strong>Province / Postal code</strong> (Canada).</div>
         </div>
         <div style="background:#F9FAFB;border:1px solid #EEF0F2;border-radius:8px;padding:12px;font-size:12px;color:#6B7280;">
-          Logo, colours, business address, bank details, and privacy / terms links live under <strong>Branding</strong>.
+          Logo, colours, bank details, and privacy / terms links live under <strong>Branding</strong>.
           <button id="kt-ea-branding" style="margin-top:8px;display:block;background:white;color:#1F6080;border:1px solid #1F6080;border-radius:7px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:12px;">Open Branding →</button>
         </div>
-        <div id="kt-ea-country"></div>
+        </div>
+
+        <div data-eapane="address" hidden>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            ${fld('Legal name', 'kt-ea-legal', rec.legal_name, 'If different from the trading name')}
+            ${fld('Website', 'kt-ea-website', rec.website, 'https://')}
+          </div>
+          ${fld('Address line 1', 'kt-ea-addr1', rec.address_line1, '')}
+          ${fld('Address line 2', 'kt-ea-addr2', rec.address_line2, 'Unit, suite, floor')}
+          <div style="display:grid;grid-template-columns:2fr 1.4fr 1fr;gap:12px;">
+            ${fld('City', 'kt-ea-city', rec.city, '')}
+            ${fld('Province / State', 'kt-ea-province', rec.province, '')}
+            ${fld('Postal / ZIP', 'kt-ea-postal', rec.postal_code, '')}
+          </div>
+          <div style="font-size:11px;color:#64748B;margin-top:-4px;">
+            Printed on your invoices and receipts. These are the same fields the platform team edits, so a change here shows there and the other way round.
+          </div>
+        </div>
+
+        <div data-eapane="automation" hidden>
+          <div style="border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;background:#F9FAFB;">
+            <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+              <input type="checkbox" id="kt-ea-autofill" ${rec.schedule_autofill ? 'checked' : ''} style="width:19px;height:19px;margin-top:2px;flex:0 0 auto;accent-color:#159FB4;">
+              <span>
+                <span style="display:block;font-size:13.5px;font-weight:700;color:#111827;">Fill staff schedules automatically</span>
+                <span style="display:block;font-size:12px;color:#6B7280;line-height:1.55;margin-top:3px;">
+                  Each night at 04:30 this rosters <strong>every centre in your agency</strong> 28 days ahead, using each
+                  centre's own opening hours and open days. Closure days are skipped, a day that is already rostered is
+                  never overwritten, and <strong>a shift somebody deletes stays deleted</strong>.
+                </span>
+                <span style="display:block;font-size:12px;color:#64748B;line-height:1.55;margin-top:6px;">
+                  Leave it off if you build your rota by hand. You can still fill a single week whenever you like from
+                  <strong>Staff schedule → Autofill</strong>.
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
         <div id="kt-ea-msg" style="margin-top:12px;font-size:13px;"></div>
         <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
           <button id="kt-ea-cancel" style="background:white;color:#374151;border:1px solid #D1D5DB;border-radius:8px;padding:9px 18px;font-weight:700;cursor:pointer;">Cancel</button>
@@ -1250,6 +1558,22 @@
     } catch (e) {}
 
     const close = () => overlay.remove();
+    /* Panes stay in the DOM and are hidden, so one Save reads every field — building a
+       pane when its tab is opened would post only what the user happened to look at. */
+    modal.querySelectorAll('[data-eatab]').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const key = tab.getAttribute('data-eatab');
+        modal.querySelectorAll('[data-eatab]').forEach((t) => {
+          const on = t === tab;
+          t.style.borderBottomColor = on ? '#1F6080' : 'transparent';
+          t.style.color = on ? '#1F6080' : '#64748B';
+        });
+        modal.querySelectorAll('[data-eapane]').forEach((p) => {
+          p.hidden = p.getAttribute('data-eapane') !== key;
+        });
+      });
+    });
+
     modal.querySelector('#kt-ea-close').addEventListener('click', close);
     modal.querySelector('#kt-ea-cancel').addEventListener('click', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -1286,6 +1610,14 @@
         contact_email: modal.querySelector('#kt-ea-email').value.trim(),
         contact_phone: modal.querySelector('#kt-ea-phone').value.trim(),
         subdomain: modal.querySelector('#kt-ea-subdomain').value.trim().toLowerCase(),
+        legal_name: modal.querySelector('#kt-ea-legal').value.trim(),
+        website: modal.querySelector('#kt-ea-website').value.trim(),
+        address_line1: modal.querySelector('#kt-ea-addr1').value.trim(),
+        address_line2: modal.querySelector('#kt-ea-addr2').value.trim(),
+        city: modal.querySelector('#kt-ea-city').value.trim(),
+        province: modal.querySelector('#kt-ea-province').value.trim(),
+        postal_code: modal.querySelector('#kt-ea-postal').value.trim(),
+        schedule_autofill: !!modal.querySelector('#kt-ea-autofill').checked,
       };
       if (!next.name) { msg.style.color = '#DC2626'; msg.textContent = 'Agency name is required.'; return; }
       if (next.subdomain && !/^[a-z0-9-]+$/.test(next.subdomain)) {
@@ -1298,13 +1630,18 @@
       if (next.contact_email !== (rec.contact_email || '')) payload.contact_email = next.contact_email || null;
       if (next.contact_phone !== (rec.contact_phone || '')) payload.contact_phone = next.contact_phone || null;
       if (next.subdomain !== (rec.subdomain || '')) payload.subdomain = next.subdomain || null;
+      // Same sparse-diff rule as above: only what actually changed goes up, so an
+      // untouched Save still posts nothing and writes no audit row.
+      ['legal_name','website','address_line1','address_line2','city','province','postal_code']
+        .forEach((f) => { if (next[f] !== (rec[f] || '')) payload[f] = next[f] || null; });
+      if (next.schedule_autofill !== !!rec.schedule_autofill) payload.schedule_autofill = next.schedule_autofill;
       if (Object.keys(payload).length === 0) { close(); return; }
 
       const saveBtn = modal.querySelector('#kt-ea-save');
       saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
       msg.style.color = '#6B7280'; msg.textContent = 'Saving…';
       try {
-        await Api.patch('/agencies/' + agencyId, payload);
+        await Api.patch('/admin/agencies/' + agencyId, payload);
         if (Dom && Dom.toast) Dom.toast('Agency updated', 'success');
         close();
         renderAgencyDashboard(main);

@@ -108,6 +108,29 @@
   }
 
   // ── Per-role widget cache (sessionStorage) ────────────────────────────
+  /* Roles that /widgets/me serves no cards for. */
+  var NO_CARDS = ['home_visitor', 'agency_admin', 'platform_admin', 'sales_rep'];
+
+  /* The role of the ACCOUNT, ignoring any view-as preview.
+     roleOf() deliberately prefers kt_view_as so the strip matches what is being
+     previewed — right for DISPLAY, wrong for deciding whether cards exist, because
+     /widgets/me authenticates the real user. A super admin previewing a director was
+     therefore painting a skeleton for cards the endpoint would never send:
+     roleOf() -> "centre_director", but the response came back role "platform_admin"
+     with zero widgets. */
+  function accountRole() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return u.primary_role || u.role_key || u.role || '';
+    } catch (e) { return ''; }
+  }
+
+  /* No cards if EITHER the previewed role or the real account has none — the preview
+     decides what would be shown, the account decides what actually arrives. */
+  function servesNoCards() {
+    return NO_CARDS.indexOf(roleOf()) !== -1 || NO_CARDS.indexOf(accountRole()) !== -1;
+  }
+
   function cacheKey(role) { return 'kt_rw_cache_' + (role || 'x'); }
   function readCache(role) {
     try {
@@ -202,7 +225,10 @@
     var role = roleOf();
     // These roles have their OWN full dashboards and /widgets/me serves them no
     // cards — so the generic KPI strip would just sit as a stuck skeleton. Skip.
-    if (role === 'home_visitor' || role === 'agency_admin' || role === 'platform_admin' || role === 'sales_rep') return;
+    // Checked against the ACCOUNT as well as the previewed role: the endpoint answers
+    // for the real user, so a super admin previewing a director gets no cards no matter
+    // what the preview says.
+    if (servesNoCards()) return;
     var cached = readCache(role);
     if (cached) { placeStrip(container, renderStrip(cached.widgets, cached.role || role), opts); }
     else { placeStrip(container, renderSkeleton(4), opts); }
@@ -215,7 +241,7 @@
   var FETCH_THROTTLE_MS = 3000;
   function revalidate(opts, force) {
     if (!Api || fetching) return;
-    if (['home_visitor', 'agency_admin', 'platform_admin', 'sales_rep'].indexOf(roleOf()) !== -1) { clearAllStrips(); return; }
+    if (servesNoCards()) { clearAllStrips(); return; }
     var now = Date.now();
     if (!force && (now - lastFetchAt) < FETCH_THROTTLE_MS) return;
     fetching = true; lastFetchAt = now;
@@ -233,15 +259,21 @@
     Api.get('/widgets/me').then(function (data) {
       if (settled) return; settled = true; clearTimeout(killer);
       fetching = false;
-      if (!isDashboardHash()) return;                       // navigated away
-      if (hasSelfBriefDashboard()) { clearAllStrips(); return; }  // educator roster owns its brief
-      var container = containerFor();
-      if (!container || !heroIn(appMain())) return;          // home not up right now
+      /* NO CARDS -> CLEAR, FIRST, WHATEVER THE HASH.
+         This used to sit below the two guards, so a response arriving on a screen those
+         guards rejected returned early and left the skeleton on screen permanently —
+         and since clearTimeout(killer) had already run, the 8s safety net could not fire
+         either. The guards are there to stop us PAINTING onto a screen you have left;
+         that is no reason to skip CLEANING UP. Removing a placeholder is always safe. */
       if (!data || !data.widgets || !data.widgets.length) {  // role has no cards
         clearAllStrips();
         try { sessionStorage.removeItem(cacheKey(role)); } catch (e) {}
         return;
       }
+      if (!isDashboardHash()) return;                       // navigated away
+      if (hasSelfBriefDashboard()) { clearAllStrips(); return; }  // educator roster owns its brief
+      var container = containerFor();
+      if (!container || !heroIn(appMain())) return;          // home not up right now
       writeCache(role, data);
       var newSig = sigOf(data.widgets);
       var cur = currentStrip();
@@ -293,13 +325,34 @@
   function scheduleEnsure() {
     if (scheduled) return;
     scheduled = true;
-    requestAnimationFrame(function () { scheduled = false; ensure(); });
+
+    /* rAF NEVER FIRES ON A BACKGROUNDED TAB, and `scheduled` was only lowered inside it
+       — so one mutation while hidden left this raised for good and the widget strip
+       stopped being rebuilt for the rest of the session. Identical to the wedge found in
+       kt-animate (2026-09-21) and fixed long ago in kt-sweep-bus. Race a timer. */
+    var ran = false;
+    var go = function () {
+      if (ran) return;
+      ran = true;
+      scheduled = false;
+      ensure();
+    };
+    (window.requestAnimationFrame || function (f) { setTimeout(f, 16); })(go);
+    setTimeout(go, 250);
   }
 
-  var observer = new MutationObserver(scheduleEnsure);
+  var observer = null;
   function startObserver() {
+    /* Re-binds when the shell swaps #appMain — see KT.observeMain. */
+    if (window.KT && KT.observeMain) { KT.observeMain(scheduleEnsure, { childList: true }); return true; }
     var m = appMain();
-    if (m) { observer.observe(m, { childList: true }); return true; }
+    if (m) {
+      if (!observer) { observer = new MutationObserver(scheduleEnsure); }
+      observer.observe(m, { childList: true });
+
+      return true;
+    }
+
     return false;
   }
   // #appMain is in the initial shell HTML, but retry briefly just in case.

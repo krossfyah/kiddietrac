@@ -166,7 +166,70 @@ final class RefundsController extends Controller
 
         $stripeRefundId = null;
         $status = 'succeeded';
-        if (env('STRIPE_SECRET') && !empty($payment->stripe_payment_id)) {
+
+        /* HELCIM FIRST, because the PROVIDER IS DECIDED BY THE PAYMENT, not by which key
+           happens to be configured. (2026-09-21)
+
+           A Helcim charge refunded through the Stripe branch below would find no
+           stripe_payment_id, fall through to 'manual', and record a refund that returns no
+           money at all - the family is told they have been refunded and nothing arrives.
+           payments.method is the only honest discriminator, which is why Helcim charges
+           are written as 'helcim_card' rather than the generic 'card'.
+
+           REFUND vs VOID: an unsettled transaction is reversed, not refunded. To the
+           cardholder that is the difference between the charge vanishing and the charge
+           sitting on their statement next to a credit. Helcim rejects a reverse once the
+           batch has closed, so we try it only for a same-day, full-value return and fall
+           back to a refund - which is also the only thing that can be partial. */
+        if ($payment->method === 'helcim_card' && ! empty($payment->reference_number)) {
+            $agencyId = (int) DB::table('families as f')
+                ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                ->where('f.id', $payment->family_id)->value('c.agency_id');
+
+            if ($agencyId <= 0 || ! \App\Support\Helcim::configured($agencyId)) {
+                return response()->json([
+                    'error' => 'This payment was taken through Helcim, but Helcim is no longer '
+                        . 'configured for this agency, so the money cannot be returned automatically.',
+                ], 422);
+            }
+
+            $txn = (int) $payment->reference_number;
+            $full = abs((float) $data['amount'] - (float) $payment->amount) < 0.005;
+            $sameDay = $payment->paid_at
+                && \Illuminate\Support\Carbon::parse($payment->paid_at)->isSameDay(now());
+
+            $ref = null;
+            $err = null;
+            if ($full && $sameDay) {
+                [$okRev, $resRev, $errRev] = \App\Support\Helcim::reverse($agencyId, $txn, $request->ip());
+                if ($okRev) {
+                    $ref = (string) ($resRev['transactionId'] ?? '');
+                } else {
+                    $err = $errRev;   // kept only for the log; a refund is tried next
+                }
+            }
+
+            if ($ref === null) {
+                [$okRef, $resRef, $errRef] = \App\Support\Helcim::refund(
+                    $agencyId, $txn, (float) $data['amount'], $request->ip()
+                );
+                if (! $okRef) {
+                    Log::warning('Helcim refund failed', [
+                        'payment' => $payment->id, 'msg' => $errRef, 'reverse_msg' => $err,
+                    ]);
+
+                    return response()->json(['error' => $errRef ?: 'Helcim refused the refund.'], 422);
+                }
+                $ref = (string) ($resRef['transactionId'] ?? '');
+            }
+
+            /* Reuses stripe_refund_id as the provider reference column. Not ideal naming,
+               but inventing a second column would leave two places to look for "what did
+               the provider call this refund" - and refund_method below says which provider
+               the reference belongs to. */
+            $stripeRefundId = $ref;
+            $status = 'succeeded';
+        } elseif (env('STRIPE_SECRET') && !empty($payment->stripe_payment_id)) {
             try {
                 $cents = (int) round($data['amount'] * 100);
                 $refund = Refund::create([
@@ -200,7 +263,11 @@ final class RefundsController extends Controller
             'amount' => $data['amount'],
             'reason' => $data['reason'] ?? null,
             'stripe_refund_id' => $stripeRefundId,
-            'refund_method' => $stripeRefundId ? 'stripe' : 'manual',
+            /* Which provider actually returned the money - 'stripe' on a Helcim refund
+               would send anyone reconciling it to the wrong dashboard. */
+            'refund_method' => $payment->method === 'helcim_card'
+                ? 'helcim'
+                : ($stripeRefundId ? 'stripe' : 'manual'),
             'status' => $status,
             'initiated_by_id' => $request->user()->id,
             'refunded_at' => now(),
@@ -233,7 +300,9 @@ final class RefundsController extends Controller
                 'family_id' => (int) $payment->family_id,
                 'invoice_id' => $payment->invoice_id ? (int) $payment->invoice_id : null,
                 'external_invoice_id' => $payment->external_invoice_id ? (int) $payment->external_invoice_id : null,
-                'method' => $stripeRefundId ? 'stripe' : 'manual',
+                'method' => $payment->method === 'helcim_card'
+                    ? 'helcim'
+                    : ($stripeRefundId ? 'stripe' : 'manual'),
                 'status' => $status,
                 'reason' => $data['reason'] ?? null,
                 'approved_by' => trim($data['signed_name']),

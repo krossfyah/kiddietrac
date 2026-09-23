@@ -23,6 +23,7 @@ final class PaymentProviders
 {
     public const ZUM = 'zumrails';
     public const STRIPE = 'stripe';
+    public const HELCIM = 'helcim';
 
     /** Which keys each provider holds, and which of them are secret. */
     private const FIELDS = [
@@ -43,6 +44,24 @@ final class PaymentProviders
             'publishable_key' => ['label' => 'Publishable key', 'secret' => false],
             'secret_key' => ['label' => 'Secret key', 'secret' => true],
             'webhook_secret' => ['label' => 'Webhook signing secret', 'secret' => true],
+        ],
+        /* HELCIM (2026-09-21).
+           One token does everything: Helcim authenticates every call with `api-token`,
+           and there is no publishable half to pair it with, because the card is never
+           entered on our pages - HelcimPay.js collects it in Helcim's own iframe and
+           hands back a transaction. That is the whole reason to prefer it: a card number
+           never reaches this server, so nothing here is in PCI scope.
+
+           NO WEBHOOK SECRET, deliberately. Zum and Stripe confirm settlement by calling
+           us back, so they need a shared secret. Helcim instead returns a per-checkout
+           `secretToken` when the session is created, and the browser's result carries a
+           SHA-256 hash of the response data with that token appended. We hold the token
+           server-side for the life of one payment and verify the hash - so the trust is
+           per transaction rather than a single standing key. See Helcim::verifyHash(). */
+        self::HELCIM => [
+            'api_token' => ['label' => 'API token', 'secret' => true],
+            'terminal_id' => ['label' => 'Terminal ID (optional)', 'secret' => false],
+            'currency' => ['label' => 'Currency (CAD or USD)', 'secret' => false],
         ],
     ];
 
@@ -98,9 +117,12 @@ final class PaymentProviders
     {
         $c = self::config($agencyId, $provider);
 
-        return $provider === self::ZUM
-            ? (! empty($c['base_url']) && ! empty($c['username']) && ! empty($c['password']))
-            : ! empty($c['secret_key']);
+        return match ($provider) {
+            self::ZUM => ! empty($c['base_url']) && ! empty($c['username']) && ! empty($c['password']),
+            /* One token is the whole credential - see the note on FIELDS. */
+            self::HELCIM => ! empty($c['api_token']),
+            default => ! empty($c['secret_key']),
+        };
     }
 
     /**

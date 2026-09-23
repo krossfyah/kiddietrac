@@ -96,7 +96,7 @@
       + '    <div id="kt-agree-err" style="color:#B91C1C;font-size:13px;min-height:17px;margin:8px 2px;"></div>'
       + '  </div>'
       + '</div>'
-      + '<div style="flex:0 0 auto;padding:12px 18px calc(env(safe-area-inset-bottom,0px) + 14px);background:#fff;border-top:1px solid #E7EDF3;">'
+      + '<div style="flex:0 0 auto;padding:12px 18px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 14px);background:#fff;border-top:1px solid #E7EDF3;">'
       + '  <button id="kt-agree-submit" disabled style="width:100%;border:none;border-radius:13px;padding:15px;font-size:16px;font-weight:800;'
       + '    color:#fff;background:#159FB4;opacity:.5;cursor:not-allowed;">Agree &amp; continue</button>'
       + '  <button id="kt-agree-decline" type="button" style="width:100%;background:none;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:12px;'

@@ -452,7 +452,14 @@
   }
   (function watchMain(tries) {
     var m = document.getElementById('appMain');
-    if (m) { try { new MutationObserver(scheduleClk).observe(m, { childList: true }); } catch (e) {} scheduleClk(); return; }
+    if (m) {
+      /* Re-binds when the shell swaps #appMain (kt:main-swapped); a MutationObserver follows a NODE, and this one used to die silently at the first render. */
+      try {
+        if (window.KT && KT.observeMain) { KT.observeMain(scheduleClk, { childList: true }); }
+        else { new MutationObserver(scheduleClk).observe(m, { childList: true }); }
+      } catch (e) {}
+      scheduleClk(); return;
+    }
     if (tries > 80) return;
     requestAnimationFrame(function () { watchMain(tries + 1); });
   })(0);

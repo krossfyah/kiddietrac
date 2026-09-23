@@ -983,6 +983,12 @@
   }
 
   // ============================ SMS ============================
+  /* The "never asked" count, shown on the Text alerts tab so the number that explains a
+     broadcast reaching nobody is visible without opening the tab. loadSmsConsent() is a
+     module-level function and the tab bar is built inside renderSms(), so they meet here
+     rather than through a lookup that would break if either is renamed. */
+  var smsConsentBadge = 0;
+  var _smsTabsRepaint = null;
   // The agency's own word for a facility — Centre, Provider or Room. KT.term() does
   // not exist; kt-term exposes centreWord(plural, lower).
   function _cw(plural, lower) {
@@ -993,7 +999,23 @@
     // The fields used to be stacked full-width labels of differing widths, which made
     // the form look ragged. One card, one column of aligned rows: label left, control
     // right, every control the same width.
+    /* THREE JOBS, THREE TABS (2026-09-18).
+
+       Anthony: "SMS broadcast section has alot going on can you add subtabs for the TEXT
+       Alerts, the table where it shows optd in etc."
+
+       Fair - I added the consent panel and its 31-row table straight underneath the
+       compose form, so the screen became a compose box, a summary, a full roster and a
+       message log stacked in one column. They are three different jobs: writing a
+       message, managing who may receive one, and looking at what was sent.
+
+       PANES, NOT RE-RENDERS. Each tab is a sibling div toggled with `hidden`, so the
+       compose form keeps whatever is half-typed in it when you look at the roster and
+       come back. Switching tabs does not re-fetch either. */
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+      <div id="sms-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;"></div>
+
+      <div id="sms-pane-send">
       <div class="kt-card" style="max-width:720px;padding:20px;">
         <div style="display:grid;grid-template-columns:120px 1fr;gap:12px 14px;align-items:center;">
           <!-- TEXT OR A PHONE CALL. Same audience, same guards, two very different
@@ -1047,16 +1069,72 @@
           </div>
 
           <div></div>
+          <div>
+          <div id="sms-reach" style="margin:0 0 8px;font-size:12.5px;"></div>
           <div style="display:flex;align-items:center;gap:12px;">
             <button id="sms-send" class="kt-btn kt-btn-primary" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Send broadcast</button>
             <span id="sms-msg" style="font-size:13px;"></span>
           </div>
+          </div>
         </div>
       </div>
 
-      <h3 id="sms-recent-h" style="margin:26px 0 10px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recent broadcasts</h3>
-      <div id="sms-recent"></div>
+      </div>
+
+      <div id="sms-pane-consent" hidden>
+        <div id="sms-consent"></div>
+      </div>
+
+      <div id="sms-pane-recent" hidden>
+        <h3 id="sms-recent-h" style="margin:0 0 10px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recent broadcasts</h3>
+        <div id="sms-recent"></div>
+      </div>
     </div>`;
+
+    /* The tab bar, in the house pattern (see immTabBar in screen-immunizations.js).
+       The counts are filled in once the consent roster has loaded, because "Text alerts"
+       on its own does not tell you that twenty people are waiting to be asked - which is
+       the entire reason this screen reached nobody. */
+    const SMS_TABS = [
+      ['send', 'Send a message'],
+      ['consent', 'Text alerts'],
+      ['recent', 'Recent broadcasts'],
+    ];
+    let smsTab = 'send';
+
+    function paintSmsTabs() {
+      const bar = document.getElementById('sms-tabs');
+      if (!bar) return;
+      bar.innerHTML = SMS_TABS.map(([id, label]) => {
+        const on = id === smsTab;
+        const badge = (id === 'consent' && smsConsentBadge)
+          ? `<span style="margin-left:8px;background:${on ? 'rgba(255,255,255,.22)' : '#FEF3C7'};`
+            + `color:${on ? '#fff' : '#B45309'};border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;">`
+            + `${smsConsentBadge}</span>`
+          : '';
+        return `<button data-sms-tab="${id}" class="kt-tab${on ? ' active' : ''}" style="padding:8px 16px;`
+          + `border:1px solid ${on ? '#1F6080' : '#D1D5DB'};border-radius:8px;`
+          + `background:${on ? '#1F6080' : 'white'};color:${on ? 'white' : '#374151'};`
+          + `font-weight:600;cursor:pointer;">${label}${badge}</button>`;
+      }).join('');
+      bar.querySelectorAll('[data-sms-tab]').forEach(b => {
+        b.addEventListener('click', () => showSmsTab(b.getAttribute('data-sms-tab')));
+      });
+    }
+
+    function showSmsTab(id) {
+      smsTab = id;
+      SMS_TABS.forEach(([t]) => {
+        const pane = document.getElementById('sms-pane-' + t);
+        if (pane) pane.hidden = (t !== id);
+      });
+      paintSmsTabs();
+      /* A table drawn behind a hidden pane gets no search box and no sortable headers:
+         the sweeps are driven by hashchange and the sweep bus, and an in-screen tab fires
+         neither. Ask for them here, where the table is finally on screen. See
+         kiddietrac-enhance-tables. */
+      try { if (window.KT && KT.enhanceTables) KT.enhanceTables(); } catch (e) {}
+    }
 
     const body = document.getElementById('sms-body');
     const counter = document.getElementById('sms-count');
@@ -1071,6 +1149,7 @@
 
     const catRow = document.getElementById('sms-cat-l');
     const catSel = document.getElementById('sms-cat');
+    catSel.addEventListener('change', function () { try { refreshReach(); } catch (e) {} });
     const note = document.getElementById('sms-note');
     const bodyLabel = document.getElementById('sms-body-l');
     const recentH = document.getElementById('sms-recent-h');
@@ -1100,7 +1179,12 @@
     }
 
     document.querySelectorAll('#sms-chan [data-chan]').forEach(b => {
-      b.addEventListener('click', () => { channel = b.getAttribute('data-chan'); syncChannel(); });
+      b.addEventListener('click', () => {
+        channel = b.getAttribute('data-chan'); syncChannel();
+        /* The reachable count is channel-dependent: a call on an urgent category waives
+           consent, a text never does. */
+        try { refreshReach(); } catch (e) {}
+      });
     });
     syncChannel();
 
@@ -1121,7 +1205,67 @@
       show(centreSel, aud.value === 'centre' || aud.value === 'room');
       show(roomRow, aud.value === 'room');   show(roomSel, aud.value === 'room');
     };
-    aud.addEventListener('change', syncRole);
+    /* WHO THIS WOULD ACTUALLY REACH (2026-09-18).
+
+       Anthony: "when sending to whole agency i don't see anything being sent."
+
+       It was sending to nobody, and saying so in green. Consent is per person and almost
+       nobody had given it - iLearn: 52 people, 42 with a phone, ONE opted in; Test Agency:
+       31, 22 with phones, none. The audience filter drops people before the send loop, so
+       unlike every other way a message gets dropped it left no skipped row and no reason.
+
+       Asked BEFORE the send, not reported after it, because "text 41 families" and "text
+       nobody" are different decisions and the compose form gave no way to tell which one
+       was about to happen. */
+    var reachEl = document.getElementById('sms-reach');
+    var lastReach = null;
+
+    function audiencePayload() {
+      var p = { audience: aud.value, channel: channel };
+      if (channel === 'voice') { p.category = catSel.value; }
+      if (aud.value === 'role') { p.role = roleSel.value; }
+      if (aud.value === 'centre') { p.centre_id = parseInt(centreSel.value, 10) || null; }
+      if (aud.value === 'room') {
+        p.centre_id = parseInt(centreSel.value, 10) || null;
+        p.room_id = parseInt(roomSel.value, 10) || null;
+      }
+      return p;
+    }
+
+    async function refreshReach() {
+      if (!reachEl) return;
+      var p = audiencePayload();
+      if ((p.audience === 'centre' && !p.centre_id) || (p.audience === 'room' && !p.room_id)) {
+        lastReach = null; reachEl.innerHTML = ''; return;
+      }
+      var qs = Object.keys(p).filter(function (k) { return p[k] !== null && p[k] !== undefined && p[k] !== ''; })
+        .map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(p[k]); }).join('&');
+      reachEl.innerHTML = '<span style="color:#94A3B8;">Checking who this reaches…</span>';
+      try {
+        var b = await Api.get('/admin/sms/audience?' + qs);
+        lastReach = b;
+        var word = channel === 'voice' ? 'can be called' : 'can be texted';
+        var bits = [];
+        if (b.no_phone) bits.push(b.no_phone + ' with no mobile number');
+        if (b.not_consented) bits.push(b.not_consented + ' who have not agreed');
+        /* Amber at zero, not red: nothing has gone wrong yet and nothing has been sent.
+           It is a warning about what is ABOUT to happen. */
+        var tone = b.reachable === 0 ? '#B45309' : '#047857';
+        reachEl.innerHTML = '<span style="color:' + tone + ';font-weight:600;">'
+          + b.reachable + ' of ' + b.in_audience + ' ' + word + '</span>'
+          + (bits.length ? '<span style="color:#64748B;"> · ' + bits.join(' · ') + '</span>' : '')
+          + (b.consent_waived ? '<span style="color:#64748B;"> · urgent category, consent not required</span>' : '')
+          + (b.reachable === 0
+              ? '<div style="color:#B45309;margin-top:4px;">Nobody in this audience can receive it. '
+                + 'Open the <b>Text alerts</b> tab to ask them to opt in.</div>'
+              : '');
+      } catch (e) {
+        lastReach = null;
+        reachEl.innerHTML = '';
+      }
+    }
+
+    aud.addEventListener('change', function () { syncRole(); refreshReach(); });
     syncRole();
 
     // Centres, then the rooms of whichever centre is selected.
@@ -1150,8 +1294,11 @@
         ? mine.map(r => `<option value="${r.id}">${(r.name || ('#' + r.id))}</option>`).join('')
         : '<option value="">No rooms here</option>';
     }
-    centreSel.addEventListener('change', loadRooms);
+    centreSel.addEventListener('change', function () { loadRooms(); refreshReach(); });
+    roomSel.addEventListener('change', refreshReach);
+    roleSel.addEventListener('change', refreshReach);
     loadRooms();
+    refreshReach();
 
     document.getElementById('sms-send').onclick = async () => {
       const payload = {
@@ -1174,11 +1321,47 @@
       /* A phone call is not undoable and not silent. Confirmed by count, because
          "call 214 people" and "call 4 people" are different decisions and the audience
          picker above does not make which one this is obvious. */
-      if (channel === 'voice') {
-        const ok = window.KT && KT.confirm
+      /* CONFIRM BY COUNT, ON BOTH CHANNELS (2026-09-18).
+
+         The call channel already confirmed, because a ringing phone is not undoable. SMS
+         did not, and it turned out to need it more: a send that reaches nobody was
+         indistinguishable from one that reached everybody until this line existed. The
+         numbers come from the same preview shown under the box, which is the same query
+         the send itself runs. */
+      await refreshReach();
+      var r0 = lastReach;
+      if (r0 && r0.reachable === 0) {
+        var why = [];
+        if (r0.no_phone) why.push(r0.no_phone + ' have no mobile number');
+        if (r0.not_consented) why.push(r0.not_consented + ' have not agreed to be ' + (channel === 'voice' ? 'called' : 'texted'));
+        var go = window.KT && KT.confirm
+          ? await KT.confirm('This will reach nobody.', {
+              description: 'Of the ' + r0.in_audience + ' people in this audience, '
+                + (why.join(' and ') || 'none can be contacted') + '.\n\n'
+                + 'Send anyway, or close this and use the Text alerts tab to ask them to opt in?',
+              okLabel: 'Send anyway',
+            })
+          : window.confirm('This will reach nobody. Send anyway?');
+        if (!go) return;
+      } else if (r0) {
+        var verbC = channel === 'voice' ? 'Place ' + r0.reachable + ' announcement call' : 'Send this text to ' + r0.reachable + ' person';
+        if (r0.reachable !== 1) verbC = channel === 'voice' ? 'Place ' + r0.reachable + ' announcement calls' : 'Send this text to ' + r0.reachable + ' people';
+        var ok2 = window.KT && KT.confirm
+          ? await KT.confirm(verbC + '?', {
+              description: r0.in_audience > r0.reachable
+                ? (r0.in_audience - r0.reachable) + ' of the ' + r0.in_audience + ' in this audience cannot be reached'
+                  + (r0.no_phone ? ' (' + r0.no_phone + ' with no mobile number' + (r0.not_consented ? ', ' + r0.not_consented + ' who have not agreed)' : ')') : '')
+                  + '.'
+                : 'Everyone in this audience will receive it.',
+              okLabel: channel === 'voice' ? 'Place calls' : 'Send',
+            })
+          : window.confirm(verbC + '?');
+        if (!ok2) return;
+      } else if (channel === 'voice') {
+        var okV = window.KT && KT.confirm
           ? await KT.confirm('Place announcement calls now? Everyone this reaches will have their phone ring.')
           : window.confirm('Place announcement calls now?');
-        if (!ok) return;
+        if (!okV) return;
       }
 
       try {
@@ -1186,9 +1369,22 @@
           ? await Api.post('/admin/voice/announce', payload)
           : await Api.post('/admin/sms/broadcast', payload);
         const done = channel === 'voice' ? r.placed : r.sent;
-        const verb = channel === 'voice' ? 'Calling' : 'Sent';
-        document.getElementById('sms-msg').innerHTML =
-          `<span style="color:#047857;">${verb} ${done} · skipped ${r.skipped} · total ${r.total}</span>`;
+        const verb = channel === 'voice' ? 'Calling' : 'Sent to';
+        /* Zero is not a success. It used to print in the same green as a send that
+           reached four hundred people, which is how "I don't see anything being sent"
+           went unexplained for so long. */
+        const b = r.breakdown || {};
+        const why = [];
+        if (b.no_phone) why.push(b.no_phone + ' with no mobile number');
+        if (b.not_consented) why.push(b.not_consented + ' who have not agreed');
+        document.getElementById('sms-msg').innerHTML = done === 0
+          ? `<span style="color:#B45309;font-weight:600;">Reached nobody.</span>`
+            + `<span style="color:#64748B;"> ${b.in_audience || r.total || 0} in this audience`
+            + `${why.length ? ' · ' + why.join(' · ') : ''}.</span>`
+          : `<span style="color:#047857;">${verb} ${done}`
+            + `${r.skipped ? ' · skipped ' + r.skipped : ''}`
+            + `${why.length ? ' · could not reach ' + why.join(' · ') : ''}</span>`;
+        refreshReach();
       } catch (e) {
         document.getElementById('sms-msg').innerHTML =
           `<span style="color:#B91C1C;">${escapeHtml((e && e.message) || 'Send failed')}</span>`;
@@ -1196,11 +1392,340 @@
       loadSmsRecent(channel);
     };
     // syncChannel() above already drew the list for the starting channel.
+    _smsTabsRepaint = paintSmsTabs;
+    paintSmsTabs();
+    /* Both lists are fetched now rather than on first click: they are two small reads,
+       and a tab that pauses on a spinner the first time it is opened feels broken. */
+    loadSmsConsent();
   }
 
   // Recent broadcasts as a REAL table, so it picks up the same search, sort and record
   // count as every other table on the site (kt-table-filter + kt-table-export attach to
   // any #appMain table). It used to be a hand-rolled list of divs, which got none of it.
+  /* WHO CAN BE TEXTED, AND HOW TO ASK THE REST (2026-09-18).
+
+     The reason an agency-wide broadcast reached nobody was never visible anywhere: consent
+     is a per-person column and the only way to set it was a toggle inside Settings >
+     Notifications, behind a confirm dialog. A parent does not go there. iLearn had 52
+     people, 42 with a phone, and one opted in.
+
+     Three ways to fix that, and all three sit beside the thing they fix:
+
+       - ASK EVERYONE emails a signed, expiring link to a one-page yes/no. This is the only
+         one that moves people already on the system.
+       - RECORD lets a director who was told yes in person record it, stored WITH THEIR NAME.
+       - and new families are asked during onboarding, so the problem stops growing.
+
+     There is deliberately NO "turn everyone on" button. Consent the person did not give is
+     not consent; it is a carrier complaint, and a column full of ones nobody can account
+     for is worse than an empty one. */
+  async function loadSmsConsent() {
+    const host = document.getElementById('sms-consent');
+    if (!host) return;
+    host.innerHTML = '<div class="kt-card" style="padding:18px;color:#64748B;font-size:13px;">Loading...</div>';
+
+    let r;
+    try { r = await Api.get('/admin/sms/consent-coverage'); }
+    catch (e) {
+      host.innerHTML = '<div class="kt-card" style="padding:18px;color:#B91C1C;font-size:13px;">'
+        + 'Could not load text-alert consent.</div>';
+      return;
+    }
+    const sum = r.summary || {};
+    const rows = r.data || [];
+    const pill = (n, label, tint) => `<span style="display:inline-flex;align-items:center;gap:6px;`
+      + `background:${tint}1A;color:${tint};border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;">`
+      + `${n} ${label}</span>`;
+
+    /* WHO THE BUTTON WOULD ACTUALLY EMAIL (2026-09-18).
+
+       Anthony: "The ask 41 people by email - can we see the list before this gets sent
+       out as we could not want all 41 sent out and does this include staff/contractors
+       etc?"
+
+       Both halves of that were right, and the second one found a bug I put here this
+       morning. The label counted people whose status is `never_asked`, which REQUIRES a
+       mobile number on file - but the send has no such filter, so at iLearn the button
+       said 41 and would have emailed 51, the extra ten being people we hold no number
+       for. Label and action have to be the same set.
+
+       They belong in the set: the consent page asks for a number when we hold none, so
+       these are exactly the people worth asking. But that is a different thing to be
+       doing and the preview names them separately.
+
+       AND IT IS EVERYONE. The invite query joins role_assignments with no role filter, so
+       at iLearn it is 37 guardians, 9 educators, 4 agency admins and 2 home visitors.
+       That is defensible - an educator gets sign-in alerts for their own room - but it is
+       not what "ask the parents" sounds like, and it was nowhere on screen. */
+    const candidates = rows.filter(x => x.status === 'never_asked' || x.status === 'no_phone')
+      .filter(x => (x.email || '').trim() !== '');
+    const askable = candidates.length;
+    smsConsentBadge = askable;
+    try { if (_smsTabsRepaint) _smsTabsRepaint(); } catch (e) {}
+
+    host.innerHTML = `
+      <div class="kt-card" style="padding:18px;">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;">
+          ${pill(sum.opted_in || 0, 'can be texted', '#047857')}
+          ${pill(sum.never_asked || 0, 'never asked', '#B45309')}
+          ${pill(sum.declined || 0, 'declined', '#64748B')}
+          ${pill(sum.no_phone || 0, 'no mobile number', '#64748B')}
+        </div>
+        <div style="font-size:13px;color:#475569;line-height:1.6;margin-bottom:14px;">
+          Only people who have agreed can be sent a text. Emailing the link below asks them
+          in one tap &mdash; no sign-in needed &mdash; and records their answer with the exact
+          wording they were shown.
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <button id="sms-ask-all" class="kt-btn" ${askable ? '' : 'disabled'}
+            style="background:${askable ? '#1F6080' : '#CBD5E1'};color:#fff;border:0;padding:9px 18px;
+            border-radius:8px;cursor:${askable ? 'pointer' : 'default'};font-weight:600;">
+            ${askable ? 'Ask ' + askable + ' ' + (askable === 1 ? 'person' : 'people') + ' by email&hellip;' : 'Everyone has been asked'}</button>
+          <span id="sms-ask-msg" style="font-size:13px;"></span>
+        </div>
+      </div>
+      <div class="kt-card" style="margin-top:12px;padding:0;overflow-x:auto;">
+      <table data-kt-filter-always="1">
+        <thead><tr>
+          ${['Name', 'Roles', 'Mobile', 'Text alerts', ''].map(h =>
+            `<th style="text-align:left;padding:9px 12px;font-size:11px;font-weight:700;color:#6B7280;
+             letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #E5E7EB;">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows.map(x => consentRow(x)).join('')}</tbody>
+      </table></div>`;
+
+    /* A roster of thirty-one is a list you search, not one you scroll: this is where a
+       director goes to answer "has Natasha been asked?". The sweeps that add the search
+       box and sortable headers run on hashchange and the sweep bus, and neither fires for
+       a table drawn inside a tab - so ask for them directly. data-kt-filter-always keeps
+       the box on a short roster too, where it would otherwise be skipped. */
+    try { if (window.KT && KT.enhanceTables) KT.enhanceTables(); } catch (e) {}
+
+    const askBtn = document.getElementById('sms-ask-all');
+    if (askBtn && askable) {
+      askBtn.onclick = async () => {
+        /* A confirm dialog that says "email 41 people" is not consent to email 41 people
+           when you cannot see who they are. Pick them. */
+        const chosen = await pickInviteRecipients(candidates);
+        if (!chosen || !chosen.length) return;
+        askBtn.disabled = true;
+        const msg = document.getElementById('sms-ask-msg');
+        msg.innerHTML = '<span style="color:#64748B;">Sending...</span>';
+        try {
+          const res = await Api.post('/admin/sms/consent-invites', { user_ids: chosen });
+          /* Suppressed is its own outcome, not a success and not a failure: the mail was
+             built and then deliberately stopped, almost always by an agency-level switch.
+             Saying "asked 22 people" when 22 were blocked is the same false success that
+             made a suppressed form package look delivered. */
+          const extra = []
+            .concat(res.suppressed ? [res.suppressed + ' blocked before delivery'
+              + (res.suppressed_reason ? ' (' + escapeHtml(res.suppressed_reason) + ')' : '')] : [])
+            .concat(res.failed ? [res.failed + ' could not be emailed'] : []);
+          msg.innerHTML = res.sent
+            ? `<span style="color:#047857;">Asked ${res.sent} ${res.sent === 1 ? 'person' : 'people'}</span>`
+              + (extra.length ? `<span style="color:#B45309;"> &middot; ${extra.join(' &middot; ')}</span>` : '')
+            : `<span style="color:#B45309;font-weight:600;">Nobody was emailed.</span>`
+              + (extra.length ? `<span style="color:#64748B;"> ${extra.join(' &middot; ')}</span>` : '');
+        } catch (e) {
+          msg.innerHTML = `<span style="color:#B91C1C;">${escapeHtml((e && e.message) || 'Could not send')}</span>`;
+        }
+        loadSmsConsent();
+      };
+    }
+
+    host.querySelectorAll('[data-consent-user]').forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.getAttribute('data-consent-user');
+        const name = btn.getAttribute('data-consent-name') || 'this person';
+        /* Recorded consent needs a human behind it, so the dialog says what the director
+           is attesting to rather than just asking "are you sure". */
+        const ok = window.KT && KT.confirm
+          ? await KT.confirm('Record that ' + name + ' agreed to text alerts?', {
+              description: 'Only do this if they told you so. It is stored against your name as the '
+                + 'person who recorded it, with the date and the wording they were read.',
+              okLabel: 'Yes, they agreed',
+            })
+          : window.confirm('Record that ' + name + ' agreed to text alerts?');
+        if (!ok) return;
+        try {
+          await Api.post('/admin/sms/consent/' + id, { agreed: true, note: 'Told a director in person' });
+        } catch (e) {
+          if (window.KT && KT.toast) KT.toast((e && e.message) || 'Could not record that', 'error');
+        }
+        loadSmsConsent();
+      };
+    });
+  }
+
+  /* SEE THE LIST BEFORE IT GOES (2026-09-18).
+
+     Anthony: "can we see the list before this gets sent out as we could not want all 41
+     sent out and does this include staff/contractors etc?"
+
+     Grouped BY ROLE, because that is the question actually being asked. "Ask everyone" at
+     iLearn meant 37 guardians, 9 educators, 4 agency admins and 2 home visitors, and a
+     director who wants to ask the families and not their own staff had no way to say so.
+     A whole group toggles in one click; individuals toggle underneath.
+
+     Everyone starts TICKED. The alternative - nothing selected - makes the common case
+     (ask the lot) into forty clicks, and the list is right there to untick from. What is
+     NOT allowed is sending without opening this first: the button no longer has a path
+     that skips it.
+
+     People with no mobile number are a separate group rather than hidden or dropped. The
+     consent page asks for a number when we hold none, so they are worth asking - but that
+     is a different errand from confirming a number we already have, and the previous code
+     silently included them while the button counted only the others. */
+  function pickInviteRecipients(candidates) {
+    return new Promise(resolve => {
+      const ROLE_WORDS = {
+        guardian: 'Parents and guardians', educator: 'Educators',
+        agency_admin: 'Agency admins', centre_director: 'Directors',
+        home_visitor: 'Home visitors', platform_admin: 'Platform admins',
+      };
+      /* One person can hold several roles. File them under the first one, so the groups
+         partition the list and a head count across groups is the real total rather than
+         a number bigger than the list. */
+      const groups = new Map();
+      candidates.forEach(x => {
+        const noNum = (x.phone || '').trim() === '';
+        const key = noNum ? '_nonumber' : String(x.roles || '').split(',')[0].trim() || '_other';
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(x);
+      });
+      const order = [...groups.keys()].sort((a, b) => {
+        if (a === '_nonumber') return 1;
+        if (b === '_nonumber') return -1;
+        return groups.get(b).length - groups.get(a).length;
+      });
+
+      const o = document.createElement('div');
+      o.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:2147483640;'
+        + 'display:flex;align-items:center;justify-content:center;padding:16px;';
+      o.innerHTML = `<div style="background:#fff;border-radius:14px;width:100%;max-width:620px;
+          max-height:86vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(15,23,42,.25);">
+        <div style="padding:20px 22px 12px;border-bottom:1px solid #E5E7EB;">
+          <div style="font-size:17px;font-weight:700;">Who should be asked?</div>
+          <div style="font-size:13px;color:#64748B;margin-top:5px;line-height:1.5;">
+            Each person gets their own link to a one-question page. No sign-in needed, and
+            nobody is opted in until they say yes.</div>
+        </div>
+        <div id="inv-list" style="overflow-y:auto;padding:6px 22px 12px;flex:1 1 auto;"></div>
+        <div style="padding:14px 22px;border-top:1px solid #E5E7EB;display:flex;gap:10px;
+          align-items:center;justify-content:space-between;flex-wrap:wrap;">
+          <button id="inv-none" style="background:transparent;border:none;color:#64748B;
+            font-size:13px;cursor:pointer;padding:0;">Clear all</button>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button id="inv-cancel" style="background:transparent;border:1px solid #CBD5E1;
+              border-radius:8px;padding:9px 16px;cursor:pointer;font-weight:600;color:#334155;">Cancel</button>
+            <button id="inv-go" style="background:#1F6080;color:#fff;border:0;border-radius:8px;
+              padding:9px 18px;cursor:pointer;font-weight:600;"></button>
+          </div>
+        </div>
+      </div>`;
+
+      const list = o.querySelector('#inv-list');
+      list.innerHTML = order.map(key => {
+        const people = groups.get(key);
+        const title = key === '_nonumber' ? 'No mobile number on file'
+          : (ROLE_WORDS[key] || key.replace(/_/g, ' '));
+        const note = key === '_nonumber'
+          ? 'The page will ask them for a number before it can turn texts on.'
+          : '';
+        return `<div style="margin-top:14px;">
+          <label style="display:flex;gap:9px;align-items:center;cursor:pointer;
+            background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;padding:9px 11px;">
+            <input type="checkbox" data-inv-group="${escapeHtml(key)}" checked
+              style="width:17px;height:17px;cursor:pointer;">
+            <span style="font-weight:700;font-size:13.5px;color:#0F172A;">${escapeHtml(title)}</span>
+            <span style="color:#64748B;font-size:12.5px;">${people.length}</span>
+          </label>
+          ${note ? `<div style="font-size:12px;color:#94A3B8;margin:5px 0 0 28px;">${note}</div>` : ''}
+          <div style="margin:4px 0 0 12px;">${people.map(x => `
+            <label style="display:flex;gap:9px;align-items:baseline;cursor:pointer;padding:5px 0;">
+              <input type="checkbox" data-inv-user="${x.id}" data-inv-in="${escapeHtml(key)}" checked
+                style="width:15px;height:15px;cursor:pointer;">
+              <span style="font-size:13px;color:#334155;">${escapeHtml(x.name || ('#' + x.id))}
+                <span style="color:#94A3B8;">${escapeHtml(x.email || '')}</span></span>
+            </label>`).join('')}</div>
+        </div>`;
+      }).join('');
+
+      const boxes = () => [...list.querySelectorAll('[data-inv-user]')];
+      const go = o.querySelector('#inv-go');
+      function recount() {
+        const n = boxes().filter(b => b.checked).length;
+        go.textContent = n ? `Email ${n} ${n === 1 ? 'person' : 'people'}` : 'Nobody selected';
+        go.disabled = !n;
+        go.style.background = n ? '#1F6080' : '#CBD5E1';
+        go.style.cursor = n ? 'pointer' : 'default';
+        /* A group box reflects its members rather than commanding them, so unticking one
+           person does not leave the header claiming the whole group is going. */
+        list.querySelectorAll('[data-inv-group]').forEach(g => {
+          const key = g.getAttribute('data-inv-group');
+          const mine = boxes().filter(b => b.getAttribute('data-inv-in') === key);
+          const on = mine.filter(b => b.checked).length;
+          g.checked = on === mine.length;
+          g.indeterminate = on > 0 && on < mine.length;
+        });
+      }
+      list.addEventListener('change', e => {
+        const g = e.target.getAttribute && e.target.getAttribute('data-inv-group');
+        if (g) {
+          boxes().filter(b => b.getAttribute('data-inv-in') === g)
+            .forEach(b => { b.checked = e.target.checked; });
+        }
+        recount();
+      });
+      o.querySelector('#inv-none').onclick = () => {
+        boxes().forEach(b => { b.checked = false; });
+        recount();
+      };
+
+      const close = v => { o.remove(); document.removeEventListener('keydown', esc); resolve(v); };
+      function esc(e) { if (e.key === 'Escape') close(null); }
+      document.addEventListener('keydown', esc);
+      o.querySelector('#inv-cancel').onclick = () => close(null);
+      o.addEventListener('click', e => { if (e.target === o) close(null); });
+      o.querySelector('#inv-go').onclick = () =>
+        close(boxes().filter(b => b.checked).map(b => parseInt(b.getAttribute('data-inv-user'), 10)));
+
+      document.body.appendChild(o);
+      recount();
+    });
+  }
+
+  function consentRow(x) {
+    const tone = {
+      opted_in:    ['#047857', 'On'],
+      never_asked: ['#B45309', 'Never asked'],
+      declined:    ['#64748B', 'Declined'],
+      no_phone:    ['#64748B', 'No mobile number'],
+    }[x.status] || ['#64748B', '-'];
+    const sourceWords = {
+      app: 'the app', sms: 'a text reply', email_link: 'the emailed link',
+      admin: 'a director', onboarding: 'onboarding',
+    };
+    const src = x.sms_opt_in && x.sms_consent_source
+      ? `<div style="font-size:11px;color:#94A3B8;">via ${escapeHtml(sourceWords[x.sms_consent_source] || x.sms_consent_source)}</div>`
+      : '';
+    /* Recording on someone's behalf is offered ONLY where it is meaningful: they have a
+       number, and they have not already answered for themselves. */
+    const canRecord = x.status === 'never_asked';
+    return `<tr style="border-bottom:1px solid #F3F4F6;">
+      <td style="padding:9px 12px;font-weight:600;color:#111827;">${escapeHtml(x.name || ('#' + x.id))}
+        <div style="font-size:11px;color:#94A3B8;font-weight:400;">${escapeHtml(x.email || '')}</div></td>
+      <td style="padding:9px 12px;color:#475569;">${escapeHtml(x.roles || '')}</td>
+      <td style="padding:9px 12px;color:#475569;">${escapeHtml(x.phone || '-')}</td>
+      <td style="padding:9px 12px;"><span style="color:${tone[0]};font-weight:700;">${tone[1]}</span>${src}</td>
+      <td style="padding:9px 12px;text-align:right;">${canRecord
+        ? `<button data-consent-user="${x.id}" data-consent-name="${escapeHtml(x.name || 'this person')}"
+             style="background:transparent;border:1px solid #CBD5E1;border-radius:7px;padding:5px 11px;
+             font-size:12px;cursor:pointer;color:#334155;">Record a yes</button>`
+        : ''}</td>
+    </tr>`;
+  }
+
   async function loadSmsRecent(channel) {
     const voice = channel === 'voice';
     const r = await Api.get(voice ? '/admin/voice/calls' : '/admin/sms/messages').catch(() => ({ data: [] }));
@@ -1221,7 +1746,8 @@
       <thead style="background:#F8FAFC;">
         <tr>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Called' : 'Sent'}</th>
-          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">To</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Recipient</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Number</th>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Status</th>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Announcement' : 'Message'}</th>
         </tr>
@@ -1229,7 +1755,14 @@
       <tbody>
         ${rows.map(m => `<tr>
           <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${fmtDate(m.created_at)}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${escapeHtml(m.to_name || m.to_phone || '')}</td>
+          <!-- WHO, THEN WHICH NUMBER (2026-09-22). This was one cell showing the name OR
+               the number, and for SMS the API returned no name at all - so a broadcast
+               list was a column of bare phone numbers that told nobody whether the right
+               parents were reached. Two cells, so both are searchable and sortable by the
+               table tools, and a row whose user has been deleted still shows its number
+               rather than an empty cell. -->
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;font-weight:600;color:#111827;">${escapeHtml(m.to_name || '—')}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;font-family:ui-monospace,monospace;font-size:12.5px;color:#475569;">${escapeHtml(m.to_phone || '—')}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;"><span style="color:${colour(m.status)};font-weight:600;">${escapeHtml((m.status || '').replace(/_/g, ' '))}</span>${m.error ? `<div style="font-size:11.5px;color:#94A3B8;">${escapeHtml(String(m.error).substring(0, 120))}</div>` : ''}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;">${escapeHtml((m.body || '').substring(0, 200))}</td>
         </tr>`).join('')}

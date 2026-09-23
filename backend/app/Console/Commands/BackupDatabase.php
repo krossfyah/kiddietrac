@@ -19,11 +19,20 @@ use Throwable;
  */
 class BackupDatabase extends Command
 {
-    protected $signature = 'db:backup {--keep=14 : number of daily backups to retain}';
+    protected $signature = 'db:backup {--keep= : daily copies to retain (default: the portal setting, else 14)}';
     protected $description = 'Dump + gzip the database to ../backups, verify it, retain the last N, alert on failure.';
 
     public function handle(): int
     {
+        /* SWITCHED OFF IS A DELIBERATE STATE, NOT A FAILURE. (2026-09-21)
+           Turning backups off from the portal must not file a 'backup_failed' alert every
+           night - that is exactly how a real failure learns to be ignored. */
+        if (\App\Support\PlatformSettings::get('backup.enabled', '1') === '0') {
+            $this->info('Database backups are switched off in Platform settings.');
+
+            return self::SUCCESS;
+        }
+
         $conn = config('database.connections.' . config('database.default'));
         $dir = base_path('../backups');          // ~/kiddietrac/backups — outside backend/public + parent-portal
         if (! is_dir($dir)) {
@@ -68,7 +77,10 @@ class BackupDatabase extends Command
         $this->info("Backup written: {$file} ({$mb} MB)");
 
         // Retention — keep the newest N, delete the rest.
-        $keep = max(1, (int) $this->option('keep'));
+        /* The portal setting is the default; --keep still wins for a one-off run. */
+        $keep = (int) ($this->option('keep')
+            ?: \App\Support\PlatformSettings::get('backup.keep', 14));
+        $keep = max(1, min(90, $keep));
         $all = glob($dir . '/kiddietrac-*.sql.gz') ?: [];
         rsort($all);
         foreach (array_slice($all, $keep) as $old) {
@@ -76,12 +88,25 @@ class BackupDatabase extends Command
         }
         $this->info('Retaining ' . min(count($all), $keep) . ' backup(s) (keep=' . $keep . ').');
 
+        /* What happened, where the portal can read it without shelling out. */
+        try {
+            \App\Support\PlatformSettings::set('backup.last_ok_at', now()->toDateTimeString());
+            \App\Support\PlatformSettings::set('backup.last_size_mb', (string) $mb);
+            \App\Support\PlatformSettings::set('backup.last_error', '');
+        } catch (Throwable $e) {
+        }
+
         return self::SUCCESS;
     }
 
     private function failure(string $msg): int
     {
         Log::error('[BACKUP] ' . $msg);
+        try {
+            \App\Support\PlatformSettings::set('backup.last_error',
+                now()->toDateTimeString() . ' - ' . substr($msg, 0, 300));
+        } catch (Throwable $e) {
+        }
         // A failed backup is itself a monitoring event — surface it in Security alerts.
         try {
             DB::table('security_alerts')->insert([

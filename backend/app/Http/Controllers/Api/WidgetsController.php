@@ -203,33 +203,78 @@ final class WidgetsController extends Controller
         }
         $centreId = (int) $assignment->centre_id;
 
-        $today = Carbon::now()->startOfDay();
+        /* THE CARD COUNTED A DIFFERENT SET OF CHILDREN FROM THE ROSTER (2026-09-21).
+
+           Anthony, impersonating Bruni: "at the attendance card vs the children clocked
+           in doesnt match". Measured: the card said 2, her room held 3.
+
+           Both numbers were right about different things. The card counted by
+           families.centre_id - children whose FAMILY is registered at this centre - while
+           the roster she was looking at counts who is checked into HER ROOM. Weston Boyd
+           is checked into Bruni's room 34, but his family belongs to centre 45 (Priscilla
+           Abankwa), so he was invisible to the card and present on the roster.
+
+           That is normal in a home-childcare agency: children are placed with whichever
+           provider has the space, and a child in another provider's room is not an
+           anomaly. Four such placements exist today across three children - and the same
+           two, the Rappitt children, already broke absence reporting on 4 September for
+           exactly this reason. ANYTHING KEYED ON families.centre_id IS WRONG FOR THEM.
+
+           So the card counts the ROOMS THIS EDUCATOR HOLDS, which is what she is
+           responsible for and what the roster shows. The centre is kept as a fallback for
+           an educator who holds no rooms yet, where it is the only answer available. */
+        $roomIds = DB::table('educator_rooms')->where('user_id', $user->id)->pluck('room_id')->all();
+        $byRoom = ! empty($roomIds);
+
+        /* The AGENCY's day, not the server's. Carbon::now()->startOfDay() is UTC on this
+           box, which is 8pm the previous evening in Toronto - so the count rolled over
+           mid-evening and an after-hours check-in landed on the wrong day. Not what was
+           reported here, but wrong in the same card. */
+        $tz = DB::table('centres as c')->join('agencies as a', 'a.id', '=', 'c.agency_id')
+            ->where('c.id', $centreId)->value('a.timezone') ?: config('app.display_timezone', 'America/Toronto');
+        $today = Carbon::now($tz)->startOfDay()->setTimezone(config('app.timezone', 'UTC'));
         $tomorrow = (clone $today)->addDay();
 
-        // Children currently signed in at the centre (last event today is check_in)
-        $signedInCount = DB::table('check_events as ce1')
-            ->join('children as c', 'c.id', '=', 'ce1.child_id')
-            ->join('families as f', 'f.id', '=', 'c.family_id')
-            ->where('f.centre_id', $centreId)
+        // Children currently signed in (last event today is check_in, no check_out after it)
+        $signedIn = DB::table('check_events as ce1')
             ->where('ce1.occurred_at', '>=', $today)
             ->where('ce1.event_type', 'check_in')
-            ->whereNotExists(function ($sq) use ($today) {
+            ->whereNotExists(function ($sq) use ($tomorrow) {
                 $sq->select(DB::raw(1))->from('check_events as ce2')
                     ->whereColumn('ce2.child_id', 'ce1.child_id')
                     ->where('ce2.occurred_at', '>', DB::raw('ce1.occurred_at'))
                     ->where('ce2.event_type', 'check_out')
-                    ->where('ce2.occurred_at', '<', $today->copy()->addDay());
-            })
-            ->distinct()
-            ->count('ce1.child_id');
+                    ->where('ce2.occurred_at', '<', $tomorrow);
+            });
 
-        // Total enrolled at this centre — capacity context
-        $enrolledCount = DB::table('children as c')
-            ->join('families as f', 'f.id', '=', 'c.family_id')
-            ->where('f.centre_id', $centreId)
-            ->where('c.enrollment_status', 'enrolled')
-            ->whereNull('c.deleted_at')
-            ->count();
+        if ($byRoom) {
+            $signedIn->whereIn('ce1.room_id', $roomIds);
+        } else {
+            $signedIn->join('children as c', 'c.id', '=', 'ce1.child_id')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->where('f.centre_id', $centreId);
+        }
+        $signedInCount = $signedIn->distinct()->count('ce1.child_id');
+
+        // The denominator has to match the numerator, or the percentage is nonsense.
+        if ($byRoom) {
+            $enrolledCount = DB::table('enrollments as e')
+                ->join('children as c', 'c.id', '=', 'e.child_id')
+                ->whereIn('e.room_id', $roomIds)
+                ->whereNull('c.deleted_at')
+                ->where('c.enrollment_status', 'enrolled')
+                ->where(function ($w) {
+                    $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', now()->toDateString());
+                })
+                ->distinct()->count('c.id');
+        } else {
+            $enrolledCount = DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id')
+                ->where('f.centre_id', $centreId)
+                ->where('c.enrollment_status', 'enrolled')
+                ->whereNull('c.deleted_at')
+                ->count();
+        }
 
         // medication_administrations carries completed admins (administered_at).
         // Count today's dose log to surface what's already been given. If you
@@ -270,7 +315,12 @@ final class WidgetsController extends Controller
                 'id' => 'signed-in',
                 'label' => 'Signed in now',
                 'value' => $signedInCount . ' / ' . $enrolledCount,
-                'hint' => $enrolledCount > 0 ? round(($signedInCount / max($enrolledCount, 1)) * 100) . '% present' : 'No enrolled children',
+                /* Say which set this is. "2 of 3" with no scope is exactly how the card
+                   and the roster came to disagree without anybody being able to tell. */
+                'hint' => $enrolledCount > 0
+                    ? round(($signedInCount / max($enrolledCount, 1)) * 100) . '% present'
+                        . ($byRoom ? ' in your room' . (count($roomIds) === 1 ? '' : 's') : ' at your centre')
+                    : ($byRoom ? 'No children enrolled in your rooms' : 'No enrolled children'),
                 'accent' => '#16A34A',
                 'icon' => '✅',
             ],

@@ -145,7 +145,13 @@
     var ex = existing || null;
     var xv = function (f) { return ex && ex[f] != null ? esc(String(ex[f])) : ''; };
     var xsel = function (f, v) { return ex && String(ex[f] == null ? '' : ex[f]) === String(v) ? ' selected' : ''; };
-    var box = el('div', { style: 'max-width:640px;margin:0 auto;padding:16px 16px 90px;' });
+    /* Same defect as the inspection form, same fix (2026-09-18). Every answer on this
+       screen lives in the DOM, and any write this tab makes has kt-live call
+       renderScreen(), which clears #appMain and re-runs this function from the top - an
+       empty report. The refreshers deferred only while a field was FOCUSED, so tapping a
+       radio or scrolling was enough to let the teardown through. This attribute tells
+       kt-unsaved-guard.js there is unsaved work here. */
+    var box = el('div', { 'data-kt-guard-unsaved': '1', style: 'max-width:640px;margin:0 auto;padding:16px 16px 90px;' });
     box.appendChild(el('h1', { style: 'margin:6px 2px 4px;font-size:22px;font-weight:800;color:#0f172a;' }, [ex ? 'Edit home visit report' : 'New home visit report']));
     box.appendChild(el('div', { style: 'color:#64748b;font-size:13.5px;margin:0 2px 18px;' }, [ex ? 'Update the visit details. Every change is logged with your name and the time.' : 'Choose the centre this family belongs to, then record the visit.']));
     var card = el('div', { style: 'background:#fff;border:1px solid #E7EDF3;border-radius:16px;padding:18px 18px 20px;' });
@@ -252,6 +258,10 @@
       };
       var done = function () {
         if (KT.toast) KT.toast('✅', status === 'draft' ? 'Draft saved' : (ex ? 'Report updated' : 'Report submitted'), status === 'draft' ? 'Come back any time to finish it.' : 'Your home visit report has been saved.', '#16A34A');
+        /* The work is on the server, so the screen no longer needs protecting. Before
+           the hash change, or the guard keeps deferring refreshes for a screen that has
+           already been navigated away from. */
+        if (KT.clearUnsaved) KT.clearUnsaved();
         window.location.hash = '#home-visits';
       };
       var fail = function (e) {
@@ -371,6 +381,17 @@
     var canEdit = isReviewerUser();
     var wrap = el('div', { style: 'max-width:1120px;margin:0 auto;padding:6px 16px 90px;' });
     // No own heading — the shell injects the standard "Home visit reports" banner.
+    /* Start one from here: this is the screen a reviewer already opens to read visits,
+       so it is where they will look to record one they did themselves. */
+    var newBar = el('div', { style: 'display:flex;justify-content:flex-end;margin:2px 0 10px;' });
+    var newBtn = el('button', {
+      style: 'padding:9px 15px;border-radius:9px;border:1px solid #0FA3B1;background:#0FA3B1;'
+           + 'color:#fff;font-size:13px;font-weight:700;cursor:pointer;',
+    }, ['➕ New home visit report']);
+    newBtn.addEventListener('click', function () { window.location.hash = 'new-home-visit'; });
+    newBar.appendChild(newBtn);
+    wrap.appendChild(newBar);
+
     var toolbar = el('div', { style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0 12px;' });
     var isDesktop = window.matchMedia && window.matchMedia('(min-width:701px)').matches;
     var search = el('input', { type: 'search', placeholder: '🔍 Filter by home visitor, family, centre…', style: 'flex:1 1 260px;min-width:200px;padding:8px 11px;border:1px solid #CBD5E1;border-radius:9px;font-size:13px;' });
@@ -548,7 +569,21 @@
 
   KT.Shell.registerScreen('home_visitor:home', renderHome);
   // Wrap so the shell's ctx arg is never mistaken for an "existing" report.
-  KT.Shell.registerScreen('home_visitor:new-home-visit', function (c) { renderNewReport(c); });
+  /* A DIRECTOR OR ADMIN CAN FILE THEIR OWN VISIT (2026-09-22).
+
+     Anthony: "...including for the home visit reports".
+
+     They could already EDIT a report (the three registrations below) but not START one,
+     so a director who did the visit themselves had nowhere to record it. The backend was
+     never the obstacle - the home-visits prefix is
+     role:home_visitor,agency_admin,centre_director,platform_admin and store() stamps
+     home_visitor_id with the signed-in user, so the report is correctly attributed to
+     whoever actually went. renderNewReport takes no home-visitor-specific input; it asks
+     for the centre and the family like anyone else. */
+  ['home_visitor', 'agency_admin', 'centre_director', 'platform_admin'].forEach(function (role) {
+    // Wrap so the shell's ctx arg is never mistaken for an "existing" report.
+    KT.Shell.registerScreen(role + ':new-home-visit', function (c) { renderNewReport(c); });
+  });
   KT.Shell.registerScreen('home_visitor:home-visits', renderReports);
   // Home visitor edits their OWN DRAFT via this screen (submitted reports are
   // reviewer-only — the backend enforces that; the UI only links Edit on drafts).

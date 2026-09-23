@@ -55,17 +55,48 @@ class EnsurePasswordChanged
             return $next($request);
         }
 
+        /* EXPIRY IS ENFORCED HERE, OR THE POLICY IS DECORATIVE (2026-09-21).
+
+           The warning email tells people "you will be asked to set a new one the next
+           time you sign in". Until this existed, that was a promise the code did not
+           keep: the 90-day rule had a column, a nightly reminder and no teeth at all.
+
+           Reuses the same gate as an admin-forced reset, so there is one way to be asked
+           for a new password rather than two that can disagree - and one allow-list of
+           endpoints somebody mid-change can still reach.
+
+           Deliberately NOT a hard sign-out. The account keeps working the moment a new
+           password is set; nothing is revoked and no data is touched. */
+        $expired = false;
         if (empty($user->must_change_password)) {
-            return $next($request);
+            try {
+                $expired = \App\Services\PasswordPolicy::isExpired($user->password_changed_at ?? null);
+            } catch (\Throwable $e) {
+                /* FAIL OPEN. A fault in the age check must never lock 81 people out of a
+                   Monday morning; the worst case of failing open is a password that
+                   lives a few days longer than policy says. */
+                $expired = false;
+            }
+
+            if (! $expired) {
+                return $next($request);
+            }
         }
 
         if ($this->allowed($request)) {
             return $next($request);
         }
 
+        /* Say WHICH of the two it is. "Your password was reset by an administrator" to
+           somebody whose password simply aged out is a small lie that sends them to ask
+           an admin what they did. */
         return response()->json([
             'password_change_required' => true,
-            'message' => 'Your password was reset by an administrator. Please choose a new password to continue.',
+            'reason' => $expired ? 'expired' : 'admin_reset',
+            'message' => $expired
+                ? 'Your password has reached its ' . \App\Services\PasswordPolicy::maxAgeDays()
+                    . '-day limit. Please choose a new one to continue.'
+                : 'Your password was reset by an administrator. Please choose a new password to continue.',
         ], 403);
     }
 

@@ -500,7 +500,7 @@
 
     card.innerHTML =
       '<div style="background:linear-gradient(135deg,#1F6080 0%,#2c7894 100%);color:#fff;padding:22px 24px;display:flex;align-items:center;gap:16px;position:relative;">'
-      + (photo ? '<img src="' + esc(photo) + '" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.5);">'
+      + (photo ? '<img decoding="sync" src="' + esc(photo) + '" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.5);">'
                : '<div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;">' + esc((d.first_name || '?')[0]) + '</div>')
       + '<div><div style="font-size:22px;font-weight:800;">' + esc(d.full_name || d.display_name) + '</div>'
       + '<div style="opacity:.9;font-size:13px;">' + esc((d.age && d.age.human) || '') + (d.room && d.room.name ? ' · ' + esc(d.room.name) : '') + '</div></div>'
@@ -2068,7 +2068,7 @@
       style: 'position:fixed;inset:0;z-index:9650;background:rgba(8,17,33,.6);display:flex;align-items:flex-end;',
     });
     const sheet = Dom.el('div', {
-      style: 'background:#fff;width:100%;border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px);',
+      style: 'background:#fff;width:100%;border-radius:20px 20px 0 0;padding:18px 16px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 18px);',
     });
     ov.appendChild(sheet);
 
@@ -2506,7 +2506,34 @@
     const back = Dom.el('button', { style: 'background:none;border:none;font-size:26px;color:var(--brand-blue);cursor:pointer;padding:0 6px;line-height:1;flex-shrink:0;' }, '‹');
     back.addEventListener('click', () => { if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove(); });
     header.appendChild(back);
-    header.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:var(--ink-900);' }, 'Invoice ' + (inv.invoice_number || '')));
+    header.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:var(--ink-900);flex:1;min-width:0;' }, 'Invoice ' + (inv.invoice_number || '')));
+
+    /* A CLOSE CONTROL PEOPLE RECOGNISE (2026-09-17).
+
+       Anthony: "view invoice under payment schedules doesnt have a close X to close the
+       popup." The only way out was the '‹' on the left, which reads as "back" in a
+       phone flow and as nothing at all in a full-screen overlay on a desktop — where the
+       eye goes to the top RIGHT for a close. The chevron stays for the phone; this is the
+       one a desktop reader looks for.
+
+       Escape closes it too. It is a modal overlay, and every other dialog in the portal
+       answers Escape; this one silently did not. */
+    const shut = () => {
+      document.removeEventListener('keydown', onEsc);
+      if (window.KT && KT.popOverlay) { KT.popOverlay(tw); } else { tw.remove(); }
+    };
+    function onEsc(e) { if (e.key === 'Escape') { shut(); } }
+    document.addEventListener('keydown', onEsc);
+    back.addEventListener('click', () => document.removeEventListener('keydown', onEsc));
+
+    const xBtn = Dom.el('button', {
+      title: 'Close', 'aria-label': 'Close',
+      style: 'border:none;background:var(--ink-100,#F1F5F9);color:var(--ink-600,#475569);'
+        + 'width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;'
+        + 'flex-shrink:0;display:flex;align-items:center;justify-content:center;',
+    }, '✕');
+    xBtn.addEventListener('click', shut);
+    header.appendChild(xBtn);
     tw.appendChild(header);
 
     const body = Dom.el('div', { style: 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;' });
@@ -2522,6 +2549,53 @@
     sum.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-top:5px;' }, inv.balance_due > 0 ? `Balance due · by ${inv.due_date}` : 'Total'));
     if (child) sum.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:6px;' }, `${child.display_name} · ${inv.issue_date ? 'Issued ' + inv.issue_date : ''}`));
     body.appendChild(sum);
+
+    /* THE ACTUAL INVOICE, not a second drawing of the same numbers (2026-09-17).
+
+       This sheet summarised an invoice — status, total, a breakdown — while the real
+       document lived only in an email attachment. Anthony, from Accounting: "view
+       invoice ... its not showing the actual invoice for the sanford family — this needs
+       to show up with the template being used and also on the parent view should show
+       the same as well."
+
+       So the document itself is rendered here, in the agency's chosen template, from the
+       same InvoiceDocument the emailed PDF comes from. One sheet serves both audiences,
+       so a parent and the office are now looking at the same piece of paper.
+
+       Fetched rather than framed by URL because the endpoints need the bearer token.
+       Staff read /invoices/{id}/document (centre-scoped); a guardian reads their own
+       through /parent/…, and staff fall back to it for their own family's invoice. */
+    (function () {
+      const docCard = Dom.el('div', { style: card('padding:0;margin-bottom:14px;overflow:hidden;') });
+      const frame = Dom.el('iframe', {
+        style: 'width:100%;height:520px;border:0;display:block;background:#fff;',
+        title: 'Invoice ' + (inv.invoice_number || ''),
+      });
+      docCard.appendChild(frame);
+      body.appendChild(docCard);
+
+      const base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      const tok = (function () {
+        try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; }
+      })();
+      const paths = ktIsStaff()
+        ? ['/invoices/' + inv.id + '/document', '/parent/invoices/' + inv.id + '/document']
+        : ['/parent/invoices/' + inv.id + '/document'];
+
+      (async function load() {
+        for (const p of paths) {
+          try {
+            const r = await fetch(base + p, { headers: { Authorization: 'Bearer ' + tok } });
+            if (!r.ok) { continue; }
+            frame.srcdoc = await r.text();
+            return;
+          } catch (e) { /* try the next one */ }
+        }
+        /* No document is not an error worth a red box — the figures above are still
+           correct and the invoice may simply be too new to render. */
+        docCard.remove();
+      })();
+    })();
 
     // Breakdown
     const bd = Dom.el('div', { style: card('padding:16px;margin-bottom:14px;') });
@@ -2764,7 +2838,7 @@
     // Action sheet for a message you sent: Edit (text only) / Delete.
     function msgActions(m) {
       const ov = Dom.el('div', { style: 'position:fixed;inset:0;z-index:14500;background:rgba(8,17,33,.5);display:flex;align-items:flex-end;' });
-      const sheet = Dom.el('div', { style: 'background:#fff;width:100%;border-radius:20px 20px 0 0;padding:8px 12px calc(env(safe-area-inset-bottom,0px) + 12px);' });
+      const sheet = Dom.el('div', { style: 'background:#fff;width:100%;border-radius:20px 20px 0 0;padding:8px 12px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 12px);' });
       const mk = (icon, label, color, fn) => { const btn = Dom.el('button', { type: 'button', style: `display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;padding:15px 12px;font-size:16px;font-weight:600;color:${color};cursor:pointer;text-align:left;border-bottom:1px solid var(--ink-100);` }, [Dom.el('span', { style: 'font-size:20px;' }, icon), label]); btn.addEventListener('click', () => { ov.remove(); fn(); }); return btn; };
       if (m.can_edit) sheet.appendChild(mk('✏️', 'Edit', 'var(--ink-900)', () => startEdit(m)));
       if (m.can_delete) sheet.appendChild(mk('🗑', 'Delete', '#DC2626', () => delMsg(m)));
@@ -3102,7 +3176,7 @@
 
     const status = Dom.el('div', { style: 'font-size:13px;color:#B45309;padding:0 16px;min-height:16px;' });
     panel.appendChild(status);
-    const send = Dom.el('button', { type: 'button', style: 'margin:8px 16px calc(env(safe-area-inset-bottom,0px) + 14px);border:0;cursor:pointer;padding:15px;border-radius:14px;font-size:16px;font-weight:800;color:#fff;background:#159FB4;flex-shrink:0;' }, 'Send message');
+    const send = Dom.el('button', { type: 'button', style: 'margin:8px 16px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 14px);border:0;cursor:pointer;padding:15px;border-radius:14px;font-size:16px;font-weight:800;color:#fff;background:#159FB4;flex-shrink:0;' }, 'Send message');
     send.addEventListener('click', async () => {
       if (!ta.value.trim() && !pickedFile) { status.textContent = 'Write a message or add a photo first.'; return; }
       send.disabled = true; send.textContent = 'Sending…'; status.textContent = '';

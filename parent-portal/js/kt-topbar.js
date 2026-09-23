@@ -352,7 +352,7 @@
         var iconHtml;
         if (e.avatar) {
           var av = /^https?:\/\//i.test(e.avatar) ? e.avatar : (API.replace(/\/api\/v1\/?$/, '') + e.avatar);
-          iconHtml = '<img src="' + esc(av) + '" alt="" onerror="this.style.display=\'none\';if(this.nextSibling)this.nextSibling.style.display=\'\';" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block;">'
+          iconHtml = '<img decoding="sync" src="' + esc(av) + '" alt="" onerror="this.style.display=\'none\';if(this.nextSibling)this.nextSibling.style.display=\'\';" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block;">'
             + '<span style="font-size:17px;line-height:1.25;flex-shrink:0;display:none;">' + (e.icon || '•') + '</span>';
         } else {
           iconHtml = '<span style="font-size:17px;line-height:1.25;flex-shrink:0;">' + (e.icon || '•') + '</span>';
@@ -682,7 +682,7 @@
   function tbAvatarHtml(u) {
     if (u && u.photo_url) {
       var src = /^https?:\/\//i.test(u.photo_url) ? u.photo_url : (API.replace(/\/api\/v1\/?$/, '') + u.photo_url);
-      return '<span class="kt-tb-ava"><img src="' + esc(src) + '" alt=""></span>';
+      return '<span class="kt-tb-ava"><img decoding="sync" src="' + esc(src) + '" alt=""></span>';
     }
     return '<span class="kt-tb-ava kt-tb-ava--init" style="background:' + avaColour((u && u.name) || '') + '">' + esc(tbInitials(u)) + '</span>';
   }
@@ -691,7 +691,7 @@
     var apiHost = API.replace(/\/api\/v1\/?$/, '');
     var src = /^https?:\/\//i.test(u.photo_url) ? u.photo_url : (apiHost + u.photo_url);
     sp.className = 'kt-tb-ava'; sp.style.background = '';
-    sp.innerHTML = '<img alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
+    sp.innerHTML = '<img decoding="sync" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">';
     var tbImg = sp.querySelector('img');
     ktPhotoRetry(tbImg, function () {
       sp.className = 'kt-tb-ava kt-tb-ava--init';

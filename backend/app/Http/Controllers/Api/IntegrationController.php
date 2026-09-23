@@ -134,9 +134,66 @@ class IntegrationController extends Controller
         ]);
         $source = $this->source($request);
 
-        $centre = Centre::where('agency_id', $agencyId)
+        /* CLOSING A PROVIDER DID NOT STICK (2026-09-21).
+
+           Anthony: "why is Priscilla added back as an educator when we closed her."
+
+           Because this lookup could not see her. Centre uses SoftDeletes, so archiving
+           c#13 on 18 September hid it from this query; the next sync at 07:15 on the 19th
+           looked for iLearn's provider-1776864171017, found nothing, and created c#45 - a
+           second "Priscilla Abankwa", active, with the SAME external id. Archiving a
+           synced provider therefore guaranteed a duplicate rather than a closure, every
+           morning, for as long as iLearn kept sending her.
+
+           withTrashed() is the fix for the duplicate. But finding it is not enough: the
+           line below defaults status to 'active', so simply matching the archived row
+           would have un-closed her instead - trading a duplicate for a silent
+           resurrection, which is worse because nobody would see a second record appear.
+
+           So an archived centre is LEFT ARCHIVED and reported back. A close is a local
+           decision, made by somebody who knew why; a nightly import is not entitled to
+           overturn it. If the provider really has reopened, an administrator restores
+           them in the portal - one click, with their name against it. */
+        $centre = Centre::withTrashed()
+            ->where('agency_id', $agencyId)
             ->where('external_source', $source)
             ->where('external_id', $data['external_id'])->first();
+
+        if ($centre && $centre->deleted_at) {
+            /* Recorded, not silent. "The sync keeps trying to bring back somebody we
+               closed" is a thing worth being able to read, and it is the evidence that
+               the source system still holds them. */
+            try {
+                \App\Support\Audit::write([
+                    'user_id' => optional($request->user())->id,
+                    'agency_id' => $agencyId,
+                    'action' => 'integration.skipped_archived_centre',
+                    'entity_type' => 'centre',
+                    'entity_id' => $centre->id,
+                    'payload' => json_encode([
+                        'summary' => 'The ' . $source . ' sync offered "' . $data['name'] . '" again, but that '
+                            . 'provider was archived here on ' . $centre->deleted_at . '. Left archived; '
+                            . 'restore them in the portal if they have genuinely reopened.',
+                        'external_id' => $data['external_id'],
+                        'archived_at' => (string) $centre->deleted_at,
+                    ]),
+                    'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+            }
+
+            return response()->json([
+                'ok' => true,
+                'entity' => 'centre',
+                'created' => false,
+                'skipped' => 'archived',
+                'id' => $centre->id,
+                'external_id' => $centre->external_id,
+                'message' => 'This provider is archived in KiddieTrac and was not re-created. '
+                    . 'Restore them in the portal if they have reopened.',
+            ], 200);
+        }
+
         $created = ! $centre;
 
         $attrs = collect($data)->except('external_id')->filter(fn ($v) => $v !== null)->all();
@@ -293,6 +350,36 @@ class IntegrationController extends Controller
         }
     }
 
+    /**
+     * A record the source system still holds, that we deliberately archived.
+     *
+     * Recorded rather than passed over in silence: "the sync keeps offering somebody we
+     * closed" is worth being able to read, and it is the evidence that the other system
+     * has not been told. It is also how an admin discovers that a restore is the action
+     * they actually want.
+     */
+    private function noteArchivedSkip(Request $request, int $agencyId, string $type, int $id,
+                                      string $label, string $archivedAt, string $source): void
+    {
+        try {
+            \App\Support\Audit::write([
+                'user_id' => optional($request->user())->id,
+                'agency_id' => $agencyId,
+                'action' => 'integration.skipped_archived_' . $type,
+                'entity_type' => $type,
+                'entity_id' => $id,
+                'payload' => json_encode([
+                    'summary' => 'The ' . $source . ' sync offered "' . $label . '" again, but that '
+                        . $type . ' was archived here on ' . $archivedAt . '. Left archived rather than '
+                        . 're-created; restore it in the portal if that is wrong.',
+                    'archived_at' => $archivedAt,
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+    }
+
     /** POST /integration/families — upsert a family by external_id, linked to a centre. */
     public function upsertFamily(Request $request): JsonResponse
     {
@@ -321,9 +408,27 @@ class IntegrationController extends Controller
         abort_unless($centre, 422, 'Unknown centre_external_id for this agency — upsert the centre first.');
 
         $agencyCentreIds = Centre::where('agency_id', $agencyId)->pluck('id');
-        $family = Family::whereIn('centre_id', $agencyCentreIds)
+        /* Same hole as the centre above, and it has already bitten: three families exist
+           TWICE under one external id because the first copy was archived, hidden from
+           this lookup, and re-created on the next sync. 24 archived families still carry
+           an external id, so every one of them is a duplicate waiting to happen.
+           (2026-09-21) */
+        $family = Family::withTrashed()
+            ->whereIn('centre_id', $agencyCentreIds)
             ->where('external_source', $source)
             ->where('external_id', $data['external_id'])->first();
+
+        if ($family && $family->deleted_at) {
+            $this->noteArchivedSkip($request, $agencyId, 'family', $family->id,
+                (string) ($data['family_name'] ?? 'family'), (string) $family->deleted_at, $source);
+
+            return response()->json([
+                'ok' => true, 'entity' => 'family', 'created' => false, 'skipped' => 'archived',
+                'id' => $family->id, 'external_id' => $family->external_id,
+                'message' => 'This family is archived in KiddieTrac and was not re-created.',
+            ], 200);
+        }
+
         $created = ! $family;
 
         $attrs = collect($data)->except(['external_id', 'centre_external_id'])->filter(fn ($v) => $v !== null)->all();
@@ -379,9 +484,27 @@ class IntegrationController extends Controller
         abort_unless($family, 422, 'Unknown family_external_id for this agency — upsert the family first.');
 
         $agencyFamilyIds = Family::whereIn('centre_id', $agencyCentreIds)->pluck('id');
-        $child = Child::whereIn('family_id', $agencyFamilyIds)
+        /* And children - where it is worst. Three children already exist twice under one
+           external id and BOTH copies are live, which splits a child's attendance,
+           billing and medical record across two rows that nobody knows to reconcile.
+           (2026-09-21) */
+        $child = Child::withTrashed()
+            ->whereIn('family_id', $agencyFamilyIds)
             ->where('external_source', $source)
             ->where('external_id', $data['external_id'])->first();
+
+        if ($child && $child->deleted_at) {
+            $this->noteArchivedSkip($request, $agencyId, 'child', $child->id,
+                trim((string) (($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? ''))) ?: 'child',
+                (string) $child->deleted_at, $source);
+
+            return response()->json([
+                'ok' => true, 'entity' => 'child', 'created' => false, 'skipped' => 'archived',
+                'id' => $child->id, 'external_id' => $child->external_id,
+                'message' => 'This child is archived in KiddieTrac and was not re-created.',
+            ], 200);
+        }
+
         $created = ! $child;
 
         $attrs = collect($data)->except(['external_id', 'family_external_id'])->filter(fn ($v) => $v !== null)->all();

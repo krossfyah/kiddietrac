@@ -90,7 +90,7 @@
     // whole form (incl. the Give-award button) stays reachable and centred.
     var isMobile = window.matchMedia && window.matchMedia('(max-width:768px)').matches;
     var ovPad = isMobile
-      ? 'padding:10px 12px calc(84px + env(safe-area-inset-bottom,0px)) 12px;'
+      ? 'padding:10px 12px calc(84px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px))) 12px;'
       : 'padding:16px;';
     var cardMaxH = isMobile ? 'calc(100vh - 150px)' : '92vh';
 
@@ -103,7 +103,7 @@
         (children.length ? '' : '<div style="font-size:12px;color:#B91C1C;">No children found in your rooms.</div>') +
         '<label style="font-size:13px;font-weight:700;">Award *<input id="aw-title" list="aw-presets" placeholder="e.g. Star of the Week" maxlength="120" style="' + inp + '"><datalist id="aw-presets">' + PRESETS.map(function (p) { return '<option value="' + esc(p) + '">'; }).join('') + '</datalist></label>' +
         '<div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">Badge</div><div id="aw-badges" style="display:flex;flex-wrap:wrap;gap:6px;">' + BADGES.map(function (b, i) { return '<button type="button" class="aw-badge" data-badge="' + b + '" style="font-size:22px;width:40px;height:40px;line-height:1;border:2px solid ' + (i === 0 ? '#F59E0B' : '#E2E8F0') + ';border-radius:11px;background:' + (i === 0 ? '#FEF3C7' : '#fff') + ';cursor:pointer;">' + b + '</button>'; }).join('') + '</div></div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
+        '<div class="aw-2col" style="display:grid;gap:12px;">' +
           '<label style="font-size:13px;font-weight:700;">Period<select id="aw-period" style="' + inp + '"><option value="">—</option><option value="daily">Daily</option><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option></select></label>' +
           '<label style="font-size:13px;font-weight:700;">Date<input id="aw-date" type="date" value="' + new Date().toISOString().slice(0, 10) + '" style="' + inp + '"></label>' +
         '</div>' +
@@ -156,6 +156,16 @@
       var rows = (d && d.data) || [];
       if (!rows.length) { el.innerHTML = '<div style="text-align:center;padding:40px;background:#fff;border-radius:14px;color:#64748B;"><div style="font-size:44px;">🏆</div><div style="font-weight:800;color:#0F172A;margin-top:6px;">No awards yet</div>When an educator celebrates your child, it’ll appear here.</div>'; return; }
       el.innerHTML = '<div style="display:grid;gap:12px;">' + rows.map(parentAwardCard).join('') + '</div>';
+      /* The same certificate the educator prints. Looked up by id rather than closed
+         over, because these cards are rebuilt from an HTML string and a handler holding
+         the old object would be pointing at a card that is no longer on the page. */
+      el.querySelectorAll('[data-award-view]').forEach(function (b) {
+        b.addEventListener('click', function (ev) {
+          ev.preventDefault(); ev.stopPropagation();
+          var id = b.getAttribute('data-award-view');
+          printCertificate(rows.find(function (r) { return String(r.id) === id; }));
+        });
+      });
     } catch (e) { el.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message || '') + '</div>'; }
   }
 
@@ -166,6 +176,12 @@
       '<div style="font-size:13px;color:#475569;margin-top:2px;">' + esc(childName(a)) + ' · ' + esc(fmtDate(a.awarded_on)) + (a.period ? ' · ' + esc(periodLabel(a.period)) : '') + '</div>' +
       (a.note ? '<div style="font-size:13px;color:#64748B;margin-top:5px;font-style:italic;">“' + esc(a.note) + '”</div>' : '') +
       (byName(a) ? '<div style="font-size:11.5px;color:#94A3B8;margin-top:4px;">— ' + esc(byName(a)) + '</div>' : '') +
+      /* Parents had no way into the certificate at all — the card was inert. Same
+         action the educator row has carried since awards shipped. (Anthony, 2026-09-08) */
+      '<button type="button" data-award-view="' + a.id + '"' +
+        ' style="margin-top:10px;background:#FEF3C7;border:1px solid #F1E5C8;border-radius:10px;' +
+        'padding:8px 14px;font:inherit;font-size:13px;font-weight:700;color:#92400E;cursor:pointer;">' +
+        '\ud83c\udfc6 View certificate</button>' +
       '</div></div>';
   }
 
@@ -217,10 +233,34 @@
       '.bar{position:fixed;top:14px;right:14px;display:flex;gap:8px;z-index:10}' +
       '.bar button{border:none;border-radius:10px;padding:10px 16px;font-family:Arial,sans-serif;font-weight:bold;font-size:13px;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.18)}' +
       '.bar .p{background:#B0891F;color:#fff}.bar .x{background:#fff;color:#444}' +
-      '@media print{.bar{display:none}body{background:#fff}.page{margin:0;padding:0}}';
+      '@media print{.bar{display:none}body{background:#fff}.page{margin:0;padding:0}}' +
+      /* ON SCREEN ONLY. The certificate is designed in millimetres for A4; on a phone
+         that is about twice the viewport width, so it scrolled sideways and the framing
+         fell apart. Below 820px it becomes fluid and the generous print margins come
+         down to something readable on a handset. @page and the print block above are
+         untouched, so what comes out of the printer is exactly what it was. */
+      '@media screen and (max-width:820px){' +
+        'body{background:#fff}' +
+        '.page{width:100%;min-height:0;padding:0;display:block}' +
+        '.inner{padding:22px 14px 18px}' +
+        '.agency{font-size:15px;letter-spacing:1px}' +
+        '.seal{width:74px;height:74px;font-size:36px;margin:12px auto 4px}' +
+        '.eyebrow{font-size:17px;letter-spacing:5px;margin-top:12px}' +
+        '.corner{width:18px;height:18px}' +
+        '.corner.tl,.corner.tr{top:10px}.corner.bl,.corner.br{bottom:10px}' +
+        '.corner.tl,.corner.bl{left:10px}.corner.tr,.corner.br{right:10px}' +
+        /* The signature row is two columns on paper; side by side they are ~90px each
+           on a phone, so the names wrap to three lines and collide with the rules. */
+        '.sigrow{display:block}.sig{margin:0 auto 14px;max-width:230px}' +
+        '.spacer{min-height:10px}' +
+      '}';
 
-    var html = '<!doctype html><html><head><meta charset="utf-8"><title>Certificate - ' + esc(name) + '</title><style>' + css + '</style></head><body>' +
-      '<div class="bar"><button class="p" onclick="window.print()">Print</button><button class="x" onclick="window.close()">Close</button></div>' +
+    var html = '<!doctype html><html><head><meta charset="utf-8">' +
+      /* Without this a phone lays the 210mm certificate out at desktop width and shows
+         a sliver of it. The certificate still PRINTS at A4 — @page below is unaffected
+         by the viewport, which only governs on-screen layout. */
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>Certificate - ' + esc(name) + '</title><style>' + css + '</style></head><body>' +
       '<div class="page"><div class="frame">' +
       '<span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>' +
       '<div class="inner">' +
@@ -241,10 +281,91 @@
       '</div>' +
       (agency ? '<div class="foot">Presented by ' + esc(agency) + '</div>' : '') +
       '</div></div></div></body></html>';
-    var w = window.open('', '_blank');
-    if (!w) { alert('Please allow pop-ups to open the certificate.'); return; }
-    w.document.open(); w.document.write(html); w.document.close();
-    try { w.focus(); } catch (e) {}
+    showCertificate(html, name);
+  }
+
+  /**
+   * Show a certificate over the page, in an iframe.
+   *
+   * Not a popup: mobile blocks those by default, and when one did open, window.close()
+   * is routinely refused inside a WebView — which is what the phone apps run — leaving
+   * a certificate on screen with no way back. The Close button here is part of THIS
+   * document, so it cannot be refused.
+   *
+   * The iframe is what makes it safe to put print-styled markup inside the app: the
+   * certificate keeps its own document and cannot be reached by the portal's stylesheets,
+   * which carry around 1,350 !important rules and would otherwise repaint it.
+   */
+  function showCertificate(html, name) {
+    var old = document.getElementById('ktCertOverlay');
+    if (old) { old.remove(); }
+
+    var ov = document.createElement('div');
+    ov.id = 'ktCertOverlay';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-label', 'Certificate for ' + (name || ''));
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.72);'
+      + 'display:flex;flex-direction:column;';
+
+    var bar = document.createElement('div');
+    bar.style.cssText = 'flex:0 0 auto;display:flex;gap:8px;justify-content:flex-end;align-items:center;'
+      + 'padding:10px 12px;background:#0F172A;'
+      /* The phone apps draw under the status bar; without this the buttons sit beneath it. */
+      + 'padding-top:calc(10px + var(--kt-safe-top, env(safe-area-inset-top,0px)));';
+
+    var title = document.createElement('div');
+    title.style.cssText = 'flex:1;min-width:0;color:#fff;font:600 13px/1.3 system-ui,sans-serif;'
+      + 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    title.textContent = name ? ('Certificate — ' + name) : 'Certificate';
+    bar.appendChild(title);
+
+    function mkBtn(label, bg, fg) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      // 34px: tappable without being one of the oversized controls flagged before.
+      b.style.cssText = 'appearance:none;border:0;border-radius:8px;padding:0 14px;height:34px;'
+        + 'font:700 13px system-ui,sans-serif;cursor:pointer;flex:0 0 auto;background:' + bg + ';color:' + fg + ';';
+      return b;
+    }
+    var printBtn = mkBtn('🖨️ Print', '#B0891F', '#fff');
+    var closeBtn = mkBtn('✕ Close', '#fff', '#0F172A');
+    bar.appendChild(printBtn);
+    bar.appendChild(closeBtn);
+
+    var frame = document.createElement('iframe');
+    frame.title = 'Certificate';
+    frame.style.cssText = 'flex:1 1 auto;width:100%;border:0;background:#fff;display:block;';
+
+    ov.appendChild(bar);
+    ov.appendChild(frame);
+    document.body.appendChild(ov);
+    // The page behind must not scroll under the overlay on touch.
+    var prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    var doc = frame.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+
+    function close() {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('keydown', onKey, true);
+      ov.remove();
+    }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } }
+
+    closeBtn.addEventListener('click', close);
+    document.addEventListener('keydown', onKey, true);
+    printBtn.addEventListener('click', function () {
+      /* Print the IFRAME, not the page — otherwise the portal behind it comes out too.
+         focus() first: Safari prints the top document if the frame is not focused. */
+      try {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+      } catch (e) {
+        try { window.print(); } catch (e2) {}
+      }
+    });
   }
 
   /* ═══════════ REGISTER ═══════════ */

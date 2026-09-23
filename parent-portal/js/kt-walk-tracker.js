@@ -64,7 +64,7 @@
     var s = document.createElement('style'); s.id = 'ktw-css';
     s.textContent =
       '@keyframes ktwPulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}70%{box-shadow:0 0 0 10px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}' +
-      '#ktw-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(78px + env(safe-area-inset-bottom,0px));z-index:99998;display:flex;align-items:center;gap:11px;padding:8px 8px 8px 14px;border-radius:999px;background:rgba(15,23,42,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.35);color:#fff;font-size:13px;font-weight:700;max-width:94vw;}' +
+      '#ktw-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(78px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));z-index:99998;display:flex;align-items:center;gap:11px;padding:8px 8px 8px 14px;border-radius:999px;background:rgba(15,23,42,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.35);color:#fff;font-size:13px;font-weight:700;max-width:94vw;}' +
       '#ktw-pill .ktw-live{display:flex;align-items:center;gap:7px;white-space:nowrap;}' +
       '#ktw-pill .ktw-live b{width:9px;height:9px;border-radius:50%;background:#34D399;animation:ktwPulse 1.7s infinite;}' +
       '#ktw-pill .ktw-sub{opacity:.72;font-weight:600;font-size:11.5px;}' +
@@ -461,7 +461,7 @@
     Api.get('/parent/active-walks').then(function (r) {
       var walks = (r && r.walks) || [], host = document.getElementById('ktw-parent-banner');
       if (!walks.length) { if (host) host.remove(); return; }
-      if (!host) { host = document.createElement('div'); host.id = 'ktw-parent-banner'; host.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));z-index:99990;display:flex;flex-direction:column;gap:8px;pointer-events:none;'; document.body.appendChild(host); }
+      if (!host) { host = document.createElement('div'); host.id = 'ktw-parent-banner'; host.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(8px + var(--kt-safe-top, env(safe-area-inset-top,0px)));z-index:99990;display:flex;flex-direction:column;gap:8px;pointer-events:none;'; document.body.appendChild(host); }
       host.innerHTML = walks.map(function (w) {
         return '<button data-trip="' + w.trip_id + '" data-title="' + esc((w.child_name || 'Your child') + ' — ' + (w.title || 'walk')) + '" style="pointer-events:auto;text-align:left;background:linear-gradient(135deg,#065F46,#0E9E6E);color:#fff;border:0;border-radius:14px;padding:11px 14px;box-shadow:0 8px 22px rgba(6,95,70,.32);display:flex;align-items:center;gap:11px;cursor:pointer;">' +
           '<span style="font-size:24px;">🚶</span><span style="flex:1;min-width:0;"><span style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85;">Live walk in progress</span>' +

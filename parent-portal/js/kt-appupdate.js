@@ -35,7 +35,7 @@
     if (document.getElementById('kt-appupdate')) return;
     var bar = document.createElement('div');
     bar.id = 'kt-appupdate';
-    bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:13000;'
+    bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 12px);z-index:13000;'
       + 'background:#0E7C90;color:#fff;border-radius:14px;padding:13px 15px;display:flex;align-items:center;gap:12px;'
       + 'box-shadow:0 14px 34px -12px rgba(0,0,0,.5);font-family:system-ui,-apple-system,sans-serif;animation:kt-appup-in .35s ease both;';
     var txt = document.createElement('div'); txt.style.cssText = 'flex:1;min-width:0;';
