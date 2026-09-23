@@ -394,6 +394,145 @@
     return true;
   };
 
+  /**
+   * TRANSCRIBE A RECORD THAT ARRIVED BARE.
+   *
+   * Same ticklist as the uploader, against a document that is already on file, so
+   * nobody has to re-upload the card just to attach what it says. Pre-ticked from
+   * what the uploader claimed: their ticks are a reading to check, which is faster
+   * than starting from a blank list, and every one still has to be confirmed here
+   * before it becomes a dose.
+   */
+  KT.immunAddDetails = function (opts) {
+    opts = opts || {};
+    var child = opts.child;
+    var r = opts.record;
+    if (!child || !r) { return false; }
+    var M = window.KT && KT.Shell && KT.Shell.Modal;
+    if (!M) { return; }
+
+    var claimed = {};
+    (r.covers_claimed || []).forEach(function (c) {
+      claimed[String(c.vaccine || '').toLowerCase() + '|' + String(c.dose_label || '').toLowerCase()] =
+        c.administered_on || '';
+    });
+
+    var box = document.createElement('div');
+    box.innerHTML =
+      '<div style="font-size:13px;color:#475569;margin-bottom:10px;">'
+      +   'Tick what this record shows. Each one becomes a recorded dose against '
+      +   esc(childName(child)) + '.'
+      + '</div>'
+      + '<div class="dt-list" style="border:1px solid #E2E8F0;border-radius:10px;max-height:320px;overflow:auto;"></div>'
+      + '<div class="dt-note" style="font-size:12px;color:#64748B;margin-top:8px;"></div>'
+      + '<div class="dt-err" style="color:#B91C1C;font-size:12.5px;margin-top:8px;"></div>';
+
+    var listEl2 = box.querySelector('.dt-list');
+    var noteEl2 = box.querySelector('.dt-note');
+    listEl2.innerHTML = '<div style="padding:14px;color:#94A3B8;font-size:13px;">Working out what is due\u2026</div>';
+
+    KT.Api.get('/immunization/child/' + child.id + '/status').then(function (d) {
+      var items = (d && d.items) || [];
+      listEl2.innerHTML = '';
+      if (!items.length) {
+        listEl2.innerHTML = '<div style="padding:14px;color:#64748B;font-size:13px;">'
+          + 'No immunisation schedule is set up for this agency, so there is nothing to tick.</div>';
+        return;
+      }
+      var pre = 0;
+      items.forEach(function (i, idx) {
+        var already = (i.status === 'done' || i.status === 'exempt');
+        var key = String(i.vaccine || '').toLowerCase() + '|' + String(i.dose_label || '').toLowerCase();
+        var wasClaimed = Object.prototype.hasOwnProperty.call(claimed, key);
+        if (wasClaimed && !already) { pre++; }
+        var row = document.createElement('label');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 11px;'
+          + 'border-top:' + (idx ? '1px solid #F1F5F9' : 'none') + ';font-size:13px;'
+          + (already ? 'opacity:0.55;' : 'cursor:pointer;');
+        row.innerHTML =
+          '<input type="checkbox" class="dt-tick"' + (already ? ' checked disabled' : (wasClaimed ? ' checked' : '')) + ' '
+          +   'data-vaccine="' + esc(i.vaccine) + '" data-dose="' + esc(i.dose_label || '') + '" '
+          +   'style="width:17px;height:17px;flex:none;">'
+          + '<span style="flex:1;min-width:0;">'
+          +   '<span style="font-weight:600;color:#0F172A;">' + esc(i.vaccine) + '</span> '
+          +   '<span style="color:#64748B;">' + esc(i.dose_label || '') + '</span>'
+          +   (already ? '<span style="color:#166534;font-size:12px;"> \u00b7 already on file</span>'
+                       : (wasClaimed ? '<span style="color:#92400E;font-size:12px;"> \u00b7 uploader ticked this</span>' : ''))
+          + '</span>'
+          + '<input type="date" class="dt-date" ' + (already || !wasClaimed ? 'disabled ' : '')
+          +   'value="' + esc(wasClaimed ? (claimed[key] || '') : '') + '" '
+          +   'style="flex:none;width:142px;padding:4px 7px;border:1px solid #CBD5E1;'
+          +   'border-radius:7px;font-size:12.5px;">';
+        var tick = row.querySelector('.dt-tick');
+        var date = row.querySelector('.dt-date');
+        if (!already) {
+          tick.addEventListener('change', function () {
+            date.disabled = !tick.checked;
+            if (!tick.checked) { date.value = ''; }
+          });
+        }
+        listEl2.appendChild(row);
+      });
+      noteEl2.textContent = pre
+        ? pre + ' pre-ticked from what the uploader said the card shows \u2014 check each one.'
+        : 'Nothing was claimed on upload, so start from the card itself.';
+    }).catch(function () {
+      listEl2.innerHTML = '<div style="padding:14px;color:#9A3412;font-size:13px;">'
+        + 'The schedule could not be loaded. Try again in a moment.</div>';
+    });
+
+    M.open({
+      /* `body`, not `content`, and no `subtitle` — the dialog renders a string or a
+         Node from `body` and ignores anything else, so a wrong key opens a titled
+         dialog with two buttons and NOTHING between them. */
+      title: 'Add the details — ' + (r.title || 'Immunization record'),
+      body: box,
+      large: true,
+      actions: [
+        { label: 'Cancel' },
+        {
+          label: 'Record doses',
+          primary: true,
+          busyLabel: 'Recording\u2026',
+          handler: function () {
+            var err = box.querySelector('.dt-err');
+            err.textContent = '';
+            var doses = [];
+            var ticks = box.querySelectorAll('.dt-tick');
+            for (var k = 0; k < ticks.length; k++) {
+              var t = ticks[k];
+              if (t.disabled || !t.checked) { continue; }
+              doses.push({
+                vaccine: t.getAttribute('data-vaccine'),
+                dose_label: t.getAttribute('data-dose') || null,
+                administered_on: (t.parentNode.querySelector('.dt-date') || {}).value || null,
+              });
+            }
+            if (!doses.length) { err.textContent = 'Tick at least one dose, or cancel.'; return false; }
+
+            return KT.Api.post('/director/children/' + child.id
+                  + '/immunization-records/' + r.id + '/details', { doses: doses })
+              .then(function (res) {
+                try {
+                  if (window.Dom && Dom.toast) { Dom.toast((res && res.message) || 'Doses recorded.', 'success'); }
+                } catch (e) {}
+                /* Re-read rather than patch: the server decides what was actually
+                   written (a dose already on file is skipped, not duplicated). The
+                   caller owns that refresh - this function is shared by the child's
+                   panel and the agency-wide records table, which reload differently. */
+                try { if (opts.onDone) { opts.onDone(res); } } catch (e) {}
+              })
+              .catch(function (e) {
+                err.textContent = (e && e.message) || 'Could not record those doses.';
+                return false;
+              });
+          },
+        },
+      ],
+    });
+    return true;
+  };
+
   KT.immunPanel = function (host, child, opts) {
     opts = opts || {};
     var scope = opts.scope === 'director' ? 'director' : 'parent';
@@ -710,7 +849,7 @@
             fill.textContent = 'Add details';
             fill.style.cssText = 'padding:6px 12px;border-radius:8px;border:1px solid #1F6FB2;'
               + 'background:#1F6FB2;font-size:12.5px;font-weight:700;cursor:pointer;color:#fff;';
-            fill.addEventListener('click', function () { openDetailsEditor(r, fill); });
+            fill.addEventListener('click', function () { openDetailsEditor(r); });
             row.appendChild(fill);
           }
 
@@ -721,137 +860,14 @@
       if (canUpload) { recEl.appendChild(uploader()); }
     }
 
-    /**
-     * TRANSCRIBE A RECORD THAT ARRIVED BARE.
-     *
-     * Same ticklist as the uploader, against a document that is already on file, so
-     * nobody has to re-upload the card just to attach what it says. Pre-ticked from
-     * what the uploader claimed: their ticks are a reading to check, which is faster
-     * than starting from a blank list, and every one still has to be confirmed here
-     * before it becomes a dose.
-     */
-    function openDetailsEditor(r, btn) {
-      var M = window.KT && KT.Shell && KT.Shell.Modal;
-      if (!M) { return; }
-
-      var claimed = {};
-      (r.covers_claimed || []).forEach(function (c) {
-        claimed[String(c.vaccine || '').toLowerCase() + '|' + String(c.dose_label || '').toLowerCase()] =
-          c.administered_on || '';
-      });
-
-      var box = document.createElement('div');
-      box.innerHTML =
-        '<div style="font-size:13px;color:#475569;margin-bottom:10px;">'
-        +   'Tick what this record shows. Each one becomes a recorded dose against '
-        +   esc(childName(child)) + '.'
-        + '</div>'
-        + '<div class="dt-list" style="border:1px solid #E2E8F0;border-radius:10px;max-height:320px;overflow:auto;"></div>'
-        + '<div class="dt-note" style="font-size:12px;color:#64748B;margin-top:8px;"></div>'
-        + '<div class="dt-err" style="color:#B91C1C;font-size:12.5px;margin-top:8px;"></div>';
-
-      var listEl2 = box.querySelector('.dt-list');
-      var noteEl2 = box.querySelector('.dt-note');
-      listEl2.innerHTML = '<div style="padding:14px;color:#94A3B8;font-size:13px;">Working out what is due\u2026</div>';
-
-      KT.Api.get('/immunization/child/' + child.id + '/status').then(function (d) {
-        var items = (d && d.items) || [];
-        listEl2.innerHTML = '';
-        if (!items.length) {
-          listEl2.innerHTML = '<div style="padding:14px;color:#64748B;font-size:13px;">'
-            + 'No immunisation schedule is set up for this agency, so there is nothing to tick.</div>';
-          return;
-        }
-        var pre = 0;
-        items.forEach(function (i, idx) {
-          var already = (i.status === 'done' || i.status === 'exempt');
-          var key = String(i.vaccine || '').toLowerCase() + '|' + String(i.dose_label || '').toLowerCase();
-          var wasClaimed = Object.prototype.hasOwnProperty.call(claimed, key);
-          if (wasClaimed && !already) { pre++; }
-          var row = document.createElement('label');
-          row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 11px;'
-            + 'border-top:' + (idx ? '1px solid #F1F5F9' : 'none') + ';font-size:13px;'
-            + (already ? 'opacity:0.55;' : 'cursor:pointer;');
-          row.innerHTML =
-            '<input type="checkbox" class="dt-tick"' + (already ? ' checked disabled' : (wasClaimed ? ' checked' : '')) + ' '
-            +   'data-vaccine="' + esc(i.vaccine) + '" data-dose="' + esc(i.dose_label || '') + '" '
-            +   'style="width:17px;height:17px;flex:none;">'
-            + '<span style="flex:1;min-width:0;">'
-            +   '<span style="font-weight:600;color:#0F172A;">' + esc(i.vaccine) + '</span> '
-            +   '<span style="color:#64748B;">' + esc(i.dose_label || '') + '</span>'
-            +   (already ? '<span style="color:#166534;font-size:12px;"> \u00b7 already on file</span>'
-                         : (wasClaimed ? '<span style="color:#92400E;font-size:12px;"> \u00b7 uploader ticked this</span>' : ''))
-            + '</span>'
-            + '<input type="date" class="dt-date" ' + (already || !wasClaimed ? 'disabled ' : '')
-            +   'value="' + esc(wasClaimed ? (claimed[key] || '') : '') + '" '
-            +   'style="flex:none;width:142px;padding:4px 7px;border:1px solid #CBD5E1;'
-            +   'border-radius:7px;font-size:12.5px;">';
-          var tick = row.querySelector('.dt-tick');
-          var date = row.querySelector('.dt-date');
-          if (!already) {
-            tick.addEventListener('change', function () {
-              date.disabled = !tick.checked;
-              if (!tick.checked) { date.value = ''; }
-            });
-          }
-          listEl2.appendChild(row);
-        });
-        noteEl2.textContent = pre
-          ? pre + ' pre-ticked from what the uploader said the card shows \u2014 check each one.'
-          : 'Nothing was claimed on upload, so start from the card itself.';
-      }).catch(function () {
-        listEl2.innerHTML = '<div style="padding:14px;color:#9A3412;font-size:13px;">'
-          + 'The schedule could not be loaded. Try again in a moment.</div>';
-      });
-
-      M.open({
-        /* `body`, not `content`, and no `subtitle` — the dialog renders a string or a
-           Node from `body` and ignores anything else, so a wrong key opens a titled
-           dialog with two buttons and NOTHING between them. */
-        title: 'Add the details — ' + (r.title || 'Immunization record'),
-        body: box,
-        large: true,
-        actions: [
-          { label: 'Cancel' },
-          {
-            label: 'Record doses',
-            primary: true,
-            busyLabel: 'Recording\u2026',
-            handler: function () {
-              var err = box.querySelector('.dt-err');
-              err.textContent = '';
-              var doses = [];
-              var ticks = box.querySelectorAll('.dt-tick');
-              for (var k = 0; k < ticks.length; k++) {
-                var t = ticks[k];
-                if (t.disabled || !t.checked) { continue; }
-                doses.push({
-                  vaccine: t.getAttribute('data-vaccine'),
-                  dose_label: t.getAttribute('data-dose') || null,
-                  administered_on: (t.parentNode.querySelector('.dt-date') || {}).value || null,
-                });
-              }
-              if (!doses.length) { err.textContent = 'Tick at least one dose, or cancel.'; return false; }
-
-              return KT.Api.post('/director/children/' + child.id
-                    + '/immunization-records/' + r.id + '/details', { doses: doses })
-                .then(function (res) {
-                  try {
-                    if (window.Dom && Dom.toast) { Dom.toast((res && res.message) || 'Doses recorded.', 'success'); }
-                  } catch (e) {}
-                  // Re-read rather than patch: the server decides what was actually
-                  // written (a dose already on file is skipped, not duplicated).
-                  loadRecords();
-                  loadDue();
-                  try { if (opts.onChange) { opts.onChange(); } } catch (e) {}
-                })
-                .catch(function (e) {
-                  err.textContent = (e && e.message) || 'Could not record those doses.';
-                  return false;
-                });
-            },
-          },
-        ],
+    /* ONE implementation, called from two places: this panel and the agency-wide
+       records table on the Immunizations screen. A second copy would be two
+       implementations of one clinical rule. */
+    function openDetailsEditor(r) {
+      return KT.immunAddDetails({
+        child: child,
+        record: r,
+        onDone: function () { loadRecords(); loadDue(); try { if (opts.onChange) { opts.onChange(); } } catch (e) {} },
       });
     }
 

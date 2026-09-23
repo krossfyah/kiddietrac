@@ -481,19 +481,61 @@
                   '<th style="padding:12px;"></th>' +
                 '</tr></thead><tbody>' +
                 rows.map(function (r) {
+                  /* The same question the child's own panel answers on every row: is this
+                     a card that has been READ, or only one that arrived? A document on
+                     file looks like a job finished. */
+                  var needsDetails = !(r.doses && r.doses.length);
                   return '<tr style="border-top:1px solid #E5E7EB;">' +
                     '<td style="padding:12px;font-weight:600;">' + esc(r.child_name || '—') + '</td>' +
                     '<td style="padding:12px;">' + esc(r.title || 'Immunization record') +
-                      '<div style="color:#94A3B8;font-size:12px;">' + esc(fmtSize(r.file_size)) + '</div></td>' +
+                      '<div style="color:#94A3B8;font-size:12px;">' + esc(fmtSize(r.file_size)) + '</div>' +
+                      (needsDetails
+                        ? '<div style="margin-top:4px;"><span style="background:#FEF3C7;border:1px solid #FDE68A;' +
+                            'border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;color:#92400E;">' +
+                            'Details pending</span></div>'
+                        : '<div style="margin-top:4px;color:#166534;font-size:12px;">✓ ' +
+                            r.doses.map(function (x) {
+                              return esc(String(x.vaccine || '') + ' ' + String(x.dose_label || '')).trim();
+                            }).join(' · ') + '</div>') +
+                    '</td>' +
                     '<td style="padding:12px;">' + esc(r.uploaded_by || '—') +
                       '<div><span style="display:inline-block;margin-top:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:' +
                       (r.uploaded_by_parent ? '#E0F2FE;color:#075985' : '#F1F5F9;color:#475569') + ';">' +
                       (r.uploaded_by_parent ? 'Parent' : 'Staff') + '</span></div></td>' +
                     '<td style="padding:12px;white-space:nowrap;">' + esc(fmtStamp(r.uploaded_at)) + '</td>' +
-                    '<td style="padding:12px;text-align:right;"><button type="button" data-open="' + r.id +
-                      '" data-child="' + r.child_id + '" data-print="' + esc(r.print_url || '') + '" ' +
-                      'style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;' +
-                      'background:white;font-size:12.5px;font-weight:600;cursor:pointer;">View</button></td>' +
+                    /* data-kt-iconized on each: kt-icon-buttons swaps any short label it
+                       recognises for a glyph, and the kebab item takes its text FROM the
+                       button - so all three read as a bare eye. The flag is that file's
+                       only opt-out. Same reason the panel stamps it on View.
+
+                       PLAIN BUTTONS IN THE LAST CELL, never a hand-rolled menu:
+                       kt-row-actions.js collapses these into the standard kebab on every
+                       render and forwards the click to the original. Drawing our own would
+                       get kebabified too - a kebab inside a kebab. */
+                    '<td style="padding:12px;text-align:right;white-space:nowrap;">' +
+                      '<button type="button" data-kt-iconized="1" data-open="' + r.id +
+                        '" data-child="' + r.child_id + '" data-print="' + esc(r.print_url || '') + '" ' +
+                        'style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;' +
+                        'background:white;font-size:12.5px;font-weight:600;cursor:pointer;">View</button>' +
+                      /* The leading glyph is deliberate: kt-row-actions picks a fallback
+                         icon from the label, and its view/open/DETAILS rule is tested
+                         BEFORE its add rule - so 'Add details' came out as an eye sitting
+                         next to the real View. A label carrying its own emoji wins over the
+                         fallback, which is cheaper than re-ordering a shared primitive that
+                         every other screen depends on.
+
+                         Only where nothing has been read off the card yet - the whole point
+                         of the action. Once it is transcribed, changing a dose is a different
+                         job and belongs on the dose, in the Doses tab. */
+                      (needsDetails
+                        ? '<button type="button" data-kt-iconized="1" data-details="' + r.id + '" data-child="' + r.child_id + '" ' +
+                            'style="margin-left:6px;padding:6px 12px;border-radius:8px;border:1px solid #1F6FB2;' +
+                            'background:#1F6FB2;color:#fff;font-size:12.5px;font-weight:700;cursor:pointer;">➕ Add details</button>'
+                        : '') +
+                      '<button type="button" data-kt-iconized="1" data-childrec="' + r.child_id + '" ' +
+                        'style="margin-left:6px;padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;' +
+                        'background:white;font-size:12.5px;font-weight:600;cursor:pointer;">Open child record</button>' +
+                    '</td>' +
                   '</tr>';
                 }).join('') +
               '</tbody></table></div></div>') +
@@ -502,11 +544,36 @@
     wireImmTabs(container);
     wireImmUpload(container);
     container.querySelectorAll('[data-open]').forEach(function (b) {
-      b.addEventListener('click', function () {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
         openStaffRecord(b.getAttribute('data-child'), b.getAttribute('data-open'),
           b.getAttribute('data-print') || null);
       });
     });
+    container.querySelectorAll('[data-details]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var id = parseInt(b.getAttribute('data-details'), 10);
+        var childId = parseInt(b.getAttribute('data-child'), 10);
+        var rec = (rows || []).filter(function (x) { return Number(x.id) === id; })[0];
+        if (!rec || !(window.KT && KT.immunAddDetails)) { return; }
+        KT.immunAddDetails({
+          child: { id: childId, name: rec.child_name, first_name: rec.child_name },
+          record: rec,
+          // Re-read: the server decides what was actually written.
+          onDone: function () { renderRecords(container); },
+        });
+      });
+    });
+    container.querySelectorAll('[data-childrec]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.stopPropagation();
+        location.hash = '#child-detail?id=' + b.getAttribute('data-childrec');
+      });
+    });
+    /* The rows were built after this screen's render returned, so the sweep that
+       collapses them into a kebab has already run. Nudge it. */
+    if (window.KT && KT.sweepRowActions) { setTimeout(KT.sweepRowActions, 0); }
   }
 
   /* Filing a record on a child's behalf. A parent uploading is the common path, but
