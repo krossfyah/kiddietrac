@@ -29,7 +29,7 @@
         tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
         values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = "kt-20260917brand3";
+const CACHE = "kt-20260923imm1";
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -72,9 +72,31 @@ self.addEventListener('activate', (e) => {
   })());
 });
 
+/* WHY THERE IS NO MEDIA CACHE HERE. (2026-09-21)
+
+   Tried, measured, removed. Signed media lives under /api/, so the blanket skip below
+   was sending every avatar to the network — which looked like the obvious thing to fix.
+   It is not worth doing:
+
+   - An <img> without crossorigin fetches no-cors, so what a service worker gets back is
+     an OPAQUE response. Chrome pads opaque entries in storage accounting (~7 MB each
+     regardless of real size), so a cache of 120 faces can be accounted at hundreds of
+     megabytes and push the APK over quota — evicting the versioned-asset cache above,
+     which is the thing that actually makes launches fast.
+   - It buys almost nothing. The endpoint now sends max-age=14400 with an ETag, and the
+     signed URL is stable for six hours, so a repeat view is already served by the HTTP
+     cache with ZERO bytes transferred. Measured on a live roster.
+   - The real fix was upstream: avatars were being served as the original camera file
+     (median 72 KB, largest 1.5 MB) and are now 384px thumbnails — 88% fewer bytes, and
+     a fraction of the decode.
+
+   If this is ever revisited, the way to do it without the quota risk is crossorigin
+   ="anonymous" on the avatar <img> tags (the endpoint already sends
+   Access-Control-Allow-Origin: *), which makes the response CORS rather than opaque. */
+
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  if (e.request.url.includes('/api/')) return; // Don't cache API
+  if (e.request.url.includes('/api/')) return; // Don't cache the API
 
   const accept = e.request.headers.get('accept') || '';
   const isDoc = e.request.mode === 'navigate' || accept.includes('text/html');

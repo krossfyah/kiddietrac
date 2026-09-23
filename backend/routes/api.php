@@ -73,6 +73,76 @@ Route::prefix('v1')->group(function () {
 
     // v22p84: throttle login to blunt brute-force / credential-stuffing
     // (10 attempts/min per IP+route). Legitimate sign-ins never approach this.
+    /* WHAT THE SERVER NEVER SEES (2026-09-18).
+
+       A 508 "Resource Limit Is Reached" and a 421 "Misdirected Request" are produced by
+       the web server before PHP is started, so nothing in Laravel can log them - and
+       between them they account for 59,845 responses this month against 71 PHP-level
+       500s. They are also the ones that reach the user as "Network error - check your
+       connection", because an error page emitted before PHP runs carries no CORS header,
+       so the browser refuses the response to JavaScript and fetch() rejects outright.
+
+       The browser is the only witness. This is where it testifies.
+
+       Deliberately forgiving about auth: a portal that has just been handed a 508 may be
+       mid-session, between tokens, or on a page that never had one, and a report refused
+       for want of a bearer token is a report we do not get. Rate-limited instead, and it
+       records only what it is told plus what the request itself reveals. */
+    Route::post('/diag/client-error', function (\Illuminate\Http\Request $r) {
+        $d = $r->validate([
+            'status' => 'required|integer|min:0|max:599',
+            'path'   => 'required|string|max:200',
+            'method' => 'nullable|string|max:10',
+            'kind'   => 'nullable|string|max:40',
+            'ms'     => 'nullable|integer|min:0|max:600000',
+        ]);
+
+        $userId = null;
+        $agencyId = null;
+        try {
+            $u = $r->user();
+            if ($u) { $userId = (int) $u->id; }
+        } catch (\Throwable $e) {}
+        /* The client sends the agency it was scoped to. Unstamped rows are invisible in
+           every agency, which for an error log means written and never read. */
+        $hdr = (int) $r->header('X-Active-Agency-Id');
+        if ($hdr > 0) { $agencyId = $hdr; }
+        if (! $agencyId && $userId) {
+            try { $agencyId = \App\Support\AuditScope::resolve($userId, $r); } catch (\Throwable $e) {}
+        }
+
+        $status = (int) $d['status'];
+        $what = $status === 0
+            ? 'The request never completed (no response reached the browser)'
+            : 'HTTP ' . $status
+                . ($status === 508 ? ' Resource Limit Is Reached - the hosting account was at its concurrency limit' : '')
+                . ($status === 421 ? ' Misdirected Request' : '');
+
+        try {
+            \App\Support\Audit::write([
+                'user_id'     => $userId,
+                'agency_id'   => $agencyId,
+                'action'      => 'error.client_request',
+                'entity_type' => 'request',
+                'entity_id'   => null,
+                'payload'     => json_encode([
+                    'summary' => 'The portal could not load ' . ($d['method'] ?? 'GET') . ' /'
+                        . ltrim($d['path'], '/') . ': ' . $what . '.',
+                    'status'  => $status,
+                    'path'    => $d['path'],
+                    'method'  => $d['method'] ?? 'GET',
+                    'kind'    => $d['kind'] ?? null,
+                    'ms'      => $d['ms'] ?? null,
+                ]),
+                'ip_address'  => $r->ip(),
+                'user_agent'  => mb_substr((string) $r->userAgent(), 0, 500),
+                'created_at'  => now(),
+            ]);
+        } catch (\Throwable $e) { /* never break the error sink */ }
+
+        return response()->json(['ok' => true]);
+    })->middleware('throttle:60,1');
+
     // Public crash-report sink — the Android app POSTs its last captured native
     // crash here on next launch so we can review it server-side (storage/app/crash-reports.log).
     Route::post('/diag/crash', function (\Illuminate\Http\Request $r) {
@@ -208,6 +278,33 @@ Route::prefix('v1')->group(function () {
                 'ok' => true,
                 'ticket_id' => null,
                 'note' => 'Logged. No ticket filed: the browser withheld the detail, so there is nothing actionable.',
+            ]);
+        }
+
+        /* A REPORT THAT SAYS NOTHING IS NOT A CRASH (ticket #86, 2026-09-21).
+
+           #86 read, in full: "Crash: Unknown error. Who: unknown. Screen: ? URL: ?
+           Last action: not captured. App: ? Viewport: ? Device: OS: Trace: (empty)."
+           Every field a question mark, and nothing to work on.
+
+           It came from 202.61.157.28 at 08:08 on 20 September — the first request of the
+           probe that spent the next twenty minutes guessing passwords. This endpoint is
+           public by necessity (a crashed client has no session to prove), which means
+           anyone can post an empty body and file a technical ticket. Left alone, that is
+           a way to bury a real crash queue under junk, and it is free to do.
+
+           So: no trace, no screen, no URL, and nobody signed in — log it and stop.
+           LOGGED, never silently dropped, because a flood of these is itself worth
+           seeing; it is the same rule the opaque-error guard above already follows. */
+        $hasNothing = trim((string) $data['trace']) === ''
+            && trim((string) $data['screen']) === ''
+            && trim((string) $data['url']) === ''
+            && ! $claimedUser;
+        if ($hasNothing) {
+            return response()->json([
+                'ok' => true,
+                'ticket_id' => null,
+                'note' => 'Logged. No ticket filed: the report carried no error, screen or URL.',
             ]);
         }
 
@@ -366,6 +463,12 @@ Route::prefix('v1')->group(function () {
     // Public: lets the login page show a scheduled-maintenance notice.
     Route::get('/maintenance/status', [\App\Http\Controllers\Api\MaintenanceController::class, 'show']);
     Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+/* PASSKEYS — public half. Sign-in names no account: the credential does, which is what
+   eight accounts sharing three email addresses actually needs. Throttled like the other
+   unauthenticated auth routes, because an open verify endpoint is a guessing endpoint. */
+Route::post('/auth/passkey/options', [\App\Http\Controllers\Api\PasskeyController::class, 'loginOptions'])->middleware('throttle:30,1');
+Route::post('/auth/passkey/verify',  [\App\Http\Controllers\Api\PasskeyController::class, 'loginVerify'])->middleware('throttle:30,1');
+
     Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
     Route::post('/auth/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
     Route::post('/auth/set-password', [AuthController::class, 'setPasswordFromToken'])->middleware('throttle:10,1');
@@ -477,6 +580,20 @@ Route::get ('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFor
 Route::post('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFormController::class, 'submit'])->name('forms.fill.submit')->middleware('signed')->whereNumber('form')->whereNumber('u');
 Route::post('/forms/fill/{form}/{u}/draft', [\App\Http\Controllers\Api\SignedFormController::class, 'draft'])->name('forms.fill.draft')->middleware('signed')->whereNumber('form')->whereNumber('u');
 
+/* THE TEXT-ALERT CONSENT PAGE. No login, because the people least likely to have a
+   working password are exactly the ones who have never set up their account - and this
+   is the question we need to ask everybody. The signature names ONE user and expires, so
+   a forwarded email cannot answer on somebody else's behalf.
+
+   NormalizeEntityQuery runs first for the same reason as the media route above: Blade
+   writes the `&` of a signed query string as `&amp;`, and a mail client that follows the
+   link without decoding it would otherwise get a 403 on a link that cannot be reissued. */
+Route::get ('/sms-consent/{u}', [\App\Http\Controllers\Api\SmsConsentInviteController::class, 'page'])
+    ->name('sms.consent.page')
+    ->middleware([\App\Http\Middleware\NormalizeEntityQuery::class, 'signed'])->whereNumber('u');
+Route::post('/sms-consent/{u}', [\App\Http\Controllers\Api\SmsConsentInviteController::class, 'submit'])
+    ->middleware([\App\Http\Middleware\NormalizeEntityQuery::class, 'signed'])->whereNumber('u');
+
 Route::get ('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::class, 'actPage'])->name('timeoff.act')->middleware('signed');
 Route::post('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::class, 'actSubmit'])->middleware('signed');
 
@@ -526,6 +643,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/social-config', [\App\Http\Controllers\Api\SocialAuthController::class, 'configSave']);
             Route::get('/security-alerts', [\App\Http\Controllers\Api\SecurityController::class, 'alerts']);
             Route::post('/security-alerts/{id}/resolve', [\App\Http\Controllers\Api\SecurityController::class, 'resolveAlert'])->where('id', '[0-9]+');
+            /* Acknowledge everything open, then clear what has been acknowledged. Two
+               separate acts on purpose - see clearAlerts(): an unread security warning
+               must never be one click from gone. */
+            Route::post('/security-alerts/resolve-all', [\App\Http\Controllers\Api\SecurityController::class, 'resolveAllAlerts']);
+            Route::post('/security-alerts/clear',       [\App\Http\Controllers\Api\SecurityController::class, 'clearAlerts']);
             Route::get('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'listAgencies']);
             Route::post('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'createAgency']);
             Route::patch('/agencies/{agency}', [\App\Http\Controllers\Api\PlatformController::class, 'updateAgency']);
@@ -671,7 +793,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             $docs = \Illuminate\Support\Facades\DB::table('documents')
                 ->where('scope_type', 'user')->where('scope_id', $request->user()->id)
                 ->orderByDesc('created_at')
-                ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at']);
+                ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at', 'notes']);
             return response()->json(['documents' => $docs]);
         });
         // Stream one of the caller's own documents through the API so the mobile
@@ -729,6 +851,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            family that splits its week across providers. */
         Route::get ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'show']);
         Route::put ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'update']);
+        /* PASSKEYS — signed-in half: enrol, list, remove. Beside the biometric routes
+           on purpose; the two are neighbours in the UI and in what they are for. */
+        Route::get   ('/passkeys',                  [\App\Http\Controllers\Api\PasskeyController::class, 'index']);
+        Route::post  ('/passkeys/register/options', [\App\Http\Controllers\Api\PasskeyController::class, 'registerOptions']);
+        Route::post  ('/passkeys/register/verify',  [\App\Http\Controllers\Api\PasskeyController::class, 'registerVerify']);
+        Route::delete('/passkeys/{id}',             [\App\Http\Controllers\Api\PasskeyController::class, 'destroy'])->whereNumber('id');
         Route::post('/me/biometric-enrolled', [\App\Http\Controllers\Api\BiometricController::class, 'enrolled']);
         Route::post('/me/biometric-revoked',  [\App\Http\Controllers\Api\BiometricController::class, 'revoked']);
         Route::get ('/admin/biometric-report', [\App\Http\Controllers\Api\BiometricController::class, 'report']);
@@ -810,6 +938,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/admin/managed-forms/signoffs',           [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffs']);
         // Send a completed copy to the address configured on its form (see emailSignoff).
         Route::post  ('/admin/managed-forms/signoffs/{id}/email', [\App\Http\Controllers\Api\ManagedFormController::class, 'emailSignoff'])->where('id', '[0-9]+');
+        /* Review + counter-sign a form the parent already completed, and return the
+           finished document to BOTH sides. Admin-only; the controller re-checks and
+           scopes to the active agency. */
+        Route::post  ('/admin/managed-forms/signoffs/{id}/countersign', [\App\Http\Controllers\Api\ManagedFormController::class, 'countersign'])->where('id', '[0-9]+');
+        Route::post  ('/admin/managed-forms/signoffs/sync-documents',   [\App\Http\Controllers\Api\ManagedFormController::class, 'syncDocuments']);
+        Route::post  ('/admin/managed-forms/signoffs/{id}/return',      [\App\Http\Controllers\Api\ManagedFormController::class, 'returnToSigner'])->where('id', '[0-9]+');
         Route::delete('/admin/managed-forms/signoffs/{id}',       [\App\Http\Controllers\Api\ManagedFormController::class, 'deleteSignoff'])->where('id', '[0-9]+');
         Route::get   ('/admin/managed-forms/{id}/signoff/{sid}',  [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffDetail']);
         // What has been sent, for the history table.
@@ -818,6 +952,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/admin/file-requests',                     [\App\Http\Controllers\Api\FileRequestController::class, 'index']);
         Route::post  ('/admin/file-requests',                     [\App\Http\Controllers\Api\FileRequestController::class, 'store']);
         Route::get   ('/admin/file-requests/{id}',                [\App\Http\Controllers\Api\FileRequestController::class, 'show'])->whereNumber('id');
+        /* The signed upload link that was emailed, so staff can reopen or re-share it
+           when a family says they never got it. */
+        Route::get   ('/admin/file-requests/{id}/link',            [\App\Http\Controllers\Api\FileRequestController::class, 'link'])->whereNumber('id');
         Route::post  ('/admin/file-requests/{id}/remind',         [\App\Http\Controllers\Api\FileRequestController::class, 'remind'])->whereNumber('id');
         Route::delete('/admin/file-requests/{id}',                [\App\Http\Controllers\Api\FileRequestController::class, 'destroy'])->whereNumber('id');
         Route::get   ('/admin/file-requests/{id}/files/{doc}/download', [\App\Http\Controllers\Api\FileRequestController::class, 'download'])->whereNumber('id')->whereNumber('doc');
@@ -911,6 +1048,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             Route::get   ('/agency/external-invoices',       [\App\Http\Controllers\Api\InvoiceController::class, 'externalForAgency']);
             Route::patch ('/agency/external-invoices/{id}', [\App\Http\Controllers\Api\InvoiceController::class, 'updateExternalInvoice'])->where('id','[0-9]+');
+            /* Cancel a synced invoice in KiddieTrac's copy. The next sync may restore it;
+               the dialog says so. */
+            Route::post  ('/agency/external-invoices/{id}/void', [\App\Http\Controllers\Api\InvoiceController::class, 'voidExternalInvoice'])->where('id','[0-9]+');
+            /* Cash / EFT that arrived outside the payment rails, against a synced
+               invoice. Partial is normal; the totals are derived from the rows. */
+            Route::post  ('/agency/external-invoices/{id}/payments', [\App\Http\Controllers\Api\InvoiceController::class, 'recordExternalPayment'])->where('id','[0-9]+');
+            /* Who a resend would go to. Shown and editable, never assumed. */
+            Route::get   ('/agency/families/{family}/billing-contacts', [\App\Http\Controllers\Api\InvoiceController::class, 'billingContacts'])->where('family','[0-9]+');
+            /* Service-fee rates, so a dialog can show the fee before charging it. */
+            Route::get   ('/agency/payment-surcharges', [\App\Http\Controllers\Api\InvoiceController::class, 'surchargeRates']);
             // Open ONE synced invoice as STAFF. The /parent/ twin resolves the caller's
             // families through `guardians`, so it 403s for every admin and director —
             // which is what "could not open that invoice" was.
@@ -1194,6 +1341,21 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/invoices/{invoice}/payments', [InvoiceController::class, 'recordPayment']);
             // Cancel an invoice raised in error. Refuses while money is held against it.
             Route::post('/invoices/{invoice}/void', [InvoiceController::class, 'void']);
+            /* Issue a schedule's draft without waiting for the 06:00 cron to reach its
+               month. Draft -> sent only; the same write the cron makes. */
+            Route::post('/invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->where('invoice', '[0-9]+');
+            /* Add or deduct a charge on an existing invoice, with an optional tax rate.
+               Totals are rebuilt from the lines on every change. */
+            Route::post  ('/invoices/{invoice}/lines', [InvoiceController::class, 'addLine'])->where('invoice', '[0-9]+');
+            Route::patch ('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'updateLine'])
+                ->where('invoice', '[0-9]+')->where('line', '[0-9]+');
+            /* The invoice's own description (Accounting's Description column). Notes
+               only - money moves by editing a LINE, never by a free-hand total. */
+            Route::patch ('/invoices/{invoice}/notes', [InvoiceController::class, 'updateNotes'])->where('invoice', '[0-9]+');
+            /* Email a receipt for a payment on this invoice. */
+            Route::post  ('/invoices/{invoice}/receipt', [InvoiceController::class, 'emailReceipt'])->where('invoice', '[0-9]+');
+            Route::delete('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'deleteLine'])
+                ->where('invoice', '[0-9]+')->where('line', '[0-9]+');
 
             Route::get('/incidents', [IncidentController::class, 'index']);
             Route::patch('/incidents/{incident}/review', [IncidentController::class, 'review']);
@@ -1339,6 +1501,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Carry the plan out. Without confirm=true it previews and writes nothing.
         Route::post('/centres/{centre}/offboard', [\App\Http\Controllers\Api\CentreOffboardController::class, 'execute'])->whereNumber('centre');
         Route::delete('/centres/{centre}/permanent', [AdminController::class, 'permanentDeleteCentre']);
+        /* Everything a provider left behind - children with dates, staff, payroll,
+           billing, documents. Read-only, admin-gated inside the controller, and it works
+           for a LIVE provider as well as an archived one: "what has happened here" is the
+           same question either way. (2026-09-21) */
+        Route::get('/centres/{centre}/history', [\App\Http\Controllers\Api\ProviderHistoryController::class, 'show'])->whereNumber('centre');
         Route::post('/centres/{centre}/restore', [AdminController::class, 'restoreCentre']);
         // v22p3.4: per-centre branding logo upload
         Route::post('/centres/{centre}/logo', [AdminController::class, 'uploadCentreLogo']);
@@ -1727,6 +1894,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Feature flag management
     Route::get   ('/admin/features/catalog',           [FeatureFlagController::class, 'catalog']);
     Route::get   ('/admin/agencies/{id}/features',     [FeatureFlagController::class, 'show']);
+    /* Live sample for the Branding screen's numbering format. Read-only: it takes
+       no sequence number. */
+    Route::get   ('/admin/agencies/{id}/invoice-number-preview', [FeatureFlagController::class, 'invoiceNumberPreview'])->where('id', '[0-9]+');
     Route::patch ('/admin/agencies/{id}/features',     [FeatureFlagController::class, 'update']);
     
     /* MRR dashboard. The role guard is ON EACH ROUTE, not on an enclosing group —
@@ -1754,6 +1924,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // White-label invoice preview (returns text/html)
     Route::get   ('/invoices/{id}/preview',            [InvoicePreviewController::class, 'previewExisting']);
     Route::get   ('/invoices/preview-sample',          [InvoicePreviewController::class, 'previewSample']);
+    /* The real invoice, drawn in the agency's chosen template — what "View invoice"
+       opens from Accounting. The controller method existed and had no route, so staff
+       had no way to see the actual document at all. Guarded by authorizeCentreAccess
+       inside. (2026-09-17) */
+    Route::get   ('/invoices/{id}/document',           [InvoicePreviewController::class, 'previewExisting'])->where('id', '[0-9]+');
+    /* The same document as a downloadable file, for the schedule kebab. */
+    Route::get   ('/invoices/{id}/pdf',                [InvoicePreviewController::class, 'pdfExisting'])->where('id', '[0-9]+');
 
     // ---- PDF exports ----
     Route::get('/families/{family}/t4a/{year}', [\App\Http\Controllers\Api\PdfController::class, 't4a']);
@@ -1864,6 +2041,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Settings -> Payment providers. Agency admins only; the controller re-checks.
         Route::get  ('/admin/payment-providers', [\App\Http\Controllers\Api\PaymentProvidersController::class, 'index']);
         Route::post ('/admin/payment-providers/{provider}', [\App\Http\Controllers\Api\PaymentProvidersController::class, 'update']);
+        /* Does the stored Helcim token actually work? A button, rather than finding out
+           when a parent cannot pay. Costs nothing: a zero-dollar verify session. */
+        Route::post ('/admin/payment-providers/helcim/test', [\App\Http\Controllers\Api\HelcimController::class, 'test']);
+
+        /* Settings -> Backups. The controller re-checks platform_admin; there is NO route
+           that serves a dump, deliberately — see the note on BackupController. */
+        Route::get  ('/admin/backups',          [\App\Http\Controllers\Api\BackupController::class, 'index']);
+        Route::post ('/admin/backups/settings', [\App\Http\Controllers\Api\BackupController::class, 'update']);
+        Route::post ('/admin/backups/run',      [\App\Http\Controllers\Api\BackupController::class, 'run']);
 
         Route::get  ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'show']);
         Route::post ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'update']);
@@ -1917,6 +2103,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/parent/zum/bank-account',  [\App\Http\Controllers\Api\ZumPaymentController::class, 'saveBankAccount']);
     Route::post('/parent/zum/pay',           [\App\Http\Controllers\Api\ZumPaymentController::class, 'pay']);
 
+    /* HELCIM - card payment on an invoice, through their hosted iframe.
+
+       Two calls on purpose. checkout() opens the session and keeps the secretToken here;
+       complete() is the ONLY place a payment row is written, and it believes the hash
+       rather than the browser. Nothing the page says about an amount is trusted. */
+    Route::post('/parent/helcim/checkout', [\App\Http\Controllers\Api\HelcimController::class, 'checkout']);
+    Route::post('/parent/helcim/complete', [\App\Http\Controllers\Api\HelcimController::class, 'complete']);
+
     Route::get  ('/parent/billing/status',         [\App\Http\Controllers\Api\StripeParentPayController::class, 'status']);
     Route::post ('/parent/billing/setup-intent',   [\App\Http\Controllers\Api\StripeParentPayController::class, 'setupIntent']);
     Route::post ('/parent/billing/save-card',      [\App\Http\Controllers\Api\StripeParentPayController::class, 'saveCard']);
@@ -1929,6 +2123,28 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::post('/admin/sms/broadcast', [\App\Http\Controllers\Api\SmsController::class, 'broadcast']);
         Route::get ('/admin/sms/messages',  [\App\Http\Controllers\Api\SmsController::class, 'listMessages']);
+        /* Who a broadcast would reach, before anyone presses send. Read-only. */
+        /* LETTING SOMEBODY BACK IN (2026-09-21).
+
+           Anthony: "add mechanism for admins to unlock a user if they locked themselves
+           out (and reduce the 15 mins lock out)."
+
+           The hold is five minutes and clears itself, so this is for the case where five
+           minutes is five minutes too long - an educator at the door with children
+           arriving. Lifting it is itself audited, because "who let this account back in,
+           and when" is exactly what an auditor asks about a security control that can be
+           switched off.
+
+           Admin-gated: an /admin/ prefix says where a thing is EDITED, not who may use
+           it, so the role check is explicit rather than inherited from the path. */
+        Route::get ('/admin/security/locked-accounts', [\App\Http\Controllers\Api\SecurityLockController::class, 'index']);
+        Route::post('/admin/users/{user}/unlock-login', [\App\Http\Controllers\Api\SecurityLockController::class, 'unlock'])->whereNumber('user');
+        Route::get ('/admin/sms/audience', [\App\Http\Controllers\Api\SmsController::class, 'audience']);
+        /* Text-alert consent: see who has it, ask the ones who do not, and record a yes
+           given in person. There is deliberately no bulk "turn everyone on". */
+        Route::get ('/admin/sms/consent-coverage', [\App\Http\Controllers\Api\SmsConsentInviteController::class, 'coverage']);
+        Route::post('/admin/sms/consent-invites',  [\App\Http\Controllers\Api\SmsConsentInviteController::class, 'invite']);
+        Route::post('/admin/sms/consent/{user}',   [\App\Http\Controllers\Api\SmsConsentInviteController::class, 'record'])->whereNumber('user');
     });
 
     /* ---- VOICE ANNOUNCEMENTS (2026-09-10) ----
@@ -2139,6 +2355,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get('/parent/ledger/pdf',                [\App\Http\Controllers\Api\LedgerController::class, 'familyLedgerPdf']);
     // #34 — per-invoice actions from the parent ledger kebab (download / email-to-self).
     Route::get ('/parent/invoices/{invoice}/pdf',   [\App\Http\Controllers\Api\LedgerController::class, 'myInvoicePdf']);
+    // The same document, inline, so the app can SHOW a parent their invoice.
+    Route::get ('/parent/invoices/{invoice}/document', [\App\Http\Controllers\Api\LedgerController::class, 'myInvoiceDocument']);
     Route::post('/parent/invoices/{invoice}/email', [\App\Http\Controllers\Api\LedgerController::class, 'emailMyInvoice']);
     Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
         Route::get('/families/{familyId}/ledger',        [\App\Http\Controllers\Api\LedgerController::class, 'familyLedger']);
@@ -2312,6 +2530,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/payment-plans/family/{id}',[\App\Http\Controllers\Api\PaymentPlanController::class, 'listForFamily']);
         Route::post('/payment-plans',            [\App\Http\Controllers\Api\PaymentPlanController::class, 'create']);
         Route::post('/payment-plans/{id}/cancel',[\App\Http\Controllers\Api\PaymentPlanController::class, 'cancel']);
+        // Edit an existing schedule - rewrites only its unissued tail. See update().
+        Route::patch('/payment-plans/{id}',       [\App\Http\Controllers\Api\PaymentPlanController::class, 'update'])->where('id','[0-9]+');
+    /* One instalment, not the whole tail. A row's own edit must not renumber
+       every invoice after it. */
+    Route::patch('/payment-plans/{plan}/installments/{installment}', [\App\Http\Controllers\Api\PaymentPlanController::class, 'updateInstallment'])
+        ->where('plan', '[0-9]+')->where('installment', '[0-9]+');
+    /* Remove an UNISSUED instalment. An issued one must be voided in Accounting,
+       where the family gets told. */
+    Route::delete('/payment-plans/{plan}/installments/{installment}', [\App\Http\Controllers\Api\PaymentPlanController::class, 'deleteInstallment'])
+        ->where('plan', '[0-9]+')->where('installment', '[0-9]+');
     });
     Route::get ('/payment-plans/mine',           [\App\Http\Controllers\Api\PaymentPlanController::class, 'myPlans']);
     Route::get ('/doc-workflows',                [\App\Http\Controllers\Api\DocumentWorkflowController::class, 'listMine']);

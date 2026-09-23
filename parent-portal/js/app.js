@@ -41,6 +41,30 @@
         }
       } catch (e) {}
     },
+    /* THE ROLE THIS ACCOUNT LAST CHOSE (2026-09-17).
+
+       Anthony: "default my role to super admin or the last role that I chose when logging
+       off." A fresh sign-in starts with an empty sessionStorage, so kt_view_as is unset
+       and the account lands in its REAL role - a super admin as super admin, which is the
+       first half of the ask. This is the second half: if they deliberately picked a role
+       before, put them back in it.
+
+       Keyed to the user id, so the next person to sign in on a shared tablet gets their
+       own answer and not the last person's ([[kiddietrac-active-agency-localstorage]]).
+       Anything that does not match is ignored, which lands on the real role. */
+    applyViewAsPreference() {
+      try {
+        var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+        if (!u || !u.id) { return; }
+        var raw = localStorage.getItem('kt_view_as_pref');
+        var p = raw ? JSON.parse(raw) : null;
+        if (p && String(p.uid) === String(u.id) && typeof p.role === 'string' && p.role) {
+          sessionStorage.setItem('kt_view_as', p.role);
+        } else {
+          sessionStorage.removeItem('kt_view_as');
+        }
+      } catch (e) {}
+    },
     clear() {
       // SECURITY: the bearer token is also written to localStorage (biometric
       // sign-in, set-password) and every helper reads sessionStorage||localStorage,
@@ -49,6 +73,11 @@
       try {
         sessionStorage.removeItem('kt_token'); sessionStorage.removeItem('kt_user');
         localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user');
+        /* The view-as PREVIEW dies with the session; the remembered PREFERENCE does not,
+           because remembering it across a sign-out is the whole point. It is safe to keep
+           only because it carries the user id it belongs to and is ignored for anybody
+           else. */
+        sessionStorage.removeItem('kt_view_as');
       } catch (e) {}
     },
     requireLogin() {
@@ -90,7 +119,8 @@
       try { return await this._request(path, opts); }
       finally { try { window.__ktInflight = Math.max(0, (window.__ktInflight || 1) - 1); } catch (e) {} }
     },
-    async _request(path, { method = 'GET', body = null, query = null } = {}) {
+    async _request(path, { method = 'GET', body = null, query = null, _retried = false } = {}) {
+      const opts_retried = _retried;
       let url = API_BASE + path;
       if (query) {
         const qs = new URLSearchParams(query).toString();
@@ -123,6 +153,7 @@
       } catch (e) { /* sessionStorage unavailable */ }
 
       let res;
+      const _started = Date.now();
       try {
         res = await fetch(url, {
           method,
@@ -130,7 +161,108 @@
           body: body ? (isForm ? body : JSON.stringify(body)) : null,
         });
       } catch (e) {
-        throw new ApiError('network', 'Network error — check your connection', 0);
+        /* "NETWORK ERROR — CHECK YOUR CONNECTION" WAS USUALLY A LIE (2026-09-18).
+
+           Anthony: "sometimes i get the Could not load: Network error - check your
+           connection when using the portal - why?"
+
+           fetch() rejects when the response never reaches JavaScript at all, and the
+           commonest cause here is not the person's connection. It is a 508 Resource Limit
+           Is Reached from the hosting account — 43,967 of them this month, all the same
+           288-byte page — which is emitted by the web server before PHP runs and
+           therefore carries no Access-Control-Allow-Origin. The browser then refuses to
+           hand it over and rejects, so a server that answered in full looks identical to
+           a dead wifi connection.
+
+           Two things follow. The message should only blame the connection when the
+           browser says the connection IS down; and a transient capacity error deserves
+           one quiet retry before anybody is told anything, because by the next second the
+           slot is usually free. */
+        const offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
+
+        /* ONLY WHAT IS SAFE TO SEND TWICE (2026-09-21).
+
+           I added this retry on 18 Sep without a method check, which was wrong. A
+           rejected fetch means the RESPONSE never arrived - it does NOT mean the server
+           did nothing. A POST that succeeded and lost its reply would be sent again, and
+           for /provider/check-in that is a second check-in, for an invoice a second
+           invoice, for a message a second message.
+
+           Eisha, 21 Sep, 8:51:52am: check-in succeeds. 8:51:58: a second attempt is
+           refused "Already checked in at 8:51 AM", and the browser recorded that the
+           reply to it never arrived at all. That one was six seconds apart so it was her
+           tapping again rather than this code - but it is exactly the shape this retry
+           would produce, and on a slow endpoint it was a matter of time.
+
+           GET and HEAD only. Everything else is handed back to the caller, which is the
+           screen that knows whether asking twice is safe. */
+        var _idempotent = (method === 'GET' || method === 'HEAD');
+
+        if (_idempotent && !offline && !opts_retried) {
+          await new Promise(r => setTimeout(r, 900));
+          try {
+            return await this._request(path, { method, body, query, _retried: true });
+          } catch (again) {
+            Api._reportFailure(path, method, 0, Date.now() - _started, 'fetch_rejected');
+            throw again;
+          }
+        }
+
+        /* The RETRY does not file its own report: the attempt that started this owns it,
+           and reports the whole elapsed time rather than the few milliseconds the second
+           try took. Without this the dedup below kept the inner report (ms: 0) and threw
+           away the useful one. */
+        if (!opts_retried) {
+          Api._reportFailure(path, method, 0, Date.now() - _started, offline ? 'offline' : 'fetch_rejected');
+        }
+        throw new ApiError(
+          'network',
+          offline
+            ? 'You appear to be offline — check your connection.'
+            : 'The server could not be reached just now. It is usually busy rather than broken — please try again in a moment.',
+          0
+        );
+      }
+
+      /* A 5xx that DID arrive is reported too, so the audit log holds both halves of the
+         picture: what PHP knows it returned, and what the browser actually received. */
+      if (res.status >= 500) {
+        Api._reportFailure(path, method, res.status, Date.now() - _started, 'server');
+      }
+
+      /* A PASSWORD CHANGE DEMANDED MID-SESSION (2026-09-21).
+
+         EnsurePasswordChanged answers 403 to everything except auth/* while
+         must_change_password is set. That flag can be raised while somebody is already
+         signed in - an admin reset, or a password reaching its 90-day limit - and nothing
+         on this side recognised the reply. The screen simply failed, repeatedly, with no
+         explanation.
+
+         Handled BEFORE the generic !res.ok below, so every screen inherits it without
+         needing to know. Safe from looping: auth/* is allowed through the gate, so the
+         change-password call itself can never produce this. */
+      if (res.status === 403) {
+        let _pw = null;
+        try { _pw = await res.clone().json(); } catch (_) {}
+        if (_pw && _pw.password_change_required) {
+          try { sessionStorage.setItem('kt_force_password_change', '1'); } catch (e) {}
+          /* Only move them once. A screen firing six parallel requests would otherwise
+             re-navigate on each reply and the reason would flash past unread. */
+          if (!window.__ktPwRedirect) {
+            window.__ktPwRedirect = true;
+            try {
+              if (window.KT && KT.toast) {
+                KT.toast('\u{1F511}', 'Choose a new password',
+                  _pw.message || 'Your password needs changing before you can continue.', '#B45309');
+              }
+            } catch (e) {}
+            setTimeout(function () {
+              if (!/#settings/.test(window.location.hash)) { window.location.hash = 'settings?tab=security'; }
+            }, 300);
+          }
+          throw new ApiError('password_change_required',
+            _pw.message || 'Please choose a new password to continue.', 403, _pw);
+        }
       }
 
       // Auth expired? send to login
@@ -168,6 +300,51 @@
 
       return data;
     },
+    /* TELL THE SERVER WHAT THE SERVER COULD NOT SEE.
+
+       A 508 and a 421 never reach PHP, so nothing on the API can log them; between them
+       they are 59,845 responses this month against 71 PHP-level 500s. The browser is the
+       only witness, so it files the report.
+
+       Rules, so the reporter never becomes the problem:
+         · fire-and-forget — never awaited, never throws, never blocks a screen;
+         · raw fetch, NOT Api.post, or a failing report would report its own failure
+           and recurse;
+         · at most one report per path+status per minute per tab, because a poller that
+           is failing is failing every few seconds and would otherwise file hundreds;
+         · silent when offline — there is nothing to send it to, and the browser has
+           already told the user. */
+    _reportFailure(path, method, status, ms, kind) {
+      try {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+        const key = (path || '') + '|' + status;
+        Api._seen = Api._seen || {};
+        const now = Date.now();
+        if (Api._seen[key] && now - Api._seen[key] < 60000) return;
+        Api._seen[key] = now;
+
+        const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        try {
+          const t = Auth.token(); if (t) headers['Authorization'] = 'Bearer ' + t;
+          const a = sessionStorage.getItem('kt_active_agency_id');
+          if (a) headers['X-Active-Agency-Id'] = a;
+        } catch (e) {}
+
+        fetch(API_BASE + '/diag/client-error', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            status: status,
+            path: String(path || '').slice(0, 200),
+            method: method || 'GET',
+            kind: kind || null,
+            ms: ms || 0,
+          }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch (e) { /* a failed report is not worth a second failure */ }
+    },
+
     get(path, query) { return this.request(path, { query }); },
     post(path, body) { return this.request(path, { method: 'POST', body }); },
     /** Multipart upload. Same as post() — request() detects FormData — but named
@@ -289,7 +466,7 @@
         // Center transform-free (left/right + margin auto) and attach to <html>,
         // NOT <body>: a transformed ancestor (mobile screen transitions) turns a
         // transform-based fixed toast off-screen. Clear the bottom nav too.
-        toast.style.cssText = `position:fixed; bottom:calc(env(safe-area-inset-bottom,0px) + 88px); left:0; right:0; margin:0 auto; width:max-content; max-width:calc(100vw - 24px);
+        toast.style.cssText = `position:fixed; bottom:calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 88px); left:0; right:0; margin:0 auto; width:max-content; max-width:calc(100vw - 24px);
           padding:12px 20px; border-radius:12px; font-size:14px; font-weight:500;
           z-index:2147483600; box-shadow:0 8px 32px rgba(0,0,0,0.18); transition:opacity 0.2s;`;
         (document.documentElement || document.body).appendChild(toast);
@@ -314,6 +491,13 @@
   async function bootstrapPage() {
     Auth.rememberSession();   // restore a persisted session (survives WebView restarts) before gating
     if (!Auth.requireLogin()) return null;
+
+    /* Settle the role BEFORE anything reads it. Every screen and the whole nav branch on
+       kt_view_as, so deciding it after the page has begun drawing would paint one role
+       and then act as another. Only when nothing has set it already - a live session
+       mid-preview must not be yanked back to the default on the next page load. */
+    /* The role is settled at module scope now, not here - see the note beside
+       rememberSession() at the foot of this file. bootstrapPage() is dead code. */
 
     const user = Auth.user();
     const navAvatar = Dom.$('#navAvatar');
@@ -375,4 +559,22 @@
      biometric or PIN lock is enrolled, because those own their own encrypted vault and
      must not be bypassed. (Anthony, 2026-09-09) */
   try { Auth.rememberSession(); } catch (e) {}
+
+  /* SETTLE THE VIEW-AS ROLE HERE TOO, AND FOR THE SAME REASON.
+
+     I first called applyViewAsPreference() from bootstrapPage(), which is precisely the
+     mistake the note above is about: nothing calls bootstrapPage, so the preference was
+     stored correctly and then never read on a normal sign-in. Verified in the browser -
+     kt_view_as_pref held {"uid":1,"role":"guardian"} and kt_view_as came back null.
+
+     Module scope runs while app.js is parsed, before app-v2-shell.js boots the dashboard,
+     so the role is decided before the nav or any screen branches on it.
+
+     Only when nothing has set it already: a live session mid-preview must not be yanked
+     back on the next page load. (2026-09-17) */
+  try {
+    var _hasView = false;
+    try { _hasView = sessionStorage.getItem('kt_view_as') !== null; } catch (e) {}
+    if (!_hasView) { Auth.applyViewAsPreference(); }
+  } catch (e) {}
 })(window);

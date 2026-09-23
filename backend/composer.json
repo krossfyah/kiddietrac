@@ -11,6 +11,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.27",
         "laravel/tinker": "^3.0",
+        "lbuchs/webauthn": "^2.2",
         "minishlink/web-push": "^10.0",
         "phpoffice/phpspreadsheet": "^5.7",
         "setasign/fpdf": "^1.9",

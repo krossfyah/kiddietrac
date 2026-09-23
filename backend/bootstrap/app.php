@@ -65,6 +65,12 @@ return Application::configure(basePath: dirname(__DIR__))
             // route and a number instead of a feeling. See the middleware for why it is
             // deliberately quiet.
             \App\Http\Middleware\TrackSlowRequests::class,
+            /* And every failure, for the same reason and in the same place. Note what it
+               CANNOT see: a 508 is decided by the web server before PHP starts, so no
+               middleware here will ever run for one - and 508 is the error Anthony was
+               asking about (43,967 this month). The browser reports those to
+               /diag/client-error instead. See the middleware's own note. */
+            \App\Http\Middleware\TrackFailedRequests::class,
             /* LAST, so it sees the final JSON whatever the rest of the pipeline did:
                every protected /storage URL leaving the API is replaced with a signed,
                expiring one. Uploaded files were served by Apache with no auth, no

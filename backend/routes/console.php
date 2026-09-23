@@ -42,6 +42,18 @@ Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
 Schedule::command('tokens:prune --days=30')
     ->dailyAt('03:15')->timezone('America/Toronto')->withoutOverlapping();
 
+/* A SIGNED FORM THAT NEVER REACHED THE FAMILY'S RECORD.
+
+   Filing happens at signature time and is best-effort on purpose - a filing problem must
+   not fail the submission the parent just made. The price is silence: if the account did
+   not exist yet, or the write failed, the form is complete in Forms Manager and missing
+   from the family's Documents, and nobody notices until somebody looks for it.
+
+   So the question is asked again every night. Normally a no-op and silent; anything it
+   has to fix, or cannot, is logged. See App\Console\Commands\SyncSignedFormDocuments. */
+Schedule::command('forms:sync-documents')
+    ->dailyAt('03:35')->timezone('America/Toronto')->withoutOverlapping();
+
 /* Chases every incident that is still open until somebody closes it. An incident
    report nobody actions is the failure this exists to prevent, and until now
    nothing in the platform noticed. Silent when there is nothing open. */
@@ -260,7 +272,25 @@ Schedule::command('kiddietrac:portal-tips')->weeklyOn(3, '10:00')->withoutOverla
 Schedule::command('security:alerts')->everyFifteenMinutes()->withoutOverlapping();
 
 // SOC 2 — Availability: nightly verified database backup (retains 14 days).
-Schedule::command('db:backup')->dailyAt('03:30')->withoutOverlapping();
+/* The hour is a PORTAL SETTING now (Settings -> Backups), not a constant. Read here
+   rather than inside the command, because dailyAt() is what decides whether the command
+   runs at all — a command that checks the clock itself would have to be scheduled every
+   minute and then do nothing 1439 times a day.
+
+   Wrapped: routes/console.php is evaluated on every schedule:run tick (once a minute), so
+   a missing table or an unreadable value must fall back to the old fixed time rather than
+   take the whole scheduler down with it. */
+Schedule::command('db:backup')
+    ->dailyAt((function () {
+        try {
+            $t = (string) \App\Support\PlatformSettings::get('backup.time', '03:30');
+
+            return preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $t) ? $t : '03:30';
+        } catch (\Throwable $e) {
+            return '03:30';
+        }
+    })())
+    ->withoutOverlapping();
 
 // Invoice/payment reminders — hourly; gated by config('billing.reminders_enabled')
 // (OFF) + per-agency settings; only fires in each agency's send-time hour.
@@ -315,6 +345,15 @@ Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=
 
 
 // Daily sales-lead follow-up reminders (email owner/superadmin about due/overdue follow-ups).
+/* Password expiry warnings: 14 days out, 7, 1, and once on the day it lapses. Each step
+   is sent ONCE (users.password_expiry_notified_at holds which one), so a nightly sweep
+   does not become a nightly nag - being pestered daily about a password is how people
+   learn to ignore email from us.
+
+   09:00 rather than overnight: a warning read at the start of a working day gets acted
+   on; one that arrives at 3am is at the bottom of the inbox by breakfast. */
+Schedule::command('kiddietrac:password-expiry')->dailyAt('09:00');
+
 Schedule::command('kiddietrac:sales-followups')->dailyAt('08:00');
 
 // Nightly data-retention purge — enforces each agency's compliance policy
