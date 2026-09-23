@@ -747,6 +747,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post  ('/library',                 [\App\Http\Controllers\Api\SalesLibraryController::class, 'store']);
             Route::get   ('/library/{doc}/download',  [\App\Http\Controllers\Api\SalesLibraryController::class, 'download'])->whereNumber('doc');
             Route::delete('/library/{doc}',           [\App\Http\Controllers\Api\SalesLibraryController::class, 'destroy'])->whereNumber('doc');
+            Route::post  ('/library/folders',         [\App\Http\Controllers\Api\SalesLibraryController::class, 'folderStore']);
+            Route::delete('/library/folders/{folder}',[\App\Http\Controllers\Api\SalesLibraryController::class, 'folderDestroy'])->whereNumber('folder');
         });
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);

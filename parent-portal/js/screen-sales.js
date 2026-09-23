@@ -918,13 +918,11 @@
   /**
    * THE FILES REPOSITORY — superadmin only.
    *
-   * Price sheets, comparison decks, contract templates: material the sales side needs to
-   * hand, belonging to KiddieTrac rather than to any agency.
-   *
-   * Laid out as a real table with the file's own icon, because a shelf is scanned rather
-   * than read — you are looking for the price sheet, not reading a list of them. The
-   * uploader is collapsed behind a button for the same reason: adding a file is the rare
-   * action here and a permanently open form pushed the shelf itself below the fold.
+   * Price sheets, comparison decks, contract templates. Folders down the side, the shelf
+   * in the middle, and the search and sorting come from the platform: the table carries no
+   * `data-kt-no-filter`, so kt-table-filter gives it a live filter box and sortable headers
+   * the same way it does every other table in the portal. Writing a second search box here
+   * would have been a second thing to keep working.
    */
   async function renderLibrary(container) {
     clear(container); ensureSalesCss();
@@ -940,6 +938,7 @@
 
     var host = el('div', {});
     container.appendChild(host);
+    var state = { folderId: null, folders: [], docs: [] };
     busy();
 
     function busy() {
@@ -948,33 +947,42 @@
         ['Loading the repository…']));
     }
 
-    /* A file is recognised by its shape before its name. */
-    function iconFor(d) {
-      var t = String(d.file_type || '').toLowerCase();
-      var n = String(d.title || '').toLowerCase();
-      if (t.indexOf('pdf') !== -1 || /\.pdf$/.test(n)) return '📄';
-      if (t.indexOf('sheet') !== -1 || t.indexOf('excel') !== -1 || /\.(xlsx?|csv)$/.test(n)) return '📊';
-      if (t.indexOf('presentation') !== -1 || t.indexOf('powerpoint') !== -1 || /\.pptx?$/.test(n)) return '📑';
-      if (t.indexOf('word') !== -1 || /\.docx?$/.test(n)) return '📝';
-      if (t.indexOf('image') !== -1) return '🖼️';
-      if (t.indexOf('zip') !== -1 || /\.(zip|rar|7z)$/.test(n)) return '🗜️';
-      return '📎';
-    }
-
-    function sizeOf(d) {
-      var b = Number(d.file_size || 0);
-      if (!b) return '';
-      return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
-    }
-
-    function kindOf(d) {
-      var t = String(d.file_type || '').split('/').pop().toUpperCase();
-      return t.length > 5 ? t.slice(0, 5) : t;
-    }
-
     function btnCss(bg, fg, br) {
       return 'padding:6px 12px;border-radius:8px;border:1px solid ' + br + ';background:' + bg
         + ';color:' + fg + ';font-size:12.5px;font-weight:700;cursor:pointer';
+    }
+
+    function iconFor(d) {
+      switch (String(d.kind || '')) {
+        case 'PDF': return '📄';
+        case 'Spreadsheet': return '📊';
+        case 'Presentation': return '📑';
+        case 'Word': case 'Text': return '📝';
+        case 'Image': return '🖼️';
+        case 'Video': return '🎬';
+        case 'Archive': return '🗜️';
+        default: return '📎';
+      }
+    }
+    function sizeOf(d) {
+      var b = Number(d.file_size || 0);
+      if (!b) { return ''; }
+      return b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+    }
+    /* Date AND time. "Added 2026-09-23" cannot tell two versions of the same price sheet
+       apart when both landed the same morning, which is exactly when it matters. */
+    function stampOf(d) {
+      var raw = String(d.uploaded_at || '');
+      if (!raw) { return { date: '—', time: '', sort: '' }; }
+      var iso = raw.replace(' ', 'T');
+      if (!/(Z|[+-]\d{2}:?\d{2})$/.test(iso)) { iso += 'Z'; }   // server stamps are UTC
+      var dt = new Date(iso);
+      if (isNaN(dt.getTime())) { return { date: raw.slice(0, 10), time: raw.slice(11, 16), sort: raw }; }
+      return {
+        date: dt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+        time: dt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+        sort: String(dt.getTime()),
+      };
     }
 
     async function reload() {
@@ -986,86 +994,196 @@
         host.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Could not load: ' + (e.message || e)])]));
         return;
       }
-      var docs = data.documents || [];
+      state.folders = data.folders || [];
+      state.docs = data.documents || [];
+      paint();
+    }
+
+    function paint() {
       clear(host);
 
-      // ── the bar: count on the left, the one action on the right ──────────
+      var shown = state.folderId === null
+        ? state.docs
+        : state.docs.filter(function (d) { return Number(d.folder_id) === Number(state.folderId); });
+
+      // ── bar ────────────────────────────────────────────────────────────
       var addBtn = el('button', { type: 'button', style: btnCss('#0C6070', '#fff', '#0C6070') }, ['＋ Add a file']);
-      var bar = el('div', { style: 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px' }, [
-        el('div', { style: 'font-weight:800;color:#0F172A;font-size:14px' },
-          [docs.length + ' file' + (docs.length === 1 ? '' : 's')]),
-        el('div', { style: 'flex:1' }, []),
-        addBtn,
-      ]);
-      host.appendChild(bar);
-
       addBtn.addEventListener('click', openUploadDialog);
+      var newFolder = el('button', { type: 'button', style: 'margin-right:8px;' + btnCss('#fff', '#0F172A', '#CBD5E1') }, ['📁 New folder']);
+      newFolder.addEventListener('click', createFolder);
+      host.appendChild(el('div', { style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px' }, [
+        el('div', { style: 'font-weight:800;color:#0F172A;font-size:14px' },
+          [shown.length + ' file' + (shown.length === 1 ? '' : 's')
+            + (state.folderId === null ? '' : ' in this folder')]),
+        el('div', { style: 'flex:1' }, []),
+        newFolder, addBtn,
+      ]));
 
-      if (!docs.length) {
-        host.appendChild(el('div', {
+      // ── layout: folders | shelf ────────────────────────────────────────
+      var grid = el('div', { style: 'display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:16px;align-items:start' }, []);
+      grid.appendChild(folderRail(shown));
+
+      var right = el('div', { style: 'min-width:0' }, []);
+      grid.appendChild(right);
+      host.appendChild(grid);
+
+      if (!shown.length) {
+        right.appendChild(el('div', {
           style: 'background:#fff;border:1px dashed #CBD5E1;border-radius:12px;padding:40px 20px;'
             + 'text-align:center;color:#64748B;font-size:13.5px',
-        }, ['Nothing here yet. Add the first price sheet or deck.']));
+        }, [state.folderId === null
+              ? 'Nothing here yet. Add the first price sheet or deck.'
+              : 'This folder is empty. Add a file to it, or pick All files.']));
         return;
       }
 
-      // ── the shelf ────────────────────────────────────────────────────────
-      var tbl = el('table', {
-        'data-kt-filtered': '1',
-        style: 'width:100%;border-collapse:collapse;background:#fff;font-size:13.5px',
-      });
-      tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#F8FAFC;text-align:left' }, [
-        th('File'), th('Category'), th('Size'), th('Added'), th(''),
+      /* No data-kt-no-filter: the platform's own filter box and sortable headers attach
+         to this table, so every column sorts and the search is the one people already
+         know from every other table. data-kt-sort on a cell tells it what to sort BY —
+         raw bytes and a timestamp, not "1.2 MB" and "Sep 23", which sort alphabetically. */
+      var tbl = el('table', { style: 'width:100%;border-collapse:collapse;background:#fff;font-size:13.5px' });
+      function th(label) {
+        return el('th', {
+          style: 'padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;'
+            + 'letter-spacing:.4px;border-bottom:1px solid #E2E8F0;white-space:nowrap;text-align:left',
+        }, [label]);
+      }
+      tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#F8FAFC' }, [
+        th('File'), th('Type'), th('Folder'), th('Category'), th('Size'), th('Added'), th(''),
       ])]));
 
-      function th(t) {
-        return el('th', {
-          style: 'padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;'
-            + 'text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #E2E8F0;white-space:nowrap',
-        }, [t]);
-      }
-      function td(kids, extra) {
-        return el('td', { style: 'padding:12px 14px;vertical-align:top;' + (extra || '') }, kids);
-      }
-
       var tb = el('tbody', {});
-      docs.forEach(function (d) {
+      shown.forEach(function (d) {
+        var st = stampOf(d);
         var open = el('button', { type: 'button', 'data-kt-iconized': '1', style: btnCss('#fff', '#0F172A', '#CBD5E1') }, ['View']);
         open.addEventListener('click', function (e) { e.stopPropagation(); openDoc(d); });
         var del = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'margin-left:6px;' + btnCss('#fff', '#B91C1C', '#FCA5A5') }, ['🗑 Remove']);
-        del.addEventListener('click', function (e) { e.stopPropagation(); removeDoc(d, reload); });
+        del.addEventListener('click', function (e) { e.stopPropagation(); removeDoc(d); });
 
-        var meta = [el('span', { style: 'font-weight:700;color:#0F172A' }, [d.title || 'Document'])];
-        if (d.notes) {
-          meta.push(el('div', {
-            style: 'color:#64748B;font-size:12.5px;margin-top:3px;line-height:1.45;white-space:pre-wrap',
-          }, [d.notes]));
+        function td(kids, extra, sortKey) {
+          var a = { style: 'padding:12px 14px;vertical-align:top;' + (extra || '') };
+          if (sortKey !== undefined) { a['data-kt-sort'] = String(sortKey); }
+          return el('td', a, kids);
         }
 
+        var nameCell = [el('div', { style: 'display:flex;gap:10px;align-items:flex-start' }, [
+          el('span', { style: 'font-size:20px;line-height:1.1;flex:none' }, [iconFor(d)]),
+          el('div', { style: 'min-width:0' }, [
+            // The real name, extension and all.
+            el('div', { style: 'font-weight:700;color:#0F172A;word-break:break-word' }, [d.file_name || d.title || 'Document']),
+            (d.title && d.file_name && d.title !== d.file_name)
+              ? el('div', { style: 'color:#64748B;font-size:12px;margin-top:2px' }, [d.title])
+              : el('span', {}, []),
+            d.notes
+              ? el('div', { style: 'color:#94A3B8;font-size:12px;margin-top:3px;line-height:1.45;white-space:pre-wrap' }, [d.notes])
+              : el('span', {}, []),
+          ]),
+        ])];
+
         tb.appendChild(el('tr', { style: 'border-bottom:1px solid #F1F5F9' }, [
-          td([el('div', { style: 'display:flex;gap:10px;align-items:flex-start' }, [
-            el('span', { style: 'font-size:20px;line-height:1.1;flex:none' }, [iconFor(d)]),
-            el('div', { style: 'min-width:0' }, meta),
-          ])]),
+          td(nameCell, '', String(d.file_name || d.title || '').toLowerCase()),
+          td([el('span', {
+            style: 'display:inline-block;background:#F1F5F9;color:#334155;border:1px solid #E2E8F0;'
+              + 'border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;white-space:nowrap',
+          }, [d.kind || 'File'])], 'white-space:nowrap', String(d.kind || '')),
+          td([d.folder
+                ? el('span', { style: 'color:#334155' }, ['📁 ' + d.folder])
+                : el('span', { style: 'color:#CBD5E1' }, ['—'])], 'white-space:nowrap', String(d.folder || '')),
           td([d.category
-            ? el('span', {
-                style: 'display:inline-block;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;'
-                  + 'border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;white-space:nowrap',
-              }, [d.category])
-            : el('span', { style: 'color:#CBD5E1' }, ['—'])], 'white-space:nowrap'),
-          td([el('div', { style: 'color:#334155' }, [sizeOf(d) || '—']),
-              el('div', { style: 'color:#94A3B8;font-size:11.5px;margin-top:2px' }, [kindOf(d)])], 'white-space:nowrap'),
-          td([el('div', { style: 'color:#334155' }, [String(d.uploaded_at || '').slice(0, 10)]),
-              el('div', { style: 'color:#94A3B8;font-size:11.5px;margin-top:2px' }, [d.uploaded_by || ''])], 'white-space:nowrap'),
+                ? el('span', {
+                    style: 'display:inline-block;background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE;'
+                      + 'border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;white-space:nowrap',
+                  }, [d.category])
+                : el('span', { style: 'color:#CBD5E1' }, ['—'])], 'white-space:nowrap', String(d.category || '')),
+          // Sorted on raw bytes, shown as KB/MB.
+          td([el('span', { style: 'color:#334155' }, [sizeOf(d) || '—'])], 'white-space:nowrap',
+             String(Number(d.file_size || 0)).padStart(12, '0')),
+          td([el('div', { style: 'color:#334155' }, [st.date + (st.time ? ' · ' + st.time : '')]),
+              el('div', { style: 'color:#94A3B8;font-size:11.5px;margin-top:2px' }, [d.uploaded_by || ''])],
+             'white-space:nowrap', st.sort),
           td([open, del], 'text-align:right;white-space:nowrap'),
         ]));
       });
       tbl.appendChild(tb);
-      host.appendChild(el('div', {
+      right.appendChild(el('div', {
         style: 'background:#fff;border:1px solid #e6ebf1;border-radius:12px;overflow:hidden',
       }, [el('div', { style: 'overflow-x:auto' }, [tbl])]));
 
+      // The table was built after the screen's render returned, so both sweeps have run.
+      if (window.KT && KT.enhanceTables) { setTimeout(KT.enhanceTables, 0); }
       if (window.KT && KT.sweepRowActions) { setTimeout(KT.sweepRowActions, 0); }
+    }
+
+    function folderRail(shown) {
+      var rail = el('div', { style: 'background:#fff;border:1px solid #e6ebf1;border-radius:12px;padding:8px;min-width:0' }, []);
+      function row(label, count, active, onClick, onDelete) {
+        var a = el('button', { type: 'button', style:
+          'display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;text-align:left;'
+          + 'padding:8px 10px;border-radius:9px;border:0;cursor:pointer;font-size:13px;font-weight:700;'
+          + (active ? 'background:#E0F2FE;color:#075985;' : 'background:transparent;color:#334155;') }, []);
+        a.appendChild(el('span', { style: 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' }, [label]));
+        a.appendChild(el('span', { style: 'flex:none;color:#94A3B8;font-weight:600' }, [String(count)]));
+        a.addEventListener('click', onClick);
+        var wrap = el('div', { style: 'display:flex;align-items:center;gap:4px' }, [a]);
+        if (onDelete) {
+          var x = el('button', { type: 'button', title: 'Delete folder', style:
+            'flex:none;border:0;background:transparent;color:#94A3B8;cursor:pointer;font-size:14px;padding:6px' }, ['✕']);
+          x.addEventListener('click', function (e) { e.stopPropagation(); onDelete(); });
+          wrap.appendChild(x);
+        }
+        return wrap;
+      }
+      rail.appendChild(row('All files', state.docs.length, state.folderId === null,
+        function () { state.folderId = null; paint(); }));
+      if (!state.folders.length) {
+        rail.appendChild(el('div', { style: 'color:#94A3B8;font-size:12px;padding:8px 10px;line-height:1.5' },
+          ['No folders yet. Use New folder to group price sheets, decks or contracts.']));
+      }
+      state.folders.forEach(function (f) {
+        rail.appendChild(row('📁 ' + f.name, f.count, Number(state.folderId) === Number(f.id),
+          function () { state.folderId = f.id; paint(); },
+          function () { deleteFolder(f); }));
+      });
+      return rail;
+    }
+
+    async function createFolder() {
+      var name = null;
+      try {
+        if (KT.prompt) {
+          // One field resolves a STRING, and the field's key is `key`.
+          name = await KT.prompt({ title: 'New folder', okLabel: 'Create',
+            fields: [{ key: 'name', label: 'Folder name', placeholder: 'e.g. Contracts' }] });
+        }
+      } catch (e) { name = null; }
+      if (!name || !String(name).trim()) { return; }
+      try {
+        var res = await KT.Api.post('/sales/library/folders', { name: String(name).trim() });
+        toast('📁', 'Folder', (res && res.message) || 'Created.');
+        reload();
+      } catch (e) { toast('⚠️', 'Could not create', e.message || '', '#DC2626'); }
+    }
+
+    async function deleteFolder(f) {
+      var ok = true;
+      try {
+        if (KT.confirm) {
+          ok = await KT.confirm({
+            title: 'Delete the folder “' + f.name + '”?',
+            description: f.count
+              ? ('The ' + f.count + ' file' + (f.count === 1 ? '' : 's') + ' inside move back to All files. Nothing is deleted.')
+              : 'The folder is empty.',
+            okLabel: 'Delete folder',
+          });
+        }
+      } catch (e) { ok = false; }
+      if (!ok) { return; }
+      try {
+        var res = await Api.del('/sales/library/folders/' + f.id);
+        toast('🗑', 'Folder deleted', (res && res.message) || '');
+        if (Number(state.folderId) === Number(f.id)) { state.folderId = null; }
+        reload();
+      } catch (e) { toast('⚠️', 'Could not delete', e.message || '', '#DC2626'); }
     }
 
     /* Signed, bearer-free and short-lived, so it can be handed to the real browser —
@@ -1073,18 +1191,18 @@
     function openDoc(d) {
       if (!d.open_url) { toast('⚠️', 'Unavailable', 'That file has no link.', '#DC2626'); return; }
       try {
-        if (window.KT && KT.openDocumentExternally) { KT.openDocumentExternally(d.open_url, d.title); return; }
+        if (window.KT && KT.openDocumentExternally) { KT.openDocumentExternally(d.open_url, d.file_name || d.title); return; }
       } catch (e) {}
       window.open(d.open_url, '_blank', 'noopener');
     }
 
-    async function removeDoc(d, done) {
+    async function removeDoc(d) {
       var ok = true;
       try {
         if (KT.confirm) {
           ok = await KT.confirm({
             title: 'Remove this file?',
-            description: '“' + (d.title || 'This file') + '” stops being listed. The file itself is kept.',
+            description: '“' + (d.file_name || d.title || 'This file') + '” stops being listed. The file itself is kept.',
             okLabel: 'Remove',
           });
         }
@@ -1092,27 +1210,14 @@
       if (!ok) { return; }
       try {
         await Api.del('/sales/library/' + d.id);
-        toast('🗑', 'Removed', d.title || '');
-        done();
+        toast('🗑', 'Removed', d.file_name || d.title || '');
+        reload();
       } catch (e) { toast('⚠️', 'Could not remove', e.message || '', '#DC2626'); }
     }
 
-    function field(label, hint, controlHtml) {
-      return '<label style="display:block">'
-        + '<span style="display:block;font-size:12px;font-weight:800;color:#334155;'
-        +   'text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">' + label + '</span>'
-        + controlHtml
-        + (hint ? '<span style="display:block;color:#94A3B8;font-size:11.5px;margin-top:4px;">' + hint + '</span>' : '')
-        + '</label>';
-    }
-
     /**
-     * ADD A FILE, in a dialog.
-     *
-     * It was an inline panel that pushed the shelf down the moment you opened it —
-     * which is backwards: the shelf is what the screen is for, and adding to it is the
-     * occasional act. A dialog also gives the form somewhere to put its own error and a
-     * Cancel that means something.
+     * ADD A FILE, in a dialog. The progress bar is not this screen's job — every upload
+     * in the portal draws one, from kt-upload-progress.js.
      */
     function openUploadDialog() {
       var M = window.KT && KT.Shell && KT.Shell.Modal;
@@ -1120,7 +1225,6 @@
 
       var INPUT = 'width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #CBD5E1;'
         + 'border-radius:9px;font-size:13.5px;background:#fff;';
-
       function field(label, hint, controlHtml) {
         return '<label style="display:block">'
           + '<span style="display:block;font-size:12px;font-weight:800;color:#334155;'
@@ -1129,16 +1233,22 @@
           + (hint ? '<span style="display:block;color:#94A3B8;font-size:11.5px;margin-top:4px;">' + hint + '</span>' : '')
           + '</label>';
       }
+      var folderOpts = '<option value="">All files (no folder)</option>'
+        + state.folders.map(function (f) {
+            return '<option value="' + esc(String(f.id)) + '"'
+              + (Number(state.folderId) === Number(f.id) ? ' selected' : '') + '>' + esc(f.name) + '</option>';
+          }).join('');
 
       var form = document.createElement('div');
       form.innerHTML =
         field('File', 'PDF, deck, sheet or image — up to 25 MB',
               '<input type="file" class="sl-file" style="' + INPUT + 'padding:8px 10px;">')
         + '<div style="height:14px"></div>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;">'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;">'
+        +   field('Folder', 'Where it lives', '<select class="sl-folder" style="' + INPUT + '">' + folderOpts + '</select>')
         +   field('Title', 'Left blank, the file name is used',
                   '<input class="sl-title" placeholder="e.g. Price sheet 2026" style="' + INPUT + '">')
-        +   field('Category', 'Groups the shelf — e.g. Pricing, Decks',
+        +   field('Category', 'A label — e.g. Pricing, Decks',
                   '<input class="sl-cat" list="sl-cats" placeholder="Pricing" style="' + INPUT + '">'
                   + '<datalist id="sl-cats"></datalist>')
         + '</div>'
@@ -1148,8 +1258,6 @@
         + '<div class="sl-err" style="color:#B91C1C;font-size:12.5px;margin-top:10px;"></div>';
 
       M.open({
-        // `body`, not `content` — the dialog renders a string or a Node from `body` and
-        // silently ignores anything else.
         title: '📁 Add a file to the repository',
         body: form,
         large: true,
@@ -1163,8 +1271,6 @@
               var err = form.querySelector('.sl-err');
               err.textContent = '';
               var f = form.querySelector('.sl-file').files[0];
-              // Returning false keeps the dialog open and restores the button, which is
-              // the whole reason a validation failure belongs here and not in a toast.
               if (!f) { err.textContent = 'Choose a file.'; return false; }
               if (f.size > 25 * 1024 * 1024) { err.textContent = 'That file is larger than 25 MB.'; return false; }
 
@@ -1173,6 +1279,7 @@
               fd.append('title', form.querySelector('.sl-title').value || '');
               fd.append('category', form.querySelector('.sl-cat').value || '');
               fd.append('notes', form.querySelector('.sl-notes').value || '');
+              fd.append('folder_id', form.querySelector('.sl-folder').value || '');
 
               return KT.Api.postForm('/sales/library', fd)
                 .then(function (res) {
