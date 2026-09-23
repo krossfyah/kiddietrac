@@ -938,7 +938,7 @@
 
     var host = el('div', {});
     container.appendChild(host);
-    var state = { folderId: null, folders: [], docs: [] };
+    var state = { folderId: null, folders: [], docs: [], categories: [] };
     busy();
 
     function busy() {
@@ -1044,6 +1044,7 @@
       }
       state.folders = data.folders || [];
       state.docs = data.documents || [];
+      state.categories = data.categories || [];
       paint();
     }
 
@@ -1105,6 +1106,18 @@
         var st = stampOf(d);
         var open = el('button', { type: 'button', 'data-kt-iconized': '1', style: btnCss('#fff', '#0F172A', '#CBD5E1') }, ['View']);
         open.addEventListener('click', function (e) { e.stopPropagation(); openDoc(d); });
+        /* Each carries its own glyph: kt-row-actions picks a fallback icon from the
+           label, and "Move to folder" hits its view/open rule and would come out as a
+           second eye beside the real View. */
+        var move = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'margin-left:6px;' + btnCss('#fff', '#0F172A', '#CBD5E1') }, ['📁 Move to folder']);
+        move.addEventListener('click', function (e) { e.stopPropagation(); moveDoc(d); });
+
+        var unfile = null;
+        if (d.folder_id) {
+          unfile = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'margin-left:6px;' + btnCss('#fff', '#0F172A', '#CBD5E1') }, ['↩ Remove from folder']);
+          unfile.addEventListener('click', function (e) { e.stopPropagation(); setFolder(d, null); });
+        }
+
         var del = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'margin-left:6px;' + btnCss('#fff', '#B91C1C', '#FCA5A5') }, ['🗑 Remove']);
         del.addEventListener('click', function (e) { e.stopPropagation(); removeDoc(d); });
 
@@ -1155,7 +1168,7 @@
           td([el('div', { style: 'color:#334155' }, [st.date + (st.time ? ' · ' + st.time : '')]),
               el('div', { style: 'color:#94A3B8;font-size:11.5px;margin-top:2px' }, [d.uploaded_by || ''])],
              'white-space:nowrap', st.sort),
-          td([open, del], 'text-align:right;white-space:nowrap'),
+          td(unfile ? [open, move, unfile, del] : [open, move, del], 'text-align:right;white-space:nowrap'),
         ]));
       });
       tbl.appendChild(tb);
@@ -1250,6 +1263,54 @@
       window.open(d.open_url, '_blank', 'noopener');
     }
 
+    /* ONE writer for both directions: the server takes folder_id and null means the
+       root, so "remove from folder" is "move" with nothing chosen. */
+    async function setFolder(d, folderId) {
+      try {
+        var res = await KT.Api.patch('/sales/library/' + d.id, { folder_id: folderId });
+        toast('📁', 'Moved', (res && res.message) || '');
+        reload();
+      } catch (e) { toast('⚠️', 'Could not move', e.message || '', '#DC2626'); }
+    }
+
+    function moveDoc(d) {
+      var M = window.KT && KT.Shell && KT.Shell.Modal;
+      if (!M) { return; }
+      if (!state.folders.length) {
+        toast('📁', 'No folders yet', 'Use New folder first, then move files into it.');
+        return;
+      }
+      var box = document.createElement('div');
+      box.innerHTML =
+        '<div style="font-size:13.5px;color:#475569;margin-bottom:10px;">Where should '
+        + '<strong>' + esc(d.file_name || d.title || 'this file') + '</strong> live?</div>'
+        + '<select class="mv-folder" style="width:100%;box-sizing:border-box;padding:9px 11px;'
+        +   'border:1px solid #CBD5E1;border-radius:9px;font-size:13.5px;background:#fff;">'
+        +   '<option value="">All files (no folder)</option>'
+        +   state.folders.map(function (f) {
+              return '<option value="' + esc(String(f.id)) + '"'
+                + (Number(d.folder_id) === Number(f.id) ? ' selected' : '') + '>'
+                + esc(f.name) + '</option>';
+            }).join('')
+        + '</select>';
+      M.open({
+        title: '📁 Move file',
+        body: box,
+        actions: [
+          { label: 'Cancel' },
+          {
+            label: 'Move',
+            primary: true,
+            busyLabel: 'Moving…',
+            handler: function () {
+              var v = box.querySelector('.mv-folder').value;
+              return setFolder(d, v ? Number(v) : null);
+            },
+          },
+        ],
+      });
+    }
+
     async function removeDoc(d) {
       var ok = true;
       try {
@@ -1303,13 +1364,43 @@
         +   field('Title', 'Left blank, the file name is used',
                   '<input class="sl-title" placeholder="e.g. Price sheet 2026" style="' + INPUT + '">')
         +   field('Category', 'A label — e.g. Pricing, Decks',
-                  '<input class="sl-cat" list="sl-cats" placeholder="Pricing" style="' + INPUT + '">'
-                  + '<datalist id="sl-cats"></datalist>')
+                  '<select class="sl-cat-sel" style="' + INPUT + '">'
+                  +   '<option value="">No category</option>'
+                  +   state.categories.map(function (c) {
+                        return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+                      }).join('')
+                  +   '<option value="__new">＋ New category…</option>'
+                  + '</select>'
+                  + '<input class="sl-cat-new" placeholder="New category name" '
+                  +   'style="' + INPUT + 'margin-top:8px;display:none;">')
         + '</div>'
         + '<div style="height:14px"></div>'
         + field('Notes', 'What it is for, and who it is aimed at',
                 '<textarea class="sl-notes" rows="3" style="' + INPUT + 'resize:vertical;"></textarea>')
         + '<div class="sl-err" style="color:#B91C1C;font-size:12.5px;margin-top:10px;"></div>';
+
+      /* THE FILE NAME CARRIES THE NAMING CONVENTION, so lift it into Title rather than
+         make somebody retype it. Only while Title is untouched: once it has been edited by
+         hand, choosing a different file must not throw that away. The extension is left
+         off, because it is already shown beside the name and a title reading
+         "x.pdf.pdf" is the kind of thing nobody notices until it is everywhere. */
+      var titleEl = form.querySelector('.sl-title');
+      var titleTouched = false;
+      titleEl.addEventListener('input', function () { titleTouched = true; });
+      form.querySelector('.sl-file').addEventListener('change', function (ev) {
+        var picked = ev.target.files && ev.target.files[0];
+        if (!picked || titleTouched) { return; }
+        titleEl.value = String(picked.name || '').replace(/\.[a-z0-9]{1,8}$/i, '');
+      });
+
+      /* "New category" reveals the free-text box; everything else picks an existing one. */
+      var catSel = form.querySelector('.sl-cat-sel');
+      var catNew = form.querySelector('.sl-cat-new');
+      catSel.addEventListener('change', function () {
+        var isNew = catSel.value === '__new';
+        catNew.style.display = isNew ? '' : 'none';
+        if (isNew) { catNew.focus(); }
+      });
 
       M.open({
         title: '📁 Add a file to the repository',
@@ -1331,7 +1422,10 @@
               var fd = new FormData();
               fd.append('file', f);
               fd.append('title', form.querySelector('.sl-title').value || '');
-              fd.append('category', form.querySelector('.sl-cat').value || '');
+              var catSel = form.querySelector('.sl-cat-sel');
+              fd.append('category', catSel.value === '__new'
+                ? (form.querySelector('.sl-cat-new').value || '')
+                : (catSel.value || ''));
               fd.append('notes', form.querySelector('.sl-notes').value || '');
               fd.append('folder_id', form.querySelector('.sl-folder').value || '');
 

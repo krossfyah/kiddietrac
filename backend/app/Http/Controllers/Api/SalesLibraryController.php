@@ -206,6 +206,50 @@ class SalesLibraryController extends Controller
         return response()->json(['ok' => true, 'message' => 'Removed from the library.']);
     }
 
+    /**
+     * PATCH /sales/library/{doc} — move a file into a folder, or out of one.
+     *
+     * `folder_id` null means the root. Sent explicitly rather than inferred from its
+     * absence, so "move to All files" is a thing the caller asks for rather than
+     * something that happens when a field is forgotten.
+     */
+    public function move(Request $request, int $docId): JsonResponse
+    {
+        $this->assertSuperAdmin($request);
+
+        $data = $request->validate(['folder_id' => ['present', 'nullable', 'integer']]);
+
+        $doc = DB::table('sales_documents')->where('id', $docId)->whereNull('deleted_at')
+            ->first(['id', 'title', 'file_name', 'folder_id']);
+        abort_unless($doc, 404);
+
+        $folderId = null;
+        $folderName = null;
+        if (! empty($data['folder_id'])) {
+            $folder = DB::table('sales_folders')->where('id', (int) $data['folder_id'])->first(['id', 'name']);
+            // A folder id from the client is user input; a stale one must not file the
+            // document somewhere nobody can open.
+            abort_unless($folder, 422, 'That folder no longer exists.');
+            $folderId = (int) $folder->id;
+            $folderName = $folder->name;
+        }
+
+        DB::table('sales_documents')->where('id', $docId)
+            ->update(['folder_id' => $folderId, 'updated_at' => now()]);
+
+        $this->audit($request, 'sales.library_moved', $docId, [
+            'file' => $doc->file_name ?: $doc->title,
+            'from_folder_id' => $doc->folder_id ? (int) $doc->folder_id : null,
+            'to_folder_id' => $folderId,
+            'to_folder' => $folderName,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'message' => $folderName ? ('Moved to ' . $folderName . '.') : 'Moved to All files.',
+        ]);
+    }
+
     /** POST /sales/library/folders */
     public function folderStore(Request $request): JsonResponse
     {
