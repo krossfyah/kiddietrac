@@ -207,6 +207,34 @@
     }
     (sc ? sc.parentElement : table.parentElement).insertBefore(wrap, sc || table);
 
+    /* ONE PAGER PER TABLE (2026-09-24).
+
+       Anthony: "the immunization table has two pagination - this should never be
+       like this."
+
+       It had. There are two global table pagers in the portal - this one, and
+       attachPagination() in kt-polish-v2.js - and nothing stopped both landing under
+       the same tbody. kt-polish-v2 fires when a table carries data-kt-paginate="N"
+       (or runs past 200 rows); this one fires whenever the search toolbar attaches.
+       Seven tables carry data-kt-paginate, and the immunization roster carries
+       data-kt-filter-always as well, so it asked for both by name. Two sets of
+       controls under one table is two ways to disagree about which page you are on.
+
+       This one wins where both apply, for the reason kt-polish-v2's own comment
+       gives: it is the pager that cooperates with the search and sort sweep through
+       data-ktFilterHidden, and a pager that does not know what is filtered will
+       happily show an empty page 3.
+
+       `ktPaginated` is the flag kt-polish-v2 already checks before attaching, so
+       setting it here is enough to stop it in the usual order. When it has already
+       run - it is free to fire before the toolbar attaches - its bar is removed
+       rather than left sitting under this one. Either order, one pager. */
+    table.dataset.ktPaginated = '1';
+    try {
+      const host = (sc || table).parentElement;
+      host.querySelectorAll(':scope > .kt-pager').forEach((b) => b.remove());
+    } catch (e) {}
+
     // Pagination footer — inserted BELOW the scroll container so it's always visible.
     const pager = document.createElement('div');
     pager.className = 'kt-table-pager';
@@ -215,6 +243,12 @@
     anchor.parentElement.insertBefore(pager, anchor.nextSibling);
 
     let page = 1;
+
+    /** The size this table asked for, else the house default. */
+    function tablePageSize() {
+      const want = parseInt(table.getAttribute('data-kt-paginate') || '', 10);
+      return want > 0 ? want : PAGE_SIZE;
+    }
 
     function pageBtn(label, target, active) {
       const b = document.createElement('button');
@@ -368,10 +402,14 @@
         matched = scored.map(m => m.r);
       }
       const total = matched.length;
-      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      /* A screen that asked for a page size gets it. data-kt-paginate used to reach
+         only the other pager, so silencing that one would have quietly changed 25 to
+         this module's default on every table that set it. */
+      const pageSize = tablePageSize();
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
       if (page > totalPages) page = totalPages;
       if (page < 1) page = 1;
-      const start = (page - 1) * PAGE_SIZE, end = start + PAGE_SIZE;
+      const start = (page - 1) * pageSize, end = start + pageSize;
       const inMatch = new Set(matched);
       let mi = 0;
       for (const r of Array.from(tbody.children)) {
