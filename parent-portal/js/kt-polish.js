@@ -253,7 +253,7 @@
 
     // ---- Sortable headers ----
     const ths = Array.from(thead.querySelectorAll('th'));
-    ths.forEach((th, colIdx) => {
+    ths.forEach((th) => {
       const text = (th.textContent || '').trim();
       if (!text || text === '') return;
       if (th.querySelector('button')) return; // action header
@@ -290,13 +290,29 @@
         indicator.textContent = dir === 'asc' ? '↑' : '↓';
         indicator.style.opacity = '1';
 
+        /* THE COLUMN IS WHERE THIS HEADER IS *NOW* (2026-09-24).
+
+           Anthony: "when I click on the provider name it should sort the providers
+           based on their names and the status doesnt sort based on the status types."
+
+           It was sorting the column to the LEFT of whichever one you clicked. colIdx
+           was captured when the handler was bound, and kt-polish-v2.js prepends a
+           select-all checkbox cell to the header and to every row afterwards
+           (`row.insertBefore(td, row.firstChild)`). Every column shifts one to the
+           right; the handlers keep pointing at the old seat. On the immunization
+           roster, clicking Provider sorted Family, and clicking Status sorted Uploaded
+           - which is mostly empty, so it read as "status does not sort at all".
+
+           It only showed where the checkbox column exists, which is why the same table
+           sorts correctly on an agency that has not got one.
+
+           Read live from the DOM instead. Any column inserted later - a checkbox now,
+           anything else next time - moves the header and the index together. */
+        const liveCol = Array.prototype.indexOf.call(th.parentElement.children, th);
         const rows = Array.from(tbody.children);
         rows.sort((a, b) => {
-          const av = cellSortKey(a.children[colIdx]);
-          const bv = cellSortKey(b.children[colIdx]);
-          if (av < bv) return dir === 'asc' ? -1 : 1;
-          if (av > bv) return dir === 'asc' ? 1 : -1;
-          return 0;
+          const r = compareKeys(cellSortKey(a.children[liveCol]), cellSortKey(b.children[liveCol]));
+          return dir === 'asc' ? r : -r;
         });
         rows.forEach(r => tbody.appendChild(r));
       });
@@ -321,6 +337,29 @@
         right.insertBefore(csvBtn, right.firstChild);
       }
     }
+  }
+
+  /* COMPARING A NUMBER WITH A DASH (2026-09-24).
+
+     cellSortKey returns a NUMBER for a cell that looks numeric and a STRING for one
+     that does not, and a column full of money with a few blanks in it contains both.
+     `1500 < '\u2014'` is false, and so is `1500 > '\u2014'` - a dash coerces to NaN and
+     every comparison against it answers false. The comparator read that as "equal",
+     so the rows around each blank kept whatever order they were already in and the
+     column came out unsorted rather than merely oddly sorted. Found on the children
+     roster's Fee column, which runs $0.00, a dash, $1500.00.
+
+     So: numbers against numbers numerically, text against text with localeCompare
+     (which also gets names with accents right, where < and > do not), and a number
+     before text when the two meet. Blanks and dashes are text, so they gather at one
+     end instead of scattering through the middle. */
+  function compareKeys(av, bv) {
+    const an = typeof av === 'number' && !isNaN(av);
+    const bn = typeof bv === 'number' && !isNaN(bv);
+    if (an && bn) { return av - bv; }
+    if (an) { return -1; }
+    if (bn) { return 1; }
+    return String(av).localeCompare(String(bv), undefined, { numeric: true, sensitivity: 'base' });
   }
 
   function cellSortKey(td) {
