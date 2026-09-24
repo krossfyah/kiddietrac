@@ -2639,11 +2639,30 @@
           <!-- One flex line: time, ticks, reactions, +. It WRAPS rather than stacks -
                a short bubble is only ~116px wide, and letting inline content wrap there
                produced a 100px tower of one item per line. -->
-          <div style="font-size:10.5px;color:rgba(13,27,42,.5);margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:3px;justify-content:${mine ? 'flex-end' : 'flex-start'};"><span style="white-space:nowrap;">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}</span><span class="kt-msg-reactions" style="display:contents;">${reactionsHtml}</span>${reactBtn}${delBtn}</div>
+          <div style="font-size:10.5px;color:rgba(13,27,42,.5);margin-top:4px;display:flex;flex-wrap:wrap;align-items:center;gap:3px;justify-content:${mine ? 'flex-end' : 'flex-start'};"><span style="white-space:nowrap;">${formatTime(m.created_at)}${mine ? readReceipt(m) : ''}</span>${smsBadge(m)}<span class="kt-msg-reactions" style="display:contents;">${reactionsHtml}</span>${reactBtn}${delBtn}</div>
         </div>
       </div>
     `;
   }
+  /* A LINE THAT CAME BY TEXT SAYS SO (2026-09-24).
+
+     Anthony: "show up as a chat from the SMS user and allow for a two way chat".
+
+     The thread holds both kinds now - a parent texting from a bus stop and the same
+     parent typing in the app - and they are not interchangeable to whoever is
+     replying. A text reaches a handset; an in-app message waits for them to open the
+     app. Without the mark the reader cannot tell which they are answering, and a reply
+     typed here only leaves the building if the parent is opted in.
+
+     In the meta line beside the time, not a banner: it is a fact about the message,
+     and a full-width badge per bubble would bury the conversation. */
+  function smsBadge(m) {
+    if (!m || m.via !== 'sms') { return ''; }
+    return '<span title="Arrived as a text message" style="white-space:nowrap;'
+      + 'background:#ECFDF5;border:1px solid #A7F3D0;color:#047857;border-radius:999px;'
+      + 'padding:0 6px;font-size:9.5px;font-weight:800;letter-spacing:.3px;">SMS</span>';
+  }
+
   // Deterministic colour per participant name — same person, same colour.
   function senderColor(s) {
     var pal = ['#1F6FB2', '#0FA3B1', '#E0699A', '#7C3AED', '#F59E0B', '#10B981', '#EF6C4D', '#0891B2', '#DB2777', '#4F8A3D'];

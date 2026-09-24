@@ -75,7 +75,33 @@ final class SmsInbound
             ]);
 
             self::audit($id);
-            self::notify($agencyId, $userId, $fromPhone, $body, $keyword);
+
+            /* INTO THE CHAT THREAD FIRST (2026-09-24).
+
+               Anthony: "can this be wired up to the chat system and show up as a chat
+               from the SMS user and allow for a two way chat if required?"
+
+               A reply that lands in chat arrives where staff already read messages from
+               that family, counts towards their unread badge, and can be ANSWERED -
+               which is the part a log entry can never do. insertMessage() works out its
+               own recipients and pushes, so bridging replaces the separate notice
+               rather than adding to it; sending both would buzz the same phone twice
+               for one text.
+
+               A keyword is not conversation. "STOP" in a chat thread reads as a parent
+               shouting at an educator, and there is nothing to reply to - so those keep
+               the plain notification.
+
+               The fallback matters: somebody who is not a guardian of any family - a
+               staff member, a wrong number that happens to match an account - has no
+               thread to bridge into, and their message must still reach somebody. */
+            $bridged = null;
+            if (! $keyword && $userId) {
+                $bridged = SmsChatBridge::relayIn($userId, $body);
+            }
+            if (! $bridged) {
+                self::notify($agencyId, $userId, $fromPhone, $body, $keyword);
+            }
 
             return $id;
         } catch (Throwable $e) {

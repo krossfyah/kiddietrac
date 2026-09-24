@@ -537,6 +537,10 @@ final class ChatController extends Controller
                 'sender_name' => $s ? trim(($s->first_name ?? '').' '.($s->last_name ?? '')) : 'Unknown',
                 'sender_photo_url' => $s->photo_url ?? null,   // so the chat shows real photos, not just initials
                 'is_me' => $isMe,
+                // Which line arrived by text. A thread can hold both, so the reader has
+                // to be able to tell - a reply typed here reaches a phone only when the
+                // parent is opted in, and that is worth knowing before you rely on it.
+                'via' => $m->via ?? null,
                 'deleted' => $deleted,
                 'can_delete' => $isMe && ! $deleted,
                 'reactions' => $this->groupReactions($reactsByMsg[$m->id] ?? collect(), (int) $userId),
@@ -716,16 +720,52 @@ final class ChatController extends Controller
         return response()->json(['ok' => true]);
     }
 
-    private function insertMessage(int $conversationId, int $senderId, string $body, array $attachments = []): array
+    /**
+     * PUBLIC so a text message can become a chat message (2026-09-24).
+     *
+     * Anthony: "can this be wired up to the chat system and show up as a chat from the
+     * SMS user and allow for a two way chat if required?"
+     *
+     * SmsInbound calls this rather than carrying its own copy of "write a message and
+     * work out who to tell". Everything below - the recipient rule, the push, the
+     * unread counts - is the behaviour a chat message is supposed to have, and a second
+     * implementation of it would be a second thing to keep in step.
+     *
+     * @param  string|null  $via  'sms' when the message arrived from, or is going to, a
+     *                            handset; null for an ordinary in-app message.
+     */
+    public function insertMessage(int $conversationId, int $senderId, string $body, array $attachments = [], ?string $via = null): array
     {
         $now = now();
         $msgId = DB::table('messages')->insertGetId([
             'conversation_id' => $conversationId,
             'sender_id' => $senderId,
             'body' => $body,
+            'via' => $via,
             'attachments' => $attachments ? json_encode($attachments) : null,
             'created_at' => $now,
         ]);
+
+        /* AND BACK OUT TO THE HANDSET, when this thread is wired to one.
+
+           Only a conversation explicitly marked channel='sms', and only when the sender
+           is NOT the parent - a text that arrived from the handset is already on the
+           handset, and relaying it back is a loop that texts somebody their own words.
+
+           Relayed through SmsController::sendOne, so every gate still applies: a parent
+           who has opted out, or whose agency has texts switched off, does not receive
+           one because a member of staff typed into this thread. The staff member sees
+           their message in the thread either way; what they do not get is a silent
+           failure, because the send is logged and audited like any other. */
+        if ($via === null) {
+            try {
+                \App\Support\SmsChatBridge::relayOut($conversationId, $senderId, $body, $msgId);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('SMS relay out failed', [
+                    'conversation' => $conversationId, 'e' => $e->getMessage(),
+                ]);
+            }
+        }
         // v22p17.2: rewritten push for the conversations data model.
         // The previous block queried a chat_thread_participants table that
         // does not exist in this schema, so chat messages were never actually
