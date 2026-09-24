@@ -272,7 +272,9 @@ final class ImmunizationRemindersController extends Controller
             ->distinct()
             ->get([
                 'ch.id', 'ch.first_name', 'ch.last_name', 'ch.preferred_name',
-                'c.name as centre_name', 'r.name as room_name',
+                // The id, not just the name: a reminder has to be filtered to the
+                // centres its reader actually covers, and a name cannot do that.
+                'c.id as centre_id', 'c.name as centre_name', 'r.name as room_name',
             ]);
         if ($children->isEmpty()) {
             return ['count' => 0, 'children' => []];
@@ -333,6 +335,7 @@ final class ImmunizationRemindersController extends Controller
         return [
             'id' => (int) $ch->id,
             'name' => trim((($ch->preferred_name ?: $ch->first_name) . ' ' . $ch->last_name)),
+            'centre_id' => (int) ($ch->centre_id ?? 0),
             'centre_name' => $ch->centre_name,
             'room_name' => $ch->room_name,
             'last_record_on' => $latest,

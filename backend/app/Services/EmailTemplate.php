@@ -103,7 +103,10 @@ final class EmailTemplate
             . '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
             . '<title>' . $title . '</title>'
             . '<style>'
-            . '@media (max-width:620px){.kt-card{padding:18px !important;}.kt-title{font-size:20px !important;}.kt-banner{padding:20px 22px !important;}}'
+            . '@media (max-width:620px){.kt-card{padding:18px !important;}.kt-title{font-size:20px !important;}.kt-banner{padding:20px 22px !important;}'
+            // the fixed 620 is for the desktop clients that need an attribute; a phone
+            // takes the width it actually has
+            . '.kt-shell{width:100% !important;}}'
             // Dark-mode: render a proper dark palette instead of a broken auto-invert.
             . '@media (prefers-color-scheme: dark){'
             . 'body,.kt-bg{background:#0E1726 !important;}'
@@ -145,7 +148,28 @@ final class EmailTemplate
             // Hidden preheader (inbox snippet)
             . '<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">' . $preheader . '</div>'
 
-            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="100%" style="max-width:620px;margin:0 auto;">'
+            /* THE WIDTH CANNOT RIDE ON max-width (2026-09-24).
+
+               Anthony: "the banner header has a space at the far right."
+
+               It did, and only in some clients. This was ONE table at width="100%"
+               with style="max-width:620px", holding a banner at width="620". Outlook
+               renders through Word, which ignores max-width entirely - so the table
+               took the full width of the reading pane while the image stayed at its
+               620 attribute, leaving a white strip to the right of the banner and a
+               card that ran past it. Reproduced exactly by neutralising max-width on
+               the table alone: banner ended at 632, card at 708, a 76px gap.
+
+               So the width is carried by the width ATTRIBUTE on a fixed inner table,
+               which every client obeys including Word, and an outer full-width table
+               centres it - the standard bulletproof shell. max-width stays as well for
+               the clients that honour it, and .kt-shell drops to 100% on a phone.
+
+               Nothing changes where it already looked right: in Chrome this measures
+               620px centred, exactly as before. */
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;border-collapse:collapse;">'
+            . '<tr><td align="center" style="padding:0;">'
+            . '<table role="presentation" class="kt-shell" cellpadding="0" cellspacing="0" border="0" align="center" width="620" style="width:620px;max-width:620px;margin:0 auto;">'
 
             // Header (banner image for KiddieTrac, coloured logo banner for white-label)
             . $headerRow
@@ -162,6 +186,7 @@ final class EmailTemplate
             . '</td></tr>'
 
             . '</table>'
+            . '</td></tr></table>'
 
             . '</body></html>';
     }

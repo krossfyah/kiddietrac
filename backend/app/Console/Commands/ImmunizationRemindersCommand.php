@@ -70,26 +70,17 @@ class ImmunizationRemindersCommand extends Command
                 continue;
             }
 
-            $to = $this->option('test')
-                ? [(string) $this->option('test')]
-                : $this->recipients((int) $agency->id, $cfg);
+            $audience = $this->audience((int) $agency->id, $cfg);
 
-            if (! $to) {
+            if (! $audience) {
                 $this->warn("  {$agency->name}: {$outstanding['count']} outstanding but nobody to tell");
                 continue;
             }
 
-            $this->line("  {$agency->name}: {$outstanding['count']} outstanding -> " . count($to) . ' recipient(s)');
-            if ($this->option('dry')) {
-                foreach ($outstanding['children'] as $c) {
-                    $this->line('      ' . $c['name'] . ' (' . $c['reason'] . ')');
-                }
-                continue;
-            }
+            $this->line("  {$agency->name}: {$outstanding['count']} outstanding -> "
+                . count($audience) . ' recipient(s)');
 
-            if ($this->send((int) $agency->id, (string) $agency->name, $to, $outstanding, $cfg)) {
-                $sent++;
-            }
+            $sent += $this->send((int) $agency->id, (string) $agency->name, $audience, $outstanding, $cfg);
         }
 
         $this->info("immunization:reminders — {$sent} agency reminder(s) sent");
@@ -168,9 +159,12 @@ class ImmunizationRemindersCommand extends Command
         /* A SAMPLE GOES TO THE PERSON WHO ASKED FOR IT AND NOBODY ELSE. The real send
            blind-copies the office; a test that did the same would put a made-up
            reminder about a real child in front of real staff. */
-        $staffBcc = (! $testTo && ($cfg['parent_bcc_staff'] ?? true))
-            ? $this->recipients($agencyId, $cfg)
-            : [];
+        $bccStaff = ! $testTo && ($cfg['parent_bcc_staff'] ?? true);
+        $audience = $bccStaff ? $this->audience($agencyId, $cfg) : [];
+        /* WHERE EACH CHILD ACTUALLY IS, so the copy goes to the people who see them
+           every morning. Read from the live ENROLLMENT rather than families.centre_id,
+           which names the family's centre and not the room the child was placed in. */
+        $childCentre = $this->centreOfChildren(array_column($rows, 'child_id'));
         $sent = 0;
 
         foreach ($byFamily as $familyId => $children) {
@@ -181,6 +175,21 @@ class ImmunizationRemindersCommand extends Command
             if (! $guardians) {
                 continue;
             }
+
+            /* THE COPY FOLLOWS THE CHILD. Siblings can sit with different providers, so
+               the list is the union across the children this one email is about - and
+               only those. An educator is blind-copied so they can chase the record with
+               the parent at pick-up, which only works for a family they actually see. */
+            $staffBcc = [];
+            foreach ($children as $kid) {
+                $centreId = $childCentre[$kid['child_id']] ?? 0;
+                foreach ($audience as $r) {
+                    if ($centreId && in_array($centreId, $r->centreIds, true)) {
+                        $staffBcc[$r->email] = true;
+                    }
+                }
+            }
+            $staffBcc = array_keys($staffBcc);
 
             $subject = count($children) === 1
                 ? 'Immunization record for ' . $children[0]['child_name']
@@ -368,8 +377,30 @@ class ImmunizationRemindersCommand extends Command
         return (int) $now->isoWeekday() === (int) ($cfg['day_of_week'] ?? 1);
     }
 
-    /** @return list<string> */
-    private function recipients(int $agencyId, array $cfg): array
+    /* WHO HEARS ABOUT THIS, AND ABOUT WHOM (2026-09-24).
+
+       Anthony: "all educators got the immunization reminders for all children and not
+       the ones specifically in their care."
+
+       They did, and the cause was that this method used to return a flat list of
+       ADDRESSES. One list, filtered by role and by agency, and then a single body
+       built from every outstanding child in the agency was sent to all of it. The
+       query was scoped to the tenant and not at all to the person - which at iLearn,
+       where each educator IS their own centre, meant every provider received the names
+       and immunization status of six other providers' children.
+
+       The same flat list was also handed to the parent pass as its BCC, so ticking
+       "notify educators" silently put all nine of them on the blind copy of all twenty
+       family emails as well. One list serving two switches.
+
+       So it returns PEOPLE now, each carrying the centres they actually cover, and the
+       callers filter what they send by that. Scope comes from Visibility::centreIds -
+       the same rule the rest of the portal answers with, rather than a private variant
+       of it - which fails closed: somebody with no centre assignment gets nothing.
+
+       @return array<int,object{email:string,user_id:int,centreIds:int[]}>
+     */
+    private function audience(int $agencyId, array $cfg): array
     {
         $roles = [];
         if ($cfg['notify_agency_admins'] ?? true) {
@@ -388,7 +419,7 @@ class ImmunizationRemindersCommand extends Command
         $centreIds = DB::table('centres')->where('agency_id', $agencyId)
             ->whereNull('deleted_at')->pluck('id');
 
-        return DB::table('role_assignments as ra')
+        $people = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.active', 1)
             ->whereIn('ra.role', $roles)
@@ -400,13 +431,126 @@ class ImmunizationRemindersCommand extends Command
             })
             ->whereNull('u.deleted_at')
             ->whereNotNull('u.email')
-            ->distinct()->pluck('u.email')->filter()->unique()->values()->all();
+            /* Nobody who has not accepted their invite or has been switched off - the
+               mail layer refuses them anyway, after the work is done. Same list the
+               family side uses. */
+            ->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)
+            ->distinct()->get(['u.id', 'u.email']);
+
+        $out = [];
+        foreach ($people as $u) {
+            $theirs = \App\Support\Visibility::centreIds($agencyId, $u);
+            sort($theirs);
+            if (! $theirs) {
+                continue;             // fails closed: no assignment, no reminder
+            }
+            $out[mb_strtolower(trim((string) $u->email))] = (object) [
+                'email' => (string) $u->email,
+                'user_id' => (int) $u->id,
+                'centreIds' => $theirs,
+            ];
+        }
+
+        return array_values($out);
     }
 
-    private function send(int $agencyId, string $agencyName, array $to, array $outstanding, array $cfg): bool
+    /**
+     * child_id => centre_id, taken from the live enrollment.
+     *
+     * NOT families.centre_id: that names the family's own centre, and a child placed in
+     * another provider's room is exactly the case where the two disagree.
+     *
+     * @param  int[]  $childIds
+     * @return array<int,int>
+     */
+    private function centreOfChildren(array $childIds): array
+    {
+        if (! $childIds) {
+            return [];
+        }
+
+        return DB::table('enrollments as e')
+            ->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->whereIn('e.child_id', $childIds)
+            ->whereNull('e.end_date')
+            ->pluck('r.centre_id', 'e.child_id')
+            ->map(fn ($v) => (int) $v)->all();
+    }
+
+    /* ONE BODY PER DISTINCT VIEW.
+
+       The leak was not only in who was on the list, it was in the body: a single table
+       of every child in the agency, sent to everyone at once. So the table is built
+       from the children the READER covers, and people who cover the same centres are
+       grouped so that an agency of admins still costs one send rather than four.
+
+       This makes the old failure structurally impossible rather than merely fixed: two
+       people with different scopes can no longer share an email, because the body they
+       would have to share does not exist.
+
+       Anyone whose filtered list comes out empty is not written to at all - an educator
+       whose own children are all up to date should hear nothing, not a table of
+       somebody else's.
+
+       @param  array<int,object{email:string,user_id:int,centreIds:int[]}>  $audience
+       @return int  sends made
+     */
+    private function send(int $agencyId, string $agencyName, array $audience, array $outstanding, array $cfg): int
+    {
+        /* Group by the set of centres, so identical readers share one send. Sorted in
+           audience() already, so the key is stable. */
+        $groups = [];
+        foreach ($audience as $r) {
+            $key = implode(',', $r->centreIds);
+            if (! isset($groups[$key])) {
+                $groups[$key] = ['centreIds' => $r->centreIds, 'emails' => []];
+            }
+            $groups[$key]['emails'][] = $r->email;
+        }
+
+        $sent = 0;
+        foreach ($groups as $group) {
+            $mine = array_values(array_filter(
+                $outstanding['children'],
+                fn ($c) => in_array((int) ($c['centre_id'] ?? 0), $group['centreIds'], true)
+            ));
+            if (! $mine) {
+                continue;                 // nothing of theirs is outstanding
+            }
+
+            $to = $this->option('test')
+                ? [(string) $this->option('test')]
+                : $group['emails'];
+
+            if ($this->option('dry')) {
+                $this->line('    [dry] ' . count($mine) . ' child(ren) -> ' . implode(', ', $to));
+                foreach ($mine as $c) {
+                    $this->line('        ' . $c['name'] . ' (' . $c['reason'] . ')');
+                }
+                $sent++;
+                continue;
+            }
+
+            if ($this->sendOne($agencyId, $agencyName, $to, $mine, $cfg)) {
+                $sent++;
+            }
+
+            if ($this->option('test')) {
+                break;                    // one sample is a sample
+            }
+        }
+
+        return $sent;
+    }
+
+    /**
+     * @param  list<string>  $to
+     * @param  array<int,array<string,mixed>>  $children  already filtered to these readers
+     */
+    private function sendOne(int $agencyId, string $agencyName, array $to, array $children, array $cfg): bool
     {
         $rows = '';
-        foreach ($outstanding['children'] as $c) {
+        foreach ($children as $c) {
             $rows .= '<tr>'
                 . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;font-weight:600;">' . e($c['name']) . '</td>'
                 . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;color:#475569;">'
@@ -415,7 +559,7 @@ class ImmunizationRemindersCommand extends Command
                 . '</tr>';
         }
 
-        $n = $outstanding['count'];
+        $n = count($children);
         $body = '<p style="margin:0 0 14px;">'
             . '<strong>' . $n . '</strong> ' . ($n === 1 ? 'child needs' : 'children need')
             . ' an immunization record from a parent.</p>';
@@ -434,7 +578,8 @@ class ImmunizationRemindersCommand extends Command
             . '<p style="margin:0 0 14px;">Parents can upload a record themselves from the app — '
             . 'it files straight onto the child\'s Documents tab.</p>'
             . '<p style="margin:0;font-size:12.5px;color:#64748B;">'
-            . 'You are receiving this because immunization reminders are switched on for '
+            . 'This covers the children in your care. You are receiving it because '
+            . 'immunization reminders are switched on for '
             . e($agencyName) . '. Change or stop them in Settings → Email.</p>';
 
         $subject = $n . ' immunization ' . ($n === 1 ? 'record' : 'records') . ' need updating';
