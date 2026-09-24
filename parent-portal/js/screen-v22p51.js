@@ -1086,7 +1086,7 @@
       </div>
 
       <div id="sms-pane-recent" hidden>
-        <h3 id="sms-recent-h" style="margin:0 0 10px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Recent broadcasts</h3>
+        <h3 id="sms-recent-h" style="margin:0 0 10px;font-size:13px;color:#64748B;text-transform:uppercase;letter-spacing:.06em;">Sent &amp; received</h3>
         <div id="sms-recent"></div>
       </div>
     </div>`;
@@ -1098,7 +1098,7 @@
     const SMS_TABS = [
       ['send', 'Send a message'],
       ['consent', 'Text alerts'],
-      ['recent', 'Recent broadcasts'],
+      ['recent', 'Sent & received'],
     ];
     let smsTab = 'send';
 
@@ -1167,7 +1167,7 @@
       catSel.style.display = voice ? '' : 'none';
       bodyLabel.textContent = voice ? 'Announcement' : 'Message';
       sendBtn.textContent = voice ? 'Place calls' : 'Send broadcast';
-      recentH.textContent = voice ? 'Recent calls' : 'Recent broadcasts';
+      recentH.textContent = voice ? 'Recent calls' : 'Sent & received';
       body.maxLength = LIMIT[channel];
       note.textContent = voice
         ? 'Read aloud by an automated voice. An emergency reason reaches everyone with a phone '
@@ -1734,27 +1734,47 @@
     const rows = (r && r.data) || [];
     if (!rows.length) {
       host.innerHTML = '<div class="kt-card" style="color:#64748B;padding:40px;text-align:center;font-size:13px;">'
-        + (voice ? 'No calls placed yet.' : 'No broadcasts sent yet.') + '</div>';
+        + (voice ? 'No calls placed yet.' : 'Nothing sent or received yet.') + '</div>';
       return;
     }
     /* A call has more ways to end than a text has. Green is only for a call that was
        actually answered and heard out; "no answer" is amber because it is a normal
        outcome and not a fault, and only a genuine failure is red. */
-    const colour = (st) => ['sent', 'completed', 'spoken'].includes(st) ? '#047857'
+    const colour = (st) => ['sent', 'delivered', 'completed', 'spoken', 'received'].includes(st) ? '#047857'
       : ['failed', 'rejected'].includes(st) ? '#B91C1C' : '#D97706';
+
+    /* REPLIES BELONG IN THIS LIST (2026-09-24).
+
+       It was headed "Sent" and showed only what we sent, because until now that was
+       all there was. Inbound texts are filed as rows too, and a list of one half of a
+       conversation is how somebody concludes a parent never answered.
+
+       An arrow rather than a word: the column is scanned, not read, and every row in
+       a hundred-row list saying "Outbound" teaches the eye to skip it - which is
+       exactly the wrong habit when three of those rows say the other thing. */
+    const isIn = (m) => (m.direction || 'out') === 'in';
+    const wayBadge = (m) => isIn(m)
+      ? '<span title="Reply received from this number" style="display:inline-flex;align-items:center;gap:4px;'
+        + 'background:#ECFDF5;border:1px solid #A7F3D0;color:#047857;border-radius:999px;padding:1px 8px;'
+        + 'font-size:11px;font-weight:800;white-space:nowrap;">\u2190 Reply</span>'
+      : '<span title="Sent by KiddieTrac" style="display:inline-flex;align-items:center;gap:4px;'
+        + 'background:#F1F5F9;border:1px solid #E2E8F0;color:#475569;border-radius:999px;padding:1px 8px;'
+        + 'font-size:11px;font-weight:700;white-space:nowrap;">\u2192 Sent</span>';
     host.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:14px;background:#fff;">
       <thead style="background:#F8FAFC;">
         <tr>
-          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Called' : 'Sent'}</th>
-          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Recipient</th>
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Called' : 'When'}</th>
+          ${voice ? '' : '<th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Direction</th>'}
+          <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Recipient' : 'Person'}</th>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Number</th>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">Status</th>
           <th style="text-align:left;padding:10px 12px;border-bottom:1px solid #E2E8F0;">${voice ? 'Announcement' : 'Message'}</th>
         </tr>
       </thead>
       <tbody>
-        ${rows.map(m => `<tr>
+        ${rows.map(m => `<tr${!voice && isIn(m) ? ' style="background:#F6FEFB;"' : ''}>
           <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${fmtDate(m.created_at)}</td>
+          ${voice ? '' : `<td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;" data-kt-sort="${isIn(m) ? '0' : '1'}">${wayBadge(m)}</td>`}
           <!-- WHO, THEN WHICH NUMBER (2026-09-22). This was one cell showing the name OR
                the number, and for SMS the API returned no name at all - so a broadcast
                list was a column of bare phone numbers that told nobody whether the right

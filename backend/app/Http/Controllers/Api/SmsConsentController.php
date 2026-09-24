@@ -229,12 +229,25 @@ final class SmsConsentController extends Controller
         if ($event !== 'message.received') {
             $ref = (string) ($body['data']['payload']['id'] ?? $body['data']['id'] ?? '');
             $errs = $body['data']['payload']['errors'] ?? [];
-            $delivered = in_array((string) ($body['data']['payload']['to'][0]['status'] ?? ''), ['delivered'], true);
+            /* Telnyx reports the outcome PER RECIPIENT, and its failure states are named
+               rather than signalled by the presence of `errors`: a delivery_failed can
+               arrive with none. Reading only `errors` filed those as `sent`, which is
+               the one wrong answer this column can give - a failure that reads as a
+               success is worse than no receipt at all. */
+            $state = (string) ($body['data']['payload']['to'][0]['status'] ?? '');
+            $status = 'sent';
+            if ($errs || in_array($state, ['delivery_failed', 'sending_failed', 'expired'], true)) {
+                $status = 'failed';
+            } elseif ($state === 'delivered') {
+                $status = 'delivered';
+            }
             if ($ref !== '') {
                 \App\Support\SmsInbound::receipt(
                     $ref,
-                    $errs ? 'failed' : ($delivered ? 'delivered' : 'sent'),
-                    $errs ? mb_substr(json_encode($errs), 0, 190) : null
+                    $status,
+                    $status === 'failed'
+                        ? mb_substr($errs ? json_encode($errs) : ('carrier reported ' . $state), 0, 190)
+                        : null
                 );
             }
 
