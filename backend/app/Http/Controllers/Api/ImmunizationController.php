@@ -183,47 +183,33 @@ class ImmunizationController extends Controller
             ], 422);
         }
 
-        /* Matched the way the schedule matches, so an exemption lands on the dose the
-           reader is looking at rather than beside it. */
-        $key = fn ($v, $d) => mb_strtolower(trim(((string) $v) . '|' . ((string) $d)));
-        $wanted = $key($vaccine, $dose);
-
-        $existing = null;
-        foreach (Immunization::where('child_id', $childId)->get() as $row) {
-            if ($key($row->vaccine, $row->dose_label) === $wanted) {
-                $existing = $row;
-                break;
-            }
-        }
-
-        $action = 'immunization.exemption_set';
+        /* The matching and the write both live in ImmunizationExemption, because the
+           exemption-form path in ParentImmunizationRecordController does exactly this
+           too and the two must not drift on what happens when a row already exists. */
+        $E = \App\Support\ImmunizationExemption::class;
 
         if (! $wantExempt) {
-            if (! $existing || ! $existing->exempt) {
+            $outcome = $E::clear($childId, $vaccine, $dose !== '' ? $dose : null);
+            if ($outcome === $E::NOTHING) {
                 return response()->json(['ok' => true, 'message' => 'That dose was not exempt.']);
-            }
-            $isOnlyAnExemption = ! $existing->administered_on && ! $existing->lot_number
-                && ! $existing->site && ! $existing->clinic_name && ! $existing->administered_by;
-            if ($isOnlyAnExemption) {
-                $existing->delete();
-            } else {
-                $existing->update(['exempt' => false, 'exemption_reason' => null]);
             }
             $action = 'immunization.exemption_removed';
             $result = null;
-        } elseif ($existing) {
-            $existing->update(['exempt' => true, 'exemption_reason' => $reason]);
-            $result = $existing->fresh();
         } else {
-            $result = Immunization::create([
-                'child_id' => $childId,
-                'vaccine' => $vaccine,
-                'dose_label' => $dose !== '' ? $dose : null,
-                'administered_on' => null,
-                'exempt' => true,
-                'exemption_reason' => $reason,
-                'recorded_by_id' => $request->user()->id,
-            ]);
+            $outcome = $E::set($childId, $vaccine, $dose !== '' ? $dose : null,
+                $reason, (int) $request->user()->id);
+
+            /* A dose somebody already wrote a DATE against is not quietly turned into
+               an exemption - that would destroy the more specific record - so say so
+               rather than reporting a success that did not happen. */
+            if ($outcome === $E::SKIPPED_GIVEN) {
+                return response()->json([
+                    'message' => 'That dose is already recorded as given, with a date. '
+                        . 'Remove the recorded dose first if it was entered in error.',
+                ], 422);
+            }
+            $action = 'immunization.exemption_set';
+            $result = null;
         }
 
         /* A health record changed, so the log has to name WHAT - the child and the dose,

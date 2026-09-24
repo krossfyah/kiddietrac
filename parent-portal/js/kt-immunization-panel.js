@@ -425,11 +425,63 @@
         c.administered_on || '';
     });
 
+    /* WHAT KIND OF DOCUMENT IS THIS? (2026-09-24)
+
+       Anthony: "when the exempt form gets uploaded there should be the buttons to
+       exempt with each of the doses that is required based on this."
+
+       A filed document answers one of two questions - which doses were GIVEN, or which
+       doses this child is EXEMPT from - and this dialog could only hear the first. An
+       exemption form had to be uploaded and then every dose it covered exempted one at
+       a time from the schedule, with nothing tying those exemptions back to the form.
+
+       The ticks mean the same thing under either heading - "this document covers these
+       doses" - so the list is unchanged and only what a tick DOES to the dose moves.
+       Choosing the exemption reading swaps the date boxes for one reason and turns the
+       required doses on, because a form that exempts a child almost always exempts the
+       required schedule and ticking eleven boxes by hand is how one gets missed. */
+    var EXEMPTION_REASONS = [
+      'Religious or conscientious belief',
+      'Medical reason (documented by a physician)',
+      'Other',
+    ];
+
     var box = document.createElement('div');
     box.innerHTML =
-      '<div style="font-size:13px;color:#475569;margin-bottom:10px;">'
-      +   'Tick what this record shows. Each one becomes a recorded dose against '
-      +   esc(childName(child)) + '.'
+      '<div style="display:flex;gap:8px;margin-bottom:12px;">'
+      +   '<label class="dt-mode-w" style="flex:1;display:flex;gap:8px;align-items:flex-start;border:2px solid #1F6080;'
+      +     'background:#F0F7FB;border-radius:10px;padding:10px 12px;cursor:pointer;">'
+      +     '<input type="radio" name="dt-mode" class="dt-mode" value="doses" checked style="margin-top:2px;">'
+      +     '<span><span style="font-weight:700;font-size:13px;color:#0F172A;">Doses given</span>'
+      +       '<div style="font-size:11.5px;color:#64748B;line-height:1.4;">An immunization card or a clinic printout.</div></span>'
+      +   '</label>'
+      +   '<label class="dt-mode-w" style="flex:1;display:flex;gap:8px;align-items:flex-start;border:2px solid #E2E8F0;'
+      +     'border-radius:10px;padding:10px 12px;cursor:pointer;">'
+      +     '<input type="radio" name="dt-mode" class="dt-mode" value="exempt" style="margin-top:2px;">'
+      +     '<span><span style="font-weight:700;font-size:13px;color:#0F172A;">Exemption form</span>'
+      +       '<div style="font-size:11.5px;color:#64748B;line-height:1.4;">A statement of belief, or a medical exemption.</div></span>'
+      +   '</label>'
+      + '</div>'
+      + '<div class="dt-reason" style="display:none;margin-bottom:12px;">'
+      +   '<label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Reason on the form</label>'
+      +   '<select class="dt-kind" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #CBD5E1;'
+      +     'border-radius:9px;font-size:13.5px;background:#fff;">'
+      +     EXEMPTION_REASONS.map(function (r) {
+            return '<option value="' + esc(r) + '">' + esc(r) + '</option>';
+          }).join('')
+      +   '</select>'
+      +   '<input class="dt-note-in" placeholder="Anything to add (optional)" maxlength="140"'
+      +     ' style="width:100%;box-sizing:border-box;margin-top:8px;padding:9px 11px;border:1px solid #CBD5E1;'
+      +     'border-radius:9px;font-size:13.5px;">'
+      + '</div>'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">'
+      +   '<div class="dt-lead" style="font-size:13px;color:#475569;">'
+      +     'Tick what this record shows. Each one becomes a recorded dose against '
+      +     esc(childName(child)) + '.'
+      +   '</div>'
+      +   '<button type="button" class="dt-req" data-kt-no-kebab="1" style="flex:none;border:1px solid #CBD5E1;'
+      +     'background:#fff;color:#334155;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;'
+      +     'cursor:pointer;white-space:nowrap;">Tick all required</button>'
       + '</div>'
       + '<div class="dt-list" style="border:1px solid #E2E8F0;border-radius:10px;max-height:320px;overflow:auto;"></div>'
       + '<div class="dt-note" style="font-size:12px;color:#64748B;margin-top:8px;"></div>'
@@ -460,10 +512,18 @@
         row.innerHTML =
           '<input type="checkbox" class="dt-tick"' + (already ? ' checked disabled' : (wasClaimed ? ' checked' : '')) + ' '
           +   'data-vaccine="' + esc(i.vaccine) + '" data-dose="' + esc(i.dose_label || '') + '" '
+          +   'data-required="' + (i.is_required ? '1' : '0') + '" '
           +   'style="width:17px;height:17px;flex:none;">'
           + '<span style="flex:1;min-width:0;">'
           +   '<span style="font-weight:600;color:#0F172A;">' + esc(i.vaccine) + '</span> '
           +   '<span style="color:#64748B;">' + esc(i.dose_label || '') + '</span>'
+          /* Which doses the schedule actually REQUIRES, because that is the set an
+             exemption form is normally written against. */
+          +   (i.is_required
+                ? '<span style="margin-left:6px;font-size:10.5px;font-weight:800;letter-spacing:.4px;'
+                  + 'color:#9A3412;background:#FFF7ED;border:1px solid #FED7AA;border-radius:5px;'
+                  + 'padding:1px 5px;">REQUIRED</span>'
+                : '')
           +   (already ? '<span style="color:#166534;font-size:12px;"> \u00b7 already on file</span>'
                        : (wasClaimed ? '<span style="color:#92400E;font-size:12px;"> \u00b7 uploader ticked this</span>' : ''))
           + '</span>'
@@ -484,9 +544,62 @@
       noteEl2.textContent = pre
         ? pre + ' pre-ticked from what the uploader said the card shows \u2014 check each one.'
         : 'Nothing was claimed on upload, so start from the card itself.';
+      applyMode();
     }).catch(function () {
       listEl2.innerHTML = '<div style="padding:14px;color:#9A3412;font-size:13px;">'
         + 'The schedule could not be loaded. Try again in a moment.</div>';
+    });
+
+    function isExemptMode() {
+      var m = box.querySelector('.dt-mode[value="exempt"]');
+      return !!(m && m.checked);
+    }
+
+    /* One place that redraws the dialog for the chosen reading, called on every switch
+       AND once the list has painted - the rows do not exist when the dialog opens, so
+       a switch made before the fetch returns would otherwise be forgotten. */
+    function applyMode() {
+      var ex = isExemptMode();
+      box.querySelector('.dt-reason').style.display = ex ? '' : 'none';
+      box.querySelector('.dt-lead').textContent = ex
+        ? 'Tick every dose this form exempts ' + childName(child) + ' from.'
+        : 'Tick what this record shows. Each one becomes a recorded dose against '
+          + childName(child) + '.';
+      [].slice.call(box.querySelectorAll('.dt-mode-w')).forEach(function (w) {
+        var on = w.querySelector('.dt-mode').checked;
+        w.style.borderColor = on ? '#1F6080' : '#E2E8F0';
+        w.style.background = on ? '#F0F7FB' : '#fff';
+      });
+      /* A date belongs to a dose that was GIVEN. An exemption has no date, so the box
+         goes rather than sitting there inviting one. */
+      /* display, not [hidden]: a stylesheet in this portal overrides [hidden] and the
+         box would stay on screen looking editable. */
+      [].slice.call(box.querySelectorAll('.dt-date')).forEach(function (d) {
+        d.style.display = ex ? 'none' : '';
+      });
+      /* The action button is rendered by the Modal into its own footer, NOT into box,
+         so it is found by what it says rather than by a class handed to the action. */
+      var ok = [].slice.call(document.querySelectorAll('button')).filter(function (b) {
+        return /^Record (doses|exemptions)$/.test((b.textContent || '').trim());
+      })[0];
+      if (ok) { ok.textContent = ex ? 'Record exemptions' : 'Record doses'; }
+    }
+
+    [].slice.call(box.querySelectorAll('.dt-mode')).forEach(function (m) {
+      m.addEventListener('change', applyMode);
+    });
+
+    box.querySelector('.dt-req').addEventListener('click', function () {
+      var n = 0;
+      [].slice.call(box.querySelectorAll('.dt-tick')).forEach(function (t) {
+        if (t.disabled || t.getAttribute('data-required') !== '1') { return; }
+        if (!t.checked) { t.checked = true; n++; }
+        var d = t.parentNode.querySelector('.dt-date');
+        if (d) { d.disabled = false; }
+      });
+      box.querySelector('.dt-note').textContent = n
+        ? n + ' required dose(s) ticked.'
+        : 'Every required dose was already ticked.';
     });
 
     M.open({
@@ -505,6 +618,7 @@
           handler: function () {
             var err = box.querySelector('.dt-err');
             err.textContent = '';
+            var ex = isExemptMode();
             var doses = [];
             var ticks = box.querySelectorAll('.dt-tick');
             for (var k = 0; k < ticks.length; k++) {
@@ -513,13 +627,26 @@
               doses.push({
                 vaccine: t.getAttribute('data-vaccine'),
                 dose_label: t.getAttribute('data-dose') || null,
-                administered_on: (t.parentNode.querySelector('.dt-date') || {}).value || null,
+                administered_on: ex ? null : ((t.parentNode.querySelector('.dt-date') || {}).value || null),
               });
             }
-            if (!doses.length) { err.textContent = 'Tick at least one dose, or cancel.'; return false; }
+            if (!doses.length) {
+              err.textContent = ex
+                ? 'Tick at least one dose this form exempts, or cancel.'
+                : 'Tick at least one dose, or cancel.';
+              return false;
+            }
+
+            var payload = { doses: doses };
+            if (ex) {
+              var kind = box.querySelector('.dt-kind').value;
+              var extra = (box.querySelector('.dt-note-in').value || '').trim();
+              payload.exempt = true;
+              payload.exemption_reason = extra ? (kind + ' \u2014 ' + extra) : kind;
+            }
 
             return KT.Api.post('/director/children/' + child.id
-                  + '/immunization-records/' + r.id + '/details', { doses: doses })
+                  + '/immunization-records/' + r.id + '/details', payload)
               .then(function (res) {
                 try {
                   if (window.Dom && Dom.toast) { Dom.toast((res && res.message) || 'Doses recorded.', 'success'); }

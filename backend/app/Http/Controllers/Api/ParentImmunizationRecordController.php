@@ -401,12 +401,42 @@ class ParentImmunizationRecordController extends Controller
             ], 403);
         }
 
+        /* AN EXEMPTION FORM IS A RECORD TOO (2026-09-24).
+
+           Anthony: "when the exempt form gets uploaded there should be the buttons to
+           exempt with each of the doses that is required based on this."
+
+           A filed document answers one of two questions - which doses were GIVEN, or
+           which doses this child is EXEMPT from - and until now this endpoint could
+           only hear the first. An exemption form had to be uploaded, then every dose
+           it covered exempted one at a time from the schedule, with nothing tying the
+           exemptions back to the form they came from.
+
+           So `exempt` rides on the same payload. The ticks mean the same thing either
+           way - "this document covers these doses" - and the document is written onto
+           every row as its proof, which is what makes an exemption auditable: the
+           reason says what was claimed, proof_document_url says what was produced. */
         $data = $request->validate([
             'doses' => ['required', 'array', 'min:1', 'max:60'],
             'doses.*.vaccine' => ['required', 'string', 'max:100'],
             'doses.*.dose_label' => ['nullable', 'string', 'max:40'],
             'doses.*.administered_on' => ['nullable', 'date_format:Y-m-d'],
+            'exempt' => ['nullable', 'boolean'],
+            'exemption_reason' => ['nullable', 'string', 'max:200'],
         ]);
+
+        $asExemption = (bool) ($data['exempt'] ?? false);
+        $reason = trim((string) ($data['exemption_reason'] ?? ''));
+
+        /* A reason is what makes it a record. Without one an exemption is a missing
+           dose wearing a better label, and it would silence the reminder with nothing
+           on file to justify it. Same rule as the single-dose route. */
+        if ($asExemption && $reason === '') {
+            return response()->json([
+                'message' => 'Give the reason for the exemption - it is what makes it a record.',
+                'errors' => ['exemption_reason' => ['A reason is required.']],
+            ], 422);
+        }
 
         /* The document has to belong to THIS child and be an immunization record.
            Without this a valid doc id from another child would attach doses to the
@@ -438,6 +468,24 @@ class ParentImmunizationRecordController extends Controller
             $on = $d['administered_on'] ?? null;
             $key = mb_strtolower(trim($vaccine . '|' . $doseLabel));
             $label = trim($vaccine . ' ' . (string) $doseLabel);
+
+            /* THE EXEMPTION BRANCH. Handed to the shared writer, which owns the one
+               rule that matters here: a dose already carrying a DATE is left alone and
+               reported back, because an exemption form arriving later does not unsay a
+               dose somebody read off a card. The document travels with it as proof. */
+            if ($asExemption) {
+                $outcome = \App\Support\ImmunizationExemption::set(
+                    $childId, $vaccine, $doseLabel, $reason,
+                    (int) $request->user()->id, $doc->file_url
+                );
+                if ($outcome === \App\Support\ImmunizationExemption::SKIPPED_GIVEN) {
+                    $skipped[] = $label . ' (already recorded as given)';
+                } else {
+                    $recorded[] = $label;
+                }
+                continue;
+            }
+
             if ($already->has($key)) {
                 $skipped[] = $label;
                 continue;
@@ -487,14 +535,23 @@ class ParentImmunizationRecordController extends Controller
             \App\Support\Audit::write([
                 'user_id' => $request->user()->id,
                 'agency_id' => $this->agencyOfChild($childId),
-                'action' => 'child.immunization_details_recorded',
+                'action' => $asExemption
+                    ? 'child.immunization_exemptions_recorded'
+                    : 'child.immunization_details_recorded',
                 'entity_type' => 'child',
                 'entity_id' => $childId,
-                'payload' => json_encode([
+                'payload' => json_encode(array_filter([
                     'document_id' => $docId,
                     'doses_recorded' => $recorded,
                     'doses_already_on_file' => $skipped,
-                ]),
+                    'exemption_reason' => $asExemption ? $reason : null,
+                    /* Names every dose, not a count: "was the 2nd DTaP exempted from
+                       that form" is the only question ever asked of this row. */
+                    'summary' => $asExemption
+                        ? (count($recorded) . ' dose(s) recorded EXEMPT from the filed form - '
+                            . implode(', ', $recorded) . ' - reason: ' . $reason)
+                        : null,
+                ], fn ($v) => $v !== null && $v !== [])),
                 'created_at' => now(),
             ]);
         } catch (\Throwable $e) {
