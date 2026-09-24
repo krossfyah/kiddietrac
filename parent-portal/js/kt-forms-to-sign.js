@@ -18,6 +18,91 @@
 
   var TABS = [['todo', 'To sign'], ['drafts', 'Drafts'], ['submitted', 'Submitted']];
 
+  /* TEXT-MESSAGE CONSENT IS A TASK TOO (2026-09-24).
+
+     Anthony: "add as a task if not actioned as well."
+
+     A parent who has never been asked about text alerts has an outstanding decision,
+     and nothing anywhere told them so - the question only appears if they happen to
+     open Settings, or if an admin remembers to send the consent link. Meanwhile the
+     agency cannot text them, which is the whole point of having asked.
+
+     It belongs HERE rather than in a fourth place of its own: "To sign" is already
+     where this portal puts things a person still has to do, it already carries the
+     badge on the tile and the alert on the day brief, and a parent who has learned to
+     check one list should not have to learn a second.
+
+     NOT a managed form. It is not signed, it is answered yes or no, and the answer has
+     to go through the consent endpoint so the confirmation text, the emailed receipt
+     and the filed copy all still happen. So it rides in the same list as its own kind
+     of row, and only the row is new.
+
+     Shown ONLY when the question has never been answered. `actioned` is true the
+     moment either timestamp is set, so somebody who declined is never asked again by
+     this - a consent prompt that keeps coming back after a no is harassment, not a
+     task. */
+  var _consent = null;          // null = not looked yet, false = nothing to ask
+
+  function fetchConsent() {
+    return Api.get('/me/sms-consent').then(function (d) {
+      _consent = (d && !d.actioned) ? d : false;
+      return _consent;
+    }).catch(function () { _consent = false; return false; });
+  }
+
+  function consentCard() {
+    if (!_consent) { return ''; }
+    return '<div class="kt-sms-consent-task" style="border:1px solid #FDE68A;background:#FFFBEB;'
+      + 'border-radius:12px;padding:14px 16px;margin:0 0 12px;">'
+      +   '<div style="display:flex;align-items:flex-start;gap:10px;">'
+      +     '<div style="font-size:20px;line-height:1;">\uD83D\uDCAC</div>'
+      +     '<div style="flex:1;min-width:0;">'
+      +       '<div style="font-weight:800;font-size:14px;color:#0F172A;">Text message alerts</div>'
+      +       '<div style="font-size:13px;color:#475569;line-height:1.55;margin-top:3px;">'
+      +         esc(_consent.consent_text || '') + '</div>'
+      +       '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">'
+      +         '<button type="button" class="sms-yes" style="background:#1F6080;color:#fff;border:0;'
+      +           'border-radius:9px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;">'
+      +           'I agree \u2014 text me</button>'
+      +         '<button type="button" class="sms-no" style="background:#fff;color:#334155;'
+      +           'border:1px solid #CBD5E1;border-radius:9px;padding:9px 16px;font-size:13px;'
+      +           'font-weight:700;cursor:pointer;">No thanks</button>'
+      +       '</div>'
+      +       '<div class="sms-note" style="font-size:12px;color:#92400E;margin-top:8px;"></div>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>';
+  }
+
+  function wireConsent(host) {
+    var card = host.querySelector('.kt-sms-consent-task');
+    if (!card) { return; }
+    var note = card.querySelector('.sms-note');
+    function answer(agree) {
+      card.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+      note.textContent = 'Saving\u2026';
+      Api.post('/me/sms-consent', { agree: agree }).then(function () {
+        _consent = false;                       // answered: it stops being a task
+        if (KT.toast) {
+          KT.toast(agree ? '\u2705' : '\uD83D\uDC4D', agree ? 'Thank you' : 'Noted',
+            agree
+              ? 'Text alerts are on. A copy of what you agreed to is in My documents.'
+              : 'You will not get text alerts. You can turn them on any time in Settings.');
+        }
+        if (KT.refreshMyFormsCount) { KT.refreshMyFormsCount(); }
+        load(host);
+      }).catch(function (e) {
+        card.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+        /* The two refusals that are not errors: no mobile number on file, and a
+           handset that replied STOP. Both need saying plainly rather than as a
+           failure, because neither is something the parent did wrong here. */
+        note.textContent = (e && e.message) || 'That could not be saved. Try again shortly.';
+      });
+    }
+    card.querySelector('.sms-yes').addEventListener('click', function () { answer(true); });
+    card.querySelector('.sms-no').addEventListener('click', function () { answer(false); });
+  }
+
   function render(main, tab) {
     // This is BOTH the registered screen renderer and its own tab switcher, and the
     // two callers pass different second arguments: the tab buttons pass a tab key,
@@ -138,13 +223,23 @@
   }
 
   function load(el) {
-    Api.get('/managed-forms/assigned').then(function (d) {
+    /* The consent is fetched WITH the forms rather than after them, so the list paints
+       once. Two sequential paints means the caught-up banner flashes before the task
+       appears under it, which reads as the portal changing its mind. */
+    Promise.all([
+      Api.get('/managed-forms/assigned').catch(function () { return { forms: [] }; }),
+      _consent === null ? fetchConsent() : Promise.resolve(_consent),
+    ]).then(function (both) {
+      var d = both[0];
       var forms = (d && d.forms) || [];
       if (!forms.length) {
-        el.innerHTML = '<div style="padding:32px 20px;text-align:center;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;font-weight:600;">🎉 You’re all caught up — nothing to sign right now.</div>';
+        /* Caught up means caught up. With a consent still to answer the cheerful
+           banner would be contradicting the task sitting directly above it. */
+        el.innerHTML = consentCard() + (_consent ? '' : '<div style="padding:32px 20px;text-align:center;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;font-weight:600;">🎉 You’re all caught up — nothing to sign right now.</div>');
+        wireConsent(el);
         return;
       }
-      el.innerHTML = forms.map(function (f) {
+      el.innerHTML = consentCard() + forms.map(function (f) {
         return '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
           + '<div style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(f.title) + '</div>'
           + (f.description ? '<div style="font-size:13px;color:#64748B;margin-top:3px;line-height:1.5;">' + esc(f.description) + '</div>' : '')
@@ -171,6 +266,7 @@
               : '<button class="mf-sign" data-id="' + f.id + '" data-t="' + esc(f.title) + '" type="button" style="background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">✍️ Sign</button>')
           + '</div></div>';
       }).join('');
+      wireConsent(el);
       el.querySelectorAll('.mf-view').forEach(function (b) { b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); }); });
       el.querySelectorAll('.mf-sign').forEach(function (b) { b.addEventListener('click', function () { signForm(b.getAttribute('data-id'), b.getAttribute('data-t'), el); }); });
       el.querySelectorAll('.mf-fill').forEach(function (b) {
@@ -220,9 +316,18 @@
   var _cnt = null, _fetching = false;
   function fetchCount() {
     if (_fetching) return; _fetching = true;
-    Api.get('/managed-forms/assigned').then(function (d) { _cnt = (d && d.count) || 0; _fetching = false; paint(); }).catch(function () { _fetching = false; });
+    /* The badge counts the consent too. A task that does not reach the badge is a
+       task nobody discovers, because the badge is what sends them to the list. */
+    Promise.all([
+      Api.get('/managed-forms/assigned').catch(function () { return { count: 0 }; }),
+      _consent === null ? fetchConsent() : Promise.resolve(_consent),
+    ]).then(function (both) {
+      _cnt = ((both[0] && both[0].count) || 0) + (_consent ? 1 : 0);
+      _fetching = false;
+      paint();
+    }).catch(function () { _fetching = false; });
   }
-  KT.refreshMyFormsCount = function () { _cnt = null; fetchCount(); };
+  KT.refreshMyFormsCount = function () { _cnt = null; _consent = null; fetchCount(); };
   function paint() {
     if (_cnt == null) return;
     // Tile badge (any role's home).

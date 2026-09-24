@@ -67,6 +67,14 @@ final class SmsConsentController extends Controller
             'opted_in' => (bool) $u->sms_opt_in,
             'opted_in_at' => $u->sms_opt_in_at,
             'opted_out_at' => $u->sms_opt_out_at,
+            /* NEVER ASKED IS NOT THE SAME AS SAID NO (2026-09-24).
+
+               Both answer opted_in=false, and a screen that cannot tell them apart
+               either nags somebody who has already declined - the one thing a consent
+               prompt must never do - or stays silent for the people who have not been
+               asked yet, who are the entire point of asking. Either timestamp means
+               the question has been put and answered. */
+            'actioned' => (bool) ($u->sms_opt_in_at || $u->sms_opt_out_at),
             'source' => $u->sms_consent_source,
             'phone' => $u->phone,
             // The app renders this rather than carrying its own copy, so the wording

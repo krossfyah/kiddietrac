@@ -51,6 +51,33 @@ final class SmsConsentReceipt
             return false;
         }
 
+        /* THE SAME RECORD, SOMEWHERE THEY CAN GO AND LOOK (2026-09-24).
+
+           Anthony: "ensure that parents see's this in their documents."
+
+           The email above is posted once and then lives in whatever inbox it landed
+           in. A parent who deleted it, or changed address, or simply cannot find it
+           has no way back to what they agreed to - and neither has the office when
+           somebody asks. Filing it against the account fixes both: /auth/me/documents
+           reads scope_type 'user', so it appears under My documents for them and on
+           their record for staff.
+
+           Here rather than in optIn(), because this service is already the ONE place
+           every one of the five doors passes through. Only for a yes: a decline is
+           worth an email, but filing "here is the agreement you did not make" as a
+           document on somebody's record would be a strange thing to produce. */
+        if ($optedIn) {
+            \App\Support\SmsConsentRecord::file(
+                $userId,
+                SmsConsentController::CONSENT_TEXT,
+                SmsConsentController::CONSENT_VERSION,
+                $source,
+                $u->phone ?? null,
+                null,
+                null
+            );
+        }
+
         $agencyId = $agencyId ?: self::agencyOf($userId);
         $agencyName = $agencyId
             ? (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your centre')
