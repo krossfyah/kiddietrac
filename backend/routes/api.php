@@ -1414,6 +1414,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/immunizations',                       [ImmunizationController::class, 'store']);
             Route::patch('/immunizations/{id}',                 [ImmunizationController::class, 'update']);
             Route::delete('/immunizations/{id}',                [ImmunizationController::class, 'destroy']);
+            /* Exempt a dose on the SCHEDULE, rather than only on a record somebody
+               typed. Directors and agency admins: an exemption is a licensing
+               position, not a note taken at the door. */
+            Route::post('/children/{child}/immunization-exemption',
+                [ImmunizationController::class, 'setExemption'])->whereNumber('child');
 
             // v22p1: Child health profile (allergies / dietary / alerts)
             Route::get('/children/{child}/health',              [ChildHealthController::class, 'show']);

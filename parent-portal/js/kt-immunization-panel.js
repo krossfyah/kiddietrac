@@ -712,9 +712,50 @@
               + 'Show the rest of the schedule (' + rest.length + ')</summary>'
               + '<div style="margin-top:10px;">' + table(rest, false) + '</div></details>'
             : '');
+
+      /* Bound after the paint, not inline: the table is rebuilt from a string on every
+         refresh, so a handler attached to the old nodes would be thrown away with them.
+         Removing an exemption asks first - it puts a dose back on the overdue list and
+         starts the family being chased for it again. */
+      [].slice.call(dueEl.querySelectorAll('.kt-imm-ex')).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var vaccine = b.getAttribute('data-vaccine');
+          var dose = b.getAttribute('data-dose') || '';
+          if (b.getAttribute('data-on') === '1') {
+            var ask = (window.KT && KT.confirm)
+              ? KT.confirm({
+                  title: 'Remove this exemption?',
+                  description: vaccine + (dose ? ' (' + dose + ')' : '') + ' goes back on the schedule for '
+                    + childName(child) + ', and will be counted as due or overdue again.',
+                  okLabel: 'Remove it',
+                  tone: 'danger',
+                })
+              : Promise.resolve(true);
+            Promise.resolve(ask).then(function (ok) {
+              if (ok) { setExemption(vaccine, dose, false, null); }
+            });
+            return;
+          }
+          exemptDialog(vaccine, dose);
+        });
+      });
+    }
+
+    /* WHO MAY EXEMPT A DOSE. The endpoint is director/agency-admin only - an exemption
+       is a licensing position, not a note taken at the door - so the control is only
+       drawn for them. A parent never sees it, and an educator would only get a 403 from
+       a button that should not have been there. */
+    function canExempt() {
+      if (scope !== 'director') { return false; }
+      try {
+        var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {};
+        var roles = (u.roles || []).concat([u.role_key, u.role]).filter(Boolean).join(',');
+        return /agency_admin|centre_director|platform_admin/.test(roles);
+      } catch (e) { return false; }
     }
 
     function table(rows, urgent) {
+      var mayExempt = canExempt();
       return '<div style="overflow-x:auto;border:1px solid #E5E7EB;border-radius:12px;background:#fff;">'
         + '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
         + '<thead><tr style="background:#F9FAFB;text-align:left;">'
@@ -723,8 +764,10 @@
         +   '<th style="padding:9px 12px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;">'
         +     (urgent ? 'Was due' : 'Due') + '</th>'
         +   '<th style="padding:9px 12px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;">Status</th>'
+        +   (mayExempt ? '<th style="padding:9px 12px;"></th>' : '')
         + '</tr></thead><tbody>'
         + rows.map(function (i) {
+            var isExempt = i.status === 'exempt';
             return '<tr style="border-top:1px solid #F1F5F9;">'
               + '<td style="padding:9px 12px;font-weight:600;color:#111827;">' + esc(i.vaccine) + '</td>'
               + '<td style="padding:9px 12px;color:#475569;">' + esc(i.dose_label || '—') + '</td>'
@@ -733,10 +776,103 @@
                     ? 'given ' + esc(fmtDay(i.administered_on))
                     : esc(fmtDay(i.due_date)))
               + '</td>'
-              + '<td style="padding:9px 12px;">' + chip(i.status) + '</td>'
+              + '<td style="padding:9px 12px;">' + chip(i.status)
+              /* The REASON beside the chip. "Exempt" on its own invites the next person
+                 to ask why, and the answer is the whole point of recording it. */
+              +   (isExempt && i.exemption_reason
+                    ? '<div style="margin-top:3px;font-size:11.5px;color:#64748B;">'
+                      + esc(i.exemption_reason) + '</div>'
+                    : '')
+              + '</td>'
+              + (mayExempt
+                  ? '<td style="padding:9px 12px;text-align:right;white-space:nowrap;">'
+                    + '<button type="button" class="kt-imm-ex" data-kt-no-kebab="1"'
+                    +   ' data-vaccine="' + esc(i.vaccine) + '"'
+                    +   ' data-dose="' + esc(i.dose_label || '') + '"'
+                    +   ' data-on="' + (isExempt ? '1' : '0') + '"'
+                    +   ' style="border:1px solid ' + (isExempt ? '#C7D2FE' : '#CBD5E1') + ';'
+                    +     'background:' + (isExempt ? '#EEF2FF' : '#fff') + ';color:' + (isExempt ? '#3730A3' : '#334155') + ';'
+                    +     'border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">'
+                    + (isExempt ? 'Remove exemption' : 'Exempt') + '</button></td>'
+                  : '')
               + '</tr>';
           }).join('')
         + '</tbody></table></div>';
+    }
+
+    /* THE REASON IS THE RECORD. Licensing asks for a documented exemption - a medical
+       reason, or a statement of conscience or religious belief - so the dialog asks for
+       one and the endpoint refuses without it. The presets are the wording the
+       regulation uses; "Other" leaves it to whoever is filing it. */
+    var EXEMPTION_REASONS = [
+      'Religious or conscientious belief',
+      'Medical reason (documented by a physician)',
+      'Other',
+    ];
+
+    function exemptDialog(vaccine, dose) {
+      var M = window.KT && KT.Shell && KT.Shell.Modal;
+      if (!M) { return; }
+      var box = document.createElement('div');
+      box.innerHTML =
+        '<div style="font-size:13.5px;color:#475569;margin-bottom:12px;">Record <strong>'
+        +   esc(childName(child)) + '</strong> as exempt from <strong>' + esc(vaccine)
+        +   (dose ? ' (' + esc(dose) + ')' : '') + '</strong>.</div>'
+        + '<label style="display:block;font-size:12px;font-weight:700;color:#334155;margin-bottom:5px;">Reason</label>'
+        + '<select class="ex-kind" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #CBD5E1;'
+        +   'border-radius:9px;font-size:13.5px;background:#fff;">'
+        +   EXEMPTION_REASONS.map(function (r) {
+              return '<option value="' + esc(r) + '">' + esc(r) + '</option>';
+            }).join('')
+        + '</select>'
+        + '<input class="ex-note" placeholder="Anything to add (optional)" maxlength="140"'
+        +   ' style="width:100%;box-sizing:border-box;margin-top:8px;padding:9px 11px;border:1px solid #CBD5E1;'
+        +   'border-radius:9px;font-size:13.5px;">'
+        + '<div style="margin-top:12px;font-size:12px;color:#64748B;line-height:1.5;">'
+        +   'An exempt dose stops being counted as overdue and is left out of the reminders '
+        +   'sent to the family. It is recorded against this child with your name and today&rsquo;s date.</div>';
+
+      M.open({
+        title: 'Exempt from ' + vaccine,
+        body: box,
+        actions: [
+          { label: 'Cancel' },
+          {
+            label: 'Record exemption',
+            primary: true,
+            busyLabel: 'Saving\u2026',
+            handler: function () {
+              var kind = box.querySelector('.ex-kind').value;
+              var note = (box.querySelector('.ex-note').value || '').trim();
+              var reason = note ? (kind + ' — ' + note) : kind;
+              return setExemption(vaccine, dose, true, reason);
+            },
+          },
+        ],
+      });
+    }
+
+    function setExemption(vaccine, dose, on, reason) {
+      return KT.Api.post('/director/children/' + child.id + '/immunization-exemption', {
+        vaccine: vaccine,
+        dose_label: dose || null,
+        exempt: !!on,
+        exemption_reason: reason || null,
+      }).then(function (res) {
+        if (window.KT && KT.toast) {
+          KT.toast('\uD83D\uDC89', on ? 'Exempt' : 'Exemption removed', (res && res.message) || '');
+        }
+        loadDue();
+        /* The record list shows the exemption row too, and the caller may be counting
+           outstanding doses in a header it drew itself. */
+        loadRecords();
+        if (typeof opts.onChange === 'function') { try { opts.onChange(); } catch (e) {} }
+      }).catch(function (e) {
+        if (window.KT && KT.toast) {
+          KT.toast('\u26A0\uFE0F', 'Could not save', (e && e.message) || 'error', '#DC2626');
+        }
+        return false;                 // keeps the dialog open so the reason is not lost
+      });
     }
 
     /* The child's own tab already knows which child it is and already holds the dose

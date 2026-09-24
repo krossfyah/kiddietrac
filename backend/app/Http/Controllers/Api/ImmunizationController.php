@@ -91,9 +91,178 @@ class ImmunizationController extends Controller
             'exemption_reason' => 'nullable|string|max:200',
         ]);
 
+        /* THE CHILD HAS TO BE ONE OF YOURS (2026-09-24).
+
+           update() and destroy() both check this; store() never did. `exists:children,id`
+           proves a child exists, not that they are in your centre, so any director could
+           write a dose - or an exemption - onto any child in the platform by id. Noticed
+           while adding the exemption endpoint below, which needed the same guard. */
+        if (! $this->childIsInCentre((int) $data['child_id'], $centreId)) {
+            return response()->json(['message' => 'Child not in your centre'], 403);
+        }
+
         $data['recorded_by_id'] = $request->user()->id;
         $row = Immunization::create($data);
+
         return response()->json(['immunization' => $row], 201);
+    }
+
+    /** Is this child enrolled at that centre? enrollments carries room_id, so go via rooms. */
+    private function childIsInCentre(int $childId, int $centreId): bool
+    {
+        return DB::table('enrollments')
+            ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
+            ->where('enrollments.child_id', $childId)
+            ->where('rooms.centre_id', $centreId)
+            ->exists();
+    }
+
+    /**
+     * POST /director/children/{child}/immunization-exemption
+     *
+     * EXEMPT A DOSE THAT WAS NEVER GIVEN (2026-09-24).
+     *
+     * Anthony: "add an exempt option to the list of doses/vaccines to be chosen to
+     * exempt from immunizations as some children/parents has religious exempt from
+     * their province/country."
+     *
+     * Everything underneath this already worked: `immunizations.exempt` has existed
+     * since v22p1, a matched record carrying it reads as `exempt` rather than `done`,
+     * an exempt dose is never overdue, never chased in a parent reminder, and the
+     * compliance report prints "Exempt" with its reason. What there was no way to do
+     * was SET it against a dose on the schedule - the flag could only be attached to a
+     * record somebody added by hand, which meant spelling the vaccine and dose exactly
+     * as the schedule spells them and hoping they matched. Zero of the 37 rows on file
+     * carried it.
+     *
+     * An exemption is a statement about a dose, so it is keyed by vaccine and dose the
+     * same way the schedule matches one - case- and space-insensitively - and it is
+     * IDEMPOTENT. Exempting twice updates one row rather than leaving two, because two
+     * rows for one dose is how a "done" and an "exempt" end up disagreeing about the
+     * same vaccine.
+     *
+     * Clearing one REMOVES the row when the row exists only to carry the exemption. A
+     * row that also records an administered date is a real record and keeps it; only
+     * the flag comes off. Otherwise "un-exempt" would leave an empty dose behind that
+     * reads as neither given nor due.
+     *
+     * Directors and agency admins only (the route group): whether a child is exempt is
+     * a licensing position, not a note an educator takes at the door. A guardian cannot
+     * reach it at all.
+     */
+    public function setExemption(Request $request, int $childId): JsonResponse
+    {
+        $centreId = $this->resolveCentreId($request->user());
+        if (! $centreId) {
+            return response()->json(['message' => 'No centre access'], 403);
+        }
+        if (! $this->childIsInCentre($childId, $centreId)) {
+            return response()->json(['message' => 'Child not in your centre'], 403);
+        }
+
+        $data = $request->validate([
+            'vaccine' => 'required|string|max:100',
+            'dose_label' => 'nullable|string|max:40',
+            'exempt' => 'required|boolean',
+            'exemption_reason' => 'nullable|string|max:200',
+        ]);
+
+        $vaccine = trim((string) $data['vaccine']);
+        $dose = trim((string) ($data['dose_label'] ?? ''));
+        $wantExempt = (bool) $data['exempt'];
+        $reason = trim((string) ($data['exemption_reason'] ?? ''));
+
+        /* A REASON IS NOT OPTIONAL WHEN EXEMPTING. The licensing requirement is a
+           documented exemption; an undocumented one is just a missing dose wearing a
+           better label, and it would silence the reminder with nothing on file to
+           justify it. */
+        if ($wantExempt && $reason === '') {
+            return response()->json([
+                'message' => 'Give the reason for the exemption - it is what makes it a record.',
+                'errors' => ['exemption_reason' => ['A reason is required.']],
+            ], 422);
+        }
+
+        /* Matched the way the schedule matches, so an exemption lands on the dose the
+           reader is looking at rather than beside it. */
+        $key = fn ($v, $d) => mb_strtolower(trim(((string) $v) . '|' . ((string) $d)));
+        $wanted = $key($vaccine, $dose);
+
+        $existing = null;
+        foreach (Immunization::where('child_id', $childId)->get() as $row) {
+            if ($key($row->vaccine, $row->dose_label) === $wanted) {
+                $existing = $row;
+                break;
+            }
+        }
+
+        $action = 'immunization.exemption_set';
+
+        if (! $wantExempt) {
+            if (! $existing || ! $existing->exempt) {
+                return response()->json(['ok' => true, 'message' => 'That dose was not exempt.']);
+            }
+            $isOnlyAnExemption = ! $existing->administered_on && ! $existing->lot_number
+                && ! $existing->site && ! $existing->clinic_name && ! $existing->administered_by;
+            if ($isOnlyAnExemption) {
+                $existing->delete();
+            } else {
+                $existing->update(['exempt' => false, 'exemption_reason' => null]);
+            }
+            $action = 'immunization.exemption_removed';
+            $result = null;
+        } elseif ($existing) {
+            $existing->update(['exempt' => true, 'exemption_reason' => $reason]);
+            $result = $existing->fresh();
+        } else {
+            $result = Immunization::create([
+                'child_id' => $childId,
+                'vaccine' => $vaccine,
+                'dose_label' => $dose !== '' ? $dose : null,
+                'administered_on' => null,
+                'exempt' => true,
+                'exemption_reason' => $reason,
+                'recorded_by_id' => $request->user()->id,
+            ]);
+        }
+
+        /* A health record changed, so the log has to name WHAT - the child and the dose,
+           not a count. This is compliance evidence and somebody will be asked who
+           decided it and when. */
+        try {
+            $childName = DB::table('children')->where('id', $childId)
+                ->selectRaw("TRIM(CONCAT(COALESCE(NULLIF(preferred_name,''),first_name),' ',last_name)) as n")
+                ->value('n');
+            \App\Support\Audit::write([
+                'user_id' => $request->user()->id,
+                'agency_id' => \App\Support\AuditScope::resolve((int) $request->user()->id, $request),
+                'action' => $action,
+                'entity_type' => 'child',
+                'entity_id' => $childId,
+                'payload' => json_encode([
+                    'child' => $childName,
+                    'vaccine' => $vaccine,
+                    'dose_label' => $dose !== '' ? $dose : null,
+                    'exemption_reason' => $wantExempt ? $reason : null,
+                    'summary' => $wantExempt
+                        ? ($childName . ' was recorded EXEMPT from ' . $vaccine
+                            . ($dose !== '' ? ' (' . $dose . ')' : '') . ' - ' . $reason)
+                        : ('The exemption for ' . $vaccine . ($dose !== '' ? ' (' . $dose . ')' : '')
+                            . ' was removed for ' . $childName . '; the dose is due again.'),
+                ]),
+                'ip_address' => $request->ip(),
+                'user_agent' => substr((string) $request->userAgent(), 0, 500),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Immunization exemption audit failed', ['e' => $e->getMessage()]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'immunization' => $result,
+            'message' => $wantExempt ? 'Exemption recorded.' : 'Exemption removed.',
+        ]);
     }
 
     public function update(Request $request, int $id): JsonResponse

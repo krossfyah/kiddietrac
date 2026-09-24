@@ -135,7 +135,7 @@ final class ImmunizationScheduleController extends Controller
             $schedule = DB::table('immunization_schedule')->where('agency_id', $agencyId)->where('active', 1)->get();
         }
         $records = DB::table('immunizations')->where('child_id', $childId)
-            ->select('vaccine', 'dose_label', 'administered_on', 'exempt')
+            ->select('vaccine', 'dose_label', 'administered_on', 'exempt', 'exemption_reason')
             ->get();
         $recordKey = fn ($v, $d) => strtolower(trim($v . '|' . $d));
         $byKey = $records->keyBy(fn ($r) => $recordKey($r->vaccine, $r->dose_label));
@@ -165,6 +165,9 @@ final class ImmunizationScheduleController extends Controller
                 'months_until_due' => $monthsUntil,
                 'status' => $status,
                 'administered_on' => $rec->administered_on ?? null,
+                // WHY it is exempt, not just that it is. "Exempt" on its own invites the
+                // next person to ask, and the answer is the point of recording it.
+                'exemption_reason' => ($rec && $rec->exempt) ? ($rec->exemption_reason ?: null) : null,
                 'is_required' => (bool) $s->is_required,
             ];
         });
