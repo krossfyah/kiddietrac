@@ -313,17 +313,25 @@ final class SmsConsentController extends Controller
         // Punctuation and stray whitespace are common in a real reply ("STOP." / " stop ").
         $word = trim(preg_replace('/[^a-z\-]/', '', strtolower(trim($rawText))) ?? '');
 
-        $user = $this->userByPhone($from);
+        /* ALL of them for a keyword, ONE of them for a message. */
+        $onThisPhone = $this->usersByPhone($from);
+        $user = $this->primaryOf($onThisPhone);
         $reply = null;
 
         if (in_array($word, self::STOP_WORDS, true)) {
-            if ($user) {
-                $this->optOut((int) $user->id, 'sms');
+            /* EVERY account on this handset. Opting out only the one we happened to
+               resolve leaves the others texting somebody who has just said stop, which
+               is the one thing STOP may never do. */
+            foreach ($onThisPhone as $u) {
+                $this->optOut((int) $u->id, 'sms');
             }
             $reply = self::MSG_STOP;
         } elseif (in_array($word, self::START_WORDS, true)) {
-            if ($user) {
-                $this->optIn((int) $user->id, 'sms');
+            /* And back on for all of them, for the same reason in reverse: the handset
+               is what consented, and leaving three of its four accounts switched off
+               would mean START visibly not working. */
+            foreach ($onThisPhone as $u) {
+                $this->optIn((int) $u->id, 'sms');
             }
             $reply = sprintf(self::MSG_CONFIRM, $user ? $this->agencyNameFor((int) $user->id) : 'your agency');
         } elseif (in_array($word, self::HELP_WORDS, true)) {
@@ -427,18 +435,72 @@ final class SmsConsentController extends Controller
      * Compared on the last 10 digits: we store numbers as typed — "(416) 570-2747" —
      * and Twilio sends E.164, so a string comparison never matches.
      */
-    private function userByPhone(string $from)
+    /**
+     * EVERY live account on this handset (2026-09-24).
+     *
+     * Anthony: "if the SMS account has two accounts in kiddietrac based on user name
+     * would they get opt'd in requests for each identifiable account?"
+     *
+     * They would - consent is a column on the user row, so two accounts are two
+     * consents - and the dangerous half is the other direction. userByPhone() returned
+     * ONE account, the newest by id, so a STOP from a handset opted out that one and
+     * left the rest texting. Measured on live data before this change: three numbers
+     * are shared by more than one account, and on 4169892621 a STOP would have silenced
+     * account #126 while #1 carried on.
+     *
+     * A carrier does not regulate accounts, it regulates NUMBERS: STOP means stop
+     * texting this handset. So the keyword now applies to all of them.
+     *
+     * @return \Illuminate\Support\Collection
+     */
+    private function usersByPhone(string $from)
     {
         $digits = preg_replace('/\D/', '', $from) ?? '';
         if (strlen($digits) < 10) {
-            return null;
+            return collect();
         }
         $last10 = substr($digits, -10);
 
         return DB::table('users')
             ->whereRaw("RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', ''), 10) = ?", [$last10])
+            ->whereNull('deleted_at')
             ->orderByDesc('id')
-            ->first();
+            ->get();
+    }
+
+    /**
+     * Which of them a REPLY is filed under.
+     *
+     * A keyword applies to every account; a message has to belong to one, because it
+     * gets attributed, audited and dropped into one family's chat thread. Preferred in
+     * order: somebody who has opted in (they are the one being texted), then somebody
+     * with children (a reply about a child belongs with that family), then the newest -
+     * which is what this always used to return.
+     */
+    private function primaryOf($users)
+    {
+        if ($users->isEmpty()) {
+            return null;
+        }
+
+        $optedIn = $users->firstWhere('sms_opt_in', 1);
+        if ($optedIn) {
+            return $optedIn;
+        }
+
+        foreach ($users as $u) {
+            if (DB::table('guardians')->where('user_id', $u->id)->exists()) {
+                return $u;
+            }
+        }
+
+        return $users->first();
+    }
+
+    /** Kept for callers that only ever wanted one. */
+    private function userByPhone(string $from)
+    {
+        return $this->primaryOf($this->usersByPhone($from));
     }
 
     private function agencyNameFor(int $userId): string
