@@ -216,15 +216,34 @@ final class SmsConsentController extends Controller
         $body = json_decode($raw, true) ?: [];
         $event = (string) ($body['data']['event_type'] ?? '');
 
-        // The same endpoint receives delivery receipts (message.sent, message.finalized).
-        // Acknowledged so Telnyx stops retrying, and otherwise not our business here.
+        /* DELIVERY RECEIPTS WERE BEING THROWN AWAY (2026-09-24).
+
+           The same endpoint receives message.sent and message.finalized, and both were
+           acknowledged and discarded - which is why no Telnyx message has ever shown
+           anything but `sent`: 20 sent, 0 delivered, while the legacy Twilio rows have
+           18 delivered. A send we cannot confirm is a send somebody has to ask the
+           carrier about.
+
+           Matched back by provider_ref, which sendOne already stores. Still always 200:
+           a non-2xx makes Telnyx retry, and a retried receipt is harmless but pointless. */
         if ($event !== 'message.received') {
+            $ref = (string) ($body['data']['payload']['id'] ?? $body['data']['id'] ?? '');
+            $errs = $body['data']['payload']['errors'] ?? [];
+            $delivered = in_array((string) ($body['data']['payload']['to'][0]['status'] ?? ''), ['delivered'], true);
+            if ($ref !== '') {
+                \App\Support\SmsInbound::receipt(
+                    $ref,
+                    $errs ? 'failed' : ($delivered ? 'delivered' : 'sent'),
+                    $errs ? mb_substr(json_encode($errs), 0, 190) : null
+                );
+            }
+
             return response('', 200);
         }
 
         $p = (array) ($body['data']['payload'] ?? []);
         $from = (string) ($p['from']['phone_number'] ?? '');
-        $reply = $this->handleKeyword($from, (string) ($p['text'] ?? ''), 'telnyx');
+        $reply = $this->handleKeyword($from, (string) ($p['text'] ?? ''), 'telnyx', $agency);
 
         if ($reply === null || ! self::keywordRepliesOn() || $from === '') {
             return response('', 200);
@@ -271,7 +290,11 @@ final class SmsConsentController extends Controller
      * record is the part that matters: a carrier blocks the number itself, but only we
      * can stop the app claiming somebody is still subscribed.
      */
-    private function handleKeyword(string $from, string $rawText, string $carrier): ?string
+    /**
+     * @param  int|null  $agencyId  Telnyx knows it from the route; Twilio's webhook is
+     *                              platform-wide, so there it is resolved from the sender.
+     */
+    private function handleKeyword(string $from, string $rawText, string $carrier, ?int $agencyId = null): ?string
     {
         $from = trim($from);
         // Punctuation and stray whitespace are common in a real reply ("STOP." / " stop ").
@@ -298,6 +321,34 @@ final class SmsConsentController extends Controller
             'carrier' => $carrier, 'from' => $from, 'word' => $word,
             'matched' => $reply !== null, 'user' => $user->id ?? null,
         ]);
+
+        /* FILE IT, AND TELL THE PEOPLE IT CONCERNS (2026-09-24).
+
+           Here rather than in either webhook: both carriers funnel through this method,
+           and a reply that is logged for one carrier and not the other is the kind of
+           gap that only shows up after somebody swears they texted back.
+
+           EVERY inbound message, not only the keywords. A keyword was at least acted
+           on; anything else a parent typed was read and dropped, which is the worse
+           half - "running late" reaching nobody is a child standing outside. */
+        $matched = null;
+        if (in_array($word, self::STOP_WORDS, true)) {
+            $matched = 'stop';
+        } elseif (in_array($word, self::START_WORDS, true)) {
+            $matched = 'start';
+        } elseif (in_array($word, self::HELP_WORDS, true)) {
+            $matched = 'help';
+        }
+
+        \App\Support\SmsInbound::record(
+            (int) ($agencyId ?: \App\Support\SmsInbound::agencyOfUser($user->id ?? null)),
+            $from,
+            $rawText,
+            isset($user->id) ? (int) $user->id : null,
+            $matched,
+            null,
+            $carrier
+        );
 
         return $reply;
     }

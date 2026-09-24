@@ -158,7 +158,8 @@ final class SmsController extends Controller
             ->orderByDesc('m.created_at')
             ->limit(200)
             ->select(
-                'm.id', 'm.to_user_id', 'm.to_phone', 'm.body', 'm.category', 'm.provider',
+                // Which way it went, so a reply is not read as something we sent.
+                'm.id', 'm.direction', 'm.to_user_id', 'm.to_phone', 'm.body', 'm.category', 'm.provider',
                 'm.provider_ref', 'm.twilio_sid', 'm.status', 'm.error', 'm.sent_at', 'm.created_at',
                 DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as to_name")
             )
@@ -192,7 +193,7 @@ final class SmsController extends Controller
                that not send?" has an answer, and this one is no different. Found while
                testing the audience breakdown, which reported one reachable person and one
                skipped send with no trace of either. */
-            DB::table('sms_messages')->insert([
+            $gateRow = DB::table('sms_messages')->insertGetId([
                 'agency_id' => $agencyId,
                 'to_user_id' => $userId,
                 'to_phone' => $phone,
@@ -202,6 +203,7 @@ final class SmsController extends Controller
                 'error' => 'do-not-contact (suppressed account or agency)',
                 'created_at' => now(),
             ]);
+            \App\Support\SmsInbound::audit($gateRow);
 
             return false;
         }
@@ -214,7 +216,7 @@ final class SmsController extends Controller
            three by default instead of having to remember them. Logged as a skipped row,
            not dropped, so "why did that not send?" has an answer. (Anthony, 2026-09-08) */
         if (! DB::table('agencies')->where('id', $agencyId)->value('sms_enabled')) {
-            DB::table('sms_messages')->insert([
+            $gateRow = DB::table('sms_messages')->insertGetId([
                 'agency_id' => $agencyId,
                 'to_user_id' => $userId,
                 'to_phone' => $phone,
@@ -224,6 +226,7 @@ final class SmsController extends Controller
                 'error' => 'sms disabled for this agency',
                 'created_at' => now(),
             ]);
+            \App\Support\SmsInbound::audit($gateRow);
 
             return false;
         }
@@ -238,7 +241,7 @@ final class SmsController extends Controller
         // Logged as a skipped row rather than dropped silently, so "why did that not
         // send?" has an answer.
         if (! DB::table('users')->where('id', $userId)->value('sms_opt_in')) {
-            DB::table('sms_messages')->insert([
+            $gateRow = DB::table('sms_messages')->insertGetId([
                 'agency_id' => $agencyId,
                 'to_user_id' => $userId,
                 'to_phone' => $phone,
@@ -248,6 +251,7 @@ final class SmsController extends Controller
                 'error' => 'no sms consent',
                 'created_at' => now(),
             ]);
+            \App\Support\SmsInbound::audit($gateRow);
 
             return false;
         }
@@ -263,6 +267,7 @@ final class SmsController extends Controller
         ]);
         if (! $phone) {
             DB::table('sms_messages')->where('id', $rowId)->update(['status' => 'skipped', 'error' => 'no phone']);
+            \App\Support\SmsInbound::audit($rowId);
 
             return false;
         }
@@ -284,6 +289,7 @@ final class SmsController extends Controller
                 'provider' => $r['provider'],
                 'error' => $r['error'],
             ]);
+            \App\Support\SmsInbound::audit($rowId);
 
             return false;
         }
@@ -301,6 +307,13 @@ final class SmsController extends Controller
             // it" is the single most useful thing this column can hold.
             'error' => ($r['attempts'] && str_contains((string) $r['attempts'], '|')) ? $r['attempts'] : null,
         ]);
+
+        /* AUDITED FROM THE ROW, not from this branch (2026-09-24).
+           Anthony: "i need SMS texts to be logged in audit log as well." Every
+           terminal state writes one - sent, failed, and each gate that skips - so
+           the audit log and sms_messages agree on how many texts there were, and
+           a text that was silently gated is as visible as one that went. */
+        \App\Support\SmsInbound::audit($rowId);
 
         return true;
     }
