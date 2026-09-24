@@ -122,18 +122,18 @@ final class SmsConsentController extends Controller
             ], 422);
         }
 
-        $this->optIn((int) $u->id, 'app');
+        /* The confirmation text used to be sent from right here, and it never once
+           arrived. It passed `$u->agency_id` - and `users` HAS NO agency_id COLUMN, so
+           that was null, cast to 0, and every send looked up the SMS credentials of
+           agency zero and gave up with "twilio not configured". Both attempts ever made
+           are on file as `skipped`; six of the eight people who opted in never had one
+           attempted at all, because only this door and an inbound START ever tried.
 
-        // The confirmation the policy promises. Sent through the ordinary sender so it is
-        // logged in sms_messages like everything else.
-        $agency = $this->agencyNameFor((int) $u->id);
-        app(SmsController::class)->sendOne(
-            (int) ($u->agency_id ?? 0),
-            (int) $u->id,
-            (string) $u->phone,
-            sprintf(self::MSG_CONFIRM, $agency),
-            'consent_confirm'
-        );
+           It now goes out from SmsConsentReceipt, which is already the one place all
+           five doors pass through and which already resolves the agency from
+           role_assignments rather than from a column that does not exist. optIn() calls
+           it, so this path still sends - once. (2026-09-24) */
+        $this->optIn((int) $u->id, 'app');
 
         return response()->json(['opted_in' => true]);
     }

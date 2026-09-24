@@ -83,6 +83,48 @@ final class SmsConsentReceipt
             ? (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your centre')
             : 'your centre';
 
+        /* THE CONFIRMATION TEXT THE POLICY PROMISES (2026-09-24).
+
+           Anthony: "did we send a text that highlights the opt'd in through
+           kiddietrac/ilearn? and log that somewhere that was done?"
+
+           No. Eight people are opted in; two had a confirmation attempted and BOTH were
+           skipped, and the other six never had one attempted at all. Two faults:
+
+             - the only doors that tried were the app toggle and an inbound START; the
+               emailed link, a director recording it and onboarding never did;
+             - the app toggle passed `$u->agency_id` as the agency, and `users` has no
+               such column, so it was 0 - credentials for agency zero do not exist, and
+               the send was skipped as "twilio not configured".
+
+           It belongs here for the same reason the email and the filed copy do: this is
+           the one place every door passes through, and $agencyId above is resolved from
+           role_assignments rather than from a column that does not exist. A carrier
+           expects this message, and the consent wording promises the STOP and HELP
+           instructions it carries.
+
+           NOT for an inbound START: that handset already got MSG_CONFIRM as the direct
+           reply to its own text, and a second copy a moment later is the sender looking
+           broken. Not for a decline either - there is nothing to confirm.
+
+           Failure is logged and swallowed: a confirmation that does not go is worth
+           knowing about, but it is not worth failing the opt-in the person asked for. */
+        if ($optedIn && $source !== 'sms' && trim((string) ($u->phone ?? '')) !== '') {
+            try {
+                app(\App\Http\Controllers\Api\SmsController::class)->sendOne(
+                    (int) $agencyId,
+                    $userId,
+                    (string) $u->phone,
+                    sprintf(SmsConsentController::MSG_CONFIRM, $agencyName),
+                    'consent_confirm'
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('SMS consent confirmation failed', [
+                    'user' => $userId, 'e' => $e->getMessage(),
+                ]);
+            }
+        }
+
         /* The agency's clock, not the server's. A parent in Toronto reading "02:14" for
            something they did at 22:14 has been handed a record that contradicts them. */
         $tz = ($agencyId ? DB::table('agencies')->where('id', $agencyId)->value('timezone') : null)
