@@ -109,11 +109,20 @@ final class AuthController extends Controller
             if ($signable->count() > 1) {
                 // Logged, because this is a REFUSAL and it used to leave no trace.
                 // Seven of these looked like "no attempt was ever made".
+                /* Stamped too, for the same reason as login_failed below - this is
+                   also a refusal nobody could see. Only when every candidate sits in
+                   the SAME agency: a shared address can span two tenants, and filing
+                   one agency's prompt in another's log is the bleed this scoping
+                   exists to prevent. */
+                $candidateAgencies = DB::table('role_assignments')
+                    ->whereIn('user_id', $signable->pluck('id')->all())
+                    ->whereNotNull('agency_id')->distinct()->pluck('agency_id');
+
                 $this->audit($request, null, 'login_needs_username', null, null, [
                     'login' => $login,
                     'reason' => 'several_accounts_share_this_email',
                     'account_ids' => $signable->pluck('id')->all(),
-                ]);
+                ], $candidateAgencies->count() === 1 ? (int) $candidateAgencies->first() : null);
 
                 return response()->json([
                     'needs_username' => true,
@@ -137,10 +146,59 @@ final class AuthController extends Controller
            goes to the audit log, never to the browser, so this tells an attacker
            nothing it did not already tell them. */
         if (! $user) {
-            $this->audit($request, null, 'login_failed', null, null, [
-                'login' => $login,
-                'reason' => $uname !== '' ? 'no_account_matching_email_and_username' : 'no_such_account',
-            ]);
+            /* WHOSE AGENCY WAS THIS? (2026-09-24)
+
+               Anthony: "if Bruni was signing in incorrectly today why wasn't the audit
+               log showing these entries?"
+
+               It was logging them. With agency_id NULL - and the viewer shows only rows
+               stamped with the active agency, deliberately, because an unstamped row
+               used to leak across tenants. So the eight attempts that explained the
+               whole problem (she was typing a username she does not have) were invisible
+               to iLearn, while the four that happened to match her address were not. The
+               half that could be seen was the half that said least.
+
+               This is the same fault that was fixed for password resets on 21 Sep and
+               never carried across to login. Measured before the change: 313 of 356
+               refused sign-ins platform-wide carried no agency at all.
+
+               Attribution is by what we actually know, and it says which:
+
+                 • the identifier names a real account - including an archived or
+                   switched-off one, because "no live account" is not "no account". 87
+                   of the 313.
+                 • otherwise the same IP has signed in successfully to EXACTLY ONE
+                   agency recently. That is how Bruni's attempts get home: `bruni`
+                   matches nothing anywhere, but her IP has only ever reached iLearn.
+                   102 more. Recorded as INFERRED, with no user attached, because an IP
+                   is not a person.
+                 • an IP that spans several agencies is not guessed at (78 of them), and
+                   neither is one with no history (46). Those stay platform-level, which
+                   is the honest place for a probe or a typo from nowhere. */
+            [$owner, $ownerAgency, $how] = $this->attributeRefusedLogin($request, $login, $uname);
+
+            $this->audit($request, null, 'login_failed',
+                $owner ? 'user' : null,
+                $owner ? (int) $owner->id : null,
+                array_filter([
+                    'login' => $login,
+                    'reason' => $uname !== '' ? 'no_account_matching_email_and_username' : 'no_such_account',
+                    'attributed_by' => $how,
+                    'account' => $owner ? trim($owner->first_name . ' ' . $owner->last_name) : null,
+                    'account_status' => $owner ? ($owner->deleted_at ? 'archived' : $owner->status) : null,
+                    'summary' => $owner
+                        ? ('A sign-in was attempted as "' . $login . '", which belongs to '
+                            . trim($owner->first_name . ' ' . $owner->last_name)
+                            . ($owner->deleted_at
+                                ? ' - an account ARCHIVED on ' . substr((string) $owner->deleted_at, 0, 10) . '.'
+                                : ' - but the sign-in did not match it.'))
+                        : ($how === 'same_ip_recent_login'
+                            ? 'A sign-in was attempted as "' . $login . '", which matches no account. '
+                                . 'Filed here because this device has signed in to this agency before; '
+                                . 'the identifier itself names nobody.'
+                            : null),
+                ], fn ($v) => $v !== null),
+                $ownerAgency);
 
             return response()->json([
                 'message' => 'Invalid credentials.',
@@ -1467,6 +1525,85 @@ final class AuthController extends Controller
             in_array('auditor', $roles, true) => 'auditor',
             default => $roles[0] ?? null,
         };
+    }
+
+    /**
+     * Who, and which agency, does a refused sign-in concern?
+     *
+     * ONE definition, used by every refusal branch, so the login log and the reset log
+     * cannot drift apart on the question they both have to answer. Returns the owning
+     * account when the identifier names one, the agency either way when it can be
+     * established, and HOW it was decided so the payload can say so.
+     *
+     * Nothing here is disclosed to the caller: the response above is unchanged and
+     * identical for every outcome. This only decides which audit log the row lands in.
+     *
+     * @return array{0: ?object, 1: ?int, 2: ?string}
+     */
+    private function attributeRefusedLogin(Request $request, string $login, string $uname): array
+    {
+        $owner = null;
+
+        /* An archived account is not a typo - it still knows which agency it belonged
+           to, and that is exactly the account somebody is locked out of. */
+        if ($uname !== '') {
+            $owner = DB::table('users')->whereRaw('LOWER(username) = ?', [mb_strtolower($uname)])
+                ->first(['id', 'first_name', 'last_name', 'status', 'deleted_at']);
+        }
+        if (! $owner && str_contains($login, '@')) {
+            /* Only when the address names exactly ONE account. A shared address would
+               otherwise attribute the attempt to whichever row sorted first, which on a
+               cross-agency address is a row filed under the wrong tenant. */
+            $onEmail = DB::table('users')->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower(trim($login))])
+                ->get(['id', 'first_name', 'last_name', 'status', 'deleted_at']);
+            if ($onEmail->count() === 1) {
+                $owner = $onEmail->first();
+            }
+        }
+        if (! $owner && $login !== '' && ! str_contains($login, '@')) {
+            $owner = DB::table('users')->whereRaw('LOWER(username) = ?', [mb_strtolower(trim($login))])
+                ->first(['id', 'first_name', 'last_name', 'status', 'deleted_at']);
+        }
+
+        if ($owner) {
+            /* Any assignment, active or not: the roles on an archived account are
+               switched off, and that is the account being asked about. */
+            $agency = DB::table('role_assignments')->where('user_id', $owner->id)
+                ->whereNotNull('agency_id')->orderByRaw("role = 'guardian' ASC")
+                ->value('agency_id');
+
+            return [$owner, $agency ? (int) $agency : null, 'identifier'];
+        }
+
+        /* NO ACCOUNT ANYWHERE MATCHES. The device can still say where this belongs:
+           an identifier that names nobody, typed at a machine that signs in to one
+           agency and only one, is that agency's problem to see. Bounded to 30 days so
+           a long-dead lease cannot keep attributing, and refused outright when the
+           address has reached more than one agency. */
+        /* ANY agency-stamped activity from this device, not only a sign-in row.
+
+           Restricting it to the login action missed the very case this was written
+           for: Bruni last SIGNED IN on 24 August and worked from that address every
+           day since on the token it minted, so inside a 30-day window her device had
+           no login at all and her eight attempts stayed unattributed. What a device
+           does while signed in says where it belongs at least as well as how it got
+           there, and it says so far more recently. Measured across the 313: 124
+           attributable this way against 102 by sign-in rows alone.
+
+           user_id is required as well as agency_id, so this reads only rows written
+           by a signed-in person - an unattributed row cannot vouch for anybody. */
+        $agencies = DB::table('audit_logs')
+            ->where('ip_address', (string) $request->ip())
+            ->whereNotNull('agency_id')
+            ->whereNotNull('user_id')
+            ->where('created_at', '>=', now()->subDays(30))
+            ->distinct()->pluck('agency_id');
+
+        if ($agencies->count() === 1) {
+            return [null, (int) $agencies->first(), 'same_ip_recent_login'];
+        }
+
+        return [null, null, null];
     }
 
     private function audit(Request $request, ?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, string|array|null $details = null, ?int $agencyId = null): void
