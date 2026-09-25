@@ -229,17 +229,10 @@
 
     const pager = document.createElement('div');
     pager.className = 'kt-pager';
-    pager.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:13px;color:#475569;';
-    pager.innerHTML = `
-      <div class="kt-pager-info"></div>
-      <div class="kt-pager-controls" style="display:flex;align-items:center;gap:6px;">
-        <button class="kt-pager-first" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">«</button>
-        <button class="kt-pager-prev" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">‹ Prev</button>
-        <input type="number" class="kt-pager-input" min="1" max="${totalPages}" value="1" style="width:64px;padding:6px 8px;border:1px solid #E2E8F0;border-radius:6px;text-align:center;">
-        <span style="color:#64748B;">of ${totalPages}</span>
-        <button class="kt-pager-next" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">Next ›</button>
-        <button class="kt-pager-last" style="background:#F1F5F9;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;">»</button>
-      </div>`;
+    pager.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#475569;';
+    /* Same bar as every other pager in the portal (KT.pagerBar, kt-card-pager.js),
+       not the « ‹ [n] of N › » strip this used to draw for itself. */
+    pager.innerHTML = '<div class="kt-pager-info"></div><div class="kt-pager-nav"></div>';
     table.parentElement.insertBefore(pager, table.nextSibling);
 
     function render() {
@@ -251,16 +244,8 @@
         else if (r.dataset.ktFilterHidden !== '1') r.style.display = '';
       });
       pager.querySelector('.kt-pager-info').textContent = `Showing ${start + 1}–${Math.min(end, rows.length)} of ${rows.length}`;
-      pager.querySelector('.kt-pager-input').value = currentPage;
+      if (window.KT && KT.pagerBar) KT.pagerBar(pager.querySelector('.kt-pager-nav'), currentPage, totalPages, (p) => { currentPage = p; render(); });
     }
-    pager.querySelector('.kt-pager-first').onclick = () => { currentPage = 1; render(); };
-    pager.querySelector('.kt-pager-prev').onclick = () => { if (currentPage > 1) { currentPage--; render(); } };
-    pager.querySelector('.kt-pager-next').onclick = () => { if (currentPage < totalPages) { currentPage++; render(); } };
-    pager.querySelector('.kt-pager-last').onclick = () => { currentPage = totalPages; render(); };
-    pager.querySelector('.kt-pager-input').addEventListener('change', (e) => {
-      const n = parseInt(e.target.value, 10);
-      if (n >= 1 && n <= totalPages) { currentPage = n; render(); }
-    });
     render();
   }
 

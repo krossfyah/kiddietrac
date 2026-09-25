@@ -458,7 +458,7 @@
     var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
 
-    var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:13px;color:#6B7280;' });
+    var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
     wrap.appendChild(pager);
 
     /* Paging used to throw the reader down the page.
@@ -528,7 +528,10 @@
         } else {
           listWrap.appendChild(renderTable(data.logs));
         }
-        buildPager();
+        // The rows are on screen by now; a pager fault must never take them back off
+        // (the .catch below clears listWrap). A tab mid-update can hold this file with
+        // an older kt-card-pager.js that has no KT.pagerBar.
+        try { buildPager(); } catch (e) { try { console.warn('[audit-logs] pager', e); } catch (e2) {} }
         releaseHeight();
         landOnTable();
       }).catch(function (e) {
@@ -630,13 +633,13 @@
       Dom.clear(pager);
       var shown = Math.min(state.offset + state.limit, state.total);
       pager.appendChild(Dom.el('div', {}, state.total === 0 ? '0 events' : (state.offset + 1 + '–' + shown + ' of ' + state.total)));
-      var btns = Dom.el('div', { style: 'display:flex;gap:8px;' });
-      var prev = Dom.el('button', { style: pagerBtn(), disabled: state.offset === 0 }, '◀ Prev');
-      prev.addEventListener('click', function () { state.offset = Math.max(0, state.offset - state.limit); jumpToTop = true; reload(); });
-      var next = Dom.el('button', { style: pagerBtn(), disabled: state.offset + state.limit >= state.total }, 'Next ▶');
-      next.addEventListener('click', function () { if (state.offset + state.limit < state.total) { state.offset += state.limit; jumpToTop = true; reload(); } });
-      btns.appendChild(prev); btns.appendChild(next);
-      pager.appendChild(btns);
+      // The portal's one numbered pager (KT.pagerBar), not a bespoke ◀ Prev / Next ▶ pair.
+      var nav = Dom.el('div', {});
+      pager.appendChild(nav);
+      var lim = state.limit || 50;
+      if (window.KT && KT.pagerBar) KT.pagerBar(nav, Math.floor(state.offset / lim) + 1, Math.ceil(state.total / lim), function (p) {
+        state.offset = (p - 1) * lim; jumpToTop = true; reload();
+      });
     }
 
     buildToolbar();
@@ -645,7 +648,7 @@
 
   function renderTable(logs) {
     // This screen has its OWN server-side search + pagination (the toolbar filters
-    // and the ◀ Prev / Next ▶ pager below, backed by /admin/audit-logs). Pre-set
+    // and the numbered pager below, backed by /admin/audit-logs). Pre-set
     // kt-table-filter's dedup flag so its GLOBAL auto search+pager does NOT also
     // attach — otherwise it client-paginated the 50 rows we load per server page
     // into 25-per-page chunks, producing a SECOND Prev/Next and capping the view
@@ -848,7 +851,6 @@
   }
   function lblStyle() { return 'display:block;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:4px;'; }
   function inputStyle() { return 'width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:white;box-sizing:border-box;'; }
-  function pagerBtn() { return 'background:white;border:1px solid #D1D5DB;color:#374151;padding:6px 14px;border-radius:8px;font-size:13px;cursor:pointer;'; }
 
   // ─── Shell registration ────────────────────────────────────────────
   if (Shell && Shell.registerScreen) {

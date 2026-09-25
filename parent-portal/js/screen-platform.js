@@ -1248,9 +1248,11 @@
     // emailLogs). The screen used to pull a flat window of the newest 300 rows and
     // rely on a client-side filter box, which meant anything older than a day or two
     // of sending simply could not be found — it looked like the email had never been
-    // logged. Rows are paged in on demand instead, and the count says how many
-    // matches exist in total so nothing is silently cut off.
-    var state = { q: '', status: (opts.status || ''), from: '', to: '', offset: 0, limit: 100, total: 0, rows: [] };
+    // logged. Rows are paged from the server with the portal's one numbered pager
+    // (KT.pagerBar) — it was a "Load 100 more" button until 2026-09-25, the only
+    // list in the portal that paged that way — and the count says how many matches
+    // exist in total so nothing is silently cut off.
+    var state = { q: '', status: (opts.status || ''), from: '', to: '', page: 1, limit: 25, total: 0, rows: [] };
     var errorsMode = state.status === 'problems';
 
     var inp = 'padding:8px 11px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box;font-family:inherit;';
@@ -1278,7 +1280,7 @@
       + '</div>'
       + '<div id="els-meta" style="font-size:12.5px;color:#64748B;margin:0 2px 8px;min-height:17px;"></div>'
       + '<div id="els-body"><div style="padding:30px;text-align:center;color:#6B7280;">Loading…</div></div>'
-      + '<div id="els-more" style="text-align:center;margin:14px 0 4px;"></div></div>';
+      + '<div id="els-more"></div></div>';
 
     var body = container.querySelector('#els-body');
     var meta = container.querySelector('#els-meta');
@@ -1331,56 +1333,47 @@
       if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
     }
 
-    function paintMore() {
-      var shown = state.rows.length;
-      if (shown >= state.total) { more.innerHTML = ''; return; }
-      more.innerHTML = '<button id="els-more-btn" style="background:#fff;color:#1F6080;border:1.5px solid #CBD5E1;border-radius:9px;padding:9px 20px;font-weight:700;font-size:13px;cursor:pointer;">Load ' + Math.min(state.limit, state.total - shown) + ' more</button>';
-      more.querySelector('#els-more-btn').onclick = function () {
-        this.disabled = true; this.textContent = 'Loading…';
-        state.offset = shown; load(true);
-      };
+    function paintPager() {
+      var pages = Math.max(1, Math.ceil(state.total / state.limit));
+      if (!(window.KT && KT.pagerBar)) { more.innerHTML = ''; return; }
+      KT.pagerBar(more, state.page, pages, function (p) {
+        state.page = p; load();
+        try { container.scrollIntoView({ block: 'start' }); } catch (e) {}
+      });
     }
 
-    function load(append) {
-      if (!append) { state.offset = 0; body.innerHTML = '<div style="padding:30px;text-align:center;color:#6B7280;">Loading…</div>'; more.innerHTML = ''; }
-      var url = '/platform/email-logs?' + qs({ q: state.q, status: state.status, from: state.from, to: state.to, limit: state.limit, offset: state.offset });
+    // Any filter change starts again from page 1; a page change keeps the filters.
+    function reload() { state.page = 1; load(); }
+
+    function load() {
+      body.innerHTML = '<div style="padding:30px;text-align:center;color:#6B7280;">Loading…</div>';
+      var url = '/platform/email-logs?' + qs({ q: state.q, status: state.status, from: state.from, to: state.to, limit: state.limit, offset: (state.page - 1) * state.limit });
       Api.get(url).then(function (data) {
         var logs = (data && data.logs) || [];
         state.total = (data && typeof data.total === 'number') ? data.total : logs.length;
-        state.rows = append ? state.rows.concat(logs) : logs;
+        state.rows = logs;
 
         var filtered = !!(state.q || state.status || state.from || state.to);
+        var first = (state.page - 1) * state.limit + 1;
         meta.textContent = state.total
-          ? ('Showing ' + state.rows.length.toLocaleString() + ' of ' + state.total.toLocaleString() + (filtered ? ' matching' : '') + ' email' + (state.total === 1 ? '' : 's'))
+          ? ('Showing ' + first.toLocaleString() + '–' + (first + logs.length - 1).toLocaleString() + ' of ' + state.total.toLocaleString() + (filtered ? ' matching' : '') + ' email' + (state.total === 1 ? '' : 's'))
           : '';
 
         if (!state.rows.length) {
           body.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;background:#F8FAFC;border-radius:12px;">'
             + (filtered ? 'No emails match those filters.' : 'No emails logged yet.') + '</div>';
-          more.innerHTML = '';
+          paintPager();
           return;
         }
 
-        if (append) {
-          var tb = body.querySelector('tbody');
-          if (tb) {
-            var frag = document.createElement('tbody');
-            frag.innerHTML = logs.map(rowHtml).join('');
-            while (frag.firstChild) tb.appendChild(frag.firstChild);
-            wireRows(tb);
-            paintMore();
-            return;
-          }
-        }
-
-        // data-kt-no-filter: this screen owns its own SERVER-side search box, so the
-        // global client-side one must not stack a second field beside it.
+        // data-kt-no-filter: this screen owns its own SERVER-side search box and pager,
+        // so the global client-side ones must not stack a second of each beside them.
         body.innerHTML =
           '<table data-kt-no-filter style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">' +
             '<thead><tr style="background:#F9FAFB;">' + ['Date &amp; time', 'To', 'Subject', 'Status', 'Via', 'Opened', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead>' +
             '<tbody>' + state.rows.map(rowHtml).join('') + '</tbody></table>';
         wireRows(body);
-        paintMore();
+        paintPager();
       }).catch(function (e) { body.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message || 'error') + '</div>'; });
     }
 
@@ -1388,18 +1381,18 @@
     /* The Enter path was always here; what is gone is the keystroke path that sat
        beside it and re-queried the email log while the person was still typing. Its
        debounce (schedule() and its timer) went with it — nothing else used them. */
-    KT.onSearchCommit(qEl, function () { state.q = qEl.value.trim(); load(false); });
-    container.querySelector('#elf-status').addEventListener('change', function () { state.status = this.value; load(false); });
-    container.querySelector('#elf-from').addEventListener('change', function () { state.from = this.value; load(false); });
-    container.querySelector('#elf-to').addEventListener('change', function () { state.to = this.value; load(false); });
+    KT.onSearchCommit(qEl, function () { state.q = qEl.value.trim(); reload(); });
+    container.querySelector('#elf-status').addEventListener('change', function () { state.status = this.value; reload(); });
+    container.querySelector('#elf-from').addEventListener('change', function () { state.from = this.value; reload(); });
+    container.querySelector('#elf-to').addEventListener('change', function () { state.to = this.value; reload(); });
     container.querySelector('#elf-clear').addEventListener('click', function () {
       qEl.value = ''; container.querySelector('#elf-status').value = '';
       container.querySelector('#elf-from').value = ''; container.querySelector('#elf-to').value = '';
       state.q = state.status = state.from = state.to = '';
-      load(false);
+      reload();
     });
 
-    load(false);
+    reload();
   }
 
   function downloadEmail(id) {

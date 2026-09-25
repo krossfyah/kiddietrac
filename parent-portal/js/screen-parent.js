@@ -1508,15 +1508,9 @@
 
       // ── Pagination ──
       if ((meta.pages || 1) > 1) {
-        const pg = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px;' });
-        const btn = (label, disabled, onClick) => {
-          const b = Dom.el('button', { type: 'button', style: 'background:#fff;border:1px solid var(--ink-200,#e2e8f0);border-radius:9px;padding:7px 14px;font-size:13px;font-weight:700;cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';color:' + (disabled ? 'var(--ink-300,#cbd5e1)' : 'var(--brand-blue,#1F6FB2)') + ';' }, label);
-          if (disabled) b.disabled = true; else b.addEventListener('click', onClick);
-          return b;
-        };
-        pg.appendChild(btn('‹ Prev', meta.page <= 1, () => { state.page = meta.page - 1; reload(true); }));
-        pg.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500,#64748b);font-weight:700;' }, 'Page ' + meta.page + ' of ' + meta.pages));
-        pg.appendChild(btn('Next ›', meta.page >= meta.pages, () => { state.page = meta.page + 1; reload(true); }));
+        // KT.pagerBar — the portal's one pager, not a bespoke Prev / Page x of y / Next.
+        const pg = Dom.el('div', {});
+        if (window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, (p) => { state.page = p; reload(true); });
         wrap.appendChild(pg);
       }
     }

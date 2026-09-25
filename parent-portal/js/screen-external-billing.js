@@ -1010,12 +1010,8 @@
         + '<td style="' + td + 'text-align:right;white-space:nowrap;">' + acts + '</td>'
         + '</tr>';
     }).join('');
-    var pager = meta.pages > 1
-      ? '<div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px;font-size:13px;color:#475569;">'
-        + '<button id="xb-prev" ' + (meta.page <= 1 ? 'disabled' : '') + ' style="padding:6px 12px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;cursor:' + (meta.page <= 1 ? 'default' : 'pointer') + ';opacity:' + (meta.page <= 1 ? '.5' : '1') + ';">‹ Prev</button>'
-        + '<span>Page ' + meta.page + ' of ' + meta.pages + '</span>'
-        + '<button id="xb-next" ' + (meta.page >= meta.pages ? 'disabled' : '') + ' style="padding:6px 12px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;cursor:' + (meta.page >= meta.pages ? 'default' : 'pointer') + ';opacity:' + (meta.page >= meta.pages ? '.5' : '1') + ';">Next ›</button></div>'
-      : '';
+    // Filled by KT.pagerBar after render — the portal's one numbered pager.
+    var pager = '<div id="xb-pager" style="padding:0 12px 10px;"></div>';
     body.innerHTML = '<div class="kt-card" style="padding:0;overflow:hidden;">'
       + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:820px;">'
       + '<thead><tr style="background:#F8FAFC;">'
@@ -1040,9 +1036,8 @@
         }).join('')
       + '</tr></thead><tbody>' + rows + '</tbody></table></div>' + pager + '</div>';
 
-    var prev = body.querySelector('#xb-prev'), next = body.querySelector('#xb-next');
-    if (prev) prev.addEventListener('click', function () { if (state.page > 1) { state.page--; load(container); } });
-    if (next) next.addEventListener('click', function () { if (state.page < meta.pages) { state.page++; load(container); } });
+    var pg = body.querySelector('#xb-pager');
+    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); });
     body.querySelectorAll('th[data-sort]').forEach(function (thEl) {
       var k = thEl.getAttribute('data-sort');
       if (!k) return;

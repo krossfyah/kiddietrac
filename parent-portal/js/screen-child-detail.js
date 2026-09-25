@@ -1432,29 +1432,16 @@
           if (pages <= 1) return;
 
           var pager = Dom.el('div', {
-            style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;background:#FAFAFA;border-top:1px solid #F3F4F6;',
+            style: 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:9px 14px;background:#FAFAFA;border-top:1px solid #F3F4F6;',
           });
           var from = ((page - 1) * (data.per_page || 25)) + 1;
           var to = from + (data.rows || []).length - 1;
           pager.appendChild(Dom.el('span', { style: 'font-size:12px;color:#6B7280;' },
             from + '\u2013' + to + ' of ' + data.count));
 
-          var nav = Dom.el('div', { style: 'display:flex;align-items:center;gap:6px;' });
-          function navBtn(label, target, enabled) {
-            var b = Dom.el('button', {
-              type: 'button',
-              style: 'padding:4px 10px;font-size:12px;font-weight:700;font-family:inherit;border-radius:6px;'
-                + (enabled
-                    ? 'border:1px solid #D1D5DB;background:#fff;color:#374151;cursor:pointer;'
-                    : 'border:1px solid #EEF0F3;background:#F9FAFB;color:#C4C9D0;cursor:default;'),
-            }, label);
-            if (enabled) b.addEventListener('click', function () { loadPage(target); });
-            return b;
-          }
-          nav.appendChild(navBtn('\u2039 Prev', page - 1, page > 1));
-          nav.appendChild(Dom.el('span', { style: 'font-size:12px;color:#374151;font-weight:600;padding:0 4px;' },
-            'Page ' + page + ' of ' + pages));
-          nav.appendChild(navBtn('Next \u203a', page + 1, page < pages));
+          // KT.pagerBar — the portal's one pager, not a bespoke Prev / Page x of y / Next.
+          var nav = Dom.el('div', {});
+          if (window.KT && KT.pagerBar) { KT.pagerBar(nav, page, pages, loadPage); nav.style.margin = '0'; }
           pager.appendChild(nav);
           body.appendChild(pager);
         }

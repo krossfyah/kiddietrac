@@ -94,18 +94,13 @@
     });
   }
 
+  // page is 0-based here (the caller's convention); KT.pagerBar is 1-based.
   function renderPager(page, pages, total, go) {
-    var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;border-top:1px solid #F3F4F6;background:#FAFBFC;' });
-    function navBtn(label, target, disabled) {
-      var b = Dom.el('button', {
-        style: 'background:white;border:1px solid #D1D5DB;color:' + (disabled ? '#9CA3AF' : '#1F6080') + ';padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:' + (disabled ? 'default' : 'pointer') + ';',
-      }, label);
-      if (disabled) b.disabled = true; else b.addEventListener('click', function () { go(target); });
-      return b;
-    }
-    pager.appendChild(navBtn('‹ Prev', page - 1, page === 0));
-    pager.appendChild(Dom.el('div', { style: 'font-size:13px;color:#6B7280;' }, 'Page ' + (page + 1) + ' of ' + pages + ' · ' + total + ' form' + (total === 1 ? '' : 's')));
-    pager.appendChild(navBtn('Next ›', page + 1, page >= pages - 1));
+    var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 18px;border-top:1px solid #F3F4F6;background:#FAFBFC;' });
+    pager.appendChild(Dom.el('div', { style: 'font-size:13px;color:#6B7280;' }, total + ' form' + (total === 1 ? '' : 's')));
+    var nav = Dom.el('div', {});
+    pager.appendChild(nav);
+    if (window.KT && KT.pagerBar) { KT.pagerBar(nav, page + 1, pages, function (p) { go(p - 1); }); nav.style.margin = '0'; }
     return pager;
   }
 

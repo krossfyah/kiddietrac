@@ -221,15 +221,12 @@
       if (KT.sweepRowActions) KT.sweepRowActions();
       // Page through them so the list never grows without bound.
       if (pages > 1) {
-        var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-top:1px solid #F3F4F6;background:#FCFCFD;' });
-        var mkBtn = function (label, disabled, fn) {
-          var b = Dom.el('button', { type: 'button', style: 'background:' + (disabled ? '#F3F4F6' : '#fff') + ';border:1px solid #E5E7EB;border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;color:' + (disabled ? '#9CA3AF' : '#159FB4') + ';cursor:' + (disabled ? 'default' : 'pointer') + ';' }, label);
-          if (!disabled) b.addEventListener('click', fn);
-          return b;
-        };
-        pager.appendChild(mkBtn('‹ Newer', _npage <= 1, function () { _npage--; paint(); }));
+        var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:12px 18px;border-top:1px solid #F3F4F6;background:#FCFCFD;' });
+        // KT.pagerBar — the portal's one pager, not a bespoke "‹ Newer / Older ›" pair.
         pager.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;font-weight:600;' }, 'Showing ' + (start + 1) + '–' + end + ' of ' + total));
-        pager.appendChild(mkBtn('Older ›', _npage >= pages, function () { _npage++; paint(); }));
+        var nav = Dom.el('div', {});
+        pager.appendChild(nav);
+        if (window.KT && KT.pagerBar) { KT.pagerBar(nav, _npage, pages, function (p) { _npage = p; paint(); }); nav.style.margin = '0'; }
         listWrap.appendChild(pager);
       }
     }

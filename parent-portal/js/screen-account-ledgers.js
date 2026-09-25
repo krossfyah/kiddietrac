@@ -952,13 +952,8 @@
         + '</tr>';
     }).join('') || '<tr><td colspan="9" style="' + td + 'text-align:center;color:' + C.faint + ';padding:34px;">No accounts match that.</td></tr>';
 
-    var pager = (meta.pages > 1)
-      ? '<div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px;font-size:13px;color:#475569;">'
-        + '<button id="al-prev"' + (meta.page <= 1 ? ' disabled' : '') + ' style="padding:6px 12px;border:1px solid ' + C.rule + ';border-radius:8px;background:#fff;cursor:pointer;">‹ Prev</button>'
-        + '<span>Page ' + meta.page + ' of ' + meta.pages + '</span>'
-        + '<button id="al-next"' + (meta.page >= meta.pages ? ' disabled' : '') + ' style="padding:6px 12px;border:1px solid ' + C.rule + ';border-radius:8px;background:#fff;cursor:pointer;">Next ›</button>'
-        + '</div>'
-      : '';
+    // Filled by KT.pagerBar after render — the portal's one numbered pager.
+    var pager = '<div id="al-pager" style="padding:0 12px 10px;"></div>';
 
     body.innerHTML = stats + controls
       + '<div class="kt-card" style="padding:0;overflow:hidden;">'
@@ -966,10 +961,11 @@
       + '<thead><tr style="background:#F8FAFC;">' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
       + pager + '</div>';
 
-    wire(container, body);
+    wire(container, body, meta);
   }
 
-  function wire(container, body) {
+  function wire(container, body, meta) {
+    meta = meta || { page: 1, pages: 1 };
     /* Committed, not streamed — this one re-queries the server, so a debounce still
        meant a request per pause in typing and the table rebuilding underneath. */
     var s = body.querySelector('#al-search');
@@ -986,10 +982,8 @@
     var o = body.querySelector('#al-only');
     if (o) o.addEventListener('change', function () { state.only = o.value; state.page = 1; load(container); });
 
-    var prev = body.querySelector('#al-prev');
-    if (prev) prev.addEventListener('click', function () { if (state.page > 1) { state.page--; load(container); } });
-    var next = body.querySelector('#al-next');
-    if (next) next.addEventListener('click', function () { state.page++; load(container); });
+    var pg = body.querySelector('#al-pager');
+    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); });
 
     body.querySelectorAll('th[data-sort]').forEach(function (thEl) {
       var k = thEl.getAttribute('data-sort');

@@ -545,23 +545,9 @@
            screen you were on (Anthony, 2026-08-30: "some pages it has it numbered in
            pages and some has a drop down"). Numbered pages is the portal's answer
            everywhere else, so this is the one that changes. */
-        const btn = (lbl, act, dis, cur) =>
-          `<button class="kt-pg" data-pg="${act}" type="button" ${dis ? 'disabled' : ''}
-            style="min-width:34px;padding:6px 10px;border-radius:7px;
-            border:1px solid ${cur ? '#1F6080' : '#E2E8F0'};
-            background:${cur ? '#1F6080' : '#fff'};color:${cur ? '#fff' : (dis ? '#C2CBD4' : '#334155')};
-            font-size:13px;font-weight:600;transition:all .12s;
-            opacity:${dis ? '0.4' : '1'};cursor:${dis ? 'default' : 'pointer'};">${lbl}</button>`;
-        // A sliding window of five, so 40 pages does not print 40 buttons.
-        let nums = '';
-        let from = Math.max(1, state.page - 2);
-        const to = Math.min(pages, from + 4);
-        from = Math.max(1, to - 4);
-        for (let p = from; p <= to; p++) { nums += btn(String(p), p, false, p === state.page); }
-        // One page of results needs a count, not a pager.
-        const controls = pages > 1
-          ? `${btn('‹ Prev', 'prev', state.page <= 1)}${nums}${btn('Next ›', 'next', state.page >= pages)}`
-          : '';
+        // The bar itself is KT.pagerBar (kt-card-pager.js), filled in by wirePager —
+        // the same windowed numbers + Go to as every other pager in the portal.
+        const controls = pages > 1 ? '<span class="kt-pg-host"></span>' : '';
         /* Nothing to page through: say so, and stop. Offering "25 / page" for a table
            with no rows is a control that cannot do anything — Anthony, 2026-08-30:
            "why is there a button there since there is not data shown in that table". */
@@ -576,16 +562,14 @@
           </div>`;
       };
       const wirePager = (root, repaintFn) => {
-        root.querySelectorAll('.kt-pg').forEach(b => b.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (b.disabled) { return; }
-          const pages = Math.max(1, Math.ceil(state.total / state.perPage));
-          const v = b.getAttribute('data-pg');
-          state.page = v === 'prev' ? Math.max(1, state.page - 1)
-            : v === 'next' ? Math.min(pages, state.page + 1)
-            : (parseInt(v, 10) || 1);
+        const host = root.querySelector('.kt-pg-host');
+        if (!host || !(window.KT && KT.pagerBar)) { return; }
+        host.addEventListener('click', (e) => e.stopPropagation());
+        KT.pagerBar(host, state.page, Math.max(1, Math.ceil(state.total / state.perPage)), (p) => {
+          state.page = p;
           repaintFn();
-        }));
+        });
+        host.style.margin = '0';
       };
       const visible = () => convs.filter(c => isArchived(c) === state.showArchived);
       const archivedCount = () => convs.filter(isArchived).length;

@@ -1245,8 +1245,7 @@
       feed.className = 'activity-feed-v17';
       feed.style.cssText = 'max-height:360px;overflow-y:auto;overscroll-behavior:contain;';
       const pager = document.createElement('div');
-      pager.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 14px;border-top:1px solid var(--kt-border);background:var(--kt-surface);';
-      const btnCss = 'font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--kt-border);background:#fff;color:#1F6080;cursor:pointer;';
+      pager.style.cssText = 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:8px 14px;border-top:1px solid var(--kt-border);background:var(--kt-surface);';
       // Person avatar for a feed row: uploaded photo, else a coloured initial
       // circle. A small emoji badge (check-in/out, clock, etc.) sits on the corner.
       // NOTE: the centres-block `cardColour` is const-scoped to that block, so it
@@ -1277,12 +1276,12 @@
         feed.scrollTop = 0;
         const total = Math.max(1, Math.ceil(events.length / PAGE));
         pager.innerHTML = '';
-        const prev = document.createElement('button'); prev.textContent = '‹ Newer'; prev.style.cssText = btnCss; prev.disabled = page === 0; if (prev.disabled) prev.style.opacity = '.45';
-        const info = document.createElement('span'); info.style.cssText = 'font-size:12.5px;color:var(--kt-text-muted);'; info.textContent = 'Page ' + (page + 1) + ' of ' + total + ' · ' + events.length + ' events';
-        const next = document.createElement('button'); next.textContent = 'Older ›'; next.style.cssText = btnCss; next.disabled = page >= total - 1; if (next.disabled) next.style.opacity = '.45';
-        prev.onclick = () => { if (page > 0) { page--; renderPage(); } };
-        next.onclick = () => { if (page < total - 1) { page++; renderPage(); } };
-        pager.appendChild(prev); pager.appendChild(info); pager.appendChild(next);
+        // KT.pagerBar — the portal's one pager, not a bespoke "‹ Newer / Older ›" pair.
+        const info = document.createElement('span'); info.style.cssText = 'font-size:12.5px;color:var(--kt-text-muted);'; info.textContent = events.length + ' events';
+        const nav = document.createElement('div');
+        pager.appendChild(info); pager.appendChild(nav);
+        if (window.KT && KT.pagerBar) { KT.pagerBar(nav, page + 1, total, (p) => { page = p - 1; renderPage(); }); nav.style.margin = '0'; }
+        pager.style.display = total > 1 ? 'flex' : 'none';
       }
       renderPage();
       box.appendChild(feed); box.appendChild(pager);

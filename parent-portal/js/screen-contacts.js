@@ -195,12 +195,8 @@
         ? 'No contact matches that.'
         : 'No contacts yet. Add the first one, or scan a business card.') + '</td></tr>';
 
-    var pager = (meta.pages > 1)
-      ? '<div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px;font-size:13px;color:#475569;">'
-        + '<button id="ct-prev"' + (meta.page <= 1 ? ' disabled' : '') + ' style="padding:6px 12px;border:1px solid ' + C.rule + ';border-radius:8px;background:#fff;cursor:pointer;">‹ Prev</button>'
-        + '<span>Page ' + meta.page + ' of ' + meta.pages + '</span>'
-        + '<button id="ct-next"' + (meta.page >= meta.pages ? ' disabled' : '') + ' style="padding:6px 12px;border:1px solid ' + C.rule + ';border-radius:8px;background:#fff;cursor:pointer;">Next ›</button>'
-        + '</div>' : '';
+    // Filled by KT.pagerBar after render — the portal's one numbered pager.
+    var pager = '<div id="ct-pager" style="padding:0 12px 10px;"></div>';
 
     body.innerHTML = controls
       + '<div class="kt-card" style="padding:0;overflow:hidden;">'
@@ -211,10 +207,11 @@
       }).join('')
       + '</tr></thead><tbody>' + tbody + '</tbody></table></div>' + pager + '</div>';
 
-    wire(container, body);
+    wire(container, body, meta);
   }
 
-  function wire(container, body) {
+  function wire(container, body, meta) {
+    meta = meta || { page: 1, pages: 1 };
     /* A SEARCH commits — it re-queries the server, and running that per keystroke
        rearranges the page while somebody is still typing. Enter, blur, or the native
        clear, through the shared helper. */
@@ -232,10 +229,8 @@
        parameters stay, so the server's filters remain available to any caller that
        wants them — there is simply no permanent control for them here. */
 
-    var prev = body.querySelector('#ct-prev');
-    if (prev) prev.addEventListener('click', function () { if (state.page > 1) { state.page--; load(container); } });
-    var next = body.querySelector('#ct-next');
-    if (next) next.addEventListener('click', function () { state.page++; load(container); });
+    var pg = body.querySelector('#ct-pager');
+    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); });
 
     var add = body.querySelector('#ct-new');
     if (add) add.addEventListener('click', function () { openEditor(container, null); });

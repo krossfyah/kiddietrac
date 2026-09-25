@@ -250,51 +250,11 @@
       return want > 0 ? want : PAGE_SIZE;
     }
 
-    function pageBtn(label, target, active) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = label;
-      const base = 'min-width:34px;padding:6px 10px;border-radius:7px;border:1px solid #E2E8F0;background:#fff;color:#334155;font-size:13px;font-weight:600;cursor:pointer;transition:all .12s;';
-      b.style.cssText = active ? base + 'background:#1F6080;color:#fff;border-color:#1F6080;' : base;
-      if (target == null) { b.disabled = true; b.style.opacity = '0.4'; b.style.cursor = 'default'; }
-      else b.addEventListener('click', () => { page = target; render(); });
-      return b;
-    }
-
-    // Windowed page list: first, last, and a few around the current page, with … gaps.
-    function pageWindow(cur, tot) {
-      const keep = new Set([1, tot, cur, cur - 1, cur + 1, cur - 2, cur + 2]);
-      const arr = [...keep].filter(p => p >= 1 && p <= tot).sort((a, b) => a - b);
-      const out = [];
-      let prev = 0;
-      for (const p of arr) { if (p - prev > 1) out.push('…'); out.push(p); prev = p; }
-      return out;
-    }
-
+    /* The bar itself is KT.pagerBar (kt-card-pager.js) — the one every pager in the
+       portal draws with, server-paged screens included. */
     function buildPager(totalPages) {
-      if (totalPages <= 1) { pager.style.display = 'none'; pager.innerHTML = ''; return; }
-      pager.style.display = 'flex';
-      pager.innerHTML = '';
-      pager.appendChild(pageBtn('‹ Prev', page > 1 ? page - 1 : null));
-      for (const p of pageWindow(page, totalPages)) {
-        if (p === '…') {
-          const s = document.createElement('span');
-          s.textContent = '…'; s.style.cssText = 'padding:0 4px;color:#94A3B8;';
-          pager.appendChild(s);
-        } else {
-          pager.appendChild(pageBtn(String(p), p, p === page));
-        }
-      }
-      pager.appendChild(pageBtn('Next ›', page < totalPages ? page + 1 : null));
-      const jl = document.createElement('span');
-      jl.textContent = 'Go to'; jl.style.cssText = 'margin-left:10px;color:#64748B;font-weight:600;';
-      const jump = document.createElement('input');
-      jump.type = 'number'; jump.min = '1'; jump.max = String(totalPages); jump.value = String(page);
-      jump.style.cssText = 'width:60px;padding:5px 8px;border:1px solid #E2E8F0;border-radius:7px;font-size:13px;text-align:center;';
-      const go = () => { const v = parseInt(jump.value, 10); if (v >= 1 && v <= totalPages) { page = v; render(); } };
-      jump.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
-      jump.addEventListener('change', go);
-      pager.appendChild(jl); pager.appendChild(jump);
+      if (KT.pagerBar) { KT.pagerBar(pager, page, totalPages, (p) => { page = p; render(); }); return; }
+      pager.style.display = 'none';
     }
 
   /* HOW WELL a row matches, not merely WHETHER it does.

@@ -400,29 +400,28 @@
     };
 
     // Paged, not endless: a child with a year of logs would otherwise render a
-    // scroll you can't get to the bottom of.
+    // scroll you can't get to the bottom of. Numbered pages (KT.pagerBar), like
+    // every other list — this was a "Show 15 more" button until 2026-09-25.
     var PAGE = 15;
-    var shown = PAGE;
+    var page = 1;
 
     html += '<div id="cr-history" style="' + CARD + '"></div>';
     var renderHistory = function () {
       var el = ov.querySelector('#cr-history');
       if (!el) return;
-      var rows = hist.slice(0, shown);
+      var rows = hist.slice((page - 1) * PAGE, page * PAGE);
       var h2 = '<div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">'
         + 'Log history <span style="color:#64748B;font-weight:600;">· ' + hist.length + '</span></div>';
       if (!hist.length) {
         h2 += '<div style="color:#64748B;font-size:13px;">Nothing logged for this child yet.</div>';
       }
       h2 += rows.map(function (h, i) { return historyRow(h, i); }).join('');
-      if (shown < hist.length) {
-        h2 += '<button id="cr-more" style="width:100%;margin-top:10px;background:#F8FAFC;border:1px solid #E2E8F0;'
-          + 'color:#0E7C90;border-radius:10px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;">'
-          + 'Show ' + Math.min(PAGE, hist.length - shown) + ' more · ' + (hist.length - shown) + ' left</button>';
-      }
+      h2 += '<div class="cr-pager"></div>';
       el.innerHTML = h2;
-      var more = el.querySelector('#cr-more');
-      if (more) more.addEventListener('click', function () { shown += PAGE; renderHistory(); });
+      if (window.KT && KT.pagerBar) KT.pagerBar(el.querySelector('.cr-pager'), page, Math.ceil(hist.length / PAGE), function (p) {
+        page = p; renderHistory();
+        try { el.scrollIntoView({ block: 'start' }); } catch (e) {}
+      });
     };
 
     function historyRow(h, i) {
