@@ -1718,7 +1718,7 @@
   /* How long the cover may hold, and how long entrance animations stay suppressed.
      The second MUST be longer than the first: a suppression that expires while the
      screen is still covered is a re-render the reader watches happen. */
-  var SNAP_KILL_MS = 6000;
+  var SNAP_KILL_MS = 7000;
   var SILENT_WINDOW_MS = SNAP_KILL_MS + 1500;
 
   function __ktDropSnapshot(gen) {
@@ -1777,7 +1777,12 @@
      from under it. Whoever is interacting gets the real screen, loading line and all. */
   var __KT_QUIET_MS = 160;      // no mutation for this long = the screen has stopped moving
   var __KT_REQ_GRACE_MS = 140;  // after the last request lands, long enough for its .then()
-  var __KT_MAX_HOLD_MS = 2600;  // ceiling; a slow screen uncovers rather than freezing
+  /* 2600 until 2026-09-25. On a phone at the morning peak a request routinely takes
+     longer than that, so the cover came off over a "Loading…" stub, the scroll had
+     already been clamped to that stub's height, and the reader watched the page jump
+     to the top and back. The cover is a picture of real (slightly old) content and it
+     ends the moment anybody touches the screen, so holding it longer costs nothing. */
+  var __KT_MAX_HOLD_MS = 5000;  // ceiling; a slow screen uncovers rather than freezing
 
   /* A REBUILT ELEMENT RESTARTS ITS ANIMATIONS, AND THAT IS THE FLASH THAT WAS LEFT.
 
@@ -2016,8 +2021,10 @@
       var target = Math.min(y, max);
       lastSet = target;
       __ktScrollSet(target);
-      // Tall enough to honour the request, or out of patience (~1.6s of async render).
-      if (max >= y || ++tries > 32) { release(); return; }
+      // Tall enough to honour the request, or out of patience (~6s of async render —
+      // it was 1.6s, shorter than a phone's request at peak, so a slow screen was
+      // abandoned as a stub and the reader landed near the top).
+      if (max >= y || ++tries > 120) { release(); return; }
       setTimeout(step, 50);
     }
 
@@ -2039,7 +2046,48 @@
     var kick = function () { if (started) { return; } started = true; step(); };
     try { requestAnimationFrame(kick); } catch (e) {}
     setTimeout(kick, 60);
+
+    /* One last placement, made by the silent-refresh path just BEFORE the cover comes
+       off: whatever the loop above managed, the finished screen is put where the reader
+       was while it is still hidden, so the correction is never seen. */
+    return {
+      apply: function () {
+        if (aborted) { return; }
+        var target = Math.min(y, __ktScrollMax());
+        lastSet = target;
+        __ktScrollSet(target);
+      }
+    };
   }
+
+  /* ONE ANSWER TO "WHERE IS THE READER" FOR THE WHOLE PORTAL (2026-09-25).
+
+     window.scrollY is 0 for the whole session on a phone — #appMain is the scroller —
+     and files that asked it were blind there. kt-auto-refresh's "is somebody reading
+     down the audit log?" check was one: it always answered no, so the log rebuilt
+     under the reader every 45 seconds in the APK and never on a desktop. Ask this. */
+  KT.scroll = {
+    host: function () { return __ktScrollHost(); },
+    pos: function () { return __ktScrollPos(); },
+    set: function (y) { __ktScrollSet(y); },
+    max: function () { return __ktScrollMax(); },
+    /* Bring el's top to `offset` px below the top of whatever scrolls. */
+    toEl: function (el, offset) {
+      try {
+        var h = __ktScrollHost();
+        var top = el.getBoundingClientRect().top - (h ? h.getBoundingClientRect().top : 0) + __ktScrollPos();
+        __ktScrollSet(Math.max(0, top - (offset || 0)));
+      } catch (e) {}
+    },
+    /* When the reader last scrolled by hand (touch, wheel, keys). */
+    lastInput: function () { return window.__ktUserScrollAt || 0; }
+  };
+  (function () {
+    var mark = function () { window.__ktUserScrollAt = Date.now(); };
+    ['touchstart', 'touchmove', 'wheel', 'keydown'].forEach(function (ev) {
+      try { window.addEventListener(ev, mark, { passive: true, capture: true }); } catch (e) {}
+    });
+  })();
 
   /* ONE RENDER AT A TIME (2026-09-17).
 
@@ -2126,6 +2174,8 @@
        this records where you were so the same-screen case can be put back. */
     var _ktSameScreen = (location.hash === window.__ktLastHash);
     var _ktPrevScroll = _ktSameScreen ? __ktScrollPos() : 0;
+    var _ktScrollCtl = null;
+    var _ktNavAt = Date.now();
     window.__ktLastHash = location.hash;
     let main = Dom.$('#appMain');   // reassigned by __ktSwapMain below
     // Reset scroll to the top BEFORE we clear + render. If we only reset after
@@ -2368,7 +2418,12 @@
            runs alongside it: the frame is what makes the swap seamless when the tab is
            visible, the timer is what guarantees it ends. */
         var _dropped = false;
-        var _drop = function () { if (_dropped) { return; } _dropped = true; __ktDropSnapshot(__ktGen); };
+        var _drop = function () {
+          if (_dropped) { return; }
+          _dropped = true;
+          try { if (_ktScrollCtl) { _ktScrollCtl.apply(); } } catch (e) {}
+          __ktDropSnapshot(__ktGen);
+        };
         __ktWaitSettled(main, function () {
           /* BEFORE the uncover, never after: the phase has to be right in the DOM the
              reader is about to be shown, or the banner still snaps — just later. */
@@ -2385,7 +2440,10 @@
           /* Same screen: never scroll to 0 first. The old code reset to the top and then
              raced a single restore frame against it — which is why a live refresh flung
              you to the top and sometimes left you there. */
-          __ktSettleScroll(_ktPrevScroll, main);
+          _ktScrollCtl = __ktSettleScroll(_ktPrevScroll, main);
+        } else if ((window.__ktUserScrollAt || 0) > _ktNavAt) {
+          /* The reader has already started scrolling the new screen while it loaded.
+             Snapping them back to 0 now is the "jumps to the top" they reported. */
         } else {
           window.scrollTo(0, 0);
           if (document.scrollingElement) document.scrollingElement.scrollTop = 0;

@@ -815,8 +815,16 @@
     // The screen renders ASYNC (data fetch), so a single reset on hashchange gets
     // undone by the post-render layout shift. Reset now AND across the render window.
     scrollTop0();
-    requestAnimationFrame(scrollTop0);
-    [40, 120, 260, 450].forEach(function (d) { setTimeout(scrollTop0, d); });
+    /* ...but only until the reader takes over. A flick in the first half-second of a
+       new screen was pulled back to the top up to four more times — "it jumps and goes
+       back to the top". The shell records the last touch/wheel in __ktUserScrollAt. */
+    var navAt = Date.now();
+    var resetUnlessTouched = function () {
+      if ((window.__ktUserScrollAt || 0) > navAt) { return; }
+      scrollTop0();
+    };
+    requestAnimationFrame(resetUnlessTouched);
+    [40, 120, 260, 450].forEach(function (d) { setTimeout(resetUnlessTouched, d); });
     if (window.innerWidth > 600) return;
     animUntil = Date.now() + 450;
   });

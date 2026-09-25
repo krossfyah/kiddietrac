@@ -484,7 +484,9 @@
     function landOnTable() {
       if (!jumpToTop) { return; }
       jumpToTop = false;
+      // KT.scroll: on a phone #appMain scrolls, and window.scrollTo did nothing there.
       try {
+        if (window.KT && KT.scroll) { KT.scroll.toEl(listWrap, 90); return; }
         var top = listWrap.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0);
         window.scrollTo({ top: Math.max(0, top - 90), behavior: 'smooth' });
       } catch (e) {}

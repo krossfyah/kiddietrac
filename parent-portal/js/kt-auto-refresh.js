@@ -60,7 +60,11 @@
   function readingHistory() {
     try {
       if (!HISTORY_SCREENS[currentHash()]) { return false; }
-      var y = window.scrollY || (document.scrollingElement || {}).scrollTop || 0;
+      /* KT.scroll, not window.scrollY. On a phone #appMain scrolls and the window never
+         moves, so this read 0 there, called every reader "at the top", and rebuilt the
+         audit log under them every 45 seconds — APK only. (2026-09-25) */
+      var y = (window.KT && KT.scroll) ? KT.scroll.pos()
+        : (window.scrollY || (document.scrollingElement || {}).scrollTop || 0);
       return y > HISTORY_TOP_PX;
     } catch (e) { return false; }
   }
