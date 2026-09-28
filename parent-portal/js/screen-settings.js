@@ -240,6 +240,196 @@
     });
   }
 
+  /* THE SECURITY CARD — password, two-factor, fingerprint, passkeys, PIN.
+
+     Built by ONE function because it is shown in TWO places: the Security tab here,
+     and the Security tab of an admin's own record in User management ("My profile"),
+     which asks for KT.renderSecurityEditor. That hook was never defined, so for every
+     agency admin "My profile → Security" said "The security panel is not loaded."
+     and the passkey section added on 2026-09-28 was unreachable for them. */
+  function buildSecurityCard() {
+    var sc = el('div', { style: CARD });
+    sc.appendChild(el('div', { style: SECT }, ['Security']));
+
+    // change password
+    var cur = field(sc, 'Current password', 'password', '');
+    var nw = field(sc, 'New password', 'password', '');
+    // Strength meter + live requirement checklist. The server enforces
+    // PasswordPolicy (8+, mixed case, number, symbol) and 422s on a weak or
+    // recently-used password — showing the same rules here means the user meets
+    // them before submitting instead of guessing at a rejection.
+    var strength = buildStrengthMeter(nw);
+    sc.appendChild(strength.node);
+    var cf = field(sc, 'Confirm new password', 'password', '');
+    var pwStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
+    var pwBtn = el('button', { type: 'button', class: 'kt-actionbtn', style: btn() }, ['Change password']);
+    pwBtn.addEventListener('click', function () {
+      pwStatus.textContent = '';
+      if (!cur.value || !nw.value) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'Fill in your current and new password.'; return; }
+      if (!strength.meets()) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'Your new password doesn’t meet all the requirements yet.'; nw.focus(); return; }
+      if (nw.value !== cf.value) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'New passwords don’t match.'; return; }
+      pwBtn.disabled = true; pwBtn.textContent = 'Updating…';
+      Api.post('/auth/change-password', { current_password: cur.value, new_password: nw.value })
+        .then(function () { pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#16A34A'; pwStatus.textContent = '✓ Password changed.'; cur.value = nw.value = cf.value = ''; })
+        .catch(function (e) { pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#B91C1C'; pwStatus.textContent = (e && e.message) ? e.message : 'Could not change password.'; });
+    });
+    sc.appendChild(pwStatus); sc.appendChild(pwBtn);
+
+    /* Two-factor, in the same card as the password.
+
+       It used to be its own item in the menu, which put the two halves of "how do I
+       get into this account" in different places — and left a nav entry pointing at a
+       page most people open once, ever. The real screen is rendered here in embedded
+       mode rather than copied, so there is exactly one two-factor flow.
+
+       Shown to everyone it applies to. The platform support account is deliberately
+       exempt (see kt-mfa-gate.js), and for agency admins and directors it is required
+       rather than optional — said plainly, because a required control that looks
+       optional gets left off. */
+    try {
+      var _roles = (cachedUser().roles) || [];
+      var _mfa = window.KT && KT.MfaScreen;
+      if (_mfa && _mfa.appliesTo && _mfa.appliesTo(_roles)) {
+        sc.appendChild(el('div', {
+          style: 'height:1px;background:#EEF2F7;margin:16px 0 14px;',
+        }));
+        var _hdr = el('div', {
+          style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px;',
+        });
+        _hdr.appendChild(el('div', {
+          style: 'font-size:14px;font-weight:800;color:#0f172a;',
+        }, ['🔐 Two-factor authentication']));
+        if (_mfa.required && _mfa.required(_roles)) {
+          _hdr.appendChild(el('span', {
+            style: 'font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;'
+              + 'background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:20px;',
+          }, ['Required for your role']));
+        }
+        sc.appendChild(_hdr);
+        var _mfaBox = el('div', {});
+        sc.appendChild(_mfaBox);
+        _mfa.render(_mfaBox, { embedded: true });
+      }
+    } catch (e) { /* the rest of Settings must render even if this does not */ }
+
+    // biometric toggle (native only)
+    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
+    var bioRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
+    var bioSub = el('div', { style: 'font-size:12px;color:#64748B;', id: 'kt-bio-sub' }, ['Checking…']);
+    bioRow.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Fingerprint / Face sign-in']), bioSub]));
+    var bioToggle = mkSwitch(); bioToggle.id = 'kt-bio-toggle';
+    bioRow.appendChild(bioToggle);
+    sc.appendChild(bioRow);
+    // Pass the element, never look it up by id: this card isn't in the document
+    // yet (it's appended below), so getElementById would return null and every
+    // status update would silently no-op — the row stayed on "Checking…" forever.
+    wireBiometrics(bioToggle, bioSub);
+
+    /* Passkeys — sign in with the phone's or computer's own lock (face, fingerprint,
+       PIN) instead of a password. An ADDITIONAL way in: the password still works and
+       still expires on schedule. Not available inside the Android app, whose web view
+       has no WebAuthn; said plainly there instead of showing a button that fails. */
+    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
+    (function () {
+      var PK = window.KT && KT.passkeys;
+      var can = !!(PK && PK.supported());
+      var head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
+      var sub = el('div', { style: 'font-size:12px;color:#64748B;' }, [can
+        ? 'Sign in with your face, fingerprint or device PIN — no password to type. Your password still works.'
+        : 'Not available in the Android app. Add a passkey from Chrome or Safari (or a computer) and use it there; fingerprint unlock works here.']);
+      head.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['🔑 Passkeys']), sub]));
+      var add = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;' }, ['Add a passkey']);
+      if (can) head.appendChild(add);
+      sc.appendChild(head);
+      var status = el('div', { style: 'font-size:12.5px;min-height:0;margin-top:6px;' });
+      var list = el('div', { style: 'margin-top:8px;' });
+      sc.appendChild(status); sc.appendChild(list);
+      if (!PK) return;
+
+      function when(ts) {
+        if (!ts) return '';
+        try { return (KT.fmtDateTime ? KT.fmtDateTime(ts) : new Date(ts).toLocaleString()); } catch (e) { return ''; }
+      }
+      function say(msg, tone) { status.style.color = tone === 'ok' ? '#16A34A' : (tone === 'bad' ? '#B91C1C' : '#1F6080'); status.textContent = msg || ''; }
+      function paint(rows) {
+        list.innerHTML = '';
+        if (!rows.length) {
+          list.appendChild(el('div', { style: 'font-size:12.5px;color:#94A3B8;' }, ['No passkeys yet.']));
+          return;
+        }
+        rows.forEach(function (p) {
+          var r = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:6px;' });
+          r.appendChild(el('div', { style: 'flex:1;min-width:0;' }, [
+            el('div', { style: 'font-weight:700;font-size:13.5px;color:#0f172a;overflow-wrap:anywhere;' }, [p.label || 'Passkey']),
+            el('div', { style: 'font-size:11.5px;color:#64748B;' }, ['Added ' + when(p.created_at) + (p.last_used_at ? ' · last used ' + when(p.last_used_at) : ' · not used yet')]),
+          ]));
+          var rm = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'background:none;border:none;color:#B91C1C;font-size:12px;font-weight:700;cursor:pointer;padding:4px;' }, ['Remove']);
+          rm.addEventListener('click', function () {
+            var go = function () {
+              rm.disabled = true;
+              PK.remove(p.id).then(function () { say('Passkey removed. Your password still works.', 'ok'); load(); })
+                .catch(function (e) { rm.disabled = false; say((e && e.message) || 'Could not remove it.', 'bad'); });
+            };
+            if (KT.confirm) {
+              KT.confirm({ title: 'Remove this passkey?', description: '"' + (p.label || 'Passkey') + '" will no longer sign you in. Your password and any other passkeys are unaffected.', okLabel: 'Remove' })
+                .then(function (ok) { if (ok) go(); });
+            } else if (window.confirm('Remove this passkey?')) { go(); }
+          });
+          r.appendChild(rm);
+          list.appendChild(r);
+        });
+      }
+      function load() {
+        PK.list().then(function (d) { paint((d && d.passkeys) || []); })
+          .catch(function () { list.innerHTML = ''; });
+      }
+      add.addEventListener('click', function () {
+        add.disabled = true; add.textContent = 'Follow your device…'; say('');
+        PK.register().then(function (p) {
+          say('✓ Passkey added' + (p && p.label ? ' — ' + p.label : '') + '. Next time, tap "Sign in with a passkey" on the sign-in page.', 'ok');
+          load();
+        }).catch(function (e) {
+          say((e && e.message) || 'Could not add a passkey.', e && e.cancelled ? '' : 'bad');
+        }).then(function () { add.disabled = false; add.textContent = 'Add a passkey'; });
+      });
+      load();
+    })();
+
+    // Quick-unlock PIN. KT.pin (kt-pin.js) seals the session under a key derived
+    // from the PIN, so on the next launch the PIN alone reopens the app.
+    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
+    var pin = KT.pin;
+    var pinHas = !!(pin && pin.isSet());
+    var pinRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
+    var pinSub = el('div', { style: 'font-size:12px;color:#64748B;' },
+      [!pin ? 'Not available on this device.' : (pinHas ? 'A PIN is set — use it to unlock the app.' : 'Unlock the app with a 4–6 digit PIN.')]);
+    pinRow.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Quick-unlock PIN']), pinSub]));
+    var pinBtn = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;' }, [pinHas ? 'Change' : 'Set PIN']);
+    if (!pin) pinBtn.disabled = true;
+    pinRow.appendChild(pinBtn);
+    sc.appendChild(pinRow);
+    var pinArea = el('div'); sc.appendChild(pinArea);
+    var pinRemove = null;
+    function paintPin() {
+      var has = !!(pin && pin.isSet());
+      pinSub.textContent = has ? 'A PIN is set — use it to unlock the app.' : 'Unlock the app with a 4–6 digit PIN.';
+      pinBtn.textContent = has ? 'Change' : 'Set PIN';
+      if (has && !pinRemove) {
+        pinRemove = el('button', { type: 'button', style: 'background:none;border:none;color:#B91C1C;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;padding:2px;' }, ['Remove PIN']);
+        pinRemove.addEventListener('click', function () { pin.remove().then(function () { pinRemove.remove(); pinRemove = null; paintPin(); }); });
+        sc.appendChild(pinRemove);
+      } else if (!has && pinRemove) { pinRemove.remove(); pinRemove = null; }
+    }
+    if (pin) pinBtn.addEventListener('click', function () { pinFlow(pinArea, paintPin); });
+    paintPin();
+    return sc;
+  }
+  KT.renderSecurityEditor = function (host) {
+    host.innerHTML = '';
+    try { host.appendChild(buildSecurityCard()); }
+    catch (e) { host.appendChild(el('div', { style: 'color:#B91C1C;font-size:13px;' }, ['Could not load security settings.'])); }
+  };
+
   async function render(main, ctx) {
     Dom.clear ? Dom.clear(main) : (main.innerHTML = '');
     // Extra bottom padding so the last controls (Remove PIN / Sign out) clear the
@@ -487,181 +677,8 @@
       });
     }
 
-    // ── SECURITY ──
-    var sc = el('div', { style: CARD });
-    sc.appendChild(el('div', { style: SECT }, ['Security']));
-
-    // change password
-    var cur = field(sc, 'Current password', 'password', '');
-    var nw = field(sc, 'New password', 'password', '');
-    // Strength meter + live requirement checklist. The server enforces
-    // PasswordPolicy (8+, mixed case, number, symbol) and 422s on a weak or
-    // recently-used password — showing the same rules here means the user meets
-    // them before submitting instead of guessing at a rejection.
-    var strength = buildStrengthMeter(nw);
-    sc.appendChild(strength.node);
-    var cf = field(sc, 'Confirm new password', 'password', '');
-    var pwStatus = el('div', { style: 'font-size:13px;min-height:16px;margin:4px 0 8px;' });
-    var pwBtn = el('button', { type: 'button', class: 'kt-actionbtn', style: btn() }, ['Change password']);
-    pwBtn.addEventListener('click', function () {
-      pwStatus.textContent = '';
-      if (!cur.value || !nw.value) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'Fill in your current and new password.'; return; }
-      if (!strength.meets()) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'Your new password doesn’t meet all the requirements yet.'; nw.focus(); return; }
-      if (nw.value !== cf.value) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'New passwords don’t match.'; return; }
-      pwBtn.disabled = true; pwBtn.textContent = 'Updating…';
-      Api.post('/auth/change-password', { current_password: cur.value, new_password: nw.value })
-        .then(function () { pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#16A34A'; pwStatus.textContent = '✓ Password changed.'; cur.value = nw.value = cf.value = ''; })
-        .catch(function (e) { pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#B91C1C'; pwStatus.textContent = (e && e.message) ? e.message : 'Could not change password.'; });
-    });
-    sc.appendChild(pwStatus); sc.appendChild(pwBtn);
-
-    /* Two-factor, in the same card as the password.
-
-       It used to be its own item in the menu, which put the two halves of "how do I
-       get into this account" in different places — and left a nav entry pointing at a
-       page most people open once, ever. The real screen is rendered here in embedded
-       mode rather than copied, so there is exactly one two-factor flow.
-
-       Shown to everyone it applies to. The platform support account is deliberately
-       exempt (see kt-mfa-gate.js), and for agency admins and directors it is required
-       rather than optional — said plainly, because a required control that looks
-       optional gets left off. */
-    try {
-      var _roles = (cachedUser().roles) || [];
-      var _mfa = window.KT && KT.MfaScreen;
-      if (_mfa && _mfa.appliesTo && _mfa.appliesTo(_roles)) {
-        sc.appendChild(el('div', {
-          style: 'height:1px;background:#EEF2F7;margin:16px 0 14px;',
-        }));
-        var _hdr = el('div', {
-          style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px;',
-        });
-        _hdr.appendChild(el('div', {
-          style: 'font-size:14px;font-weight:800;color:#0f172a;',
-        }, ['🔐 Two-factor authentication']));
-        if (_mfa.required && _mfa.required(_roles)) {
-          _hdr.appendChild(el('span', {
-            style: 'font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;'
-              + 'background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:20px;',
-          }, ['Required for your role']));
-        }
-        sc.appendChild(_hdr);
-        var _mfaBox = el('div', {});
-        sc.appendChild(_mfaBox);
-        _mfa.render(_mfaBox, { embedded: true });
-      }
-    } catch (e) { /* the rest of Settings must render even if this does not */ }
-
-    // biometric toggle (native only)
-    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
-    var bioRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
-    var bioSub = el('div', { style: 'font-size:12px;color:#64748B;', id: 'kt-bio-sub' }, ['Checking…']);
-    bioRow.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Fingerprint / Face sign-in']), bioSub]));
-    var bioToggle = mkSwitch(); bioToggle.id = 'kt-bio-toggle';
-    bioRow.appendChild(bioToggle);
-    sc.appendChild(bioRow);
-    // Pass the element, never look it up by id: this card isn't in the document
-    // yet (it's appended below), so getElementById would return null and every
-    // status update would silently no-op — the row stayed on "Checking…" forever.
-    wireBiometrics(bioToggle, bioSub);
-
-    /* Passkeys — sign in with the phone's or computer's own lock (face, fingerprint,
-       PIN) instead of a password. An ADDITIONAL way in: the password still works and
-       still expires on schedule. Not available inside the Android app, whose web view
-       has no WebAuthn; said plainly there instead of showing a button that fails. */
-    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
-    (function () {
-      var PK = window.KT && KT.passkeys;
-      var can = !!(PK && PK.supported());
-      var head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
-      var sub = el('div', { style: 'font-size:12px;color:#64748B;' }, [can
-        ? 'Sign in with your face, fingerprint or device PIN — no password to type. Your password still works.'
-        : 'Not available in the Android app. Add a passkey from Chrome or Safari (or a computer) and use it there; fingerprint unlock works here.']);
-      head.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['🔑 Passkeys']), sub]));
-      var add = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;' }, ['Add a passkey']);
-      if (can) head.appendChild(add);
-      sc.appendChild(head);
-      var status = el('div', { style: 'font-size:12.5px;min-height:0;margin-top:6px;' });
-      var list = el('div', { style: 'margin-top:8px;' });
-      sc.appendChild(status); sc.appendChild(list);
-      if (!PK) return;
-
-      function when(ts) {
-        if (!ts) return '';
-        try { return (KT.fmtDateTime ? KT.fmtDateTime(ts) : new Date(ts).toLocaleString()); } catch (e) { return ''; }
-      }
-      function say(msg, tone) { status.style.color = tone === 'ok' ? '#16A34A' : (tone === 'bad' ? '#B91C1C' : '#1F6080'); status.textContent = msg || ''; }
-      function paint(rows) {
-        list.innerHTML = '';
-        if (!rows.length) {
-          list.appendChild(el('div', { style: 'font-size:12.5px;color:#94A3B8;' }, ['No passkeys yet.']));
-          return;
-        }
-        rows.forEach(function (p) {
-          var r = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:6px;' });
-          r.appendChild(el('div', { style: 'flex:1;min-width:0;' }, [
-            el('div', { style: 'font-weight:700;font-size:13.5px;color:#0f172a;overflow-wrap:anywhere;' }, [p.label || 'Passkey']),
-            el('div', { style: 'font-size:11.5px;color:#64748B;' }, ['Added ' + when(p.created_at) + (p.last_used_at ? ' · last used ' + when(p.last_used_at) : ' · not used yet')]),
-          ]));
-          var rm = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'background:none;border:none;color:#B91C1C;font-size:12px;font-weight:700;cursor:pointer;padding:4px;' }, ['Remove']);
-          rm.addEventListener('click', function () {
-            var go = function () {
-              rm.disabled = true;
-              PK.remove(p.id).then(function () { say('Passkey removed. Your password still works.', 'ok'); load(); })
-                .catch(function (e) { rm.disabled = false; say((e && e.message) || 'Could not remove it.', 'bad'); });
-            };
-            if (KT.confirm) {
-              KT.confirm({ title: 'Remove this passkey?', description: '"' + (p.label || 'Passkey') + '" will no longer sign you in. Your password and any other passkeys are unaffected.', okLabel: 'Remove' })
-                .then(function (ok) { if (ok) go(); });
-            } else if (window.confirm('Remove this passkey?')) { go(); }
-          });
-          r.appendChild(rm);
-          list.appendChild(r);
-        });
-      }
-      function load() {
-        PK.list().then(function (d) { paint((d && d.passkeys) || []); })
-          .catch(function () { list.innerHTML = ''; });
-      }
-      add.addEventListener('click', function () {
-        add.disabled = true; add.textContent = 'Follow your device…'; say('');
-        PK.register().then(function (p) {
-          say('✓ Passkey added' + (p && p.label ? ' — ' + p.label : '') + '. Next time, tap "Sign in with a passkey" on the sign-in page.', 'ok');
-          load();
-        }).catch(function (e) {
-          say((e && e.message) || 'Could not add a passkey.', e && e.cancelled ? '' : 'bad');
-        }).then(function () { add.disabled = false; add.textContent = 'Add a passkey'; });
-      });
-      load();
-    })();
-
-    // Quick-unlock PIN. KT.pin (kt-pin.js) seals the session under a key derived
-    // from the PIN, so on the next launch the PIN alone reopens the app.
-    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
-    var pin = KT.pin;
-    var pinHas = !!(pin && pin.isSet());
-    var pinRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
-    var pinSub = el('div', { style: 'font-size:12px;color:#64748B;' },
-      [!pin ? 'Not available on this device.' : (pinHas ? 'A PIN is set — use it to unlock the app.' : 'Unlock the app with a 4–6 digit PIN.')]);
-    pinRow.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Quick-unlock PIN']), pinSub]));
-    var pinBtn = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;' }, [pinHas ? 'Change' : 'Set PIN']);
-    if (!pin) pinBtn.disabled = true;
-    pinRow.appendChild(pinBtn);
-    sc.appendChild(pinRow);
-    var pinArea = el('div'); sc.appendChild(pinArea);
-    var pinRemove = null;
-    function paintPin() {
-      var has = !!(pin && pin.isSet());
-      pinSub.textContent = has ? 'A PIN is set — use it to unlock the app.' : 'Unlock the app with a 4–6 digit PIN.';
-      pinBtn.textContent = has ? 'Change' : 'Set PIN';
-      if (has && !pinRemove) {
-        pinRemove = el('button', { type: 'button', style: 'background:none;border:none;color:#B91C1C;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;padding:2px;' }, ['Remove PIN']);
-        pinRemove.addEventListener('click', function () { pin.remove().then(function () { pinRemove.remove(); pinRemove = null; paintPin(); }); });
-        sc.appendChild(pinRemove);
-      } else if (!has && pinRemove) { pinRemove.remove(); pinRemove = null; }
-    }
-    if (pin) pinBtn.addEventListener('click', function () { pinFlow(pinArea, paintPin); });
-    paintPin();
+    // ── SECURITY ── (one card, shared with My profile: see buildSecurityCard)
+    var sc = buildSecurityCard();
 
     // Notifications self-test: fires an FCM push to THIS user's own device
     // tokens via /push/test-fcm, bypassing chat-recipient logic — the cleanest

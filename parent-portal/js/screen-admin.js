@@ -2420,8 +2420,14 @@
       var secHost = Dom.el('div', {});
       paneAccount.appendChild(payHost);
       paneAccount.appendChild(secHost);
-      KT.AccountPanes.payroll(payHost, subject, 'admin');
-      KT.AccountPanes.security(secHost, subject, 'admin');
+      /* YOUR OWN RECORD IS YOUR PROFILE (2026-09-28). "My profile" opens this dialog on
+         yourself, so here the panes must be the editable ones: password, two-factor,
+         fingerprint, passkeys, PIN, your own pay details. In admin mode it told admins
+         to change these "from their own profile", which is this dialog, so an agency
+         admin could not reach them at all. */
+      var paneMode = _isSelf ? 'self' : 'admin';
+      KT.AccountPanes.payroll(payHost, subject, paneMode);
+      KT.AccountPanes.security(secHost, subject, paneMode);
     })();
     root.appendChild(tabBar);
     root.appendChild(paneDetails);
