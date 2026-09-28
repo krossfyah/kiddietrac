@@ -433,6 +433,27 @@
   // etc.) can force an immediate re-sweep instead of waiting for the bus/interval.
   KT.sweepRowActions = function () { try { sweep(); } catch (e) {} };
 
+  /* THE SAME MENU FOR A CARD'S OWN ⋮ (2026-09-28).
+
+     Anthony: "kebab in agency overview and educator cards are not showing up clearly".
+
+     The provider cards on Agency overview draw their own ⋮, which is the documented
+     exception because they are cards, not a table. But the menu was hand-built too,
+     position:absolute inside .centre-card-v17, and that card has overflow:hidden. So
+     the menu opened and the card cut it off after its first few pixels. It read as a
+     kebab that barely does anything.
+
+     This menu lives on <body> at position:fixed, so no card can clip it. It also
+     already handles flipping above near the bottom, staying on screen, outside clicks,
+     scrolling and Escape. A screen passes its anchor and the action buttons (they may
+     be detached; each one's click is what runs). A second press on the same anchor
+     closes it. The anchor should carry class kt-ka-kebab, so an outside-click test
+     treats it as a kebab and it looks like every other ⋮. */
+  KT.openActionMenu = function (anchor, actions) {
+    if (openMenu && openMenu.kebab === anchor) { closeMenu(); return; }
+    openFor(anchor, actions || []);
+  };
+
   /* REGISTER AS A TABLE ENHANCER TOO.
      `KT.enhanceTables()` is what a screen calls when it rebuilds a table outside the
      normal render path - an in-screen TAB fires no hashchange, so the shared sweep never

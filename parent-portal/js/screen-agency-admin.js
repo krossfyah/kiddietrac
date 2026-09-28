@@ -918,8 +918,8 @@
               ${emailPillHtml(emailInfo.byCentre[c.id] !== false, emailInfo.byCentre[c.id] !== false ? 'Email on' : 'Email off')}
               <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
                 <button class="review-day-btn" data-centre-id="${c.id}" title="Open this provider's daily overview" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#13B7CC,#1F6080);color:#fff;border:0;border-radius:10px;padding:8px 15px;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 10px -4px rgba(31,96,128,.6);white-space:nowrap;">📅 Review day</button>
-                <button class="manage-btn" data-centre-id="${c.id}">Manage this centre →</button>
-                <span class="kt-live-kebab" data-centre-id="${c.id}"></span>
+                <button class="manage-btn" data-centre-id="${c.id}" type="button" data-kt-iconized="1" title="Manage this centre" aria-label="Manage this centre" style="width:32px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid #E2E8F0;border-radius:8px;background:#fff;color:#475569;font-size:15px;line-height:1;cursor:pointer;">⚙️</button>
+                <span class="kt-live-kebab" data-centre-id="${c.id}" data-kt-no-tips="1"></span>
               </div>
             </div>
           </div>
@@ -1020,10 +1020,37 @@
     function providerKebab(items) {
       const wrap = document.createElement('div');
       wrap.style.cssText = 'position:relative;display:inline-block;';
+      wrap.setAttribute('data-kt-no-tips', '1');
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.setAttribute('aria-label', 'More actions');
+      btn.setAttribute('aria-haspopup', 'true');
+      btn.setAttribute('data-kt-iconized', '1');
       btn.textContent = '⋮';
+
+      /* THE HOUSE MENU, NOT ONE OF OUR OWN (2026-09-28). The menu below used to be
+         position:absolute inside the card, and .centre-card-v17 is overflow:hidden, so
+         it opened as a sliver cut off by the card's edge. KT.openActionMenu
+         (kt-row-actions.js) draws on <body> where nothing clips it. The fallback is
+         only for a page that somehow lacks that file. */
+      if (window.KT && KT.openActionMenu) {
+        btn.className = 'kt-ka-kebab';
+        const acts = items.filter(Boolean).map(function (it) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = it.label;
+          if (it.danger) { b.setAttribute('data-act', 'archive'); }
+          b.addEventListener('click', function () { it.run(); });
+          return b;
+        });
+        btn.addEventListener('click', function (e) {
+          e.preventDefault(); e.stopPropagation();
+          KT.openActionMenu(btn, acts);
+        });
+        wrap.appendChild(btn);
+        return wrap;
+      }
+
       btn.style.cssText = 'background:transparent;border:1px solid #E2E8F0;border-radius:8px;'
         + 'width:32px;height:32px;line-height:1;font-size:17px;cursor:pointer;color:#475569;';
       const menu = document.createElement('div');

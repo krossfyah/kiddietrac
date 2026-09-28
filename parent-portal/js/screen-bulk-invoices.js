@@ -64,7 +64,10 @@
     });
     picker.appendChild(csvBtn);
 
-    var centresWrap = Dom.el('div', { 'data-kt-list': '1', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+    /* data-kt-no-controls: data-kt-list is here for the ⋮ on each centre row, but it
+       also brought kt-list-controls' "Filter 3 items" bar, stacked above the invoice
+       table's own search. Two search boxes for one screen. */
+    var centresWrap = Dom.el('div', { 'data-kt-list': '1', 'data-kt-no-controls': '1', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(centresWrap);
     centresWrap.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'Loading centres…'));
 

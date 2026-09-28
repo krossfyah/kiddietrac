@@ -325,3 +325,33 @@ Rules:
 - A teardown is only acceptable if something is guaranteed to repaint afterwards.
   `kt-auto-refresh` may tear a screen down mid-load because it immediately calls
   `renderScreen()`; a cosmetic sweep has no such follow-up, so it must not.
+
+## A server-paged table gets ONE pager: the screen's (2026-09-28)
+
+A screen that pages on the server (fetches `per_page` rows and draws `KT.pagerBar`)
+must not be paged again by `kt-table-filter.js`. It was: Contacts loads 50 rows a page,
+the filter saw 50 > 25 and drew a second pager, and added a "Filter 50 rows" box beside
+the screen's real search, a box that could only see the one server page.
+
+`kt-table-filter` now treats a table as server-paged when it carries
+`data-kt-server-paged`, or when a screen's own `.kt-pager-bar` sits beside it (the
+nearest table before the bar). On such a table it keeps sorting and drops its pager,
+search box and count. You get that for free by drawing your pager with `KT.pagerBar`
+next to the table. Mark the table `data-kt-server-paged` if your pager lives somewhere
+else.
+
+A screen that searches or filters its own table client-side (Attendance pattern's grid)
+takes `data-kt-no-filter` or `data-kt-no-search`, or it gets a second search box.
+`data-kt-list` on a card container also brings a "Filter N items" bar. Add
+`data-kt-no-controls` when the screen has its own search (Bulk invoices).
+
+## A card's own ⋮ uses KT.openActionMenu, never an absolute menu (2026-09-28)
+
+A hand-rolled ⋮ on a CARD is allowed (no table, so kt-row-actions cannot build it). A
+hand-rolled MENU is not. It was `position:absolute` inside `.centre-card-v17`, which is
+`overflow:hidden`, so it opened as a sliver clipped by the card: "kebab not showing up
+clearly". Call `KT.openActionMenu(anchorBtn, actionButtons)` (kt-row-actions.js). The
+buttons may be detached, and each one's click is what runs. The menu draws on `<body>`
+at `position:fixed`, flips above near the bottom, and closes on outside click, scroll
+and Escape. Give the anchor class `kt-ka-kebab` so it looks and behaves like every
+other ⋮.

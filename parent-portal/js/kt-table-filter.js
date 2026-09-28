@@ -57,6 +57,52 @@
   // (everything fits on one page); larger tables get numbered page buttons + a jump box.
   const PAGE_SIZE = 25;
 
+  /* SERVER-PAGED TABLES (2026-09-28).
+
+     Anthony: "all contacts in the kiddietrac platform has two pagination".
+
+     Contacts asks the server for 50 rows a page and draws its own pager with
+     KT.pagerBar. This module saw 50 rows, which is more than 25, and paged them AGAIN
+     underneath: two pagers, the inner one paging only inside the outer one's page.
+     It also added a "Filter 50 rows" box beside the screen's real search, which
+     can only see that one server page.
+
+     The 2026-09-24 fix stopped the two GLOBAL pagers colliding. It could not see this
+     one, because the other pager belongs to the screen.
+
+     So a table is server-paged when it says so (data-kt-server-paged), or when a
+     screen's own pager bar sits beside it. That covers every screen that pages with
+     KT.pagerBar, with no per-screen change. On such a table this module keeps sorting
+     and nothing else. There is no second pager, because the screen already pages.
+     There is no search box, because it could only filter one page. There is no count,
+     because "1–50 of 50" is false when the server holds 300.
+
+     The check runs on every render, not only once at attach. A screen may draw its
+     bar after the sweep has already reached the table. */
+  const OWN_BARS = ['kt-table-pager', 'kt-pager', 'kt-card-pager'];
+  function screenPagerOf(table) {
+    let el = table;
+    for (let i = 0; i < 4; i++) {
+      el = el.parentElement;
+      if (!el || el.id === 'appMain' || el === document.body) break;
+      const bars = el.querySelectorAll('.kt-pager-bar');
+      for (const b of bars) {
+        if (OWN_BARS.some((c) => b.classList.contains(c))) continue;
+        if (b.closest('table')) continue;
+        // the bar belongs to the nearest table BEFORE it (or, if it sits above
+        // every table in this box, the first one after it)
+        const tables = Array.from(el.querySelectorAll('table'));
+        const before = tables.filter((t) => t.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const owner = before.length ? before[before.length - 1] : tables[0];
+        if (owner === table) return b;
+      }
+    }
+    return null;
+  }
+  function isServerPaged(table) {
+    return table.hasAttribute('data-kt-server-paged') || !!screenPagerOf(table);
+  }
+
   function attachFilter(table) {
     // Opt-out for screens that own their own search. The email log, for one, searches
     // SERVER-side across every row — bolting this client-side box (which can only see
@@ -243,6 +289,7 @@
     anchor.parentElement.insertBefore(pager, anchor.nextSibling);
 
     let page = 1;
+    let serverMode = false;
 
     /** The size this table asked for, else the house default. */
     function tablePageSize() {
@@ -362,6 +409,24 @@
         matched = scored.map(m => m.r);
       }
       const total = matched.length;
+      if (isServerPaged(table)) {
+        // The screen pages. Show every row it loaded, draw no second pager, and hide
+        // the page-only search and count (see screenPagerOf).
+        if (!serverMode) {
+          serverMode = true;
+          left.style.display = 'none';
+          right.style.display = 'none';
+          // kt-table-export moves this counter into its bottom bar, out of `right`
+          counter.style.display = 'none';
+          if (input.value) { input.value = ''; }
+          if (!sortWrap) { wrap.style.display = 'none'; }
+          table.setAttribute('data-kt-server-paged', '1');
+        }
+        for (const r of Array.from(tbody.children)) { r.style.display = ''; }
+        pager.style.display = 'none';
+        pager.innerHTML = '';
+        return;
+      }
       /* A screen that asked for a page size gets it. data-kt-paginate used to reach
          only the other pager, so silencing that one would have quietly changed 25 to
          this module's default on every table that set it. */

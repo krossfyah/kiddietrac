@@ -345,7 +345,11 @@
       /* table-layout:fixed -- the day columns were sized by their own content, so a
          column holding "Before" came out wider than one holding "AM" and the week
          read as ragged. Fixed layout gives the seven days one width. */
-      +   '<table id="ap-grid" style="width:100%;border-collapse:collapse;font-size:13px;min-width:900px;table-layout:fixed;"></table>'
+      /* data-kt-no-filter: this screen searches and filters the grid itself (ap-q,
+         ap-filter), and "Apply to everyone shown" means the rows THAT search shows. The
+         global toolbar added a second search box and split the grid into pages, so
+         "shown" no longer meant what it said. (Anthony, 2026-09-28: pager sweep) */
+      +   '<table id="ap-grid" data-kt-no-filter="1" style=""width:100%;border-collapse:collapse;font-size:13px;min-width:900px;table-layout:fixed;"></table>'
       + '</div>'
       + '<div id="ap-empty" style="display:none;padding:34px;text-align:center;color:#64748B;">No children match.</div>'
       + '</div>';
