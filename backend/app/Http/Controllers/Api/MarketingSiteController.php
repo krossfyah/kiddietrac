@@ -699,13 +699,28 @@ final class MarketingSiteController extends Controller
             'email'      => 'nullable|string|max:160',
             'agency'     => 'nullable|string|max:160',
             'transcript' => 'required|array|min:1|max:300',
-            'transcript.*.sender'  => 'required|string|in:visitor,bot',
+            'transcript.*.sender'  => 'required|string|in:visitor,bot,agent,system',
+            'transcript.*.author'  => 'nullable|string|max:120',
+            'reason'     => 'nullable|string|in:closed,left',
             'transcript.*.message' => 'required|string|max:2000',
             'transcript.*.at'      => 'nullable|string|max:40',
             'context'    => 'nullable|array',
         ]);
 
         $session = preg_replace('/[^a-zA-Z0-9_-]/', '', $data['session']);
+
+        // The ✕ ends the conversation for the team too; merely leaving the page does not
+        // (a reload looks exactly like leaving, and the visitor comes straight back).
+        if (($data['reason'] ?? 'closed') === 'closed') {
+            \App\Http\Controllers\Api\WebChatController::visitorEnded($session);
+        }
+
+        // The stored thread is the complete one: it has what the team said, and it
+        // survives a reload, which the page's own copy does not.
+        $stored = \App\Http\Controllers\Api\WebChatController::transcriptFor($session);
+        if (count($stored) > 0) {
+            $data['transcript'] = $stored;
+        }
 
         // One email per conversation. Reopening the widget, or a keepalive send that
         // arrives twice on a flaky connection, must not mail sales the same chat again.
@@ -769,7 +784,10 @@ final class MarketingSiteController extends Controller
         $lines = '';
         foreach ($data['transcript'] as $m) {
             $isVisitor = ($m['sender'] ?? '') === 'visitor';
-            $who = $isVisitor ? ($name ?: 'Visitor') : 'Maya (assistant)';
+            $who = $isVisitor ? ($name ?: 'Visitor') : [
+                'agent'  => ($m['author'] ?? '') ?: 'KiddieTrac team',
+                'system' => 'Chat',
+            ][$m['sender'] ?? ''] ?? 'Maya (assistant)';
             $lines .= '<div style="margin-bottom:12px;">'
                 .'<div style="font-size:11.5px;font-weight:700;color:'.($isVisitor ? '#0e7490' : '#94a3b8').';'
                 .'margin-bottom:3px;">'.$e($who)
@@ -832,7 +850,8 @@ final class MarketingSiteController extends Controller
                         'lead_id' => $lead->id,
                         'type' => 'note',
                         'body' => "Website chat:\n\n".collect($data['transcript'])->map(function ($m) use ($name) {
-                            return (($m['sender'] ?? '') === 'visitor' ? ($name ?: 'Them') : 'Maya').': '.$m['message'];
+                            $s = $m['sender'] ?? '';
+                            return ($s === 'visitor' ? ($name ?: 'Them') : ($s === 'agent' ? (($m['author'] ?? '') ?: 'Team') : ($s === 'system' ? '—' : 'Maya'))).': '.$m['message'];
                         })->implode("\n"),
                         'done' => true,
                     ]);
@@ -853,6 +872,7 @@ final class MarketingSiteController extends Controller
             'email'   => 'nullable|string|max:160',
             'sender'  => 'required|string|in:visitor,bot',
             'message' => 'required|string|max:2000',
+            'page'    => 'nullable|string|max:255',
         ]);
         $row = [
             'session' => preg_replace('/[^a-zA-Z0-9_-]/', '', $data['session']),
@@ -867,7 +887,11 @@ final class MarketingSiteController extends Controller
             Storage::disk('local')->append('marketing-chats.jsonl', json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         } catch (\Throwable $e) {
         }
-        return response()->json(['ok' => true])->header('Access-Control-Allow-Origin', '*');
+        // And into the live-chat tables, so the team can see it and answer it.
+        $id = \App\Http\Controllers\Api\WebChatController::record(
+            $request, $row['session'], $row['name'], $row['email'], $row['sender'], $row['message'], $data['page'] ?? null
+        );
+        return response()->json(['ok' => true, 'id' => $id])->header('Access-Control-Allow-Origin', '*');
     }
 
     /** platform_admin — chat conversations grouped by session, most recent first. */

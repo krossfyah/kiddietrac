@@ -489,12 +489,18 @@ Route::post('/auth/passkey/verify',  [\App\Http\Controllers\Api\PasskeyControlle
 Route::any('/login', function () { return response()->json(['message' => 'Unauthenticated. Please sign in via the app.'], 401); })->name('login');
 Route::get('/branding', [BrandingController::class, 'show']);
 Route::get('/marketing-site/config', [\App\Http\Controllers\Api\MarketingSiteController::class, 'publicConfig']);
-Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead'])->middleware('throttle:5,1');
-Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit'])->middleware('throttle:60,1');
-Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat'])->middleware('throttle:20,1');
+Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead'])->middleware('throttle:5,1,mklead');
+Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit'])->middleware('throttle:60,1,mkhit');
+Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat'])->middleware('throttle:45,1,mkchat');
 // A finished conversation goes to sales as a transcript. Throttled hard: one chat
 // ends once, and this one sends mail.
-Route::post('/marketing-site/chat/end', [\App\Http\Controllers\Api\MarketingSiteController::class, 'endChat'])->middleware('throttle:6,1');
+Route::post('/marketing-site/chat/end', [\App\Http\Controllers\Api\MarketingSiteController::class, 'endChat'])->middleware('throttle:6,1,mkchatend');
+// Each public marketing route has its OWN throttle prefix. Without one, Laravel keys every
+// throttle by IP alone, so page hits + chat polls used up the lead form's 5/min and the
+// transcript's 6/min, and those were refused with 429 mid-visit.
+// Live website chat: the page polls for the team's replies + typing, and can ask for a person.
+Route::get('/marketing-site/chat/poll', [\App\Http\Controllers\Api\WebChatController::class, 'poll'])->middleware('throttle:90,1,mkpoll');
+Route::post('/marketing-site/chat/human', [\App\Http\Controllers\Api\WebChatController::class, 'wantHuman'])->middleware('throttle:6,1,mkhuman');
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1');
 
@@ -729,6 +735,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/demo-token', [\App\Http\Controllers\Api\SalesController::class, 'demoToken']);
             Route::get('/quotes/{quote}/pdf', [\App\Http\Controllers\Api\SalesController::class, 'quotePdf'])->where('quote','[0-9]+');
             Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\SalesController::class, 'quoteSend'])->where('quote','[0-9]+');
+            // Live website chat inbox (WebChatController).
+            Route::post('/web-chats/presence', [\App\Http\Controllers\Api\WebChatController::class, 'presence']);
+            Route::get('/web-chats', [\App\Http\Controllers\Api\WebChatController::class, 'index']);
+            Route::get('/web-chats/{id}', [\App\Http\Controllers\Api\WebChatController::class, 'show'])->where('id','[0-9]+');
+            Route::post('/web-chats/{id}/reply', [\App\Http\Controllers\Api\WebChatController::class, 'reply'])->where('id','[0-9]+');
+            Route::post('/web-chats/{id}/typing', [\App\Http\Controllers\Api\WebChatController::class, 'typing'])->where('id','[0-9]+');
+            Route::post('/web-chats/{id}/join', [\App\Http\Controllers\Api\WebChatController::class, 'join'])->where('id','[0-9]+');
+            Route::post('/web-chats/{id}/release', [\App\Http\Controllers\Api\WebChatController::class, 'release'])->where('id','[0-9]+');
+            Route::post('/web-chats/{id}/close', [\App\Http\Controllers\Api\WebChatController::class, 'close'])->where('id','[0-9]+');
+            Route::post('/web-chats/{id}/lead', [\App\Http\Controllers\Api\WebChatController::class, 'lead'])->where('id','[0-9]+');
             Route::get('/messages', [\App\Http\Controllers\Api\SalesController::class, 'messagesIndex']);
             Route::post('/messages', [\App\Http\Controllers\Api\SalesController::class, 'messagesStore']);
             Route::get('/announcements', [\App\Http\Controllers\Api\SalesController::class, 'announcementsIndex']);

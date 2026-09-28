@@ -87,6 +87,8 @@
       '<div class="sidebar-section-label" style="color:#0C6070;">💼 Sales</div>' +
       '<a href="#sales" class="nav-link" data-hash="sales">' +
         '<span class="nav-icon">📊</span><span class="nav-label">Pipeline</span></a>' +
+      '<a href="#sales-webchat" class="nav-link" data-hash="sales-webchat">' +
+        '<span class="nav-icon">💬</span><span class="nav-label">Website chat</span></a>' +
       '<a href="#sales-leads" class="nav-link" data-hash="sales-leads">' +
         '<span class="nav-icon">🎯</span><span class="nav-label">Leads</span></a>' +
       '<a href="#sales-new" class="nav-link nav-link--sub" data-hash="sales-new" style="padding-left:30px">' +

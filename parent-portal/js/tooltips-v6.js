@@ -196,6 +196,9 @@
 
     candidates.forEach(el => {
       if (injectedElements.has(el)) return;
+      // Other people's words (a visitor's chat line, a message) are not labels: a
+      // glossary "?" inside someone's sentence is noise. Opt out with data-kt-no-tips.
+      if (el.closest && el.closest('[data-kt-no-tips]')) return;
       // Only inject on leaf-ish elements (don't add to containers with many children)
       const directText = Array.from(el.childNodes)
         .filter(n => n.nodeType === 3)

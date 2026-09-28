@@ -1502,7 +1502,8 @@
 
   function salesTiles() {
     var tiles = [
-      { hash: 'sales', icon: '📊', label: 'Pipeline' }, { hash: 'sales-leads', icon: '🎯', label: 'Leads' },
+      { hash: 'sales', icon: '📊', label: 'Pipeline' }, { hash: 'sales-webchat', icon: '💬', label: 'Website chat' },
+      { hash: 'sales-leads', icon: '🎯', label: 'Leads' },
       { hash: 'sales-followups', icon: '⏰', label: 'Follow-ups' }, { hash: 'sales-plans', icon: '💲', label: 'Plans & pricing' },
       { hash: 'sales-demo', icon: '🚀', label: 'Launch demo' },
       { hash: 'notifications', icon: '🔔', label: 'Inbox' }, { hash: 'help', icon: '📖', label: 'Help' },
@@ -1535,6 +1536,380 @@
     container.appendChild(salesTiles());
   }
 
+  // ─────────────────────────────── Website chat (live) ───────────────────────────────
+  /* Visitors on kiddietrac.com, answered by a person. The page polls
+     /marketing-site/chat/poll for what is said here; this screen polls
+     /sales/web-chats for what they say. Maya (the scripted assistant on the page)
+     covers when nobody is available or nobody picks up, and stops the moment
+     somebody here replies or presses Join. Backend: WebChatController. */
+  function ensureWebChatCss() {
+    if (document.getElementById('kt-webchat-css')) return;
+    var s = document.createElement('style');
+    s.id = 'kt-webchat-css';
+    s.textContent =
+      '.kt-wc{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:14px;align-items:stretch;min-height:0}' +
+      '.kt-wc-list,.kt-wc-thread{background:var(--kt-card,#fff);border:1px solid var(--kt-border,#e6ebf1);border-radius:16px;min-width:0;display:flex;flex-direction:column;overflow:hidden}' +
+      '.kt-wc-list{height:min(70vh,640px)}.kt-wc-thread{height:min(70vh,640px)}' +
+      '.kt-wc-rows{flex:1 1 auto;overflow-y:auto;min-height:0}' +
+      '.kt-wc-row{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-bottom:1px solid #F1F5F9;cursor:pointer;min-width:0}' +
+      '.kt-wc-row:hover{background:#F8FAFC}.kt-wc-row.on{background:#EEF6F9}' +
+      '.kt-wc-av{flex:0 0 32px;width:32px;height:32px;border-radius:50%;background:#E2EEF3;color:#1F6080;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;position:relative}' +
+      '.kt-wc-av i{position:absolute;right:-1px;bottom:-1px;width:10px;height:10px;border-radius:50%;background:#22C55E;border:2px solid #fff}' +
+      '.kt-wc-name{font-weight:800;font-size:13.5px;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+      '.kt-wc-prev{font-size:12.5px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}' +
+      '.kt-wc-chip{display:inline-block;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:800;margin-right:4px}' +
+      '.kt-wc-msgs{flex:1 1 auto;overflow-y:auto;min-height:0;padding:14px;display:flex;flex-direction:column;gap:8px;background:#FBFCFD}' +
+      '.kt-wc-m{display:flex;flex-direction:column;max-width:78%}.kt-wc-m.l{align-self:flex-start;align-items:flex-start}.kt-wc-m.r{align-self:flex-end;align-items:flex-end}' +
+      '.kt-wc-who{font-size:10.5px;color:#94A3B8;margin:0 5px 2px;font-weight:700}' +
+      '.kt-wc-b{padding:8px 12px;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}' +
+      '.kt-wc-sys{align-self:center;font-size:11.5px;color:#64748B;background:#F1F5F9;border-radius:999px;padding:3px 11px;text-align:center;max-width:90%}' +
+      '.kt-wc-typing{font-size:12px;color:#64748B;padding:0 16px 6px;min-height:18px}' +
+      '.kt-wc-comp{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #EEF2F6;align-items:flex-end}' +
+      '.kt-wc-comp textarea{flex:1;min-width:0;max-width:none !important;resize:none;height:40px;max-height:120px;padding:9px 11px;border:1px solid #d9e1ea;border-radius:10px;font:inherit;font-size:14px;box-sizing:border-box}' +
+      '.kt-wc-head{display:flex;gap:10px;align-items:center;padding:11px 14px;border-bottom:1px solid #EEF2F6;flex-wrap:wrap;min-width:0}' +
+      '.kt-wc-head .btn{padding:6px 11px !important;font-size:12.5px !important}' +
+      '.kt-wc-sw{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#334155;cursor:pointer;user-select:none}' +
+      '.kt-wc-back{display:none}' +
+      '@media (max-width:820px){.kt-wc{grid-template-columns:minmax(0,1fr)}.kt-wc.has-thread .kt-wc-list{display:none}.kt-wc:not(.has-thread) .kt-wc-thread{display:none}.kt-wc-back{display:inline-flex}.kt-wc-list,.kt-wc-thread{height:calc(100dvh - 250px);min-height:360px}.kt-wc-m{max-width:88%}}' +
+      '.kt-wc-pop{position:fixed;right:18px;bottom:18px;z-index:2147480000;background:#fff;border:1px solid #E2E8F0;border-left:4px solid #1F6080;border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.18);padding:11px 14px;max-width:320px;cursor:pointer;font-size:13px;color:#0F172A}' +
+      '.kt-wc-pop b{display:block;font-size:13.5px;margin-bottom:2px}.kt-wc-pop span{color:#64748B;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}';
+    document.head.appendChild(s);
+  }
+  function wcStamp(ts) {
+    if (!ts) return '';
+    if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(ts);
+    try { return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
+  }
+  function wcClock(ts) {
+    if (!ts) return '';
+    if (window.KT && KT.fmtTime) return KT.fmtTime(ts);
+    try { return new Date(ts).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; }
+  }
+  function wcInitial(c) { var n = (c.name || c.email || '?').trim(); return n.charAt(0).toUpperCase(); }
+
+  // ── The heartbeat: keeps this person "online" for the website, paints the nav
+  //    badge, and pops a notice when a new visitor line arrives. Runs on every
+  //    screen for sales users, not only on the inbox. ──
+  var WC = { available: true, online: 0, unread: 0, seen: {}, first: true, listeners: [] };
+  var _wcAudio = null;
+  document.addEventListener('pointerdown', function () {
+    if (_wcAudio) return;
+    try { _wcAudio = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }, { once: true, capture: true });
+  function wcChime() {
+    try {
+      if (!_wcAudio) return;
+      var t = _wcAudio.currentTime;
+      [880, 1175].forEach(function (f, i) {
+        var o = _wcAudio.createOscillator(), g = _wcAudio.createGain();
+        o.frequency.value = f; o.type = 'sine';
+        g.gain.setValueAtTime(0.0001, t + i * 0.16); g.gain.exponentialRampToValueAtTime(0.18, t + i * 0.16 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.16 + 0.3);
+        o.connect(g); g.connect(_wcAudio.destination); o.start(t + i * 0.16); o.stop(t + i * 0.16 + 0.32);
+      });
+    } catch (e) {}
+  }
+  function wcPaintBadge() {
+    var links = document.querySelectorAll('a.nav-link[data-hash="sales-webchat"], .kt-tile[href="#sales-webchat"]');
+    Array.prototype.forEach.call(links, function (a) {
+      var b = a.querySelector('.kt-wc-badge');
+      if (!WC.unread) { if (b) b.remove(); return; }
+      if (!b) { b = el('span', { class: 'kt-wc-badge', style: 'margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#DC2626;color:#fff;font-size:11px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;line-height:1' }); a.appendChild(b); }
+      b.textContent = WC.unread > 99 ? '99+' : String(WC.unread);
+    });
+  }
+  function wcPop(w) {
+    ensureWebChatCss();
+    var old = document.querySelector('.kt-wc-pop'); if (old) old.remove();
+    var p = el('div', { class: 'kt-wc-pop', role: 'status' }, [
+      el('b', {}, [(w.wants_human ? '🙋 ' : '💬 ') + w.name + (w.wants_human ? ' wants to talk to a person' : ' — website chat')]),
+      el('span', {}, [w.preview || '']),
+    ]);
+    p.addEventListener('click', function () { p.remove(); go('sales-webchat?id=' + w.id); });
+    document.body.appendChild(p);
+    setTimeout(function () { if (p.parentNode) p.remove(); }, 14000);
+  }
+  var _wcBusy = false;
+  async function wcBeat(setAvail) {
+    if (!salesAuthed() || _wcBusy) return;
+    _wcBusy = true;
+    try {
+      var d = await Api.post('/sales/web-chats/presence', setAvail === undefined ? {} : { available: !!setAvail });
+      WC.available = !!d.available; WC.online = d.online || 0; WC.unread = d.unread || 0;
+      var onInbox = /^#sales-webchat/.test(window.location.hash || '');
+      (d.waiting || []).forEach(function (w) {
+        var key = w.id + ':' + w.latest;
+        if (WC.seen[key]) return;
+        WC.seen[key] = 1;
+        // The first beat after sign-in reports what is already waiting once, as one
+        // notice; after that, each new line gets its own.
+        if (!WC.first && !onInbox) { wcPop(w); wcChime(); }
+        else if (!WC.first && onInbox) { wcChime(); }
+      });
+      if (WC.first && (d.waiting || []).length && !onInbox) {
+        var w0 = d.waiting[0];
+        wcPop({ id: w0.id, name: d.waiting.length > 1 ? d.waiting.length + ' website chats' : w0.name, preview: d.waiting.length > 1 ? 'Visitors are waiting for a reply.' : w0.preview, wants_human: w0.wants_human });
+      }
+      WC.first = false;
+      wcPaintBadge();
+      WC.listeners.forEach(function (fn) { try { fn(WC); } catch (e) {} });
+    } catch (e) {}
+    _wcBusy = false;
+  }
+  function wcLoop() {
+    wcBeat();
+    // Hidden tabs are throttled by the browser anyway; asking less often there keeps
+    // the agent counted as online without spending requests on a tab nobody watches.
+    setTimeout(wcLoop, document.hidden ? 30000 : 10000);
+  }
+  if (salesAuthed()) { setTimeout(wcLoop, 3000); }
+  window.addEventListener('hashchange', function () { setTimeout(wcPaintBadge, 300); });
+
+  /* kt-icon-buttons turns short labels it recognises ("Open", "Add as lead") into bare
+     icons; here the words are the point, so these buttons are marked as already done. */
+  function wbtn(label, kind, on) { var b = btn(label, kind, on); b.dataset.ktIconized = '1'; return b; }
+  async function renderWebChat(container) {
+    clear(container); ensureWebChatCss();
+    container.appendChild(hero('Website chat', 'Visitors on kiddietrac.com, live. When nobody here is available, Maya — the virtual assistant — answers and says so; replying or pressing Join hands the chat to you.', '💬'));
+
+    var params = new URLSearchParams(((window.location.hash || '').split('?')[1]) || '');
+    var state = { filter: 'open', chats: [], openId: parseInt(params.get('id') || '0', 10) || 0, lastId: 0, chat: null, dead: false };
+
+    // ── toolbar: availability + filter ──
+    var sw = el('input', { type: 'checkbox', 'data-kt-switch': '1' });
+    sw.checked = WC.available;
+    sw.addEventListener('change', function () { wcBeat(sw.checked); });
+    var onlineTxt = el('span', { style: 'font-size:12.5px;color:#64748B' });
+    function paintOnline() {
+      sw.checked = WC.available;
+      onlineTxt.textContent = WC.online ? ('● ' + WC.online + ' team member' + (WC.online === 1 ? '' : 's') + ' online for the website') : 'Nobody online — Maya is answering';
+      onlineTxt.style.color = WC.online ? '#15803D' : '#B45309';
+    }
+    paintOnline();
+    WC.listeners.push(paintOnline);
+    var fOpen = wbtn('Open', 'primary', function () { setFilter('open'); });
+    var fClosed = wbtn('Closed', 'ghost', function () { setFilter('closed'); });
+    function setFilter(f) {
+      state.filter = f;
+      // Set the three properties directly: cssText comes back normalised ("background: rgb(…)"),
+      // so a string replace on it would silently match nothing.
+      [[fOpen, 'open'], [fClosed, 'closed']].forEach(function (p) {
+        var on = f === p[1];
+        p[0].style.background = on ? ACCENT : '#F1F5F9';
+        p[0].style.color = on ? '#fff' : '#334155';
+        p[0].style.border = '1px solid ' + (on ? ACCENT : '#E2E8F0');
+      });
+      state.openId = 0; state.threadFor = 0; grid.classList.remove('has-thread');
+      loadList();
+    }
+    container.appendChild(el('div', { style: 'display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 14px' }, [
+      el('label', { class: 'kt-wc-sw' }, [sw, 'Available for website chat']),
+      onlineTxt,
+      el('div', { style: 'flex:1' }),
+      el('div', { class: 'kt-segmented', style: 'display:inline-flex;gap:6px' }, [fOpen, fClosed]),
+    ]));
+
+    // ── layout ──
+    var rows = el('div', { class: 'kt-wc-rows' });
+    var list = el('div', { class: 'kt-wc-list' }, [rows]);
+    var thread = el('div', { class: 'kt-wc-thread' });
+    // Polls itself in place: opt out of the shell's timed and write-triggered re-renders,
+    // which would rebuild the screen under a half-typed reply (kt-auto-refresh, kt-live).
+    var grid = el('div', { class: 'kt-wc', 'data-kt-self-live': '1', 'data-kt-no-autorefresh': '1', 'data-kt-no-tips': '1' }, [list, thread]);
+    container.appendChild(grid);
+
+    function alive() { return !state.dead && document.body.contains(grid); }
+
+    function paintList() {
+      clear(rows);
+      if (!state.chats.length) {
+        rows.appendChild(el('div', { style: 'padding:26px 16px;text-align:center;color:#94A3B8;font-size:13.5px' }, [state.filter === 'open' ? 'No open website chats. New ones appear here the moment a visitor writes.' : 'No closed chats yet.']));
+        return;
+      }
+      state.chats.forEach(function (c) {
+        var by = c.preview_by === 'bot' ? 'Maya: ' : (c.preview_by === 'agent' ? (c.mine ? 'You: ' : (c.agent_name || 'Team') + ': ') : (c.preview_by === 'system' ? '' : ''));
+        var chips = [];
+        if (c.wants_human && !c.agent_id && c.status === 'open') chips.push(el('span', { class: 'kt-wc-chip', style: 'background:#FEF3C7;color:#92400E' }, ['Wants a person']));
+        if (c.agent_id) chips.push(el('span', { class: 'kt-wc-chip', style: 'background:#DCFCE7;color:#166534' }, [c.mine ? 'You' : c.agent_name]));
+        else if (c.status === 'open') chips.push(el('span', { class: 'kt-wc-chip', style: 'background:#EDE9FE;color:#5B21B6' }, ['With Maya']));
+        if (c.lead_id) chips.push(el('span', { class: 'kt-wc-chip', style: 'background:#E0F2FE;color:#075985' }, ['Lead']));
+        var av = el('div', { class: 'kt-wc-av', title: c.present ? 'On the website now' : '' }, [wcInitial(c)]);
+        if (c.present) av.appendChild(el('i'));
+        var row = el('div', { class: 'kt-wc-row' + (c.id === state.openId ? ' on' : '') }, [
+          av,
+          el('div', { style: 'flex:1;min-width:0' }, [
+            el('div', { style: 'display:flex;gap:6px;align-items:baseline;min-width:0' }, [
+              el('div', { class: 'kt-wc-name', style: 'flex:1;min-width:0' + (c.unread ? '' : ';font-weight:700') }, [c.name || c.email || 'Visitor']),
+              el('div', { style: 'font-size:11px;color:#94A3B8;white-space:nowrap' }, [wcStamp(c.at)]),
+            ]),
+            el('div', { class: 'kt-wc-prev', style: c.typing ? 'color:#0E7490;font-style:italic' : (c.unread ? 'color:#0F172A;font-weight:700' : '') }, [c.typing ? 'typing…' : by + (c.preview || '')]),
+            chips.length ? el('div', { style: 'margin-top:4px' }, chips) : null,
+          ]),
+          c.unread ? el('span', { style: 'flex:0 0 9px;width:9px;height:9px;border-radius:50%;background:#DC2626;margin-top:6px' }) : null,
+        ]);
+        row.addEventListener('click', function () { openChat(c.id); });
+        rows.appendChild(row);
+      });
+    }
+    async function loadList() {
+      if (!alive()) return;
+      try {
+        var d = await Api.get('/sales/web-chats', { status: state.filter });
+        state.chats = d.chats || [];
+        paintList();
+        if (!state.openId && state.chats.length && window.innerWidth > 820) openChat(state.chats[0].id);
+        if (!state.openId && !state.chats.length) paintEmptyThread();
+      } catch (e) {
+        clear(rows); rows.appendChild(el('div', { style: 'padding:16px;color:#DC2626' }, ['Could not load chats: ' + (e.message || e)]));
+      }
+    }
+    function paintEmptyThread() {
+      clear(thread);
+      thread.appendChild(el('div', { style: 'margin:auto;text-align:center;color:#94A3B8;padding:30px;font-size:13.5px' }, ['Pick a conversation on the left.']));
+    }
+
+    // ── the open conversation ──
+    var msgsEl, typingEl, ta, headEl;
+    function bubble(m) {
+      if (m.sender === 'system') return el('div', { class: 'kt-wc-sys' }, [m.body + ' · ' + wcClock(m.at)]);
+      var mine = m.sender === 'agent' || m.sender === 'bot';
+      var who = m.sender === 'visitor' ? (state.chat && (state.chat.name || state.chat.email) || 'Visitor')
+        : m.sender === 'bot' ? 'Maya · virtual assistant' : (m.author || 'Team');
+      var bg = m.sender === 'visitor' ? 'background:#fff;border:1px solid #E2E8F0;color:#0F172A;border-bottom-left-radius:5px'
+        : m.sender === 'bot' ? 'background:#F3F0FF;border:1px solid #E4DCFF;color:#3B2F6B;border-bottom-right-radius:5px'
+        : 'background:' + ACCENT + ';color:#fff;border-bottom-right-radius:5px';
+      var body = m.body;
+      if (m.sender === 'visitor' && body.indexOf('[chat started]') === 0) {
+        return el('div', { class: 'kt-wc-sys' }, ['Chat started' + ' · ' + wcClock(m.at)]);
+      }
+      return el('div', { class: 'kt-wc-m ' + (mine ? 'r' : 'l') }, [
+        el('div', { class: 'kt-wc-who' }, [who + ' · ' + wcClock(m.at)]),
+        el('div', { class: 'kt-wc-b', style: bg }, [body.replace(/\*\*([^*]+)\*\*/g, '$1')]),
+      ]);
+    }
+    function appendMsgs(ms) {
+      if (!ms || !ms.length) return;
+      var nearBottom = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 80;
+      ms.forEach(function (m) { if (m.id > state.lastId) { msgsEl.appendChild(bubble(m)); state.lastId = m.id; } });
+      if (nearBottom || state._forceBottom) { msgsEl.scrollTop = msgsEl.scrollHeight; state._forceBottom = false; }
+    }
+    function paintHead() {
+      var c = state.chat; if (!c || !headEl) return;
+      clear(headEl);
+      var back = wbtn('‹ Chats', 'ghost', function () { state.openId = 0; state.threadFor = 0; grid.classList.remove('has-thread'); paintList(); });
+      back.classList.add('kt-wc-back');
+      var status = c.status !== 'open' ? 'Closed' : (c.present ? '● On the website now' : 'Left the page');
+      var acts = [];
+      if (c.status === 'open' && !c.mine) acts.push(wbtn(c.agent_id ? 'Take over' : 'Join', 'primary', async function () { await Api.post('/sales/web-chats/' + c.id + '/join', {}); refreshThread(); loadList(); ta && ta.focus(); }));
+      if (c.status === 'open' && c.mine) acts.push(wbtn('Hand back to Maya', 'ghost', async function () { await Api.post('/sales/web-chats/' + c.id + '/release', {}); refreshThread(); loadList(); }));
+      if (c.lead) acts.push(wbtn('🎯 Open lead', 'light', function () { go('sales-lead?id=' + c.lead.id); }));
+      else acts.push(wbtn('🎯 Add as lead', 'light', async function (ev) {
+        ev.target.disabled = true;
+        try { var r = await Api.post('/sales/web-chats/' + c.id + '/lead', {}); toast('🎯', r.created ? 'Lead created' : 'Added to the existing lead', 'The transcript is on the lead as a note.'); refreshThread(); loadList(); }
+        catch (e) { toast('⚠️', 'Could not add lead', e.message || '', '#DC2626'); ev.target.disabled = false; }
+      }));
+      if (c.status === 'open') acts.push(wbtn('Close', 'danger', async function () { await Api.post('/sales/web-chats/' + c.id + '/close', {}); refreshThread(); loadList(); }));
+      headEl.appendChild(back);
+      headEl.appendChild(el('div', { style: 'flex:1;min-width:160px' }, [
+        el('div', { style: 'font-weight:800;font-size:15px;color:#0F172A;overflow-wrap:anywhere' }, [c.name || c.email || 'Visitor']),
+        el('div', { style: 'font-size:12px;color:#64748B;overflow-wrap:anywhere' }, [
+          c.email ? el('a', { href: 'mailto:' + c.email, style: 'color:#0E7490' }, [c.email]) : null,
+          (c.email ? ' · ' : '') + status + (c.agent_name ? ' · with ' + (c.mine ? 'you' : c.agent_name) : (c.status === 'open' ? ' · Maya is answering' : '')),
+        ]),
+      ]));
+      acts.forEach(function (a) { headEl.appendChild(a); });
+      if (ta) {
+        ta.disabled = false;
+        ta.placeholder = c.status !== 'open' ? 'Closed — writing here reopens it for the visitor if they are still on the page' : (c.mine ? 'Reply to ' + (c.name || 'the visitor') + '…' : 'Reply — sending takes the chat from Maya');
+      }
+    }
+    function openChat(id) {
+      state.openId = id; state.threadFor = id; state.lastId = 0; state.chat = null; state._forceBottom = true;
+      grid.classList.add('has-thread');
+      try { history.replaceState(null, '', '#sales-webchat?id=' + id); } catch (e) {}
+      Array.prototype.forEach.call(rows.children, function (r) { r.classList.remove('on'); });
+      clear(thread);
+      headEl = el('div', { class: 'kt-wc-head' });
+      msgsEl = el('div', { class: 'kt-wc-msgs' });
+      typingEl = el('div', { class: 'kt-wc-typing' });
+      ta = el('textarea', { placeholder: 'Reply…', rows: '1' });
+      var lastTypingSent = 0;
+      ta.addEventListener('input', function () {
+        ta.style.height = '40px'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px';
+        var now = Date.now();
+        if (ta.value.trim() && now - lastTypingSent > 3000 && state.chat && state.chat.status === 'open') {
+          lastTypingSent = now;
+          Api.post('/sales/web-chats/' + id + '/typing', {}).catch(function () {});
+        }
+      });
+      ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+      var sendBtn = wbtn('Send', 'primary', function () { send(); });
+      async function send() {
+        var t = ta.value.trim(); if (!t) return;
+        ta.value = ''; ta.style.height = '40px'; sendBtn.disabled = true;
+        try {
+          var r = await Api.post('/sales/web-chats/' + id + '/reply', { body: t });
+          state._forceBottom = true;
+          await refreshThread();
+          if (r && r.message) appendMsgs([r.message]);
+          loadList();
+        } catch (e) { ta.value = t; toast('⚠️', 'Not sent', e.message || '', '#DC2626'); }
+        sendBtn.disabled = false; ta.focus();
+      }
+      thread.appendChild(headEl);
+      thread.appendChild(msgsEl);
+      thread.appendChild(typingEl);
+      thread.appendChild(el('div', { class: 'kt-wc-comp' }, [ta, sendBtn]));
+      refreshThread();
+      paintList();
+      // On a phone the thread replaces the list below the banner: bring it up so the
+      // reply box clears the bottom nav instead of sitting under it.
+      if (window.innerWidth <= 820 && window.KT && KT.scroll && KT.scroll.toEl) {
+        try { KT.scroll.toEl(grid, 8); } catch (e) {}
+        // Arriving by link (a push, the email), the shell's own settle puts the page back at
+        // the top after this runs; try once more, unless they have scrolled themselves.
+        var openedAt = Date.now();
+        setTimeout(function () {
+          if (alive() && (KT.scroll.lastInput() || 0) < openedAt) { try { KT.scroll.toEl(grid, 8); } catch (e) {} }
+        }, 1200);
+      }
+    }
+    var _thrBusy = false;
+    async function refreshThread() {
+      if (!state.openId || !alive() || _thrBusy) return;
+      _thrBusy = true;
+      var id = state.openId;
+      try {
+        var d = await Api.get('/sales/web-chats/' + id, { after: state.lastId });
+        if (id !== state.openId) { _thrBusy = false; return; }
+        var prev = state.chat;
+        state.chat = d.chat;
+        appendMsgs(d.messages || []);
+        if (!prev || prev.status !== d.chat.status || prev.agent_id !== d.chat.agent_id || prev.present !== d.chat.present || !!prev.lead !== !!d.chat.lead) paintHead();
+        typingEl.textContent = d.chat.typing ? (d.chat.name || 'The visitor') + ' is typing…' : '';
+      } catch (e) {
+        if (!state.chat) { clear(thread); thread.appendChild(el('div', { style: 'padding:16px;color:#DC2626' }, ['Could not open this chat: ' + (e.message || e)])); }
+      }
+      _thrBusy = false;
+    }
+
+    // ── polling, stopped when the screen goes ──
+    var tThread = setInterval(function () { if (!alive()) return stop(); refreshThread(); }, 2500);
+    var tList = setInterval(function () { if (!alive()) return stop(); loadList(); }, 6000);
+    function stop() {
+      state.dead = true; clearInterval(tThread); clearInterval(tList);
+      var i = WC.listeners.indexOf(paintOnline); if (i > -1) WC.listeners.splice(i, 1);
+      window.removeEventListener('hashchange', onLeave);
+    }
+    var onLeave = function () { if ((window.location.hash || '').indexOf('sales-webchat') === -1) stop(); };
+    window.addEventListener('hashchange', onLeave);
+
+    paintEmptyThread();
+    await loadList();
+    if (state.openId && state.threadFor !== state.openId) openChat(state.openId);
+    wcBeat();
+  }
+
   // ─────────────────────────────── register ───────────────────────────────
   // sales_rep + superadmin (platform_admin resolves to the agency_admin shell, so
   // register there too; guarded() blocks any non-sales/non-platform agency_admin).
@@ -1547,6 +1922,7 @@
     KT.Shell.registerScreen(role + ':sales-plans', guarded(renderPlans));
     KT.Shell.registerScreen(role + ':sales-demo', guarded(renderDemo));
     KT.Shell.registerScreen(role + ':sales-chat', guarded(renderChat));
+    KT.Shell.registerScreen(role + ':sales-webchat', guarded(renderWebChat));
     /* Registered for every sales-capable role, and renderLibrary refuses anyone
        who is not a superadmin. Registering it only for platform_admin would look
        tighter and be worse: platform_admin resolves to the agency_admin shell, so

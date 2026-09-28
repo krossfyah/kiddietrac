@@ -605,6 +605,7 @@
         { label: 'Sales', items: [
           { hash: 'home',            label: 'Home',            icon: '🏠' },
           { hash: 'sales',           label: 'Pipeline',        icon: '📊' },
+          { hash: 'sales-webchat',   label: 'Website chat',    icon: '💬' },
           { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
           { hash: 'sales-new',       label: 'New lead',        icon: '➕', sub: true },
           { hash: 'sales-followups', label: 'Follow-ups',      icon: '⏰' },
