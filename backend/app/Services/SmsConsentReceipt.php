@@ -51,6 +51,21 @@ final class SmsConsentReceipt
             return false;
         }
 
+        /* ONE CONFIRMATION PER YES (2026-09-28). The doors above now only call this on a
+           real change, but this is the last line: a double-submitted form or a retried
+           request must not text the same person the same confirmation twice. A yes that
+           was confirmed in the last ten minutes is the same yes. */
+        if ($optedIn) {
+            $recent = DB::table('sms_messages')
+                ->where('to_user_id', $userId)
+                ->where('category', 'consent_confirm')
+                ->where('created_at', '>=', now()->subMinutes(10))
+                ->exists();
+            if ($recent) {
+                return false;
+            }
+        }
+
         /* THE SAME RECORD, SOMEWHERE THEY CAN GO AND LOOK (2026-09-24).
 
            Anthony: "ensure that parents see's this in their documents."

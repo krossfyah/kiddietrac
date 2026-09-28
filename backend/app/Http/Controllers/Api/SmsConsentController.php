@@ -390,6 +390,13 @@ final class SmsConsentController extends Controller
 
     private function optIn(int $userId, string $source): void
     {
+        /* Already opted in: nothing changed, so nothing to record or confirm. Re-saving
+           the toggle or a second START must not restamp the consent or send another
+           confirmation text and email (2026-09-28, see AuthController::updateOnboarding). */
+        if ((int) DB::table('users')->where('id', $userId)->value('sms_opt_in') === 1) {
+            return;
+        }
+
         DB::table('users')->where('id', $userId)->update([
             'sms_opt_in' => 1,
             'sms_opt_in_at' => now(),

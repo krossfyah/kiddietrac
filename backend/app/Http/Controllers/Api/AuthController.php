@@ -1343,7 +1343,15 @@ final class AuthController extends Controller
            which is the difference between evidence and an assertion if a carrier ever
            asks. A no is recorded too, so "never asked" and "said no" stay distinguishable
            in the coverage view. */
-        if (array_key_exists('sms_opt_in', $data) && $data['sms_opt_in'] !== null) {
+        /* ALREADY YES IS NOT A NEW YES (2026-09-28).
+
+           The wizard autosaves on every step change (saveProgress in
+           screen-onboarding.js), and every save carries the ticked box. Each one used to
+           rewrite the consent timestamp and send the confirmation text AND email again:
+           Mike Saganek got four of each in eight minutes on 26 Sep. Only a change from
+           not-opted-in to opted-in is a decision worth recording and confirming. */
+        $alreadyOptedIn = (int) DB::table('users')->where('id', $user->id)->value('sms_opt_in') === 1;
+        if (array_key_exists('sms_opt_in', $data) && $data['sms_opt_in'] !== null && ! ($data['sms_opt_in'] && $alreadyOptedIn)) {
             if ($data['sms_opt_in']) {
                 $userUpdate['sms_opt_in'] = 1;
                 $userUpdate['sms_opt_in_at'] = now();
