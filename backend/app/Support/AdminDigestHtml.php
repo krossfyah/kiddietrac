@@ -225,7 +225,7 @@ final class AdminDigestHtml
             $score = (int) $r['score'];
             $colour = $score >= 85 ? '#166534' : ($score >= 60 ? '#92400E' : '#991B1B');
             $inner .= '<tr>'
-                . '<td style="padding:7px 8px 7px 0;font-size:13.5px;font-weight:700;color:#0F172A;white-space:nowrap;vertical-align:top;">'
+                . '<td style="padding:7px 8px 7px 0;font-size:13.5px;font-weight:700;color:#0F172A;vertical-align:top;">'
                 . e((string) $r['who'])
                 . ' <span style="background:' . $colour . ';color:#fff;border-radius:999px;font-size:11px;padding:1px 7px;">' . $score . '</span></td>'
                 . '<td style="padding:7px 0;font-size:12.5px;color:#334155;vertical-align:top;">'
@@ -261,12 +261,17 @@ final class AdminDigestHtml
         if ($blurb !== '') {
             $inner .= '<div class="kt-muted" style="font-size:12.5px;color:#64748B;margin:0 0 8px;">' . e($blurb) . '</div>';
         }
+        /* No white-space:nowrap on these cells (2026-09-28). The name and the detail were
+           both unbreakable, and a detail like "sent by Stephanie Juffs 4 days ago · 11
+           ticks to confirm" is ~390px on its own — wider than a phone gives the card. The
+           table then pushed the whole email past the screen, the 620px banner stopped
+           short of the card, and Outlook's dark mode painted the gap purple. */
         $inner .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">';
         foreach ($data['rows'] as $r) {
             $inner .= '<tr>'
-                . '<td style="padding:5px 8px 5px 0;font-size:13.5px;color:#0F172A;font-weight:700;white-space:nowrap;vertical-align:top;">' . e((string) $r['who']) . '</td>'
+                . '<td style="padding:5px 8px 5px 0;font-size:13.5px;color:#0F172A;font-weight:700;vertical-align:top;">' . e((string) $r['who']) . '</td>'
                 . '<td style="padding:5px 8px;font-size:13.5px;color:#334155;vertical-align:top;">' . e((string) $r['what']) . '</td>'
-                . '<td class="kt-muted" style="padding:5px 0;font-size:12.5px;color:#64748B;text-align:right;white-space:nowrap;vertical-align:top;">' . e((string) $r['detail']) . '</td>'
+                . '<td class="kt-muted" style="padding:5px 0;font-size:12.5px;color:#64748B;text-align:right;vertical-align:top;">' . e((string) $r['detail']) . '</td>'
                 . '</tr>';
         }
         $inner .= '</table>';

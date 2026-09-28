@@ -82,7 +82,7 @@ final class EmailTemplate
                The source PNG was 1920x819 and 1042 KB for a 620pt-wide slot. It is
                now a 1240px JPEG at 58 KB -- the same picture, 94% lighter. */
             $headerRow = '<tr><td bgcolor="#021B51" style="padding:0;line-height:0;font-size:0;background-color:#021B51;border-radius:16px 16px 0 0;">'
-                . '<img src="https://app.kiddietrac.com/email-header-v2.jpg" alt="KiddieTrac — Smart Childcare Management Platform" width="620" style="display:block;width:100%;max-width:620px;height:auto;border:0;border-radius:16px 16px 0 0;color:#FFFFFF;font-size:15px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;"></td></tr>';
+                . '<img src="https://app.kiddietrac.com/email-header-v2.jpg" alt="KiddieTrac — Smart Childcare Management Platform" width="620" style="display:block;width:100%;height:auto;border:0;border-radius:16px 16px 0 0;color:#FFFFFF;font-size:15px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;"></td></tr>';
             $titleBlock = ($eyebrow ? '<div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#1BA7AC;margin-bottom:4px;">' . $eyebrow . '</div>' : '')
                 . '<div class="kt-h" style="font-size:22px;font-weight:800;color:#0B2545;line-height:1.2;">' . $title . '</div>'
                 . ($subtitle ? '<div style="font-size:14px;color:#64748B;margin-top:4px;">' . $subtitle . '</div>' : '')
