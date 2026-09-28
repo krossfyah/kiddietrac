@@ -1773,7 +1773,11 @@
       </thead>
       <tbody>
         ${rows.map(m => `<tr${!voice && isIn(m) ? ' style="background:#F6FEFB;"' : ''}>
-          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;">${fmtDate(m.created_at)}</td>
+          <!-- A TIMESTAMP, NOT A DAY (2026-09-28). This was fmtDate: the date alone, in the
+               device's zone. A broadcast and its replies all land on one day, so the column
+               could not say which came first. Agency timezone, with the time; sorts on the
+               raw instant. -->
+          <td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;white-space:nowrap;" data-kt-sort="${escapeHtml(m.created_at || '')}" title="${escapeHtml(smsStampFull(m.created_at))}">${smsStamp(m.created_at)}</td>
           ${voice ? '' : `<td style="padding:10px 12px;border-bottom:1px solid #F1F5F9;" data-kt-sort="${isIn(m) ? '0' : '1'}">${wayBadge(m)}</td>`}
           <!-- WHO, THEN WHICH NUMBER (2026-09-22). This was one cell showing the name OR
                the number, and for SMS the API returned no name at all - so a broadcast
@@ -2099,6 +2103,21 @@
   var SLIP_BTN_P = 'background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:6px 12px;'
     + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#1E40AF;font-family:inherit;';
   function fmtDate(s) { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+  /* SMS / call timestamps, in the AGENCY timezone (kt-tz.js). "Today, 3:37 p.m." or
+     "26 Sep, 3:37 p.m."; the tooltip adds the year and seconds for the record. */
+  function smsStamp(ts) {
+    if (!ts) return '';
+    if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(ts);
+    return fmtDate(ts);
+  }
+  function smsStampFull(ts) {
+    try {
+      const d = (window.KT && KT.parseTs) ? KT.parseTs(ts) : new Date(ts);
+      if (!d || isNaN(d)) return '';
+      return new Intl.DateTimeFormat(undefined, { timeZone: (window.KT && KT.tz) ? KT.tz() : undefined,
+        year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit', timeZoneName: 'short' }).format(d);
+    } catch (e) { return ''; }
+  }
   // Approving time off is for directors & agency admins ONLY. Honour "View as":
   // when a super-admin previews a lower role (educator / home_visitor / guardian),
   // they must NOT see the approve/deny queue — only the effective role counts.
