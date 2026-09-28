@@ -1,13 +1,14 @@
 /* ============================================================
    KIDDIETRAC — Website control center (platform_admin / super-admin ONLY)
    Route: #marketing-site
-   Tabs: Overview · Subscribers · Content · SEO · Announcement · Analytics
+   Tabs: Overview · Subscribers · Content · SEO · Announcement · Analytics · Translations
    Backend:
      GET/PUT /api/v1/platform/marketing-site            (settings)
      GET     /api/v1/platform/marketing-site/leads      (subscribers)
      POST    /api/v1/platform/marketing-site/leads      (add subscriber)
      POST    /api/v1/platform/marketing-site/leads/delete (delete subscriber)
      GET     /api/v1/platform/marketing-site/analytics  (first-party views)
+     GET/PUT/DELETE /api/v1/platform/marketing-site/translations[/{id}] (auto-translations)
    ============================================================ */
 (function (window) {
   'use strict';
@@ -208,7 +209,8 @@
     { id: 'overview', label: 'Overview' }, { id: 'subscribers', label: 'Subscribers' },
     { id: 'unsubscribed', label: 'Unsubscribed' },
     { id: 'chat', label: 'Chat' }, { id: 'content', label: 'Content' }, { id: 'seo', label: 'SEO' },
-    { id: 'announce', label: 'Announcement' }, { id: 'analytics', label: 'Analytics' }
+    { id: 'announce', label: 'Announcement' }, { id: 'analytics', label: 'Analytics' },
+    { id: 'translations', label: 'Translations' }
   ];
 
   function view(c, a, leads, chats) {
@@ -222,7 +224,8 @@
       + '<div class="wsPanel" data-panel="content" style="display:none">' + tabContent(c) + '</div>'
       + '<div class="wsPanel" data-panel="seo" style="display:none">' + tabSeo(c) + '</div>'
       + '<div class="wsPanel" data-panel="announce" style="display:none">' + tabAnnounce(c) + '</div>'
-      + '<div class="wsPanel" data-panel="analytics" style="display:none">' + tabAnalytics(c, a) + '</div>';
+      + '<div class="wsPanel" data-panel="analytics" style="display:none">' + tabAnalytics(c, a) + '</div>'
+      + '<div class="wsPanel" data-panel="translations" style="display:none"><div id="ws-tr">Loading…</div></div>';
     return '<div style="max-width:900px;margin:0 auto;padding:24px">'
       + '<p style="color:#6b7280;margin:-4px 0 18px;font-size:14px">Manage <b>www.kiddietrac.com</b> — subscribers, content, SEO, the announcement bar and analytics. Changes go live within about a minute.</p>'
       + '<div style="display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:20px;overflow-x:auto">' + tabBtns + '</div>' + panels + '</div>';
@@ -369,6 +372,7 @@
         container.querySelectorAll('.wsTab').forEach(function (b) { b.style.borderBottomColor = 'transparent'; b.style.color = '#6b7280'; });
         btn.style.borderBottomColor = TEAL; btn.style.color = TEAL;
         container.querySelectorAll('.wsPanel').forEach(function (p) { p.style.display = p.getAttribute('data-panel') === id ? '' : 'none'; });
+        if (id === 'translations' && !container.__trLoaded) { container.__trLoaded = true; loadTr(container); }
       });
     });
 
@@ -471,6 +475,135 @@
       var blob = new Blob([lines.join('\n')], { type: 'text/csv' });
       var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kiddietrac-subscribers.csv';
       document.body.appendChild(a); a.click(); setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 500);
+    });
+  }
+
+  /* Translations. The site ships a checked French/Spanish dictionary; text added after that
+     (a new blog post, an edited heading) is translated automatically the first time a
+     French or Spanish visitor sees it and goes live at once. This tab is the review queue:
+     'Automatic' rows are machine output, 'Edited' rows are a person's correction and are
+     never overwritten. Deleting a row makes the site ask for a fresh translation. */
+  var TR_LANG = { fr: 'Français', es: 'Español' };
+  var trState = { lang: '', status: 'auto', q: '' };
+
+  function trApi(path, opts) {
+    var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+    return fetch(base + path, Object.assign({
+      headers: {
+        Authorization: 'Bearer ' + tok, Accept: 'application/json', 'Content-Type': 'application/json',
+        'X-Active-Agency-Id': sessionStorage.getItem('kt_active_agency_id') || '',
+      },
+    }, opts || {})).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        // a 422 carries the reason (markers changed) — show it, not "HTTP 422"
+        if (!r.ok) { throw new Error((j && j.message) || ('HTTP ' + r.status)); }
+        return j;
+      });
+    });
+  }
+
+  function trNotice(d) {
+    var err = d.last_error;
+    if (!d.configured) {
+      return '<div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px">'
+        + '<b>Automatic translation is off</b> — no Anthropic API key is set on the server. New text shows in English to French and Spanish visitors until one is added.</div>';
+    }
+    if (err) {
+      var msg = String(err.message || err);
+      var credit = /credit balance/i.test(msg);
+      return '<div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px">'
+        + '<b>' + (credit ? 'Automatic translation is paused — the Anthropic account is out of credit.' : 'The last automatic translation failed.') + '</b> '
+        + (credit ? 'Add credit at console.anthropic.com → Billing. Until then, new text shows in English to French and Spanish visitors. ' : '')
+        + '<span style="color:#7F1D1D">' + esc(msg.slice(0, 200)) + (err.at ? ' · ' + esc(fmtStamp(err.at)) : '') + '</span></div>';
+    }
+    return '<div style="background:#F0FDF4;border:1px solid #BBF7D0;color:#166534;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px">'
+      + '<b>Automatic translation is on.</b> New text is translated the first time a French or Spanish visitor sees it and goes live straight away. Review it here.</div>';
+  }
+
+  function trCounts(d) {
+    var c = { auto: 0, edited: 0 };
+    (d.counts || []).forEach(function (r) { c[r.status] = (c[r.status] || 0) + Number(r.c || 0); });
+    return c;
+  }
+
+  function loadTr(container) {
+    var host = container.querySelector('#ws-tr'); if (!host) { return; }
+    var qs = '?status=' + encodeURIComponent(trState.status) + '&lang=' + encodeURIComponent(trState.lang) + '&q=' + encodeURIComponent(trState.q);
+    trApi('/platform/marketing-site/translations' + qs).then(function (d) {
+      var rows = d.translations || [], cnt = trCounts(d);
+      var sel = 'height:30px;padding:0 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;font-family:inherit;background:#fff;width:auto;flex:0 0 auto;margin:0';
+      var html = trNotice(d)
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">'
+        + '<select id="tr-status" style="' + sel + '">'
+        + '<option value="auto"' + (trState.status === 'auto' ? ' selected' : '') + '>To review — automatic (' + cnt.auto + ')</option>'
+        + '<option value="edited"' + (trState.status === 'edited' ? ' selected' : '') + '>Edited (' + cnt.edited + ')</option>'
+        + '<option value=""' + (trState.status === '' ? ' selected' : '') + '>All</option></select>'
+        + '<select id="tr-lang" style="' + sel + '"><option value="">All languages</option>'
+        + Object.keys(TR_LANG).map(function (l) { return '<option value="' + l + '"' + (trState.lang === l ? ' selected' : '') + '>' + TR_LANG[l] + '</option>'; }).join('')
+        + '</select>'
+        + '<input id="tr-q" type="search" placeholder="Search English or translation" value="' + esc(trState.q) + '" style="' + sel + ';flex:1 1 180px;min-width:0">'
+        + '</div>'
+        + '<p style="font-size:12.5px;color:#6b7280;margin:0 0 12px">The hand-checked dictionary shipped with the site is not listed here — only text translated automatically since. Keep any <code>{0}…{/0}</code> markers and HTML tags exactly as they are: they are the links, bold words and icons.</p>';
+      if (!rows.length) {
+        html += '<div style="padding:28px;text-align:center;color:#6b7280;border:1px dashed #E5E7EB;border-radius:10px">'
+          + (trState.status === 'auto' ? 'Nothing waiting for review.' : 'No translations match.') + '</div>';
+      } else {
+        html += rows.map(function (t) {
+          var long = t.kind === 'Blog article' || String(t.en).length > 600;
+          return '<div class="tr-row" data-id="' + t.id + '" style="border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#fff">'
+            + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:#6b7280;margin-bottom:6px">'
+            + '<span style="font-weight:700;color:#0a1e2c">' + esc(TR_LANG[t.lang] || t.lang) + '</span> · ' + esc(t.kind)
+            + ' · <span style="padding:1px 7px;border-radius:999px;font-weight:700;' + (t.status === 'edited' ? 'background:#DCFCE7;color:#166534">Edited' : 'background:#FEF3C7;color:#92400E">Automatic') + '</span>'
+            + '<span style="margin-left:auto">' + esc(fmtStamp(t.updated_at)) + '</span></div>'
+            + '<div style="font-size:13px;color:#374151;background:#F9FAFB;border-radius:6px;padding:7px 9px;margin-bottom:6px;white-space:pre-wrap;word-break:break-word;max-height:' + (long ? '120px' : 'none') + ';overflow:auto">' + esc(t.en) + '</div>'
+            + '<textarea class="tr-text" rows="' + (long ? 8 : Math.min(6, Math.max(2, Math.ceil(String(t.text).length / 90)))) + '" style="display:block;width:100%;max-width:none !important;box-sizing:border-box;padding:7px 9px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;font-family:inherit;resize:vertical">' + esc(t.text) + '</textarea>'
+            + '<div style="display:flex;gap:6px;justify-content:flex-end;align-items:center;margin-top:6px">'
+            + '<span class="tr-msg" style="font-size:12px;margin-right:auto"></span>'
+            + '<button type="button" class="tr-del" style="height:30px;padding:0 12px;border:1px solid #FECACA;background:#fff;color:#B91C1C;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer">Delete</button>'
+            + '<button type="button" class="tr-save" style="height:30px;padding:0 12px;border:none;background:' + TEAL + ';color:#fff;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer">' + (t.status === 'auto' ? 'Approve' : 'Save') + '</button>'
+            + '</div></div>';
+        }).join('');
+        if (rows.length >= 500) { html += '<p style="font-size:12px;color:#6b7280">Showing the 500 most recent — search to narrow.</p>'; }
+      }
+      host.innerHTML = html;
+      wireTr(container, host);
+    }).catch(function (e) {
+      host.innerHTML = '<div style="color:#b91c1c;padding:14px">Could not load translations: ' + esc(e.message || 'error') + '</div>';
+    });
+  }
+
+  function wireTr(container, host) {
+    var st = host.querySelector('#tr-status'), lg = host.querySelector('#tr-lang'), q = host.querySelector('#tr-q'), tmr;
+    if (st) st.addEventListener('change', function () { trState.status = st.value; loadTr(container); });
+    if (lg) lg.addEventListener('change', function () { trState.lang = lg.value; loadTr(container); });
+    if (q) q.addEventListener('input', function () {
+      clearTimeout(tmr);
+      tmr = setTimeout(function () { trState.q = q.value.trim(); loadTr(container); }, 400);
+    });
+    host.querySelectorAll('.tr-row').forEach(function (row) {
+      var id = row.getAttribute('data-id'), msg = row.querySelector('.tr-msg');
+      function say(t, ok) { msg.textContent = t; msg.style.color = ok ? '#16a34a' : '#DC2626'; }
+      row.querySelector('.tr-save').addEventListener('click', function (ev) {
+        var b = ev.currentTarget, text = row.querySelector('.tr-text').value.trim();
+        if (!text) { say('A translation is required'); return; }
+        b.disabled = true;
+        trApi('/platform/marketing-site/translations/' + id, { method: 'PUT', body: JSON.stringify({ text: text }) })
+          .then(function () {
+            say('✓ Saved — live within a few minutes', true); b.disabled = false;
+            // approved = no longer waiting for review: let it leave the queue
+            if (trState.status === 'auto') { setTimeout(function () { loadTr(container); }, 1200); }
+          })
+          .catch(function (e) { say(e.message || 'Could not save'); b.disabled = false; });
+      });
+      row.querySelector('.tr-del').addEventListener('click', async function (ev) {
+        var b = ev.currentTarget;
+        if (KT.confirm && !(await KT.confirm({ title: 'Delete this translation?', description: 'The site will ask for a fresh automatic translation the next time a visitor sees this text.', okLabel: 'Delete' }))) { return; }
+        b.disabled = true;
+        trApi('/platform/marketing-site/translations/' + id, { method: 'DELETE' })
+          .then(function () { row.remove(); })
+          .catch(function (e) { say(e.message || 'Could not delete'); b.disabled = false; });
+      });
     });
   }
 

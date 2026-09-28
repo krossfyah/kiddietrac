@@ -501,6 +501,9 @@ Route::post('/marketing-site/chat/end', [\App\Http\Controllers\Api\MarketingSite
 // Live website chat: the page polls for the team's replies + typing, and can ask for a person.
 Route::get('/marketing-site/chat/poll', [\App\Http\Controllers\Api\WebChatController::class, 'poll'])->middleware('throttle:90,1,mkpoll');
 Route::post('/marketing-site/chat/human', [\App\Http\Controllers\Api\WebChatController::class, 'wantHuman'])->middleware('throttle:6,1,mkhuman');
+// Marketing-site auto-translation: the page reports text it has no FR/ES for; translated once, served after.
+Route::get('/marketing-site/i18n/{lang}/extra', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'extra'])->where('lang', 'fr|es')->middleware('throttle:120,1,mki18nx');
+Route::post('/marketing-site/i18n/missing', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'missing'])->middleware('throttle:20,1,mki18n');
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1');
 
@@ -678,6 +681,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/marketing-site/leads', [\App\Http\Controllers\Api\MarketingSiteController::class, 'addLead']);
             Route::get('/marketing-site/analytics', [\App\Http\Controllers\Api\MarketingSiteController::class, 'analytics']);
             Route::get('/marketing-site/chats', [\App\Http\Controllers\Api\MarketingSiteController::class, 'chats']);
+            Route::get('/marketing-site/translations', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'index']);
+            Route::put('/marketing-site/translations/{id}', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'update'])->where('id','[0-9]+');
+            Route::delete('/marketing-site/translations/{id}', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'destroy'])->where('id','[0-9]+');
         });
         Route::get('/auth/me', [AuthController::class, 'me']);
         // Tasks — admins/directors assign to educators; educators mark progress/done.
