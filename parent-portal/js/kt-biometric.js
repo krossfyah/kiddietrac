@@ -301,8 +301,13 @@
   }
 
   // ── UI: full-screen lock on launch → biometric → restore session ────
+  /* The parse-time navy cover (html.kt-bio-pending, dashboard.src.html) stands in for
+     this lock until it exists; drop it the moment the real lock is up, or the moment
+     boot decides no lock is needed. */
+  function dropPending() { try { document.documentElement.classList.remove('kt-bio-pending'); } catch (e) {} }
+
   function showLock(onDash) {
-    if (document.getElementById('kt-bio-lock')) return;
+    if (document.getElementById('kt-bio-lock')) { dropPending(); return; }
     var ov = document.createElement('div'); ov.id = 'kt-bio-lock';
     // Navy unlock screen — matches the login + PIN navy theme (per request).
     ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.18) 0%, rgba(19,183,204,0) 55%), linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;color:#ffffff;font-family:system-ui,-apple-system,sans-serif;';
@@ -314,6 +319,7 @@
       + '<div id="kt-bio-err" style="font-size:12.5px;color:#ffb4b4;margin-top:16px;min-height:16px;max-width:280px;line-height:1.4;"></div>'
       + '<button id="kt-bio-signout" style="background:transparent;color:#9fb6cf;border:none;margin-top:6px;font-size:13px;font-weight:700;cursor:pointer;">Use password instead</button>';
     document.body.appendChild(ov);
+    dropPending();
     try {
       if (window.KT && KT.pin && KT.pin.isSet()) {
         var pinBtn = ov.querySelector('#kt-bio-pin');
@@ -414,6 +420,7 @@
       if (!onDash) injectLoginButton();
       return;
     }
+    dropPending();
     // Login page, enrolled but (e.g.) already has a session or was recently
     // unlocked → still surface the manual biometric button.
     if (!onDash && isEnabled() && hasVault()) injectLoginButton();

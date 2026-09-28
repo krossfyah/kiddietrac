@@ -871,9 +871,19 @@
        is built from navItemsForRole(), so a superadmin's carries Reseller and a tenant
        admin's does not; each role lands on its own view of the portal.
        Desktop is deliberately unchanged: the sidebar is present there. */
+    /* A PHONE IS A PHONE FROM ITS FIRST FRAME (2026-09-28).
+
+       Anthony: after a fingerprint unlock the APK showed the agency dashboard (stat
+       cards, centre cards) and then switched to the launcher. The width test alone is
+       taken at boot, and an Android WebView can report a desktop-sized layout for its
+       first moments (a 1513px layout on a 915px screen is on record), which answered
+       "desktop" and landed a phone on the dashboard. __KT_PHONE is set by an inline
+       <head> script from the PHYSICAL screen, which does not wobble — either signal
+       saying phone is enough. Desktop windows narrower than 601px still get the
+       launcher as before. */
     try {
-      if (!window.matchMedia('(min-width: 601px)').matches
-          && ['agency_admin', 'centre_director', 'platform_admin'].indexOf(role) !== -1) {
+      var phone = !window.matchMedia('(min-width: 601px)').matches || window.__KT_PHONE === true;
+      if (phone && ['agency_admin', 'centre_director', 'platform_admin'].indexOf(role) !== -1) {
         return 'home';
       }
     } catch (e) { /* no matchMedia — fall through to the nav-order answer below */ }

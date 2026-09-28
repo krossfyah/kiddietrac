@@ -23,6 +23,14 @@
        this one, so gating it here makes all of them size-aware at a single point.
        kt-mobilenav.js re-applies the same rule and keeps it in sync on rotate. -->
   <script>try{var C=window.Capacitor;var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)));var d=document.documentElement;function ktPhone(){try{var s=window.screen||{},e=(s.width&&s.height)?Math.min(s.width,s.height):(s.width||0);var w=window.innerWidth||0;if(e)return e<=600||(w>0&&w<=768);return w>0?w<=768:true;}catch(x){return true;}}function ktSync(){d.classList.toggle('kt-app',nat);d.classList.toggle('kt-native',nat&&ktPhone());}ktSync();window.__KT_NATIVE=nat;window.__KT_PHONE=ktPhone();window.addEventListener('resize',ktSync);window.addEventListener('orientationchange',ktSync);}catch(e){}</script>
+  <!-- FINGERPRINT LOCK, FROM THE FIRST FRAME (2026-09-28). kt-biometric.js puts its lock up
+       only after every deferred script has run - seconds into a cold APK start - so the app
+       was visible first and the lock arrived on top of it. When the same conditions that
+       make kt-biometric show its lock hold, paint its navy ground now; the real lock (one
+       layer above) replaces it, and kt-biometric removes this the moment it decides.
+       Failsafe: never longer than 20s. -->
+  <style>html.kt-bio-pending::before{content:'';position:fixed;inset:0;z-index:2147481999;background:radial-gradient(120% 55% at 50% 0%,rgba(19,183,204,.18) 0%,rgba(19,183,204,0) 55%),linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);}</style>
+  <script>try{(function(){var L=localStorage,S=sessionStorage,d=document.documentElement;if(L.getItem('kt_biometric_enabled')!=='1'||!L.getItem('kt_bio_token'))return;if(S.getItem('kt_token')||S.getItem('kt_bio_session')==='1')return;if(L.getItem('kt_signed_out')==='1')return;if(Date.now()-(parseInt(L.getItem('kt_bio_unlocked_at')||'0',10)||0)<20000)return;if(!(window.__KT_NATIVE||window.__KT_PHONE))return;d.classList.add('kt-bio-pending');setTimeout(function(){d.classList.remove('kt-bio-pending');},20000);})();}catch(e){}</script>
   <!-- Clear a STALE kt_view_as: only a platform_admin can "view as" another role.
        For everyone else a leftover kt_view_as (e.g. from previewing a parent account,
        persisting across logout/login in the same WebView) wrongly overrides their real
@@ -418,7 +426,7 @@ function showReloadGate(){
   <script src="/js/kt-parent-chrome.js?v=v20260906greet1" defer></script>
   <script src="/js/session-timeout.js?v=202609090500" defer></script>
   <script src="/js/kt-illustrations.js?v=20260811greet" defer></script>
-  <script src="/js/app-v2-shell.js?v=20260928shift3" defer></script>
+  <script src="/js/app-v2-shell.js?v=20260928apk" defer></script>
   <!-- Off unless localStorage.kt_diag === "1". Records what TRIGGERED each
        re-render, how long the cover held, and which files were still writing
        afterwards. Exists because the automation browser is always document.hidden,
@@ -613,7 +621,7 @@ function showReloadGate(){
   <script src="/js/kt-mfa-gate.js?v=kt-v570-202609150729" defer></script>
   <script src="/js/kt-topbar.js?v=20260928shift1" defer></script>
   <script src="/js/kt-pin.js?v=20260809navy" defer></script>
-  <script src="/js/kt-biometric.js?v=20260918role1" defer></script>
+  <script src="/js/kt-biometric.js?v=20260928apk" defer></script>
   <script src="/js/kt-impersonate.js?v=v20260906side8" defer></script>
   <script src="/js/kt-crash-report.js?v=20260921ios" defer></script>
   <!-- Freeze watchdog: a heartbeat that notices the main thread being blocked, and
