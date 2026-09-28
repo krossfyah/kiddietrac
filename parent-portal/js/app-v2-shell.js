@@ -364,17 +364,6 @@
           ...(isPlatformAdmin_v22p34
             ? [{ hash: 'backups', label: 'Backups', icon: '🗄️' }]
             : []),
-          /* TEMPORARY, 2026-09-22 — REMOVE AFTER THE PASSKEY DEVICE TEST.
-
-             The APK has no address bar, so /passkey-check.html was unreachable from
-             inside the app - which is the ONE place the answer actually matters, because
-             a web view can refuse a ceremony it reports itself capable of. This is a
-             tappable way in, platform-admin only. Delete this entry and the screen
-             registration in screen-passkey-check.js once iPhone and Android have both
-             been read. */
-          ...(isPlatformAdmin_v22p34
-            ? [{ hash: 'passkey-check', label: 'Passkey check (temp)', icon: '🔑' }]
-            : []),
           /* Two-factor lives in the personal profile for EVERY role now — this entry
              used to be the exception, kept because agency admins and centre directors
              had no profile screen. They do as of 2026-09-01 (screen-settings registers

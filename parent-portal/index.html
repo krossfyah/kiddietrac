@@ -211,6 +211,17 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
             Log in
           </button>
 
+          <!-- Passkey sign-in. Hidden until kt-passkeys.js confirms this browser can do it:
+               the Android app's web view cannot, and a button that fails is worse than none. -->
+          <div id="ktPasskeyWrap" hidden style="margin-top:12px;">
+            <div style="display:flex;align-items:center;gap:10px;margin:0 0 12px;color:#94A3B8;font-size:12px;">
+              <span style="flex:1;height:1px;background:#E2E8F0;"></span>or<span style="flex:1;height:1px;background:#E2E8F0;"></span>
+            </div>
+            <button type="button" id="ktPasskeyBtn" style="display:flex;align-items:center;justify-content:center;gap:9px;width:100%;background:#fff;color:#1F6080;border:1.6px solid #1F6080;border-radius:12px;padding:12px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;">
+              <span style="font-size:18px;line-height:1;">🔑</span><span>Sign in with a passkey</span>
+            </button>
+          </div>
+
           <p class="ktl-foot">
             No account yet? Your childcare centre will send you an invitation email.
             <a href="https://www.kiddietrac.com/contact">Contact us</a> if you need help.
@@ -266,6 +277,66 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
       }[reason] || 'Your session ended. Please sign in again.';
       if (banner) { banner.textContent = msg; banner.hidden = false; }
     })();
+
+    /* Everything that happens once the server has said yes — shared by the password
+       form and the passkey button, so the two ways in can never drift apart. */
+    function ktFinishSignIn(body) {
+      // Store securely — use httpOnly cookies in production; for SPA we use sessionStorage + short-lived token
+      sessionStorage.setItem('kt_token', body.token);
+      sessionStorage.setItem('kt_user', JSON.stringify(body.user));
+
+      // Language follows the USER: apply their server-saved locale (chosen at
+      // onboarding or in Settings) authoritatively on every sign-in. So a changed
+      // default takes effect after sign-out/in, and a stale device value (or a
+      // previous user on this device) never overrides the account's own language.
+      try {
+        var _loc = body.user && body.user.locale;
+        if (_loc && ['en', 'fr', 'es', 'hi'].indexOf(_loc) !== -1) localStorage.setItem('kt_locale', _loc);
+        else localStorage.removeItem('kt_locale');   // not a supported code → default English
+      } catch (e) {}
+
+      // v22p31: stamp session start so idle+absolute timers kick in
+      if (window.KT && window.KT.SessionTimeout) window.KT.SessionTimeout.stampLogin();
+      else {
+        var nowMs = String(Date.now());
+        sessionStorage.setItem('kt_login_at', nowMs);
+        sessionStorage.setItem('kt_last_activity', nowMs);
+      }
+
+      /* A PENDING PASSWORD CHANGE GOES STRAIGHT TO THE CHANGE SCREEN (2026-09-21).
+
+         Anthony: "it allowed Safia to login but cannot see pages as it indicated a
+         password reset is required - why did it even allow Safia to login earlier."
+
+         The token IS issued deliberately - changing the password needs an authenticated
+         call - and the server has always returned must_change_password so the client
+         could route accordingly. Its own comment says so: "this flag is only so the
+         client can go straight to the change screen instead of painting a dashboard
+         that will 403."
+
+         Nothing ever read it. The contract was written on one side only, so she signed
+         in, landed on a dashboard, and every request came back 403. From where she sat
+         the sign-in worked and the app was broken. */
+      if (body.must_change_password) {
+        try { sessionStorage.setItem('kt_force_password_change', '1'); } catch (e) {}
+        /* The Security tab, not just Settings: landing on Profile and expecting
+           somebody to find the password form is the same failure as a notification
+           that drops you on a list. */
+        window.location.href = '/dashboard.html#settings?tab=security';
+        return;
+      }
+
+      // Redirect based on role
+      if (body.user.roles.includes('guardian')) {
+        window.location.href = '/dashboard.html';
+      } else if (body.user.roles.includes('centre_director')) {
+        window.location.href = '/dashboard.html';
+      } else if (body.user.roles.includes('agency_admin')) {
+        window.location.href = '/dashboard.html';
+      } else {
+        window.location.href = '/dashboard.html';
+      }
+    }
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -342,62 +413,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
           return;
         }
 
-        // Store securely — use httpOnly cookies in production; for SPA we use sessionStorage + short-lived token
-        sessionStorage.setItem('kt_token', body.token);
-        sessionStorage.setItem('kt_user', JSON.stringify(body.user));
-
-        // Language follows the USER: apply their server-saved locale (chosen at
-        // onboarding or in Settings) authoritatively on every sign-in. So a changed
-        // default takes effect after sign-out/in, and a stale device value (or a
-        // previous user on this device) never overrides the account's own language.
-        try {
-          var _loc = body.user && body.user.locale;
-          if (_loc && ['en', 'fr', 'es', 'hi'].indexOf(_loc) !== -1) localStorage.setItem('kt_locale', _loc);
-          else localStorage.removeItem('kt_locale');   // not a supported code → default English
-        } catch (e) {}
-
-        // v22p31: stamp session start so idle+absolute timers kick in
-        if (window.KT && window.KT.SessionTimeout) window.KT.SessionTimeout.stampLogin();
-        else {
-          var nowMs = String(Date.now());
-          sessionStorage.setItem('kt_login_at', nowMs);
-          sessionStorage.setItem('kt_last_activity', nowMs);
-        }
-
-        /* A PENDING PASSWORD CHANGE GOES STRAIGHT TO THE CHANGE SCREEN (2026-09-21).
-
-           Anthony: "it allowed Safia to login but cannot see pages as it indicated a
-           password reset is required - why did it even allow Safia to login earlier."
-
-           The token IS issued deliberately - changing the password needs an authenticated
-           call - and the server has always returned must_change_password so the client
-           could route accordingly. Its own comment says so: "this flag is only so the
-           client can go straight to the change screen instead of painting a dashboard
-           that will 403."
-
-           Nothing ever read it. The contract was written on one side only, so she signed
-           in, landed on a dashboard, and every request came back 403. From where she sat
-           the sign-in worked and the app was broken. */
-        if (body.must_change_password) {
-          try { sessionStorage.setItem('kt_force_password_change', '1'); } catch (e) {}
-          /* The Security tab, not just Settings: landing on Profile and expecting
-             somebody to find the password form is the same failure as a notification
-             that drops you on a list. */
-          window.location.href = '/dashboard.html#settings?tab=security';
-          return;
-        }
-
-        // Redirect based on role
-        if (body.user.roles.includes('guardian')) {
-          window.location.href = '/dashboard.html';
-        } else if (body.user.roles.includes('centre_director')) {
-          window.location.href = '/dashboard.html';
-        } else if (body.user.roles.includes('agency_admin')) {
-          window.location.href = '/dashboard.html';
-        } else {
-          window.location.href = '/dashboard.html';
-        }
-
+        ktFinishSignIn(body);
       } catch (err) {
         errorMsg.textContent = err.message;
         errorMsg.hidden = false;
@@ -405,6 +421,33 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
         submitBtn.textContent = 'Sign in';
       }
     });
+
+    // Passkey: usernameless — the passkey itself says which account.
+    (function () {
+      var wrap = document.getElementById('ktPasskeyWrap');
+      var pk = document.getElementById('ktPasskeyBtn');
+      if (!wrap || !pk) return;
+      function show() { if (window.KT && KT.passkeys && KT.passkeys.supported()) wrap.hidden = false; }
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
+      pk.addEventListener('click', async function () {
+        if (!(window.KT && KT.passkeys)) return;
+        errorMsg.hidden = true;
+        pk.disabled = true;
+        var label = pk.querySelector('span:last-child'), was = label.textContent;
+        label.textContent = 'Waiting for your passkey…';
+        try {
+          var body = await KT.passkeys.signIn();
+          label.textContent = 'Signing in…';
+          ktFinishSignIn(body);
+        } catch (err) {
+          errorMsg.style.color = err.cancelled ? '#1F6080' : '';
+          errorMsg.textContent = err.cancelled ? 'Passkey sign-in was cancelled.' : (err.message || 'Passkey sign-in failed.');
+          errorMsg.hidden = false;
+          pk.disabled = false;
+          label.textContent = was;
+        }
+      });
+    })();
   </script>
   <script src="/js/login-v7.js?v=20260915fpu" defer></script>
   <script src="/js/session-timeout.js?v=20260714e" defer></script>
@@ -437,6 +480,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
   <script src="/js/kt-social-login.js?v=20260721icons"></script>
   <script src="/js/kt-pin.js?v=20260809navy" defer></script>
   <script src="/js/kt-biometric.js?v=20260809navy" defer></script>
+  <script src="/js/kt-passkeys.js?v=20260928pk1" defer></script>
   <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
   <!-- Freeze watchdog on the sign-in page too: a lock-up before anybody is signed in
        is still a lock-up, and it was the one screen it could not see. -->

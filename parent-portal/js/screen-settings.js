@@ -565,6 +565,76 @@
     // status update would silently no-op — the row stayed on "Checking…" forever.
     wireBiometrics(bioToggle, bioSub);
 
+    /* Passkeys — sign in with the phone's or computer's own lock (face, fingerprint,
+       PIN) instead of a password. An ADDITIONAL way in: the password still works and
+       still expires on schedule. Not available inside the Android app, whose web view
+       has no WebAuthn; said plainly there instead of showing a button that fails. */
+    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
+    (function () {
+      var PK = window.KT && KT.passkeys;
+      var can = !!(PK && PK.supported());
+      var head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
+      var sub = el('div', { style: 'font-size:12px;color:#64748B;' }, [can
+        ? 'Sign in with your face, fingerprint or device PIN — no password to type. Your password still works.'
+        : 'Not available in the Android app. Add a passkey from Chrome or Safari (or a computer) and use it there; fingerprint unlock works here.']);
+      head.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['🔑 Passkeys']), sub]));
+      var add = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;' }, ['Add a passkey']);
+      if (can) head.appendChild(add);
+      sc.appendChild(head);
+      var status = el('div', { style: 'font-size:12.5px;min-height:0;margin-top:6px;' });
+      var list = el('div', { style: 'margin-top:8px;' });
+      sc.appendChild(status); sc.appendChild(list);
+      if (!PK) return;
+
+      function when(ts) {
+        if (!ts) return '';
+        try { return (KT.fmtDateTime ? KT.fmtDateTime(ts) : new Date(ts).toLocaleString()); } catch (e) { return ''; }
+      }
+      function say(msg, tone) { status.style.color = tone === 'ok' ? '#16A34A' : (tone === 'bad' ? '#B91C1C' : '#1F6080'); status.textContent = msg || ''; }
+      function paint(rows) {
+        list.innerHTML = '';
+        if (!rows.length) {
+          list.appendChild(el('div', { style: 'font-size:12.5px;color:#94A3B8;' }, ['No passkeys yet.']));
+          return;
+        }
+        rows.forEach(function (p) {
+          var r = el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:6px;' });
+          r.appendChild(el('div', { style: 'flex:1;min-width:0;' }, [
+            el('div', { style: 'font-weight:700;font-size:13.5px;color:#0f172a;overflow-wrap:anywhere;' }, [p.label || 'Passkey']),
+            el('div', { style: 'font-size:11.5px;color:#64748B;' }, ['Added ' + when(p.created_at) + (p.last_used_at ? ' · last used ' + when(p.last_used_at) : ' · not used yet')]),
+          ]));
+          var rm = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'background:none;border:none;color:#B91C1C;font-size:12px;font-weight:700;cursor:pointer;padding:4px;' }, ['Remove']);
+          rm.addEventListener('click', function () {
+            var go = function () {
+              rm.disabled = true;
+              PK.remove(p.id).then(function () { say('Passkey removed. Your password still works.', 'ok'); load(); })
+                .catch(function (e) { rm.disabled = false; say((e && e.message) || 'Could not remove it.', 'bad'); });
+            };
+            if (KT.confirm) {
+              KT.confirm({ title: 'Remove this passkey?', description: '"' + (p.label || 'Passkey') + '" will no longer sign you in. Your password and any other passkeys are unaffected.', okLabel: 'Remove' })
+                .then(function (ok) { if (ok) go(); });
+            } else if (window.confirm('Remove this passkey?')) { go(); }
+          });
+          r.appendChild(rm);
+          list.appendChild(r);
+        });
+      }
+      function load() {
+        PK.list().then(function (d) { paint((d && d.passkeys) || []); })
+          .catch(function () { list.innerHTML = ''; });
+      }
+      add.addEventListener('click', function () {
+        add.disabled = true; add.textContent = 'Follow your device…'; say('');
+        PK.register().then(function (p) {
+          say('✓ Passkey added' + (p && p.label ? ' — ' + p.label : '') + '. Next time, tap "Sign in with a passkey" on the sign-in page.', 'ok');
+          load();
+        }).catch(function (e) {
+          say((e && e.message) || 'Could not add a passkey.', e && e.cancelled ? '' : 'bad');
+        }).then(function () { add.disabled = false; add.textContent = 'Add a passkey'; });
+      });
+      load();
+    })();
+
     // Quick-unlock PIN. KT.pin (kt-pin.js) seals the session under a key derived
     // from the PIN, so on the next launch the PIN alone reopens the app.
     sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
