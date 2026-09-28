@@ -306,6 +306,11 @@ html.kt-gating .loading-state{visibility:hidden!important;}
   if (!b) return;
   b.classList.add(cls);
   if (role === 'agency_admin' || role === 'centre_director') b.classList.add('layout-sidebar');
+  /* The collapsed sidebar, from the first frame (2026-09-28). kt-sidebar-collapse.js
+     applied the saved choice at DOMContentLoaded, after ~160 scripts, so a collapsed
+     sidebar drew full width and then snapped narrow - the page "resizing to the
+     screen" after login. It still owns the toggle and removes this if no sidebar. */
+  try { if (b.classList.contains('layout-sidebar') && localStorage.getItem('kt_sidebar_collapsed') === '1') b.classList.add('kt-sidebar-collapsed'); } catch (e) {}
   b.setAttribute('data-kt-early-role', cls);
 } catch (e) {} })();
 </script>
@@ -342,7 +347,13 @@ function portalReady(){
     var m=document.getElementById('appMain');
     if(!m) return false;
     if(m.querySelector('.loading-state')) return false;      // placeholder still up
-    return (m.innerText||'').trim().length>40;                // a screen actually drew
+    if((m.innerText||'').trim().length<=40) return false;     // a screen actually drew
+    /* ...AND HAS FINISHED DRAWING (2026-09-28). The placeholder goes the moment a
+       screen starts; its data, widgets, top bar and decorations land after. Lifting
+       the cover then showed the page assembling itself - "a flash of the old layout,
+       then the current one". The shell stamps __ktScreenSettledAt when the first
+       screen is complete (renderScreenOnce, the reveal). 8s cap for an older shell. */
+    return !!window.__ktScreenSettledAt || (Date.now()-t0)>8000;
   }catch(e){ return true; }                                   // never trap on an error
 }
 function settle(){
@@ -378,7 +389,9 @@ function showReloadGate(){
     if(done)return;
     var main=document.getElementById('appMain');
     var stillLoading=main&&main.querySelector('.loading-state');
-    if(document.readyState==='complete'&&main&&!stillLoading){ setTimeout(drop,150); return; }
+    // Settled, not merely started - see portalReady() above. 8s cap for an older shell.
+    var settled=!!window.__ktScreenSettledAt||(Date.now()-t0)>8000;
+    if(document.readyState==='complete'&&main&&!stillLoading&&settled){ setTimeout(drop,150); return; }
     if(Date.now()-t0>10000){ drop(); return; }   // safety cap — never hold the user hostage
     setTimeout(poll,120);
   })();
@@ -426,7 +439,7 @@ function showReloadGate(){
   <script src="/js/kt-parent-chrome.js?v=v20260906greet1" defer></script>
   <script src="/js/session-timeout.js?v=202609090500" defer></script>
   <script src="/js/kt-illustrations.js?v=20260811greet" defer></script>
-  <script src="/js/app-v2-shell.js?v=20260928apk" defer></script>
+  <script src="/js/app-v2-shell.js?v=20260928boot2" defer></script>
   <!-- Off unless localStorage.kt_diag === "1". Records what TRIGGERED each
        re-render, how long the cover held, and which files were still writing
        afterwards. Exists because the automation browser is always document.hidden,

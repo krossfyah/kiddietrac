@@ -1874,6 +1874,13 @@
   /* See "A NEW SCREEN APPEARS ONCE, FINISHED" in renderScreenOnce. */
   var NAV_REVEAL_MS = 800;
   var NAV_REVEAL_FAILSAFE_MS = 1200;
+  var NAV_REVEAL_HANG_MS = 6000;
+  function __ktStampSettled() {
+    try {
+      if (!window.__ktScreenSettledAt) { window.__ktScreenSettledAt = Date.now(); }
+      document.dispatchEvent(new CustomEvent('kt:screen-settled'));
+    } catch (e) {}
+  }
   function __ktRevealStyle() {
     if (document.getElementById('kt-reveal-style')) { return; }
     try {
@@ -1914,11 +1921,13 @@
         try { window.removeEventListener(ev, finish, opts); } catch (e) {}
       });
     }
-    function finish() {
+    /* done(capped): capped === true when the ceiling ended the wait rather than the
+       screen settling - callers that only want a GENUINE settle can tell the two apart. */
+    function finish(capped) {
       if (finished) { return; }
       finished = true;
       cleanup();
-      try { done(); } catch (e) {}
+      try { done(capped === true); } catch (e) {}
     }
 
     try {
@@ -1932,7 +1941,7 @@
 
     iv = setInterval(function () {
       var now = Date.now();
-      if (now - started >= holdMs) { finish(); return; }
+      if (now - started >= holdMs) { finish(true); return; }
       var pending = 0;
       try { pending = window.__ktInflight || 0; } catch (e) {}
       if (pending > 0) { sawRequest = true; lastBusy = now; return; }
@@ -2314,9 +2323,15 @@
       __ktRevealStyle();
       _ktRevealDone = false;
       var _revealMain = main;
-      _ktReveal = function () {
+      _ktReveal = function (settled) {
         if (_ktRevealDone) { return; }
         _ktRevealDone = true;
+        /* The boot covers (splash / reload gate in dashboard.src.html) wait for THIS,
+           not for the placeholder to vanish, so the first thing seen is a finished
+           screen. Only a genuinely settled screen may say so: a failsafe reveal is a
+           give-up, and letting it stamp this lifted the boot cover over a screen that
+           had not drawn yet (measured: "settled" at 1.8s, content at 4.0s). */
+        if (settled === true) { __ktStampSettled(); }
         try {
           _revealMain.classList.add('kt-revealing-in');
           _revealMain.removeAttribute('data-kt-revealing');
@@ -2324,7 +2339,8 @@
         } catch (e) {}
       };
       try { main.setAttribute('data-kt-revealing', '1'); } catch (e) { _ktRevealDone = true; }
-      setTimeout(_ktReveal, NAV_REVEAL_FAILSAFE_MS);
+      // Absolute backstop for a screen that throws or hangs before it returns.
+      setTimeout(_ktReveal, NAV_REVEAL_HANG_MS);
     }
 
     /* THIS RENDER'S GENERATION. Every deferred banner pass carries the number it was
@@ -2467,7 +2483,18 @@
          deferred banner passes already carried this test; the work that runs right here
          did not. */
       if (__ktGen !== window.__ktRenderGen) { __ktDropSnapshot(__ktGen); return; }
-      if (!_ktRevealDone) { __ktWaitSettled(main, _ktReveal, NAV_REVEAL_MS); }
+      if (!_ktRevealDone) {
+        var _settleMain = main;
+        __ktWaitSettled(main, function (capped) {
+          _ktReveal(!capped);
+          // Shown at the cap, but not finished: keep listening, and only say "settled"
+          // once it really is (the boot cover is waiting on that, capped at 8s there).
+          if (capped) { __ktWaitSettled(_settleMain, function (c2) { if (!c2) { __ktStampSettled(); } }, 5000); }
+        }, NAV_REVEAL_MS);
+        // Counted from here, not from the swap: a cold start can spend longer than
+        // this just fetching the screen's own file.
+        setTimeout(_ktReveal, NAV_REVEAL_FAILSAFE_MS);
+      }
       /* Uncover on the next frame: the render has returned, so the new content is in the
          DOM, and one frame lets the browser paint it before the picture of the old screen
          is taken away. Removing it synchronously here shows a blank flash again. */
