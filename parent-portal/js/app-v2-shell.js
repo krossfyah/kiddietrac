@@ -1861,7 +1861,22 @@
     } catch (e) {}
   }
 
-  function __ktWaitSettled(main, done) {
+  /* See "A NEW SCREEN APPEARS ONCE, FINISHED" in renderScreenOnce. */
+  var NAV_REVEAL_MS = 800;
+  var NAV_REVEAL_FAILSAFE_MS = 1200;
+  function __ktRevealStyle() {
+    if (document.getElementById('kt-reveal-style')) { return; }
+    try {
+      var st = document.createElement('style');
+      st.id = 'kt-reveal-style';
+      st.textContent = '#appMain[data-kt-revealing] > :not(#kt-topbar){opacity:0 !important;}'
+        + '#appMain.kt-revealing-in > :not(#kt-topbar){transition:opacity .16s ease-out;}';
+      document.head.appendChild(st);
+    } catch (e) {}
+  }
+
+  function __ktWaitSettled(main, done, maxMs) {
+    var holdMs = maxMs || __KT_MAX_HOLD_MS;
     var finished = false;
     var started = Date.now();
     var lastMut = started;
@@ -1907,7 +1922,7 @@
 
     iv = setInterval(function () {
       var now = Date.now();
-      if (now - started >= __KT_MAX_HOLD_MS) { finish(); return; }
+      if (now - started >= holdMs) { finish(); return; }
       var pending = 0;
       try { pending = window.__ktInflight || 0; } catch (e) {}
       if (pending > 0) { sawRequest = true; lastBusy = now; return; }
@@ -2267,6 +2282,41 @@
     main = __ktSwapMain(main);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
 
+    /* A NEW SCREEN APPEARS ONCE, FINISHED (2026-09-28).
+
+       Anthony: "when pages load it resizes and then loads correctly why cant pages load
+       correctly the first time around? (desktop and mobile)".
+
+       A screen paints the moment its render function writes, and most write twice: a
+       shell with "Loading…", then the data a few hundred ms later — cards fill, widgets
+       grow, a table replaces a line of text. Each of those is the page visibly
+       rearranging itself. The decorators are fixed separately (kt-sweep-bus follows the
+       swap; tooltips land before the frame; the top bar is put back before the frame).
+
+       What is left is the data arriving, and that is solved the way a background refresh
+       already is: the screen's content is held back until it has SETTLED (requests done,
+       DOM quiet — __ktWaitSettled) and then shown in one piece. Navigation only, capped
+       at NAV_REVEAL_MS so a slow screen shows its loading state rather than nothing, and
+       any touch/scroll/key reveals it at once. The top bar is never hidden. */
+    var _ktRevealDone = true;
+    var _ktReveal = function () {};
+    if (!_ktSameScreen && !window.__ktNoNavReveal) {
+      __ktRevealStyle();
+      _ktRevealDone = false;
+      var _revealMain = main;
+      _ktReveal = function () {
+        if (_ktRevealDone) { return; }
+        _ktRevealDone = true;
+        try {
+          _revealMain.classList.add('kt-revealing-in');
+          _revealMain.removeAttribute('data-kt-revealing');
+          setTimeout(function () { try { _revealMain.classList.remove('kt-revealing-in'); } catch (e) {} }, 260);
+        } catch (e) {}
+      };
+      try { main.setAttribute('data-kt-revealing', '1'); } catch (e) { _ktRevealDone = true; }
+      setTimeout(_ktReveal, NAV_REVEAL_FAILSAFE_MS);
+    }
+
     /* THIS RENDER'S GENERATION. Every deferred banner pass carries the number it was
        scheduled under and stands down if the screen has moved on since.
 
@@ -2407,6 +2457,7 @@
          deferred banner passes already carried this test; the work that runs right here
          did not. */
       if (__ktGen !== window.__ktRenderGen) { __ktDropSnapshot(__ktGen); return; }
+      if (!_ktRevealDone) { __ktWaitSettled(main, _ktReveal, NAV_REVEAL_MS); }
       /* Uncover on the next frame: the render has returned, so the new content is in the
          DOM, and one frame lets the browser paint it before the picture of the old screen
          is taken away. Removing it synchronously here shows a blank flash again. */

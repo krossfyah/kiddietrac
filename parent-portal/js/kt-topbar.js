@@ -498,6 +498,21 @@
     return wrap;
   }
 
+  /* THE SAME BAR, PUT BACK BEFORE THE FRAME (2026-09-28).
+
+     Anthony: "when pages load it resizes and then loads correctly".
+
+     The bar lives inside #appMain, and almost every screen begins by overwriting
+     #appMain — so the bar the shell mounted before the render was deleted by the render,
+     and came back only when the sweep bus next ran, AFTER the screen had painted. Every
+     navigation drew the screen, then pushed all of it down 62px. Measured on six screens.
+
+     Two changes. The built bar is KEPT and re-inserted (same node: listeners, weather,
+     badges and clock intact, so nothing inside it pops in a second time either). And a
+     MutationObserver on #appMain puts it back from a microtask — which runs before the
+     browser paints — instead of waiting for the bus. Rebuilt only when who it is for
+     changes. */
+  var _bar = null, _barKey = '';
   function ensure() {
     var host = document.getElementById('appMain');
     if (!host || !store('kt_token') || document.getElementById('kt-topbar')) return;
@@ -509,6 +524,15 @@
     // horizontal top nav (app-v2-shell), so rendering kt-topbar for them DOUBLED
     // the top bar — their notification bell is added to that nav instead.
     if (!isAdminRole(u) || (viewAs && ['educator', 'guardian', 'auditor', 'home_visitor', 'sales_rep'].indexOf(viewAs) !== -1)) return;
+    var key = [(u && u.id) || '', (u && u.name) || '', (u && u.photo_url) || '', viewAs].join('|');
+    if (_bar && _barKey === key) {
+      host.insertBefore(_bar, host.firstChild);
+      try {
+        var d0 = _bar.querySelector('#kt-tb-date'); if (d0) d0.textContent = fmtDate();
+        var c0 = _bar.querySelector('#kt-tb-clock'); if (c0) c0.textContent = fmtClock();
+      } catch (e) {}
+      return;
+    }
     var effAdmin = true;
     injectStyle();
     var pod = greetEmoji(new Date().getHours());
@@ -562,6 +586,7 @@
     void isPlatformAdmin;
     bar.appendChild(right);
     host.insertBefore(bar, host.firstChild);
+    _bar = bar; _barKey = key;
     buildSelectors();
 
     loadWeather(function (txt) { var w = document.getElementById('kt-tb-weather'); if (w && txt) { w.textContent = txt; w.style.display = ''; } });
@@ -707,6 +732,25 @@
   // already drawn — that is the jank. ensure() is a no-op when the bar is present.
   window.KT = window.KT || {};
   window.KT.topbar = { ensure: ensure };
+
+  /* Before-paint remount (see ensure()). CAPPED: a screen that re-renders on any
+     #appMain mutation (Support tickets did) would otherwise wipe the bar, see this put it
+     back, and wipe it again forever. More than 8 remounts in 2s = stand down to the bus
+     for the rest of that window. */
+  (function () {
+    var stamps = [];
+    function onMain() {
+      if (document.getElementById('kt-topbar')) return;
+      var now = Date.now();
+      stamps = stamps.filter(function (t) { return now - t < 2000; });
+      if (stamps.length >= 8) return;
+      stamps.push(now);
+      try { ensure(); } catch (e) {}
+    }
+    try {
+      if (window.KT && KT.observeMain) { KT.observeMain(onMain, { childList: true }); }
+    } catch (e) {}
+  })();
 
   setInterval(function () { var c = document.getElementById('kt-tb-clock'); if (c) c.textContent = fmtClock(); var d = document.getElementById('kt-tb-date'); if (d) d.textContent = fmtDate(); }, 15000);
   (window.KT && KT.sweepBus) ? KT.sweepBus.on(ensure) : setInterval(ensure, 1200);   // safety net; the shell now calls ensure() on every render

@@ -178,9 +178,21 @@
     });
   }
 
-  function scanForTooltipTargets() {
-    // Find all elements that contain only text (likely labels/headers)
-    const candidates = document.querySelectorAll('div, span, h1, h2, h3, h4, label, button, a, p');
+  const TIP_SEL = 'div, span, h1, h2, h3, h4, label, button, a, p';
+  function scanForTooltipTargets(roots) {
+    // Find all elements that contain only text (likely labels/headers). Given roots,
+    // only inside (and including) those — see startObserver.
+    let candidates;
+    if (roots && roots.length) {
+      candidates = [];
+      roots.forEach(r => {
+        if (!r || r.nodeType !== 1 || !r.isConnected) return;
+        if (r.matches && r.matches(TIP_SEL)) candidates.push(r);
+        r.querySelectorAll(TIP_SEL).forEach(n => candidates.push(n));
+      });
+    } else {
+      candidates = document.querySelectorAll(TIP_SEL);
+    }
 
     candidates.forEach(el => {
       if (injectedElements.has(el)) return;
@@ -208,15 +220,41 @@
     // Initial scan
     setTimeout(scanForTooltipTargets, 500);
 
-    // Re-scan on DOM mutations (throttled)
+    /* BEFORE THE FRAME, AND ONLY WHAT IS NEW (2026-09-28).
+
+       This waited 250ms after a mutation and then rescanned the whole document. A screen
+       paints ~16ms after it is written, so the 16px "?" icons always arrived on a page
+       already on screen, grew their lines, and pushed everything below them down — the
+       "resizes and then loads correctly" Anthony reported (measured before: 513 elements
+       moved +31px on one dashboard navigation).
+
+       Now the added subtrees are collected and scanned in the next animation frame, which
+       runs before the paint, so the icons are part of the first picture. A 250ms timer
+       races the frame because requestAnimationFrame never fires in a background tab. */
     let pending = false;
-    const observer = new MutationObserver(() => {
+    let roots = [];
+    let full = false;
+    const run = () => {
+      if (!pending) return;
+      pending = false;
+      const r = roots; roots = [];
+      const f = full; full = false;
+      try { scanForTooltipTargets(f ? null : r); } catch (e) {}
+    };
+    const observer = new MutationObserver((recs) => {
+      for (let i = 0; i < recs.length && !full; i++) {
+        const added = recs[i].addedNodes;
+        for (let j = 0; j < added.length; j++) {
+          const n = added[j];
+          if (n.nodeType === 1) roots.push(n);
+          else if (n.nodeType === 3 && n.parentElement) roots.push(n.parentElement);
+        }
+        if (roots.length > 400) { full = true; roots = []; }
+      }
       if (pending) return;
       pending = true;
-      setTimeout(() => {
-        scanForTooltipTargets();
-        pending = false;
-      }, 250);
+      try { requestAnimationFrame(run); } catch (e) {}
+      setTimeout(run, 250);
     });
 
     observer.observe(document.body, { childList: true, subtree: true });

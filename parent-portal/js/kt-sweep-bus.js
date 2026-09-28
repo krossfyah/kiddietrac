@@ -93,6 +93,31 @@
   // Navigation always warrants a pass (the shell may swap #appMain).
   w.addEventListener('hashchange', function () { setTimeout(schedule, 60); setTimeout(schedule, 500); });
 
+  /* FOLLOW #appMain WHEN THE SHELL REPLACES IT (2026-09-28).
+
+     Anthony: "when pages load it resizes and then loads correctly".
+
+     Since 2026-09-21 every render hands the screen a FRESH #appMain (__ktSwapMain), and
+     this observer was still watching the old, detached one. So a new screen's mutations
+     reached nobody: it painted bare, and only the hashchange timers above (60ms, 500ms)
+     or the 6s safety pass re-attached the bus — at which point search bars, checkbox
+     columns, row menus, icon buttons, export bars and the rest all landed at once on a
+     page the reader was already looking at. A silent refresh has no hashchange at all.
+
+     The shell announces the swap before the screen writes a single node, so re-binding
+     here means the render's own mutations schedule the sweeps for the next frame —
+     before it is painted, which is what this bus was built to do. */
+  document.addEventListener('kt:main-swapped', function () {
+    var m = mainEl();
+    if (!m) return;
+    main = m;
+    if (!observer) observer = new MutationObserver(onMutate);
+    try { observer.disconnect(); } catch (e) {}
+    try { observer.observe(main, { childList: true, subtree: true }); } catch (e) {}
+    if (pending && Date.now() - pendingSince > 500) pending = false;
+    scheduleFrame();
+  });
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach);
   else attach();
 
