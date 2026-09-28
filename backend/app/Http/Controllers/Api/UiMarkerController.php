@@ -33,6 +33,7 @@ final class UiMarkerController extends Controller
         'kt_notif_seen',      // newest notification event the bell has shown
         'kt_whatsnew_seen',   // newest what's-new entry read
         'kt_sales_chat_seen', // highest sales-chat message id read
+        'kt_passkey_offer_snooze', // ms timestamp: no "add a passkey?" offer before then
     ];
 
     /** GET /me/markers */

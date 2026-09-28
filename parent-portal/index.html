@@ -163,7 +163,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
         <form id="loginForm" class="auth-form" novalidate>
           <div class="form-row">
             <label for="email">Email or username</label>
-            <input type="text" id="email" name="email" autocomplete="username" placeholder="you@example.com" required autofocus>
+            <input type="text" id="email" name="email" autocomplete="username webauthn" placeholder="you@example.com" required autofocus>
           </div>
 
           <!-- Shown only when an email is shared by more than one account (needs_username). -->
@@ -280,7 +280,13 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
 
     /* Everything that happens once the server has said yes — shared by the password
        form and the passkey button, so the two ways in can never drift apart. */
-    function ktFinishSignIn(body) {
+    function ktFinishSignIn(body, method) {
+      // A password sign-in may be offered a passkey once on the dashboard (kt-passkeys.js);
+      // a passkey sign-in marks this device as already having one.
+      try {
+        if (method === 'passkey') { if (window.KT && KT.passkeys) { sessionStorage.setItem('kt_user', JSON.stringify(body.user)); KT.passkeys.markHere(); } }
+        else { sessionStorage.setItem('kt_pk_offer', '1'); }
+      } catch (e) {}
       // Store securely — use httpOnly cookies in production; for SPA we use sessionStorage + short-lived token
       sessionStorage.setItem('kt_token', body.token);
       sessionStorage.setItem('kt_user', JSON.stringify(body.user));
@@ -413,7 +419,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
           return;
         }
 
-        ktFinishSignIn(body);
+        ktFinishSignIn(body, 'password');
       } catch (err) {
         errorMsg.textContent = err.message;
         errorMsg.hidden = false;
@@ -427,10 +433,36 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
       var wrap = document.getElementById('ktPasskeyWrap');
       var pk = document.getElementById('ktPasskeyBtn');
       if (!wrap || !pk) return;
-      function show() { if (window.KT && KT.passkeys && KT.passkeys.supported()) wrap.hidden = false; }
+      /* AUTOFILL: tapping the email box also lists this person's saved passkey in the
+         browser's own suggestions — one tap, nothing typed. It waits in the background,
+         so the button aborts it first (one request at a time), and it is renewed before
+         the server's 2-minute challenge runs out. */
+      var ac = null, renew = null;
+      function stopAutofill() { clearTimeout(renew); if (ac) { try { ac.abort(); } catch (e) {} ac = null; } }
+      async function startAutofill() {
+        if (!(window.KT && KT.passkeys) || !(await KT.passkeys.conditionalAvailable())) return;
+        stopAutofill();
+        var mine = ac = new AbortController();
+        renew = setTimeout(startAutofill, 100000);
+        try {
+          var body = await KT.passkeys.signIn({ conditional: true, signal: mine.signal });
+          clearTimeout(renew);
+          errorMsg.hidden = true;
+          ktFinishSignIn(body, 'passkey');
+        } catch (err) {
+          if (mine !== ac || (err && err.cancelled)) return;   // aborted or dismissed: quietly wait again
+          errorMsg.style.color = '';
+          errorMsg.textContent = err.message || 'Passkey sign-in failed.';
+          errorMsg.hidden = false;
+        }
+      }
+      function show() {
+        if (window.KT && KT.passkeys && KT.passkeys.supported()) { wrap.hidden = false; startAutofill(); }
+      }
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
       pk.addEventListener('click', async function () {
         if (!(window.KT && KT.passkeys)) return;
+        stopAutofill();
         errorMsg.hidden = true;
         pk.disabled = true;
         var label = pk.querySelector('span:last-child'), was = label.textContent;
@@ -438,13 +470,14 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
         try {
           var body = await KT.passkeys.signIn();
           label.textContent = 'Signing in…';
-          ktFinishSignIn(body);
+          ktFinishSignIn(body, 'passkey');
         } catch (err) {
           errorMsg.style.color = err.cancelled ? '#1F6080' : '';
           errorMsg.textContent = err.cancelled ? 'Passkey sign-in was cancelled.' : (err.message || 'Passkey sign-in failed.');
           errorMsg.hidden = false;
           pk.disabled = false;
           label.textContent = was;
+          startAutofill();
         }
       });
     })();
@@ -480,7 +513,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
   <script src="/js/kt-social-login.js?v=20260721icons"></script>
   <script src="/js/kt-pin.js?v=20260809navy" defer></script>
   <script src="/js/kt-biometric.js?v=20260809navy" defer></script>
-  <script src="/js/kt-passkeys.js?v=20260928pk1" defer></script>
+  <script src="/js/kt-passkeys.js?v=20260928pk5" defer></script>
   <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
   <!-- Freeze watchdog on the sign-in page too: a lock-up before anybody is signed in
        is still a lock-up, and it was the one screen it could not see. -->

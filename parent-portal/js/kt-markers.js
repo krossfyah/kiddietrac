@@ -141,7 +141,7 @@
   /* Seed from localStorage immediately so the first paint has something true-ish, then
      ask the server. Deferred a beat: KT.Api and the token are set up by app.js, and this
      file has no business racing it. */
-  ['kt_notif_seen', 'kt_whatsnew_seen', 'kt_sales_chat_seen'].forEach(function (k) {
+  ['kt_notif_seen', 'kt_whatsnew_seen', 'kt_sales_chat_seen', 'kt_passkey_offer_snooze'].forEach(function (k) {
     CACHE[k] = lsGet(k);
   });
   setTimeout(function () { KT.markers.sync(); }, 1200);
