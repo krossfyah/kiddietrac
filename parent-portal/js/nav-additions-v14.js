@@ -116,6 +116,10 @@
     injectNav();
     route();
     updateAnnouncementBadge();
+    // The Announcements screen marks them read and asks for an immediate repaint,
+    // rather than leaving the count up for up to 30s (2026-09-29).
+    window.KT = window.KT || {};
+    window.KT.refreshAnnouncementBadge = updateAnnouncementBadge;
     window.addEventListener('hashchange', route);
     // Poll every 30 sec
     setInterval(updateAnnouncementBadge, 30000);

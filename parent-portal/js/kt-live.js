@@ -209,10 +209,20 @@
         }
       } catch (e) {}
 
+      /* Any write empties the count cache, before AND after it lands (2026-09-29).
+         Marking announcements read and then repainting the badge got the count cached a
+         moment earlier -- the pre-read number -- so the badge stayed lit for up to 8s
+         after "read", and a repaint asked for right then showed it unchanged. mark-read
+         is in IGNORE (it must not ring the data bus), which is exactly why it has to be
+         handled here separately. */
+      var mW = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+      if (mW !== 'GET' && mW !== 'HEAD') { countCache = {}; }
+
       var res = inner.apply(this, arguments);
       try {
-        var method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+        var method = mW;
         if (method === 'GET' || method === 'HEAD') { return res; }
+        res = res.then(function (r) { countCache = {}; return r; }, function (err) { countCache = {}; throw err; });
 
         var url = String((input && input.url) || input || '');
         if (IGNORE.test(url)) { return res; }

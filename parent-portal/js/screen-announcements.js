@@ -897,7 +897,24 @@
       </div>`;
   }
 
+  /* Opening Announcements marks announcement notifications read (2026-09-29).
+     Anthony: "I have read the announcement but the indicator on the side panel for new
+     announcements isn't going away". The only code that did this lived in
+     nav-additions-v14's router, which returns at once now that the v17 shell owns
+     routing -- so the count was painted every 30s and never cleared. Throttled because a
+     screen must not write on every render (the billing reload loop); kt-live already
+     ignores mark-read, so this cannot trigger a re-render either way. */
+  let _annMarkedAt = 0;
+  function markAnnouncementsRead() {
+    if (Date.now() - _annMarkedAt < 5000) return;
+    _annMarkedAt = Date.now();
+    api('POST', '/notifications/mark-read', { type: 'announcement' })
+      .catch(() => {})
+      .then(() => { if (window.KT && KT.refreshAnnouncementBadge) KT.refreshAnnouncementBadge(); });
+  }
+
   function render(container) {
+    markAnnouncementsRead();
     const role = getRole();
     if (role === 'guardian') return renderParent(container);
     if (role === 'home_visitor') return renderReadOnly(container);
