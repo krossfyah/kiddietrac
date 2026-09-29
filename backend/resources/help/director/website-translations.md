@@ -2,9 +2,11 @@
 title: Website translations (French and Spanish)
 category: Marketing
 order: 31
-roles: platform_admin
+roles: agency_admin, platform_admin
 ---
 # Website translations (French and Spanish)
+
+> **Note:** This is for the KiddieTrac platform team. Agency admins do not have this screen.
 
 **Website → Translations.** Here you review the French and Spanish text that
 www.kiddietrac.com translated for itself.

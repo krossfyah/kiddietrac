@@ -575,6 +575,7 @@
             <details style="font-size:13px;">
               <summary style="cursor:pointer;color:#6B7280;">Schedule for later (optional)</summary>
               <input name="scheduled_at" type="datetime-local" style="${inp()};margin-top:8px;">
+              <div style="font-size:11px;color:#64748B;margin-top:4px;">In your agency's time zone. It goes out within a minute of this time, by every channel ticked above.</div>
             </details>
             <div id="kt-status" style="min-height:20px;font-size:14px;"></div>
             <div style="display:flex;justify-content:flex-end;gap:8px;">
@@ -689,18 +690,13 @@
         statusEl.textContent = '✗ Choose the reason for the phone call';
         return;
       }
-      if (voiceOn && sched) {
-        statusEl.style.color = '#DC2626';
-        statusEl.textContent = '✗ A phone call cannot be scheduled — send it now, or untick Voice call';
-        return;
-      }
       // A call is neither silent nor undoable, so it asks first — as SMS broadcast does.
       if (voiceOn && window.KT && KT.confirm) {
         const reasonTxt = (f.querySelector('[name="voice_category"]').selectedOptions[0] || {}).textContent || voiceCat;
         const ok = await KT.confirm({
           title: 'Place phone calls?',
           description: 'This rings the phones of the people this announcement goes to and reads it aloud (reason: '
-            + reasonTxt + '). Calls cannot be taken back once placed.',
+            + reasonTxt + ')' + (sched ? ', at the scheduled time' : '') + '. Calls cannot be taken back once placed.',
           okLabel: 'Place calls', tone: 'default',
         });
         if (!ok) return;

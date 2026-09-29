@@ -388,3 +388,7 @@ Schedule::command('kiddietrac:admin-digest --weekly')->weeklyOn(1, '07:10')->tim
    invoice.issuer.address / tax_id are unset. Scheduling it costs nothing until
    those are deliberately turned on. */
 Schedule::command('platform:billing-run')->dailyAt('06:00')->withoutOverlapping();
+
+/* Scheduled announcements (2026-09-29): nothing sent them before this. Every minute;
+   each row is claimed before delivery so an overlapping run cannot send it twice. */
+Schedule::command('announcements:send-scheduled')->everyMinute()->withoutOverlapping(5);

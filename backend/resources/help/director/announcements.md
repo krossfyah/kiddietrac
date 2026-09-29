@@ -24,7 +24,9 @@ message and app notification.
 6. Choose how it goes out: **📧 Send email**, **📱 Send SMS**, **🔔 In-app notification**,
    and — for directors and agency admins — **📞 Voice call**. Email and in-app are ticked
    by default.
-7. To send it later, open **Schedule for later (optional)** and pick a date and time.
+7. To send it later, open **Schedule for later (optional)** and pick a date and time, in
+   your agency's time zone. It goes out within a minute of that time, by every channel
+   you ticked — phone calls included — and shows **⏱ Scheduled** in the list until then.
 8. Press **Send**.
 
 ## Choosing who receives it
@@ -71,7 +73,7 @@ who turned that reason off, or chose **Don't phone me at all**, is skipped; a
 non-emergency only reaches people who agreed to be contacted; a shared phone rings once.
 The result line reports how many are being called and how many were skipped.
 
-> **Note:** A phone call cannot be scheduled. Send it now, or untick Voice call.
+> **Note:** A scheduled announcement with Voice call ticked rings people at the scheduled time, not when you press Send.
 
 ??? Why can't I see Voice call? | It is for centre directors and agency admins only, the same people who can place calls from SMS broadcast.
 ??? Why is Voice call greyed out? | Calls are switched off for your agency, or no call reasons are allowed. An agency admin sets both in Settings → Carrier settings → Voice calls.

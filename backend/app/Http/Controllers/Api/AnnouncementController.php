@@ -44,7 +44,10 @@ final class AnnouncementController extends Controller
             // decides who may be rung, exactly as on SMS broadcast -> Voice call.
             'send_voice' => ['nullable', 'boolean'],
             'voice_category' => ['nullable', 'string', 'max:40'],
-            'scheduled_at' => ['nullable', 'date', 'after_or_equal:now'],
+            // Not after_or_equal:now -- that compared the agency's wall-clock time with
+            // UTC, so for four hours of every evening a valid time was "in the past".
+            // Converted and checked below instead.
+            'scheduled_at' => ['nullable', 'date'],
         ]);
 
         // SECURITY: sanitize the rich-text body to a safe allowlist BEFORE storing
@@ -58,6 +61,26 @@ final class AnnouncementController extends Controller
         }
 
         $data['audience'] = $data['audience'] ?? 'parents';
+
+        /* SCHEDULING (2026-09-29). The composer's date box is the agency's wall-clock
+           time with no zone; the app stores UTC. Stored as typed, 09:00 went out at
+           05:00 in Toronto -- except nothing sent scheduled announcements at all until
+           announcements:send-scheduled. Converted here so the sender compares like with
+           like. A time within the next minute just sends now. */
+        if (! empty($data['scheduled_at'])) {
+            $sAgency = $this->resolveAgencyForScope($data['scope_type'], (int) $data['scope_id']);
+            try {
+                $at = \Carbon\Carbon::parse((string) $data['scheduled_at'], \App\Support\AgencyTime::tz($sAgency))->utc();
+            } catch (\Throwable $e) {
+                return response()->json(['message' => 'That date and time could not be read.',
+                    'errors' => ['scheduled_at' => ['Not a valid date and time.']]], 422);
+            }
+            if ($at->lt(now()->subMinute())) {
+                return response()->json(['message' => 'That time has already passed. Pick a later time, or clear it to send now.',
+                    'errors' => ['scheduled_at' => ['In the past.']]], 422);
+            }
+            $data['scheduled_at'] = $at->lte(now()->addMinute()) ? null : $at->format('Y-m-d H:i:s');
+        }
 
         /* VOICE (2026-09-29). Anthony: "announcements add option to send via voice as
            well". A call is neither silent nor undoable, so the same people who may place
@@ -89,12 +112,6 @@ final class AnnouncementController extends Controller
                 return response()->json(['message' => 'Calls for "' . VoiceController::CATEGORIES[$cat] . '" are switched off for this agency. '
                     . 'Choose which reasons may place calls in Carrier settings -> Voice calls.',
                     'errors' => ['voice_category' => ['Calls are switched off for this reason.']]], 422);
-            }
-            // Scheduled announcements are not delivered by anything yet, so a scheduled
-            // call would silently never ring. Refuse it rather than pretend.
-            if (! empty($data['scheduled_at'])) {
-                return response()->json(['message' => 'A phone call cannot be scheduled. Send it now, or untick Voice call.',
-                    'errors' => ['scheduled_at' => ['Not available with a voice call.']]], 422);
             }
             $data['voice_category'] = $cat;
         }
@@ -370,6 +387,70 @@ final class AnnouncementController extends Controller
                 ->exists();
         }
         return false;
+    }
+
+    /**
+     * Send every scheduled announcement whose time has come (announcements:send-scheduled,
+     * every minute). Each row is CLAIMED by setting sent_at only where it is still null,
+     * so two overlapping runs cannot both send it; the claim happens before delivery
+     * because a half-sent announcement retried would email and ring everyone twice.
+     * Returns one line per announcement for the command's output.
+     */
+    public function deliverDue(int $limit = 25): array
+    {
+        $out = [];
+        $due = DB::table('announcements')->whereNull('sent_at')->whereNotNull('scheduled_at')
+            ->where('scheduled_at', '<=', now())->orderBy('scheduled_at')->limit($limit)->get();
+        foreach ($due as $a) {
+            $claimed = DB::table('announcements')->where('id', $a->id)->whereNull('sent_at')->update(['sent_at' => now()]);
+            if (! $claimed) {
+                continue;
+            }
+            $sender = DB::table('users')->where('id', $a->created_by_id)->first();
+            $image = null;
+            if (! empty($a->image_path)) {
+                $file = public_path($a->image_path);
+                $image = [
+                    'path' => $a->image_path,
+                    'url' => rtrim((string) config('app.url'), '/') . '/' . ltrim($a->image_path, '/'),
+                    'mms_ok' => is_file($file) && filesize($file) <= 600 * 1024,
+                ];
+            }
+            $data = [
+                'scope_type' => $a->scope_type, 'scope_id' => (int) $a->scope_id,
+                'audience' => $a->audience ?: 'parents', 'title' => $a->title, 'body' => $a->body,
+                'send_email' => (bool) $a->send_email, 'send_sms' => (bool) $a->send_sms,
+                'send_push' => (bool) $a->send_push, 'send_voice' => (bool) ($a->send_voice ?? false),
+                'voice_category' => $a->voice_category ?? null, 'image' => $image,
+            ];
+            $this->voiceResult = null;
+            $delivered = 0;
+            try {
+                $delivered = $this->deliver((int) $a->id, $data, $sender ?: (object) ['id' => null]);
+            } catch (\Throwable $e) {
+                Log::error('Scheduled announcement failed', ['id' => $a->id, 'error' => $e->getMessage()]);
+            }
+            $late = (int) max(0, round((now()->getTimestamp() - strtotime($a->scheduled_at . ' UTC')) / 60));
+            \App\Support\Audit::write([
+                'user_id' => $a->created_by_id,
+                'action' => 'announcement.sent',
+                'entity_type' => 'announcement',
+                'entity_id' => $a->id,
+                'payload' => json_encode([
+                    'scope_type' => $a->scope_type, 'scope_id' => (int) $a->scope_id,
+                    'audience' => $a->audience, 'has_image' => (bool) $image,
+                    'delivered_to' => $delivered, 'scheduled' => true,
+                    'scheduled_for' => $a->scheduled_at, 'minutes_late' => $late,
+                    'voice' => $this->voiceResult,
+                ]),
+                'created_at' => now(),
+            ]);
+            $out[] = '#' . $a->id . ' "' . $a->title . '" -> ' . $delivered . ' recipient(s)'
+                . ($this->voiceResult ? ', calling ' . $this->voiceResult['placed'] . ', skipped ' . $this->voiceResult['skipped'] : '')
+                . ($late > 5 ? ' (' . $late . ' min late)' : '');
+        }
+
+        return $out;
     }
 
     /** Filled by deliver() when the announcement also went out as phone calls. */
