@@ -367,19 +367,42 @@
     var ui = '';
     try { ui = (window.KT && KT.i18n && KT.i18n.locale && KT.i18n.locale()) || document.documentElement.lang || ''; } catch (e) {}
     ui = String(ui).slice(0, 2).toLowerCase();
+    if (!document.getElementById('kt-mic-css')) {
+      var st = document.createElement('style');
+      st.id = 'kt-mic-css';
+      // #appMain button[aria-pressed] styles every pressed-state button as a toggle switch
+      // (padding 0 !important), so these rules out-rank it: id + classes + attribute.
+      st.textContent =
+        '#appMain button.kt-mic.kt-mic[aria-pressed]{display:inline-flex!important;align-items:center;gap:7px;height:32px!important;min-height:0!important;padding:0 14px 0 11px!important;' +
+        'border-radius:999px!important;border:1.5px solid #1F6080!important;background:#fff!important;color:#1F6080!important;font:inherit;font-size:13px!important;' +
+        'font-weight:700!important;cursor:pointer;line-height:1!important;white-space:nowrap;box-shadow:0 1px 2px rgba(15,23,42,.06)!important;' +
+        'transition:background .15s,color .15s,border-color .15s,box-shadow .15s;width:auto!important;margin:0!important}' +
+        '#appMain button.kt-mic.kt-mic[aria-pressed]:hover{background:#EEF6FA!important}' +
+        '#appMain button.kt-mic.kt-mic[aria-pressed]:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(31,96,128,.25)!important}' +
+        '#appMain button.kt-mic.kt-mic[aria-pressed] svg{width:16px;height:16px;flex:0 0 16px}' +
+        '#appMain button.kt-mic.kt-mic[aria-pressed] .kt-mic-dot{display:none;width:8px;height:8px;border-radius:50%;background:#fff;animation:ktMicPulse 1.1s ease-in-out infinite}' +
+        '#appMain button.kt-mic.kt-mic[aria-pressed].on{background:#DC2626!important;border-color:#DC2626!important;color:#fff!important;box-shadow:0 0 0 4px rgba(220,38,38,.15)!important}' +
+        '#appMain button.kt-mic.kt-mic[aria-pressed].on:hover{background:#B91C1C!important;border-color:#B91C1C!important}' +
+        '#appMain button.kt-mic.kt-mic[aria-pressed].on svg{display:none}#appMain button.kt-mic.kt-mic[aria-pressed].on .kt-mic-dot{display:inline-block}' +
+        '.kt-mic-state{font-size:12px;color:#64748B}.kt-mic-state.on{color:#DC2626;font-weight:600}.kt-mic-state.warn{color:#B45309}' +
+        '@keyframes ktMicPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}' +
+        '@media (prefers-reduced-motion:reduce){#appMain button.kt-mic.kt-mic[aria-pressed] .kt-mic-dot{animation:none}}';
+      document.head.appendChild(st);
+    }
     box.innerHTML =
-      '<button type="button" class="btn btn-secondary" id="kt-mic" aria-pressed="false" style="display:inline-flex; align-items:center; gap:6px;">🎤 <span>Speak it</span></button>' +
-      '<span id="kt-mic-state" aria-live="polite" style="font-size:12px; color:var(--kt-text-muted);">Talk instead of typing — the words appear in the box for you to check.</span>';
+      '<button type="button" class="kt-mic" id="kt-mic" aria-pressed="false">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>' +
+        '<span class="kt-mic-dot" aria-hidden="true"></span><span class="kt-mic-label">Speak it</span></button>' +
+      '<span id="kt-mic-state" class="kt-mic-state" aria-live="polite">Talk instead of typing — the words appear in the box for you to check.</span>';
     var btn = box.querySelector('#kt-mic'), state = box.querySelector('#kt-mic-state');
     var rec = null, on = false, base = '', finalText = '';
     function setOn(v) {
       on = v;
       btn.setAttribute('aria-pressed', v ? 'true' : 'false');
-      btn.querySelector('span').textContent = v ? 'Stop' : 'Speak it';
-      btn.style.background = v ? '#DC2626' : '';
-      btn.style.color = v ? '#fff' : '';
-      state.textContent = v ? '● Listening… speak naturally, then press Stop.' : 'Talk instead of typing — the words appear in the box for you to check.';
-      state.style.color = v ? '#DC2626' : '';
+      btn.classList.toggle('on', !!v);
+      btn.querySelector('.kt-mic-label').textContent = v ? 'Stop' : 'Speak it';
+      state.className = 'kt-mic-state' + (v ? ' on' : '');
+      state.textContent = v ? 'Listening… speak naturally, then press Stop.' : 'Talk instead of typing — the words appear in the box for you to check.';
     }
     function start() {
       rec = new SR();
@@ -400,7 +423,7 @@
       rec.onerror = function (ev) {
         var why = ev && ev.error;
         setOn(false);
-        state.style.color = '#B45309';
+        state.className = 'kt-mic-state warn';
         state.textContent = why === 'not-allowed' || why === 'service-not-allowed'
           ? 'Microphone access was blocked. Allow the microphone for this site, or use the mic on your keyboard.'
           : (why === 'no-speech' ? 'We didn\u2019t hear anything. Try again a little closer to the microphone.' : 'Speech recognition stopped. You can press Speak it again.');
@@ -433,7 +456,32 @@
     // Daily log use — and it respects room assignment.
     let children = [];
     let childLoadError = null;
-    try {
+    /* ADMINS SEE THE WHOLE AGENCY (2026-09-29). Anthony, as super admin: "I don't see all
+       of the children". /provider/bootstrap answers with ONE centre's rooms for an admin,
+       so every other centre's children were missing. Admins and directors read
+       /admin/children (the active agency, scoped server-side); educators keep the room
+       rosters, which respect room assignment. If the admin list is refused or empty we
+       fall through to the rosters rather than show nothing. */
+    let _roles = [];
+    try { _roles = (JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) {}
+    const _isAdmin = ['platform_admin', 'agency_admin', 'centre_director'].some(function (r) { return _roles.indexOf(r) !== -1; });
+    if (_isAdmin) {
+      try {
+        const res = await Api.get('/admin/children');
+        const list = (res && (res.children || res.data)) || [];
+        children = list.filter(function (c) { return !c.archived_at && !c.deleted_at && (!c.status || /active|enrolled/i.test(String(c.status))); })
+          .map(function (c) {
+            return {
+              id: c.id, first_name: c.first_name, last_name: c.last_name,
+              display_name: ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.display_name || c.preferred_name,
+              room_name: c.room_name || c.room || c.centre_name || '',
+              is_at_centre: !!c.is_at_centre,
+            };
+          });
+        children.sort(function (a, b) { if (!!a.is_at_centre !== !!b.is_at_centre) { return a.is_at_centre ? -1 : 1; } return String(a.display_name).localeCompare(String(b.display_name)); });
+      } catch (e) { children = []; }
+    }
+    if (!children.length) try {
       const boot = await Api.get('/provider/bootstrap');
       const rooms = (boot && boot.rooms) || [];
       const rosters = await Promise.all(rooms.map(function (room) {
