@@ -12,18 +12,33 @@
   }
   var Shell = window.KT.Shell;
 
+  /* A screen can be asked to draw before its script has run -- a slow phone, or a
+     deploy that changed the file while the page was loading. This used to print
+     "Screen module KT.V22p53 not loaded yet." and stay that way until you navigated
+     away (Anthony, Substitutes, 2026-09-29). Now it waits for the module, draws the
+     moment it arrives, and only after 10s says so, with a Reload button. */
+  function resolveModule(globalPath, methodName) {
+    var parts = globalPath.split('.');
+    var obj = window;
+    for (var i = 0; i < parts.length; i++) { obj = obj && obj[parts[i]]; }
+    return (obj && typeof obj[methodName] === 'function') ? obj : null;
+  }
   function bridge(globalPath, methodName) {
     var fn = function (main) {
-      var parts = globalPath.split('.');
-      var obj = window;
-      for (var i = 0; i < parts.length; i++) {
-        obj = obj && obj[parts[i]];
-      }
-      if (!obj || typeof obj[methodName] !== 'function') {
-        main.innerHTML = '<div style="padding:24px;color:#6B7280;">Screen module ' + globalPath + ' not loaded yet.</div>';
-        return;
-      }
-      return obj[methodName](main);
+      var obj = resolveModule(globalPath, methodName);
+      if (obj) { return obj[methodName](main); }
+      main.innerHTML = '<div style="padding:24px;color:#6B7280;">Loading…</div>';
+      var started = Date.now();
+      (function wait() {
+        if (!main.isConnected) { return; }            // the user has moved on
+        var o = resolveModule(globalPath, methodName);
+        if (o) { o[methodName](main); return; }
+        if (Date.now() - started < 10000) { setTimeout(wait, 150); return; }
+        try { console.error('[kt-shim] screen module never loaded: ' + globalPath); } catch (e) {}
+        main.innerHTML = '<div style="padding:24px;color:#6B7280;">This screen did not finish loading. '
+          + '<button type="button" style="margin-left:8px;padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-weight:700;cursor:pointer;" '
+          + 'onclick="location.reload()">Reload</button></div>';
+      })();
     };
     return fn;
   }
