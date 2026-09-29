@@ -18,6 +18,19 @@ If you have this role, you'll see a purple **Platform** section at the top of yo
 - Suspend or resume an agency's billing status from the All Agencies table.
 - See cross-agency totals (MRR, signups, churn) on the Platform overview screen.
 
+## Platform-only tools
+
+A few screens exist only for platform admins, because they concern the whole platform
+rather than one agency:
+
+- **View as** at the foot of the sidebar: preview a role, or see the portal as one named
+  person. See [View as another user](view-as).
+- **Settings → Backups**: the nightly database backup and whether it is running. See
+  [Database backups](database-backups).
+- **Sales → Files repository**: price sheets, decks and contract templates for the sales
+  side. See [Files repository](files-repository).
+- **Settings → Security alerts**: see [Security alerts & monitoring](security-alerts).
+
 ## What platform admins cannot do (yet)
 
 - Modify a tenant's data without first switching into that agency. The active-agency context still scopes most write operations.

@@ -52,9 +52,15 @@ When a family pays (e-transfer, cheque, cash, etc.), record it:
 
 The invoice balance updates automatically. If the family pays the full amount, the invoice status changes to **Paid**.
 
-## What about Stripe / credit cards?
+You can also record a payment from **Finance → Accounting**, which offers to add your card or EFT service fee if you charge one. See [Accounting](accounting) and [Payment surcharges](payment-surcharges).
 
-Kiddietrac doesn't currently process credit cards. You handle payments outside the app (e-transfer, cheque, etc.) and just record them in Kiddietrac so the family's account is up to date. Stripe integration may be added in a future release.
+## What about credit cards?
+
+Families can pay online once your agency has connected a payment provider under **Settings → Payment providers**. Until then, you take payments outside the app (e-transfer, cheque and so on) and record them here so the family's account is up to date. See [Payment providers](payment-providers).
+
+## Invoice numbers and look
+
+Invoice numbers follow your agency's own format, and invoices are drawn in the style chosen under **Branding**. See [Invoice style and numbering](invoice-numbering-and-style).
 
 ## Tips
 
@@ -66,5 +72,6 @@ Kiddietrac doesn't currently process credit cards. You handle payments outside t
 
 You can't delete an invoice once it's generated (this preserves your financial records). If you need to:
 
-- **Refund a family**: record a "negative" payment with a note explaining the adjustment
-- **Correct an error**: contact support — we'll help adjust the records
+- **Correct an invoice**: use **Edit** on the invoice in **Finance → Accounting**.
+- **Cancel an invoice**: use **Void invoice** in **Accounting**. It keeps its number, stops being owed, and the family is emailed to say so. See [Accounting](accounting).
+- **Refund a family**: use **Finance → Refunds**, which records who approved it. Refund any money paid before you void the invoice. See [Refunding a payment](refunds).

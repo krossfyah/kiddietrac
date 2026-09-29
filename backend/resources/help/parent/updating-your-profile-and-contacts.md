@@ -68,6 +68,16 @@ On the same step you can record:
 To change any of it afterwards, message your director. Allergies especially: tell them
 straight away rather than waiting, because that list is read every single day.
 
+## Texts and phone calls
+
+Your mobile number is also how the centre texts you, and how an urgent announcement call
+reaches you. In **Settings → Profile**, the **Texts and phone calls** card lets you agree
+to texts and choose which kinds of text and call you want.
+
+[[show: #settings @ Profile > Texts and phone calls | Show me my text and call settings]]
+
+See [Texts and phone calls](texts-and-phone-calls).
+
 ## Keeping it tidy
 
 A five-minute check at the start of each term — photo, phone, email, address, emergency contacts — saves a lot of hassle later. If in doubt, message your director and ask them to confirm what's on file.

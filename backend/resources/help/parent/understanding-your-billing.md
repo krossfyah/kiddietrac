@@ -32,11 +32,25 @@ Your invoice shows the math: full tuition minus subsidy equals what you pay.
 
 How you pay depends on what your centre has switched on:
 
-- **Online card or bank payment** — if your centre uses online payments, you'll see a **Pay** button inside the invoice, and you can save a method for **autopay**. See **Paying invoices and autopay** for the full walkthrough.
-- **E-transfer** — usually the easiest offline method. Your centre will share their e-transfer email.
+- **Online card or bank payment** — if your centre uses online payments, a **Ways to pay** box at the top of Billing lets you pay by **Card**, **Interac** or **Direct debit**, including part of an invoice. See [Paying invoices and autopay](paying-invoices-and-autopay) for the full walkthrough.
+- **E-transfer** — usually the easiest offline method. Your centre will share their e-transfer email. Put your invoice number in the message.
 - **Cheque / bank transfer / cash** — accepted by many centres.
 
-For offline methods, the centre director records the payment in Kiddietrac and your invoice status updates. Online card payments update automatically.
+For offline methods, the centre director records the payment in Kiddietrac and your invoice status updates. An online payment is marked paid once the money has arrived.
+
+## Service fees on card and e-Transfer payments
+
+Some centres pass on what card and e-Transfer / EFT payments cost them. If yours does, the fee is shown on your invoice as its own line, for example **Service fee (2.9% card)**, and separately on your receipt, so you can always see what it is.
+
+- It is a percentage of **the amount being paid**, not of the whole invoice.
+- **Cash and cheque payments never carry a service fee.**
+
+If a fee surprises you, ask your director. The rate is set by your centre.
+
+## Other lines you may see
+
+- **Late fee · 2026-10** (for example) — a late fee your centre charged on an overdue balance, for that month. There is never more than one per invoice per month.
+- **Void** — an invoice your centre cancelled. You do not owe it. Your centre's email to you says so, and you can ignore any reminder about it that went out earlier.
 
 ## What if I'm behind?
 

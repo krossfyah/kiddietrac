@@ -41,10 +41,25 @@ That record is what turns *"somebody refunded $735"* into *"this named person ap
 
 ## What happens next
 
-**The money does not move on its own.** The refund is recorded, the balance re-opens on the account, and the family is told their centre will arrange payment. Where Interac is available you are offered the transfer as a separate, deliberate step.
+What happens depends on how the money was paid.
+
+**A card payment taken through Helcim goes back to the card automatically.** You do not need to take any further step:
+
+- **Same day, full amount**: KiddieTrac first tries to **void** the charge, so it disappears from the family's card statement instead of showing as a charge and a credit.
+- **Otherwise**, or if the void is refused: the amount is **refunded** through Helcim. Only a refund can be partial.
+
+If Helcim refuses, its reason is shown and nothing is recorded. If Helcim is no longer set up for your agency, the refund is refused with a message explaining that the money cannot be returned automatically. See [Payment providers](payment-providers).
+
+**For any other payment, the money does not move on its own.** The refund is recorded, the balance re-opens on the account, and the family is told their centre will arrange payment. Where Interac is available, you are offered the transfer as a separate, deliberate step.
 
 For a KiddieTrac invoice the balance is written back to the invoice itself. For an invoice that came from an external billing system it is not — that system overwrites those fields on every sync, so a refund written there would quietly disappear at the next poll. The ledger re-opens the balance instead, which nothing overwrites.
 
 ## Money with no payment record
 
 Where a payment arrived through an integration, KiddieTrac may hold the invoice but no receipt. Those invoices are still refundable: the receipt is written the moment the refund is approved, so there is something for the refund to reverse. You do not have to do anything — it happens as part of approving.
+
+## Refund first, then void
+
+An invoice with money paid against it cannot be voided. To cancel one, refund the money here first, then void the invoice in **Accounting**. See [Accounting](accounting).
+
+See also: [Accounting](accounting) · [Account ledgers](account-ledgers) · [Payment providers](payment-providers)

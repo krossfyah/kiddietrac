@@ -57,3 +57,8 @@ When the last step is signed:
 ## Audit trail
 
 Every signed document is immutable after completion. The hash chain allows you to verify in court that the document was not altered after signing.
+
+> **Note:** To send an uploaded PDF form to parents or staff, track who has signed it, and review, counter-sign or send it back, use **Forms Manager** instead. See [Forms Manager and form packages](forms-manager).
+
+See also: [Forms Manager and form packages](forms-manager),
+[Reviewing, counter-signing and sending back forms](reviewing-and-counter-signing-forms).

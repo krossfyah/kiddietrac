@@ -65,3 +65,11 @@ If the send is held back — the agency's email switch is off, or a delivery rul
 ## Issuing a refund
 
 See **[Refunding a payment](refunds)**.
+
+## One person, or every invoice
+
+This screen answers questions about **one account**. To work across every invoice on the agency, including recording payments, voiding and filtering by who the invoice is with (parents, educators, contractors), use **Finance → Accounting**.
+
+[[open: #external-billing | Open Accounting]]
+
+See also: [Accounting](accounting) · [Refunding a payment](refunds) · [Payment schedules](payment-plans)

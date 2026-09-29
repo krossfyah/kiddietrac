@@ -19,12 +19,32 @@ Tap any invoice to open its full detail: the line items, the total, and payment 
 
 ## How to pay
 
-The payment methods available to you depend on what your centre has switched on:
+The payment methods available to you depend on what your centre has switched on.
 
-- **Card or bank payment** — if your centre uses online payments, you'll see a **Pay** button inside the invoice. Follow the prompts to pay securely.
-- **e-Transfer / manual payment** — many centres take payment by Interac e-Transfer or in person. In that case the invoice shows your centre's payment instructions instead of a Pay button, and the director marks it paid once received.
+### Paying online: "Ways to pay"
 
-> If you don't see a Pay button and expected one, your centre may not have online payments enabled yet. Ask your director how they'd like to be paid.
+[[open: #billing | Open Billing]]
+
+If your centre takes payments online, a **Ways to pay** box appears at the top of **Billing**:
+
+- [ ] Tap **💳 Add a card or bank account** to save a card, or your bank account for direct debit. Your details are entered in the payment provider's own secure form.
+- [ ] Next to each invoice with a balance, check the **amount**. It starts at the full balance, and you can lower it to **pay part** of the invoice. The screen tells you what would still be outstanding.
+- [ ] Tap how you want to pay: **Card**, **Interac** or **Direct debit**. A button stays greyed out until the method is set up. For example, **Card** needs a saved card first.
+- [ ] Confirm the amount when asked.
+
+Once you confirm, the payment is **submitted**, not yet paid. The invoice is marked paid when the money actually arrives, which for a bank payment can take a few days.
+
+> **Important:** If the box shows **TEST MODE**, your centre's payment setup is still in testing. Nothing you do there moves real money, and no invoice will actually be paid. Pay your centre another way until the notice is gone.
+
+### Paying by e-Transfer or in person
+
+Many centres take payment by Interac e-Transfer, cheque or cash. Send the e-Transfer to your centre's billing email with **your invoice number in the message**. Your centre records the payment once it is received, and your invoice updates.
+
+> If you don't see any online payment option, your centre may not have online payments enabled yet. Ask your director how they'd like to be paid.
+
+### Service fees
+
+Some centres pass on the cost of card or e-Transfer / EFT payments. If yours does, and the centre records a payment of that kind, the fee appears on your invoice as its own line, for example **Service fee (2.9% card)**. It is also shown separately on your receipt. Cash and cheque payments never carry a service fee.
 
 ## Setting up autopay
 
@@ -52,10 +72,13 @@ For your security, Kiddietrac itself never stores or displays your full card or 
 Billing is set by your centre, not by us. Message or call your director with the specifics — they can adjust the invoice and re-send it.
 
 **"I paid but it still says Due."**
-If you paid by e-Transfer or in person, the director marks it paid manually — it can take a day. Online card payments update right away; if one doesn't, refresh, then contact your centre.
+If you paid by e-Transfer or in person, the director marks it paid manually — it can take a day. For online payments, see the next question.
 
 **"Can I pay part of an invoice?"**
-That depends on your centre's setup. Ask your director — partial payments and payment plans are handled on their side.
+If your centre uses **Ways to pay**, yes: lower the amount next to the invoice before you tap a payment method. The rest stays outstanding. Payment schedules are set up by your centre, so ask your director about those.
+
+**"I paid online but it still shows a balance."**
+An online payment is submitted first and marked paid when the money arrives. A bank payment can take a few days. If it still shows after that, contact your centre.
 
 **"I want a copy for my taxes / subsidy."**
 Open the invoice or receipt and save it. For an annual childcare receipt, ask your director.

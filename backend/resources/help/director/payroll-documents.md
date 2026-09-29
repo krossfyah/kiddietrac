@@ -57,6 +57,10 @@ The payment is tied to the payslip it settles, so the record shows what was paid
 
 Only **closed** punches count. Anyone still clocked in is named on their row so you can see what was left out.
 
+The run has the same three tabs: **Educators**, **Other staff** and **Contractors**. The **Contractors** tab lists payees your agency has paid before. They have no clock, so you enter an amount only. Each row's **Lines & notes** holds line items (mileage, a top-up, a deduction) and a note for the payslip. **Approve and create payslips** writes them.
+
+When you tick somebody and type their hourly rate, **Pay** is filled in as hours × rate as a starting point. You can overwrite it. Somebody who **already has a manual payslip for the same period is skipped**, and you are told how many rows were skipped and why, so a run cannot pay the same person twice.
+
 **The rate is never filled in for you.** It starts empty and somebody types it, every run. The historical figures cannot tell an hourly rate from a whole period's pay — the data says "hours" against amounts that are plainly not hourly — and multiplying by the wrong one produces a payslip nobody meant to approve.
 
 ## The CSV export

@@ -10,12 +10,20 @@ against the schedule set in **Immunization due at age**.
 
 ## Reading it
 
-Each child is a row with a status:
+Each child is a row with a status, worst first:
 
+- **Overdue** — a dose was expected by their age and is not recorded.
+- **Nothing on file** — no doses recorded for this child. A card filed with nothing read
+  off it yet still counts as nothing.
+- **Due soon** — a dose falls due within the next three months.
 - **Up to date** — every dose the schedule expects by their age is recorded.
-- **Due** — a dose is expected now.
-- **Overdue** — a dose was expected before now.
-- **Nothing recorded** — no immunization record at all for this child.
+- **Exempt** — an exemption is recorded for the child. The reason is in the **Exemption**
+  column.
+
+The row also names the overdue and due-soon doses, how many doses are on file, and the
+date of the last one.
+
+> **Note:** A child shows **Exempt** as soon as any one dose carries an exemption. Check the **Overdue** column on those rows — a partial exemption does not cover the rest of the schedule. See [Immunization exemptions](immunization-exemptions).
 
 ## Matching doses
 
@@ -35,3 +43,7 @@ reported overdue for a dose they were given, which is what naive matching did.
   [Filing an immunization record](filing-an-immunization-record).
 - A record sitting on file is not a recorded dose. A parent's upload does not clear a
   due flag until somebody reads the card and ticks the doses.
+
+See also: [Filing an immunization record](filing-an-immunization-record),
+[Immunization exemptions](immunization-exemptions),
+[Immunization due at age](immunization-due-age).

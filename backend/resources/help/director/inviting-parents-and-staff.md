@@ -6,7 +6,10 @@ order: 2
 
 # Inviting parents and staff
 
-When you invite someone to Kiddietrac, they receive an email with a temporary password. They can log in immediately.
+When you invite someone to Kiddietrac, they receive an invitation email. Most invitations
+carry a **Set my password** button, which works for 7 days; a few older screens still send a
+temporary password instead, which they must change the first time they sign in. Either way,
+nobody else ever sees their password.
 
 ## Inviting a parent
 
@@ -30,7 +33,7 @@ The parent gets an email like this:
 > Email: [their email]
 > Temporary password: aBc123dEf
 
-They click the link and log in. **Tell them to change their password immediately.**
+They follow the link, choose a password and are signed straight in. If their email shows a temporary password instead, they will be asked to change it at their first sign-in.
 
 ## Inviting a staff member (educator or director)
 
@@ -40,6 +43,32 @@ They click the link and log in. **Tell them to change their password immediately
    - **Educator** — uses the tablet view, can log activities, take photos, message parents
    - **Director** — full admin access including billing and compliance
 4. Click **Send invitation**
+
+## When a new staff member finishes onboarding
+
+Once an **educator, centre director or home visitor** completes their onboarding, they
+get a **staff welcome email**, once. Their centre's director(s) and your agency admins are
+copied, so management knows the new person is set up.
+
+It contains:
+
+- a warm welcome naming their role and centre;
+- **how your agency cares for children** — the "Our care" text from your
+  **Provider welcome** template, so you write your values once and parents and staff
+  read the same words;
+- a short tour of the portal features they will use every day;
+- a link to **Help & guides**, and who to ask (their director's name and contact).
+
+You can change the heading, welcome, first steps and sign-off under
+**Settings → Email templates → Staff welcome (educators & providers)**, and send yourself
+a test from there.
+
+[[show: #email-templates @ Staff welcome | Show me the staff welcome template]]
+
+![Editing the staff welcome email](https://api.kiddietrac.com/help-img/email-template-staff-welcome.png)
+
+??? Does the staff welcome go to parents? | No. Parents get the separate Provider welcome email that introduces their provider. The staff welcome only goes to the new staff member, with directors and admins copied.
+??? Can I resend it? | It is sent once, automatically. Send a test from the template editor to preview it.
 
 ## Three lists, not one
 

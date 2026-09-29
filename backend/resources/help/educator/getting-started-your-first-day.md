@@ -12,6 +12,12 @@ Welcome to the team! This guide gets you from your first login to confidently ru
 
 Your director creates your account and sends an email invitation to set your password. If you can't find it, check spam or ask your director to re-send it.
 
+Once you finish setting up your account, you'll receive a **welcome email** from your
+agency: how we care for children here, a short tour of the portal, and who to ask. Your
+director is copied on it, so they know you're ready.
+
+> **Tip:** after your first sign-in, add a **passkey** so you can sign in with your face or fingerprint instead of typing a password. See [Signing in with a passkey](passkeys).
+
 On a shared classroom tablet, always sign in as **yourself** — everything you log is recorded under your name, which is exactly how it should be for accountability.
 
 ## 2. Clock in

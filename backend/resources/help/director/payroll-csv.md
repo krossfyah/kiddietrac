@@ -10,7 +10,7 @@ Pull a pay-period CSV of every staff member's clocked hours. Drop straight into 
 ## How to run
 
 1. Sidebar → **Payroll**.
-2. Pick a date range (defaults to the current calendar month).
+2. Pick a date range (it defaults to the last 30 days).
 3. Click **Run** to see a per-staff summary, or **⤓ CSV** to download the file.
 
 ## What's included

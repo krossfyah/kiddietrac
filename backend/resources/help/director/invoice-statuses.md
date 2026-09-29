@@ -8,13 +8,17 @@ roles: agency_admin, centre_director, platform_admin
 
 ![Invoices, with future-dated ones marked Scheduled](https://api.kiddietrac.com/help-img/invoices-scheduled.png)
 
+Accounting and the payment schedules show the same coloured pill with the same word, so an invoice reads the same on both screens.
+
 | Status | Meaning |
 |---|---|
+| **Pending** | Not issued yet. A payment-schedule invoice waiting for its issue date. Nobody owes it yet. |
 | **Scheduled** | Issued, unpaid, and **not due yet**. Nothing has been missed. |
-| **Open** | Due now or already past its date, and unpaid. |
+| **Issued** | Issued, due now or already past its date, and unpaid. |
 | **Overdue** | Past its due date. |
-| **Partial** | Some money has been received against it. |
+| **Partly paid** | Some money has been received against it. |
 | **Paid** | Settled. |
+| **Refunded** | Money has been given back. |
 | **Void** | Cancelled. Carries no balance. |
 
 ## Why Scheduled exists
@@ -29,12 +33,14 @@ It is not stored. An invoice becomes due by the passage of time, so the status i
 
 Three statuses are deliberately never relabelled:
 
-- **Partial** — money has already been received; that fact outranks the calendar.
-- **Draft** — not issued at all, which is a different thing from not yet due.
+- **Partly paid** — money has already been received; that fact outranks the calendar.
+- **Pending** — not issued at all, which is a different thing from not yet due.
 - **Overdue** — past its due date by definition.
 
-An invoice due **today** stays Open. It is due; it just is not late.
+An invoice due **today** stays Issued. It is due; it just is not late.
 
 ## What it does not change
 
-Only the word changes. Outstanding totals still include scheduled money, because it is still owed eventually — the ledger reports **Overdue** separately when you want only what is late.
+Only the word changes. Outstanding totals still include scheduled money, because it is still owed eventually — the ledger reports **Overdue** separately when you want only what is late. **Pending** invoices are the exception: they have not been issued, so they are not counted as outstanding anywhere.
+
+See also: [Payment schedules](payment-plans) · [Accounting](accounting) · [Account ledgers](account-ledgers)

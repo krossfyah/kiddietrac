@@ -53,6 +53,13 @@ You can't yet mute individual categories from the app, but you can:
 
 We're adding per-category controls — until then, your phone's own notification settings give you fine control.
 
+## Texts and phone calls
+
+Separately from app notifications, your centre may **text** you (sign-in and sign-out,
+reminders, broadcasts) and, for urgent news like a closure, **phone** you with a recorded
+message. You choose which kinds you get under **Settings → Profile → Texts and phone
+calls** — see [Texts and phone calls](texts-and-phone-calls).
+
 ## A note on timing
 
 Educators log the day as it happens, in between caring for children. A quiet stretch doesn't mean nothing happened — it means their hands were full. Most photos and notes appear in bursts around nap time and the end of the day.
