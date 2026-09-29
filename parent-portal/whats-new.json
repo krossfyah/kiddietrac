@@ -1,380 +1,695 @@
 {
-  "updated": "2026-08-31",
-  "entries": [
-    {
-      "type": "new",
-      "date": "2026-08-30",
-      "icon": "📊",
-      "title": "Reports for educators",
-      "body": "Educators now have their own Reports screen: an attendance log, their own clock-in hours, observations and incidents — covering the room(s) they are assigned to. Pick a room, set a date range, print or export. Ask your director to assign your rooms if the list looks empty.",
-      "roles": [
-        "educator",
-        "centre_director",
-        "agency_admin"
-      ]
-    },
-    {
-      "type": "new",
-      "date": "2026-08-30",
-      "icon": "👥",
-      "title": "Group conversations in Messenger",
-      "body": "Start a group with several colleagues from + New chat → New group, or add people to a conversation you are already in — adding a third person turns a one-to-one into a group. Anyone added can read the whole history, so they arrive with the context. Rename a group, remove someone or leave from the member list at the top of the thread.",
-      "roles": [
-        "educator",
-        "centre_director",
-        "agency_admin",
-        "home_visitor"
-      ]
-    },
-    {
-      "type": "new",
-      "date": "2026-08-30",
-      "icon": "🗓️",
-      "title": "Filter the calendar by staff member",
-      "body": "The staff calendar can now be narrowed to one person — their shifts and their time off — alongside the existing filter for the role played on a shift. Opening a day still shows the whole day, so nothing is hidden while you are arranging cover.",
-      "roles": [
-        "centre_director",
-        "agency_admin"
-      ]
-    },
-    {
-      "type": "new",
-      "date": "2026-08-31",
-      "icon": "⏱",
-      "title": "The clock follows the rota",
-      "body": "Where a centre keeps a staff rota, an educator who is not on today's schedule is asked to speak to their director instead of clocking in. Centres that do not use the schedule are unaffected, and anyone already on shift can always clock out.",
-      "roles": [
-        "educator",
-        "centre_director",
-        "agency_admin"
-      ]
-    },
-    {
-      "type": "new",
-      "date": "2026-08-31",
-      "icon": "📜",
-      "title": "The audit log says what was deleted",
-      "body": "Deleting a sales lead now records which lead it was — name, contact and stage — rather than only that a deletion happened. Automatic overnight clock-outs also appear in the log properly now.",
-      "roles": [
-        "agency_admin",
-        "centre_director",
-        "auditor"
-      ]
-    },
-    {
-      "type": "new",
-      "date": "2026-08-05",
-      "icon": "🎛️",
-      "title": "Turn email on centre-by-centre",
-      "body": "New pre-boarding controls under Settings → Email settings: a master switch per agency, plus a switch for every centre and room. Set up a new agency quietly and turn email on only where you're live. The Agency overview now shows an email on/off badge for the agency and each centre."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-05",
-      "icon": "🏆",
-      "title": "Child awards & printable certificates",
-      "body": "Educators can celebrate a child with an award (daily/weekly/monthly); parents see it in their app. Print a professional portrait certificate — now stamped with your agency name and presented on behalf of the agency owner, ready to frame. Find Awards in the left menu."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-05",
-      "icon": "🕐",
-      "title": "Centre hours & capacity",
-      "body": "When you edit a centre you can now set its opening and closing time and the maximum number of children enrolled."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-05",
-      "icon": "🎨",
-      "title": "Clearer centres list",
-      "body": "The Centres & rooms list now shows colour-coded enrolled / families / staff counts and an email badge per centre, and it's moved to the top of the menu for quick access. Editing a centre opens right where you are instead of jumping screens."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-05",
-      "icon": "🖼️",
-      "title": "Faces in your activity feed",
-      "body": "The Agency overview activity feed now shows each child's or staff member's photo next to check-ins, clock-ins and more."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-05",
-      "icon": "👤",
-      "title": "Agency owner at a glance",
-      "body": "The Edit-agency window now shows the agency owner's name, photo and contact details."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-05",
-      "icon": "🗂️",
-      "title": "Your view, remembered",
-      "body": "Switch any list between card and table view and the portal remembers your preference across sections."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-10",
-      "icon": "💬",
-      "title": "Richer parent chat",
-      "body": "Parents can now send emoji, voice notes and photos, see everyone's avatar in the thread, and “nudge” the team for a quick reply."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-10",
-      "icon": "📧",
-      "title": "Missed-message email alerts",
-      "body": "If a chat message goes unread for 15 minutes, the intended recipients get an email so nothing slips through."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-10",
-      "icon": "🔔",
-      "title": "Custom notification sound",
-      "body": "The app now plays a branded KiddieTrac chime for push notifications on Android."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-10",
-      "icon": "🔒",
-      "title": "Security hardening",
-      "body": "Sign-out now fully clears the session on shared devices, and several tenant-isolation checks were tightened."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-09",
-      "icon": "📱",
-      "title": "Redesigned parent app",
-      "body": "A cleaner, faster mobile experience: an icon home screen, instant section switching, and a simple bottom bar with new-item counters."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-09",
-      "icon": "🔔",
-      "title": "Push notifications",
-      "body": "Parents and staff now get a phone notification — with sound and vibration — for new messages, invoices and photos, even when the app is closed."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-09",
-      "icon": "📷",
-      "title": "Photos in messages",
-      "body": "Parents can attach a photo to a message and start a brand-new message from the app."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-09",
-      "icon": "🎫",
-      "title": "QR check-in / out",
-      "body": "Parents scan the centre's QR code to check their child in or out — the code rotates daily for security."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-09",
-      "icon": "💳",
-      "title": "View & pay invoices",
-      "body": "Tap any invoice to see the full breakdown and pay it right from the parent app."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-09",
-      "icon": "🛟",
-      "title": "In-app support",
-      "body": "Parents can report an app issue or share feedback from a new Support section — it reaches your team instantly."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-09",
-      "icon": "🎂",
-      "title": "New dashboard widgets",
-      "body": "Your Agency overview now shows a month calendar, upcoming birthdays, and a Team-on-the-floor list — click a name to send a quick message."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🗄️",
-      "title": "Data Retention & Compliance",
-      "body": "Set how long each type of record is kept, plus privacy contacts and consent — under Settings."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🔔",
-      "title": "Automated billing reminders",
-      "body": "Schedule invoice and overdue-payment reminders to families under Billing → Reminders (off until you enable them)."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🛡️",
-      "title": "Security alerts & monitoring",
-      "body": "Automatic detection of suspicious sign-in activity, viewable under Settings → Security alerts."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🔑",
-      "title": "Single sign-on (Google & Microsoft)",
-      "body": "Staff and families can sign in with their Google or Microsoft account."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🧩",
-      "title": "Customizable dashboard",
-      "body": "Add, remove and drag-to-arrange the Business Insights widgets on your Agency overview."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🏫",
-      "title": "Centres or Rooms",
-      "body": "Choose whether the portal calls your facilities “Centres” or “Rooms” — Edit agency."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🌎",
-      "title": "Country-aware fields",
-      "body": "Address fields now match your country — State / ZIP code for the US, Province / Postal code for Canada, and more."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "🕐",
-      "title": "New top bar",
-      "body": "A greeting, live clock, local weather, full date, and quick shortcuts for messages, announcements, and the AI assistant."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-08",
-      "icon": "💬",
-      "title": "Slide-in notifications",
-      "body": "Get a friendly welcome on sign-in and a toast when new messages arrive."
-    },
-    {
-      "type": "new",
-      "date": "2026-07-05",
-      "icon": "💾",
-      "title": "Nightly verified backups",
-      "body": "Your database is now backed up automatically every night, with an integrity check."
-    },
-    {
-      "type": "new",
-      "date": "2026-06-28",
-      "icon": "📊",
-      "title": "Canned reports + exports",
-      "body": "Branded, date-ranged reports with PDF, Excel and CSV exports under Reports."
-    },
-    {
-      "type": "new",
-      "date": "2026-06-20",
-      "icon": "📥",
-      "title": "Collapsible sidebar",
-      "body": "Collapse the left menu to a slim icon rail for more room."
-    },
-    {
-      "type": "upcoming",
-      "date": "",
-      "icon": "🔐",
-      "title": "Two-factor enforcement for admins",
-      "body": "Require every administrator to use two-factor sign-in (rolling out after enrollment)."
-    },
-    {
-      "type": "upcoming",
-      "date": "",
-      "icon": "☁️",
-      "title": "Offsite backups",
-      "body": "Copy nightly backups to separate offsite storage for disaster recovery."
-    },
-    {
-      "type": "upcoming",
-      "date": "",
-      "icon": "🔴",
-      "title": "Live staff activity",
-      "body": "See staff sign-ins and clock-ins as live notifications."
-    },
-    {
-      "type": "upcoming",
-      "date": "",
-      "icon": "✅",
-      "title": "SOC 2 readiness report",
-      "body": "Formal audit-readiness milestone toward a SOC 2 report."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-19",
-      "icon": "📅",
-      "title": "The calendar is now the agency calendar",
-      "body": "Closures, vacations, trips, conferences and birthdays all on one grid. Click any event to open it, and use + Add to create one without leaving the calendar."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-19",
-      "icon": "🚪",
-      "title": "Room assignments",
-      "body": "Put every educator in their rooms on one page. Screens that work room by room stop falling back to the whole centre."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-19",
-      "icon": "💉",
-      "title": "Immunization report",
-      "body": "Every child, what they have had and what is due, matched against your due-at-age schedule."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-19",
-      "icon": "📄",
-      "title": "Document templates",
-      "body": "Design your own payslips, invoices and receipts, or import a design you already use. No release needed to change how a document looks."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-19",
-      "icon": "🔔",
-      "title": "Mark a notification unread",
-      "body": "Opened something by accident? Put it back. Row actions now sit behind the usual kebab menu."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-18",
-      "icon": "🧾",
-      "title": "Payroll documents",
-      "body": "Payslips are stored as issued rather than recalculated, so what somebody was told they were paid stays that way. iLearn payroll syncs across."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-18",
-      "icon": "⏰",
-      "title": "Closure reminders",
-      "body": "Families and educators are reminded 5, 3 and 1 days before a closure, worded for whoever is reading. Set the lead times in Email settings."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-18",
-      "icon": "📊",
-      "title": "Educator scorecard in the daily digest",
-      "body": "The director digest now shows how each educator is doing on recording, clock-outs and sign-outs, plus any child left signed in."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-18",
-      "icon": "🌳",
-      "title": "Outdoor play as a logged moment",
-      "body": "Educators can log outdoor play like a nap or a meal, so it reaches the parent summary and licensing questions have an answer."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-18",
-      "icon": "📇",
-      "title": "Website subscribers",
-      "body": "Manage everyone who signed up through your public site, with a real unsubscribe record and confirmation emails both ways."
-    },
-    {
-      "type": "new",
-      "date": "2026-08-17",
-      "icon": "🧑‍💼",
-      "title": "Invoices for educators and contractors",
-      "body": "Bill educators as contractors from their hours or a flat amount, with tax and line items, all from the bulk invoice run."
-    }
-  ]
+ "updated": "2026-09-29",
+ "entries": [
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "🛡️",
+   "title": "Safe Arrival",
+   "body": "If a child who is scheduled today hasn't been signed in by their expected drop-off time and no absence was reported, KiddieTrac asks the parents — and if they don't answer, alerts the room's educators and the director. The new Safe Arrival board shows who still needs a call. An agency admin turns it on under Operations → Safe Arrival → Settings.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "💵",
+   "title": "Subsidies: CWELCC and provincial",
+   "body": "\"CWELCC subsidies\" is now Subsidies, with a CWELCC tab and a new Provincial subsidy tab. Record a child's provincial fee subsidy per month or per day, attach the government's approval letter, and it comes off the family's invoice automatically. Every family record now shows its full subsidy history.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "📞",
+   "title": "Announcements by phone call — and scheduling that works",
+   "body": "Directors and admins can tick 📞 Voice call on an announcement to have it read aloud to families by phone, for the reasons your agency allows. Scheduled announcements now go out at the time you pick, in your agency's time zone.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "💬",
+   "title": "Choose which texts and calls you get",
+   "body": "Everyone can now choose which kinds of text messages and phone calls they receive — sign-in texts, reminders, announcements, broadcasts — or say \"Don't phone me at all\". Find it in your profile under Texts and phone calls.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator",
+    "home_visitor",
+    "guardian"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "📡",
+   "title": "Voice calls: choose reasons, test and track costs",
+   "body": "Carrier settings now let you choose which reasons may place announcement calls, pick the voice, place a test call with your own message to any number you control, and see your Telnyx balance and 30-day usage.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "🎉",
+   "title": "Welcome email for new staff",
+   "body": "When an educator, director or home visitor finishes onboarding, they get a welcome email with your agency's care values, a tour of the portal and where to find help — with their director and the agency admins copied. Edit the wording in Email templates.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "📚",
+   "title": "Interactive help guides",
+   "body": "Help & guides now has \"Show me\" buttons that take you to the right screen and point at the control, step-by-step checklists, quick Q&As and screenshots — plus new guides for everything added this month.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator",
+    "home_visitor",
+    "guardian"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-28",
+   "icon": "🔑",
+   "title": "Sign in with a passkey",
+   "body": "Sign in with your face, fingerprint or device PIN instead of typing a password. Add a passkey from Settings → Security (or accept the offer after you sign in). Your password still works. Not available inside the Android app yet.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator",
+    "home_visitor",
+    "guardian"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-24",
+   "icon": "💬",
+   "title": "Text replies arrive in Messenger",
+   "body": "When a parent replies to a text from your agency, the reply appears in Messenger as a conversation, and your answer goes back to their phone as a text. STOP from a phone now stops texts to every account on that phone.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-24",
+   "icon": "💉",
+   "title": "Immunization exemptions and reminders",
+   "body": "Exempt a dose from a child's schedule, or every dose an exemption form covers in one step. Optional reminders tell families (and your team) which immunizations are due, each person only about their own children.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-23",
+   "icon": "✍️",
+   "title": "Form packages, file requests and counter-signing",
+   "body": "Send several forms together as a package, ask families for files with a no-password link, and review completed forms — counter-sign them, or send one back for correction with a note.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-23",
+   "icon": "📢",
+   "title": "Announcements to exactly who you mean",
+   "body": "Choose Where (a centre or everywhere) and Who (parents, educators, contractors, admins or everyone), and attach a picture that also goes out by text message.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-23",
+   "icon": "🕐",
+   "title": "Part-day time off",
+   "body": "Request time off for part of a day, not just whole days. Directors can approve straight from the email.",
+   "roles": [
+    "educator",
+    "home_visitor",
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-23",
+   "icon": "🎫",
+   "title": "Support tickets with files and history",
+   "body": "Attach screenshots and files to a support ticket, follow its full history, and reopen it if the problem comes back.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-23",
+   "icon": "🔐",
+   "title": "Password expiry reminders",
+   "body": "Passwords now expire every 90 days, with reminders 14, 7 and 1 days ahead. Change yours any time in Settings → Security.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-23",
+   "icon": "🧾",
+   "title": "Invoice numbering, surcharges and scheduled issuing",
+   "body": "Set your own invoice number format, add a card or EFT service fee, and have payment-schedule invoices issued automatically a set number of days before they are due. Card payments and refunds through Helcim are supported.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-23",
+   "icon": "💳",
+   "title": "More ways to pay",
+   "body": "Pay your invoices by card, Interac or bank transfer, and pay part of an invoice if you need to. A small service fee may apply to card payments — you'll see it before you pay.",
+   "roles": [
+    "guardian"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-17",
+   "icon": "🎨",
+   "title": "Twelve invoice styles",
+   "body": "Choose how your invoices look — including a style matching your previous invoices — under Branding, alongside your logo and colours.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-16",
+   "icon": "👤",
+   "title": "Your profile, in one place",
+   "body": "My profile now opens your own staff record, with tabs for your details, documents, security, and texts and calls.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-15",
+   "icon": "🆘",
+   "title": "Emergency card inside the portal",
+   "body": "A child's emergency card now opens right inside the portal, fits a phone, and can be printed from the app.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-15",
+   "icon": "💉",
+   "title": "File an immunization record in one step",
+   "body": "One filing wizard, from the child's record or the Immunizations section, records the doses and files the document together. Records open in the portal's panel and can be printed.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-14",
+   "icon": "🏫",
+   "title": "Room assignments and user tabs",
+   "body": "See every educator's rooms at a glance in a matrix (edit when you choose to), and find people faster in User management with Active, Invited and De-boarded tabs.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-10",
+   "icon": "🎙️",
+   "title": "Voice notes in Messenger",
+   "body": "Record a voice note right inside a conversation and send it — handy when your hands are full.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-10",
+   "icon": "💰",
+   "title": "Payroll page for educators",
+   "body": "My hours is now Payroll: your hours and your pay in two tabs, and a place to say where your pay should go.",
+   "roles": [
+    "educator",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-04",
+   "icon": "📒",
+   "title": "Account ledgers and statements",
+   "body": "Open any family's account as a ledger, see what is due this month, and send a statement by email with a PDF attached.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-04",
+   "icon": "📅",
+   "title": "Payment schedules",
+   "body": "Payment plans are now payment schedules: review each instalment line by line, then issue the invoices — and see which invoice each instalment became.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-04",
+   "icon": "📇",
+   "title": "All contacts",
+   "body": "One directory for everyone: families, staff, contractors and companies, searchable, with a Company column.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-04",
+   "icon": "💵",
+   "title": "Manual payroll, contractors included",
+   "body": "Run payroll by hand for staff and contractors. KiddieTrac never suggests a rate — you enter what was agreed.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-08-31",
+   "icon": "⏱",
+   "title": "The clock follows the rota",
+   "body": "Where a centre keeps a staff rota, an educator who is not on today's schedule is asked to speak to their director instead of clocking in. Centres that do not use the schedule are unaffected, and anyone already on shift can always clock out.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-08-31",
+   "icon": "📜",
+   "title": "The audit log says what was deleted",
+   "body": "Deleting a sales lead now records which lead it was — name, contact and stage — rather than only that a deletion happened. Automatic overnight clock-outs also appear in the log properly now.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "auditor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-08-30",
+   "icon": "📊",
+   "title": "Reports for educators",
+   "body": "Educators now have their own Reports screen: an attendance log, their own clock-in hours, observations and incidents — covering the room(s) they are assigned to. Pick a room, set a date range, print or export. Ask your director to assign your rooms if the list looks empty.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-08-30",
+   "icon": "👥",
+   "title": "Group conversations in Messenger",
+   "body": "Start a group with several colleagues from + New chat → New group, or add people to a conversation you are already in — adding a third person turns a one-to-one into a group. Anyone added can read the whole history, so they arrive with the context. Rename a group, remove someone or leave from the member list at the top of the thread.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "agency_admin",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-08-30",
+   "icon": "🗓️",
+   "title": "Filter the calendar by staff member",
+   "body": "The staff calendar can now be narrowed to one person — their shifts and their time off — alongside the existing filter for the role played on a shift. Opening a day still shows the whole day, so nothing is hidden while you are arranging cover.",
+   "roles": [
+    "centre_director",
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-08-19",
+   "icon": "📅",
+   "title": "The calendar is now the agency calendar",
+   "body": "Closures, vacations, trips, conferences and birthdays all on one grid. Click any event to open it, and use + Add to create one without leaving the calendar."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-19",
+   "icon": "🚪",
+   "title": "Room assignments",
+   "body": "Put every educator in their rooms on one page. Screens that work room by room stop falling back to the whole centre."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-19",
+   "icon": "💉",
+   "title": "Immunization report",
+   "body": "Every child, what they have had and what is due, matched against your due-at-age schedule."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-19",
+   "icon": "📄",
+   "title": "Document templates",
+   "body": "Design your own payslips, invoices and receipts, or import a design you already use. No release needed to change how a document looks."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-19",
+   "icon": "🔔",
+   "title": "Mark a notification unread",
+   "body": "Opened something by accident? Put it back. Row actions now sit behind the usual kebab menu."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-18",
+   "icon": "🧾",
+   "title": "Payroll documents",
+   "body": "Payslips are stored as issued rather than recalculated, so what somebody was told they were paid stays that way. iLearn payroll syncs across."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-18",
+   "icon": "⏰",
+   "title": "Closure reminders",
+   "body": "Families and educators are reminded 5, 3 and 1 days before a closure, worded for whoever is reading. Set the lead times in Email settings."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-18",
+   "icon": "📊",
+   "title": "Educator scorecard in the daily digest",
+   "body": "The director digest now shows how each educator is doing on recording, clock-outs and sign-outs, plus any child left signed in."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-18",
+   "icon": "🌳",
+   "title": "Outdoor play as a logged moment",
+   "body": "Educators can log outdoor play like a nap or a meal, so it reaches the parent summary and licensing questions have an answer."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-18",
+   "icon": "📇",
+   "title": "Website subscribers",
+   "body": "Manage everyone who signed up through your public site, with a real unsubscribe record and confirmation emails both ways."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-17",
+   "icon": "🧑‍💼",
+   "title": "Invoices for educators and contractors",
+   "body": "Bill educators as contractors from their hours or a flat amount, with tax and line items, all from the bulk invoice run."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-05",
+   "icon": "🎛️",
+   "title": "Turn email on centre-by-centre",
+   "body": "New pre-boarding controls under Settings → Email settings: a master switch per agency, plus a switch for every centre and room. Set up a new agency quietly and turn email on only where you're live. The Agency overview now shows an email on/off badge for the agency and each centre."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-05",
+   "icon": "🏆",
+   "title": "Child awards & printable certificates",
+   "body": "Educators can celebrate a child with an award (daily/weekly/monthly); parents see it in their app. Print a professional portrait certificate — now stamped with your agency name and presented on behalf of the agency owner, ready to frame. Find Awards in the left menu."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-05",
+   "icon": "🕐",
+   "title": "Centre hours & capacity",
+   "body": "When you edit a centre you can now set its opening and closing time and the maximum number of children enrolled."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-05",
+   "icon": "🎨",
+   "title": "Clearer centres list",
+   "body": "The Centres & rooms list now shows colour-coded enrolled / families / staff counts and an email badge per centre, and it's moved to the top of the menu for quick access. Editing a centre opens right where you are instead of jumping screens."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-05",
+   "icon": "🖼️",
+   "title": "Faces in your activity feed",
+   "body": "The Agency overview activity feed now shows each child's or staff member's photo next to check-ins, clock-ins and more."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-05",
+   "icon": "👤",
+   "title": "Agency owner at a glance",
+   "body": "The Edit-agency window now shows the agency owner's name, photo and contact details."
+  },
+  {
+   "type": "new",
+   "date": "2026-08-05",
+   "icon": "🗂️",
+   "title": "Your view, remembered",
+   "body": "Switch any list between card and table view and the portal remembers your preference across sections."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-10",
+   "icon": "💬",
+   "title": "Richer parent chat",
+   "body": "Parents can now send emoji, voice notes and photos, see everyone's avatar in the thread, and “nudge” the team for a quick reply."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-10",
+   "icon": "📧",
+   "title": "Missed-message email alerts",
+   "body": "If a chat message goes unread for 15 minutes, the intended recipients get an email so nothing slips through."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-10",
+   "icon": "🔔",
+   "title": "Custom notification sound",
+   "body": "The app now plays a branded KiddieTrac chime for push notifications on Android."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-10",
+   "icon": "🔒",
+   "title": "Security hardening",
+   "body": "Sign-out now fully clears the session on shared devices, and several tenant-isolation checks were tightened."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-09",
+   "icon": "📱",
+   "title": "Redesigned parent app",
+   "body": "A cleaner, faster mobile experience: an icon home screen, instant section switching, and a simple bottom bar with new-item counters."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-09",
+   "icon": "🔔",
+   "title": "Push notifications",
+   "body": "Parents and staff now get a phone notification — with sound and vibration — for new messages, invoices and photos, even when the app is closed."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-09",
+   "icon": "📷",
+   "title": "Photos in messages",
+   "body": "Parents can attach a photo to a message and start a brand-new message from the app."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-09",
+   "icon": "🎫",
+   "title": "QR check-in / out",
+   "body": "Parents scan the centre's QR code to check their child in or out — the code rotates daily for security."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-09",
+   "icon": "💳",
+   "title": "View & pay invoices",
+   "body": "Tap any invoice to see the full breakdown and pay it right from the parent app."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-09",
+   "icon": "🛟",
+   "title": "In-app support",
+   "body": "Parents can report an app issue or share feedback from a new Support section — it reaches your team instantly."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-09",
+   "icon": "🎂",
+   "title": "New dashboard widgets",
+   "body": "Your Agency overview now shows a month calendar, upcoming birthdays, and a Team-on-the-floor list — click a name to send a quick message."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🗄️",
+   "title": "Data Retention & Compliance",
+   "body": "Set how long each type of record is kept, plus privacy contacts and consent — under Settings."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🔔",
+   "title": "Automated billing reminders",
+   "body": "Schedule invoice and overdue-payment reminders to families under Billing → Reminders (off until you enable them)."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🛡️",
+   "title": "Security alerts & monitoring",
+   "body": "Automatic detection of suspicious sign-in activity, viewable under Settings → Security alerts."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🔑",
+   "title": "Single sign-on (Google & Microsoft)",
+   "body": "Staff and families can sign in with their Google or Microsoft account."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🧩",
+   "title": "Customizable dashboard",
+   "body": "Add, remove and drag-to-arrange the Business Insights widgets on your Agency overview."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🏫",
+   "title": "Centres or Rooms",
+   "body": "Choose whether the portal calls your facilities “Centres” or “Rooms” — Edit agency."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🌎",
+   "title": "Country-aware fields",
+   "body": "Address fields now match your country — State / ZIP code for the US, Province / Postal code for Canada, and more."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "🕐",
+   "title": "New top bar",
+   "body": "A greeting, live clock, local weather, full date, and quick shortcuts for messages, announcements, and the AI assistant."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-08",
+   "icon": "💬",
+   "title": "Slide-in notifications",
+   "body": "Get a friendly welcome on sign-in and a toast when new messages arrive."
+  },
+  {
+   "type": "new",
+   "date": "2026-07-05",
+   "icon": "💾",
+   "title": "Nightly verified backups",
+   "body": "Your database is now backed up automatically every night, with an integrity check."
+  },
+  {
+   "type": "new",
+   "date": "2026-06-28",
+   "icon": "📊",
+   "title": "Canned reports + exports",
+   "body": "Branded, date-ranged reports with PDF, Excel and CSV exports under Reports."
+  },
+  {
+   "type": "new",
+   "date": "2026-06-20",
+   "icon": "📥",
+   "title": "Collapsible sidebar",
+   "body": "Collapse the left menu to a slim icon rail for more room."
+  },
+  {
+   "type": "upcoming",
+   "date": "",
+   "icon": "☁️",
+   "title": "Offsite backups",
+   "body": "Copy nightly backups to separate offsite storage for disaster recovery."
+  },
+  {
+   "type": "upcoming",
+   "date": "",
+   "icon": "🔴",
+   "title": "Live staff activity",
+   "body": "See staff sign-ins and clock-ins as live notifications."
+  },
+  {
+   "type": "upcoming",
+   "date": "",
+   "icon": "✅",
+   "title": "SOC 2 readiness report",
+   "body": "Formal audit-readiness milestone toward a SOC 2 report."
+  }
+ ]
 }

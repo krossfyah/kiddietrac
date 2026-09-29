@@ -396,3 +396,7 @@ Schedule::command('announcements:send-scheduled')->everyMinute()->withoutOverlap
 /* Safe Arrival (2026-09-29): ask parents about children who have not arrived, then alert
    staff. Only agencies that switched it on; see App\Support\SafeArrival. */
 Schedule::command('kiddietrac:safe-arrival')->everyFiveMinutes()->withoutOverlapping(10)->runInBackground()->onOneServer();
+
+/* Weekly What's new email (2026-09-29): Mondays 9am, only when there is something new,
+   each person only what applies to their role. See WhatsNewDigestCommand. */
+Schedule::command('kiddietrac:whats-new-digest')->weeklyOn(1, '09:00')->timezone('America/Toronto')->withoutOverlapping(60)->onOneServer();
