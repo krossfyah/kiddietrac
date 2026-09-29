@@ -2581,6 +2581,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/compliance/subsidies/{id}/documents',        [\App\Http\Controllers\Api\SubsidyController::class, 'uploadDocuments'])->where('id', '[0-9]+');
         Route::get   ('/compliance/subsidies/{id}/documents/{doc}',  [\App\Http\Controllers\Api\SubsidyController::class, 'downloadDocument'])->where(['id' => '[0-9]+', 'doc' => '[0-9]+']);
         Route::delete('/compliance/subsidies/{id}/documents/{doc}',  [\App\Http\Controllers\Api\SubsidyController::class, 'removeDocument'])->where(['id' => '[0-9]+', 'doc' => '[0-9]+']);
+    });
+    // Safe Arrival (2026-09-29): the day's board, closing a case, and the agency's settings.
+    Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/safe-arrival/today',              [\App\Http\Controllers\Api\SafeArrivalController::class, 'today']);
+        Route::post('/safe-arrival/{childId}/resolve',  [\App\Http\Controllers\Api\SafeArrivalController::class, 'resolve'])->where('childId', '[0-9]+');
+        Route::get ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'settings']);
+        Route::put ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'saveSettings']);
         // The family record's subsidy history, and CWELCC enrolment changes as dated periods.
         Route::get   ('/compliance/families/{id}/subsidies', [\App\Http\Controllers\Api\SubsidyController::class, 'familyHistory'])->where('id', '[0-9]+');
         Route::post  ('/compliance/families/{id}/cwelcc',    [\App\Http\Controllers\Api\SubsidyController::class, 'familyCwelcc'])->where('id', '[0-9]+');

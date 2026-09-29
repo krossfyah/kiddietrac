@@ -235,6 +235,7 @@
         { label: 'Operations', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
+          { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
@@ -422,6 +423,7 @@
         { label: 'Operations', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
+          { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'closures',       label: 'Closures',         icon: '🗓' },
           { hash: 'today',          label: 'Today',            icon: '✨' },
@@ -1009,6 +1011,7 @@
     'inspection': 'Walk the licensing checklist before an inspector does.',
     'renewals': 'Licences and certificates coming up for renewal.',
     'cwelcc': 'CWELCC and provincial fee subsidies.',
+    'safe-arrival': 'Every scheduled child, accounted for.',
     'audit-logs': 'Every change made in the portal, and by whom.',
     'security-alerts': 'Sign-in anomalies and security events.',
     'birthday-settings': 'Warm notes when a child or colleague has a birthday coming up.',

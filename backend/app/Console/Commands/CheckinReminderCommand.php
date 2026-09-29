@@ -77,6 +77,11 @@ class CheckinReminderCommand extends Command
             }
             // Never nag a LIVE agency's parents while we are testing. This command
             // reached 39 real iLearn families before this guard existed.
+            // Safe Arrival replaces the morning reminder for agencies that switched it on:
+            // it asks at each child's own expected time, only on their scheduled days.
+            if ($window === 'morning' && \App\Support\SafeArrival::enabled((int) $child->agency_id)) {
+                continue;
+            }
             if (\App\Support\Suppression::isAgency((int) $child->agency_id)) {
                 continue;
             }

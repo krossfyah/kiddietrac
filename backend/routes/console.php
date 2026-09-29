@@ -392,3 +392,7 @@ Schedule::command('platform:billing-run')->dailyAt('06:00')->withoutOverlapping(
 /* Scheduled announcements (2026-09-29): nothing sent them before this. Every minute;
    each row is claimed before delivery so an overlapping run cannot send it twice. */
 Schedule::command('announcements:send-scheduled')->everyMinute()->withoutOverlapping(5);
+
+/* Safe Arrival (2026-09-29): ask parents about children who have not arrived, then alert
+   staff. Only agencies that switched it on; see App\Support\SafeArrival. */
+Schedule::command('kiddietrac:safe-arrival')->everyFiveMinutes()->withoutOverlapping(10)->runInBackground()->onOneServer();
