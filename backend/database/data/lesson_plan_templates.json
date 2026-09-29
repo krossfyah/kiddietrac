@@ -1,0 +1,1946 @@
+[
+  {
+    "title": "All About Me",
+    "theme": "All About Me: my body, my name, my family and the things I love",
+    "age_group": "toddler",
+    "description": "Toddlers explore their names, faces, bodies and favourite things, building a sense of belonging as they see themselves and their families reflected in the room.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Hello Song With Names",
+          "domain": "social_emotional",
+          "notes": "Sing a hello song that names each child and educator, pausing so children can wave or clap when they hear their name. Show each child's photo as you sing. Adaptation: for children not yet speaking, invite a wave, sign or smile; to extend, ask older toddlers to say a friend's name."
+        },
+        {
+          "time": "10:30",
+          "title": "Mirror Faces",
+          "domain": "cognitive",
+          "notes": "Set out unbreakable acrylic mirrors at child height. Point to and name eyes, nose, mouth and ears together, then make happy, silly and surprised faces. Materials: safety mirrors, soft mat. Adaptation: for infants or young toddlers, use one large floor mirror during tummy time or sitting play."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Name Chalk Walk",
+          "domain": "outdoor",
+          "notes": "Outside, trace around each child's shoes or hands with chunky sidewalk chalk and print their name beside it. Walk the path of names together and find your own. Adaptation: for children who dislike sitting still, let them scribble freely beside the tracing; to extend, invite them to add colour to their own outline."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Body Parts Board Book",
+          "domain": "language_literacy",
+          "notes": "Read a sturdy board book about body parts, pausing for children to point to their own head, toes, tummy and hands. Materials: board books with diverse children pictured. Adaptation: use a puppet to point for children who are shy; to extend, ask 'What do your feet do?'"
+        },
+        {
+          "time": "10:30",
+          "title": "Head, Shoulders, Knees and Toes",
+          "domain": "physical",
+          "notes": "Sing and move slowly through the song, then speed up and slow down. Add stretching up high and crouching low. Adaptation: children using mobility aids can do arm and head movements while seated; to extend, add new body parts like elbows and heels."
+        },
+        {
+          "time": "15:00",
+          "title": "Handwashing Helpers",
+          "domain": "self_care",
+          "notes": "Practise handwashing with a picture sequence posted at the sink: wet, soap, rub, rinse, dry. Sing a short washing song for 20 seconds. Adaptation: offer hand-over-hand support for younger toddlers; to extend, let confident children show a friend each step."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Family Photo Circle",
+          "domain": "social_emotional",
+          "notes": "Look at family photos families have shared (any family shape: one parent, two parents, grandparents, guardians, foster families). Name who is in each picture. Adaptation: if a family has not sent a photo, invite the child to draw or choose a picture of someone special; keep the circle short for younger toddlers."
+        },
+        {
+          "time": "10:30",
+          "title": "Handprint Painting",
+          "domain": "creative_arts",
+          "notes": "Offer washable, non-toxic paint on large paper for handprints and free painting. Label each print with the child's name. Materials: smocks, washable paint, wipes. Adaptation: for children who dislike messy textures, offer a paintbrush or paint inside a sealed zip bag to squish; to extend, compare big and small hands."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Shadow Play",
+          "domain": "outdoor",
+          "notes": "On a sunny afternoon, find and move your shadows: make them tall, small, waving and jumping. On cloudy days, play follow-the-leader movements instead. Adaptation: hold hands with children who are unsteady walkers; to extend, trace a shadow with chalk and come back later to see if it moved."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "My Favourite Things Basket",
+          "domain": "language_literacy",
+          "notes": "Each child picks a favourite toy or item from the room to place in a basket. Name each item and who chose it, modelling simple words like 'ball' or 'soft bear'. Adaptation: accept pointing or signing as a choice; to extend, ask 'Why do you like it?'"
+        },
+        {
+          "time": "10:30",
+          "title": "Big and Small Sorting",
+          "domain": "cognitive",
+          "notes": "Sort large, safe items (chunky blocks, big and little stuffed animals, adult and child shoes) into 'big' and 'small' baskets. Use only items larger than a choke tube. Adaptation: start with just two very different items; to extend, add a 'medium' basket."
+        },
+        {
+          "time": "15:00",
+          "title": "Dance Party Freeze",
+          "domain": "physical",
+          "notes": "Play upbeat music from many cultures and dance, freezing when the music stops. Adaptation: children who prefer to watch can shake a sealed shaker bottle or clap; to extend, freeze in a shape like a star or ball."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Growing Chart Measuring",
+          "domain": "cognitive",
+          "notes": "Measure each child against a wall chart using a paper strip or ribbon, and write their name beside it. Talk about growing taller. Adaptation: measure lying down for children who cannot stand, or measure hands and feet instead; to extend, compare with a stuffed animal."
+        },
+        {
+          "time": "10:30",
+          "title": "Self-Portrait Collage",
+          "domain": "creative_arts",
+          "notes": "Offer a large paper face outline and pre-cut paper pieces, fabric scraps and large yarn pieces to glue with glue sticks. Provide skin-tone crayons and paper in many shades. Adaptation: avoid small loose pieces for mouthing toddlers and use large pieces only; to extend, add a family member beside them."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Ball Rolling Circle",
+          "domain": "outdoor",
+          "notes": "Sit in a circle outside and roll a large soft ball to a friend while saying their name. Adaptation: very young toddlers can sit on an educator's lap to roll together; to extend, stand farther apart or roll a second ball."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Feelings & Friends",
+    "theme": "Feelings and Friends: naming emotions and learning to play together",
+    "age_group": "toddler",
+    "description": "Toddlers begin to name big feelings, notice how friends feel and practise simple ways to play together, supporting well-being and belonging.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Feelings Faces Photos",
+          "domain": "social_emotional",
+          "notes": "Show large photos of real children (of varied backgrounds and abilities) looking happy, sad, angry and scared. Name each feeling and make the face together. Adaptation: start with just happy and sad for younger toddlers; to extend, ask 'What makes you happy?'"
+        },
+        {
+          "time": "10:30",
+          "title": "Happy and Sad Board Book",
+          "domain": "language_literacy",
+          "notes": "Read a simple board book about feelings, pointing to faces and naming emotions. Pause so children can point or copy the face. Adaptation: use sign language for key feeling words; to extend, ask what the character could do to feel better."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Bubble Chase",
+          "domain": "outdoor",
+          "notes": "Blow bubbles outdoors for children to chase, pop and watch float. Talk about how it feels: excited, happy, calm. Adaptation: seated children can reach for bubbles blown close to them; supervise so children do not drink the bubble mix; to extend, let older toddlers try blowing with a large wand."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Calm Down Breathing",
+          "domain": "self_care",
+          "notes": "Practise 'smell the flower, blow out the candle' breathing with a real or picture flower. Introduce a calm corner with soft cushions and board books. Adaptation: hold a hand on the child's tummy so they feel breathing; to extend, try breathing with a feather to watch it move."
+        },
+        {
+          "time": "10:30",
+          "title": "Feelings Painting to Music",
+          "domain": "creative_arts",
+          "notes": "Play calm music, then lively music, while children paint freely with big brushes. Talk about how the music feels. Materials: washable paint, large paper, smocks. Adaptation: offer thick crayons for children who avoid paint; to extend, ask what colour a happy song might be."
+        },
+        {
+          "time": "15:00",
+          "title": "Rocking Boat Song",
+          "domain": "physical",
+          "notes": "Sit facing a partner or educator, hold hands and rock back and forth while singing 'Row, Row, Row Your Boat'. Adaptation: children who prefer not to hold hands can hold a scarf between them; to extend, add fast and slow rowing."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Friend Photo Match",
+          "domain": "social_emotional",
+          "notes": "Show photos of each child and ask 'Where is your friend?' Children find the friend in the room and wave. Adaptation: pair photo cards with names spoken slowly for new children; to extend, have children hand the photo to the friend."
+        },
+        {
+          "time": "10:30",
+          "title": "Sharing Play Dough",
+          "domain": "cognitive",
+          "notes": "Offer one large lump of homemade play dough (check allergy lists; use gluten-free dough if needed) for two or three children to share with rolling pins and cutters. Model turn-taking words like 'my turn, your turn'. Adaptation: give each child their own portion if waiting is too hard; supervise closely so dough is not eaten."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Wagon Rides",
+          "domain": "outdoor",
+          "notes": "Take turns pulling friends in a wagon or pushing a toy cart on the playground, practising 'wait' and 'go' words. Adaptation: educators pull for younger toddlers; to extend, older toddlers pull a stuffed animal passenger together."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "If You're Happy and You Know It",
+          "domain": "social_emotional",
+          "notes": "Sing the song with verses for happy (clap), sad (boo hoo), angry (stomp) and sleepy (yawn). Adaptation: offer a picture card for each verse for children who are non-verbal; to extend, let a child choose the next feeling."
+        },
+        {
+          "time": "10:30",
+          "title": "Stuffed Animal Care Station",
+          "domain": "self_care",
+          "notes": "Set up baby dolls and stuffed animals with blankets, bandages and brushes. Children feed, cover and comfort them, practising caring words. Include dolls with varied skin tones and abilities. Adaptation: model one step at a time for younger toddlers; to extend, ask 'How is teddy feeling?'"
+        },
+        {
+          "time": "15:00",
+          "title": "Feelings Drum Circle",
+          "domain": "creative_arts",
+          "notes": "Use hand drums or upside-down pots to drum loud for angry, soft for sleepy and fast for excited. Adaptation: children sensitive to noise can use a soft pillow drum or ear defenders; to extend, let children lead and others copy."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Friendship Hugs or High-Fives",
+          "domain": "social_emotional",
+          "notes": "Children choose how to greet a friend: wave, high-five, fist bump or hug, and friends can say 'no thank you'. Talk about asking first. Adaptation: use a choice board with pictures; to extend, ask children to notice how their friend responded."
+        },
+        {
+          "time": "10:30",
+          "title": "Tunnel Crawl Together",
+          "domain": "physical",
+          "notes": "Set up a soft play tunnel and crawl through one at a time, cheering for each friend when they come out. Adaptation: shorten the tunnel or keep an end open for children who feel unsure; to extend, add a soft mat obstacle after the tunnel."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Nature Friends Walk",
+          "domain": "outdoor",
+          "notes": "Walk around the yard or neighbourhood holding a walking rope, saying hello to birds, trees and neighbours. Adaptation: use a stroller or buggy for children who tire; to extend, stop and listen for three sounds."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Leaves & Trees",
+    "theme": "Leaves and Trees: exploring colours, textures and sounds of fall",
+    "age_group": "toddler",
+    "description": "Toddlers use their senses to explore fall leaves, bark and trees in the yard, building curiosity about the changing season in Ontario.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Leaf Basket Discovery",
+          "domain": "cognitive",
+          "notes": "Bring in a basket of large, clean fall leaves collected from outside. Children touch, crunch and name colours: red, yellow, orange, brown. Adaptation: supervise so leaves are not eaten and use only large leaves; to extend, sort into two colour baskets."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Leaf Pile Play",
+          "domain": "outdoor",
+          "notes": "Rake leaves into a low pile in a checked, clear area and let children jump, kick and toss leaves. Check the pile first for sticks and litter. Adaptation: seated children can have leaves showered gently around them; to extend, play hide-a-toy in the pile."
+        },
+        {
+          "time": "15:00",
+          "title": "Leaves Are Falling Song",
+          "domain": "physical",
+          "notes": "Sing a simple leaf song while fluttering scarves down to the floor like falling leaves. Adaptation: children can wave scarves while seated; to extend, blow like the wind and spin slowly."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Tree Picture Book",
+          "domain": "language_literacy",
+          "notes": "Read a board book about trees in fall. Name trunk, branches and leaves, and point outside to real trees. Adaptation: bring a real leaf to hold during the story; to extend, ask children to point to the tallest tree outside."
+        },
+        {
+          "time": "10:30",
+          "title": "Leaf Contact Paper Collage",
+          "domain": "creative_arts",
+          "notes": "Tape clear contact paper sticky side up to a low window or table. Children press large leaves and tissue paper onto it. Adaptation: for children who dislike stickiness, offer tongs or large leaves to hold by the stem; to extend, cover and hang as a sun catcher."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Tree Hug and Bark Feel",
+          "domain": "outdoor",
+          "notes": "Visit a tree in the yard or park. Hug it, feel the bark and listen to the leaves rustle. Adaptation: carry or support children who cannot reach; to extend, compare bark on two different trees."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Crunchy Leaf Sounds",
+          "domain": "cognitive",
+          "notes": "Crunch dry leaves in hands, then compare with soft wet leaves. Use words like crunchy, soft, wet and dry. Adaptation: place leaves in a sealed clear bag for children who prefer not to touch; to extend, crunch loud then quiet."
+        },
+        {
+          "time": "10:30",
+          "title": "Leaf Painting With Big Brushes",
+          "domain": "creative_arts",
+          "notes": "Paint large paper with fall colours using big brushes, then press large leaves into the paint to make prints. Materials: washable paint, smocks. Adaptation: use sponge rollers for children with limited grip; to extend, mix red and yellow to see what happens."
+        },
+        {
+          "time": "15:00",
+          "title": "Wind Walk",
+          "domain": "outdoor",
+          "notes": "Take a slow walk outside to feel the wind, watching leaves blow and trees sway. Adaptation: use a buggy for younger toddlers; to extend, bring a streamer to see which way the wind blows."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Leaf Colour Sort",
+          "domain": "cognitive",
+          "notes": "Sort large paper leaves and real leaves into red, yellow and brown baskets. Adaptation: start with two colours only; to extend, find something else in the room that matches each colour."
+        },
+        {
+          "time": "10:30",
+          "title": "Squirrel Hide and Find",
+          "domain": "physical",
+          "notes": "Pretend to be squirrels hiding large soft 'nuts' (bean bags or balls) around the room, then crawl and scamper to find them. Adaptation: hide items in plain view for younger toddlers; to extend, count the found nuts together."
+        },
+        {
+          "time": "15:00",
+          "title": "Warm Snack and Apple Taste",
+          "domain": "self_care",
+          "notes": "Offer soft cooked or thinly sliced apple as part of snack (check allergy lists and cut to safe sizes for toddlers). Practise washing hands before eating and wiping the table after. Adaptation: offer applesauce for children still learning to chew; to extend, compare red and green apple tastes."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Leaf Hello Circle",
+          "domain": "social_emotional",
+          "notes": "Pass a big leaf around the circle, each child saying hello to the leaf or a friend. Adaptation: accept a wave or smile instead of words; to extend, describe the leaf with one word."
+        },
+        {
+          "time": "10:30",
+          "title": "Tree Story With Felt Board",
+          "domain": "language_literacy",
+          "notes": "Tell a short story on a felt board about a tree losing its leaves, adding felt leaves one at a time. Adaptation: let children place a felt leaf with help; to extend, ask 'What happens next?'"
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Leaf Hunt",
+          "domain": "outdoor",
+          "notes": "Hunt for leaves of different colours and sizes in the yard and collect them in a bag or basket to bring back. Adaptation: hold hands with new walkers; to extend, find the biggest and the smallest leaf."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Winter Wonderland",
+    "theme": "Winter Wonderland: snow, ice and cozy winter days",
+    "age_group": "toddler",
+    "description": "Toddlers explore cold, snow and ice through safe sensory play and outdoor time, and practise winter dressing as part of growing independence.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Mittens and Boots Circle",
+          "domain": "self_care",
+          "notes": "Look at winter clothing together: hats, mittens, boots and snowsuits. Children practise pulling on a hat or mitten. Adaptation: give extra time and hand-over-hand help; to extend, try a boot on and off independently."
+        },
+        {
+          "time": "10:30",
+          "title": "Snow Sensory Bin",
+          "domain": "cognitive",
+          "notes": "Bring snow indoors in a shallow bin with scoops and cups. Offer mittens for small hands. Talk about cold, wet and melting. Adaptation: for children sensitive to cold, offer a bin of cotton pads or shaving-cream-free faux snow; to extend, watch a cup of snow melt through the day."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Snow Stomp",
+          "domain": "outdoor",
+          "notes": "Dress warmly and go outside to stomp, make footprints and dig in the snow with shovels. Check wind chill and limit time in extreme cold. Adaptation: pull young toddlers in a sled; to extend, follow the educator's footprints."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Winter Animals Board Book",
+          "domain": "language_literacy",
+          "notes": "Read about animals in winter (polar bear, owl, fox, rabbit). Make the animal sounds and movements. Adaptation: use animal puppets; to extend, ask where animals sleep in winter."
+        },
+        {
+          "time": "10:30",
+          "title": "White Painting on Dark Paper",
+          "domain": "creative_arts",
+          "notes": "Paint with white washable paint on dark blue or black paper using big brushes and sponges to make snowy pictures. Adaptation: use chunky white chalk for children who avoid paint; to extend, add silver glitter glue under supervision."
+        },
+        {
+          "time": "15:00",
+          "title": "Snowflake Scarf Dance",
+          "domain": "physical",
+          "notes": "Twirl white scarves while music plays, drifting down slowly like snowflakes and landing softly. Adaptation: children can dance seated; to extend, fall fast like a blizzard and slow like light snow."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Ice Discovery",
+          "domain": "cognitive",
+          "notes": "Freeze water in large containers with toy animals inside (large toys only). Children use warm water in spray bottles and hands to free them. Supervise water play closely. Adaptation: offer smaller ice blocks for easier holding; to extend, try salt shakers on the ice."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Snow Painting",
+          "domain": "outdoor",
+          "notes": "Fill spray bottles with water and a few drops of food colouring and spray designs on the snow. Adaptation: educators help squeeze for small hands or offer squeeze bottles; to extend, make a colour trail to follow."
+        },
+        {
+          "time": "15:00",
+          "title": "Warm Drink Pretend Cafe",
+          "domain": "social_emotional",
+          "notes": "Set up a pretend hot chocolate cafe with cups, pots and spoons. Children serve friends and say please and thank you. Adaptation: model one simple exchange at a time; to extend, add a menu with pictures."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Five Little Snowmen Rhyme",
+          "domain": "language_literacy",
+          "notes": "Say a counting rhyme about snowmen melting one by one, using felt snowmen on a board. Adaptation: use fewer snowmen for younger toddlers; to extend, let children take off each snowman."
+        },
+        {
+          "time": "10:30",
+          "title": "Cotton Ball Snowman",
+          "domain": "creative_arts",
+          "notes": "Glue large cotton balls on a paper snowman outline with glue sticks. Supervise closely so cotton is not put in mouths. Adaptation: use large paper circles for children who mouth materials; to extend, add a paper scarf and hat."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Sled Pull",
+          "domain": "outdoor",
+          "notes": "Take turns riding in a sled pulled by an educator across flat snow. Adaptation: an educator rides with children who feel unsure; to extend, pull a stuffed animal in a small sled."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Cozy Blanket Story",
+          "domain": "social_emotional",
+          "notes": "Snuggle with blankets and cushions for a calm winter story. Talk about how we stay warm and cozy. Adaptation: offer a weighted lap pad or soft toy to children who need calm; to extend, ask what keeps them warm at home."
+        },
+        {
+          "time": "10:30",
+          "title": "Penguin Waddle",
+          "domain": "physical",
+          "notes": "Waddle like penguins, slide on tummies on a mat and flap arms. Adaptation: children can waddle holding an educator's hand; to extend, waddle while holding a soft ball between knees."
+        },
+        {
+          "time": "15:00",
+          "title": "Getting Dressed Race to Go Out",
+          "domain": "self_care",
+          "notes": "Practise the flip method for coats and try mittens and boots before going outside. Celebrate every attempt. Adaptation: break into one step at a time; to extend, help a friend with a zipper."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Farm Animals",
+    "theme": "Farm Animals: sounds, movements and care of animals on the farm",
+    "age_group": "toddler",
+    "description": "Toddlers learn animal names and sounds, move like farm animals and explore how farmers care for animals, building language and gross motor skills.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Old MacDonald With Puppets",
+          "domain": "language_literacy",
+          "notes": "Sing Old MacDonald, pulling a farm animal puppet from a bag for each verse. Children make the sounds. Adaptation: use sign for each animal; to extend, let a child choose the next animal."
+        },
+        {
+          "time": "10:30",
+          "title": "Farm Small World Play",
+          "domain": "cognitive",
+          "notes": "Set up a barn with large farm animal figures (too big to fit a choke tube), blocks for fences and a toy tractor. Adaptation: offer fewer animals to reduce overwhelm; to extend, match baby animals with parent animals."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Animal Movements",
+          "domain": "outdoor",
+          "notes": "Outside, hop like bunnies, trot like horses, waddle like ducks and stretch like cats. Adaptation: seated children can move arms and heads; to extend, call out animals faster."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Who Says Moo? Guessing Game",
+          "domain": "cognitive",
+          "notes": "Play recorded or educator animal sounds and children point to the matching picture. Adaptation: offer two picture choices only; to extend, children make a sound for others to guess."
+        },
+        {
+          "time": "10:30",
+          "title": "Muddy Pig Painting",
+          "domain": "creative_arts",
+          "notes": "Paint a large paper pig with brown washable paint using hands or brushes to make it 'muddy'. Adaptation: offer paint in a sealed bag to squish for children who avoid mess; to extend, add fingerprint 'mud spots'."
+        },
+        {
+          "time": "15:00",
+          "title": "Feeding the Animals",
+          "domain": "self_care",
+          "notes": "Pretend to feed stuffed farm animals using large scoops and bowls, then practise cleaning up and washing hands. Adaptation: model scooping hand-over-hand; to extend, give each animal a named bowl."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Farm Board Book",
+          "domain": "language_literacy",
+          "notes": "Read a farm board book with flaps or textures. Name the animals and the farmer, noting that farmers can be anyone. Adaptation: let children lift the flaps; to extend, ask 'What does the cow give us?'"
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Hay Ride Pretend",
+          "domain": "outdoor",
+          "notes": "Use a wagon as a tractor and take turns giving stuffed animal passengers a ride around the yard. Adaptation: educators pull; to extend, stop at 'barns' to drop animals off."
+        },
+        {
+          "time": "15:00",
+          "title": "Horse Gallop Music",
+          "domain": "physical",
+          "notes": "Gallop, walk slowly and stop to music, like horses on the farm. Adaptation: children can bounce on an educator's knee for 'horsey rides'; to extend, gallop over soft pool noodles on the floor."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Baby Animal Match",
+          "domain": "social_emotional",
+          "notes": "Match baby animal pictures with their grown-ups (calf and cow, chick and hen). Talk about who takes care of us. Adaptation: start with two pairs; to extend, talk about the grown-ups who care for each child, in all family types."
+        },
+        {
+          "time": "10:30",
+          "title": "Sheep Cotton Collage",
+          "domain": "creative_arts",
+          "notes": "Glue large cotton pads or wool pieces onto a sheep outline with glue sticks. Supervise so cotton is not mouthed. Adaptation: use large pieces for mouthing toddlers; to extend, add a paper face and legs."
+        },
+        {
+          "time": "15:00",
+          "title": "Duck Pond Water Play",
+          "domain": "cognitive",
+          "notes": "Float large rubber ducks in a shallow water tub with scoops and cups, with constant educator supervision. Adaptation: seated children use a low tub on the floor; to extend, count ducks as they are scooped out."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Farm Animal Freeze Dance",
+          "domain": "physical",
+          "notes": "Dance to farm songs and freeze in an animal pose when the music stops: a tall horse, a curled-up cat, a flapping chicken. Adaptation: show picture cards for poses and let children freeze seated; to extend, name the animal pose you froze in and make its sound."
+        },
+        {
+          "time": "10:30",
+          "title": "Farm Snack Taste",
+          "domain": "self_care",
+          "notes": "Taste food that comes from farms, such as soft cheese cubes cut to safe sizes, bananas or soft cooked carrots (check allergy lists and dietary needs). Talk about where food comes from. Adaptation: offer mashed textures for younger toddlers; to extend, ask which is crunchy or soft."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Farm Walk",
+          "domain": "outdoor",
+          "notes": "Walk around the yard looking for birds, bugs and other animals, or visit a local petting farm with families if possible. Adaptation: use a walking rope and buggy; to extend, point out animal homes like nests."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Music & Movement",
+    "theme": "Music and Movement: rhythm, beats and moving our bodies",
+    "age_group": "toddler",
+    "description": "Toddlers explore sound, rhythm and movement with simple instruments, songs and dance from many cultures, supporting expression and physical development.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Shaker Hello Song",
+          "domain": "social_emotional",
+          "notes": "Sing a hello song while shaking sealed shaker bottles (lids glued shut) for each child's name. Adaptation: children can clap or pat knees instead; to extend, shake fast and slow."
+        },
+        {
+          "time": "10:30",
+          "title": "Make a Shaker",
+          "domain": "creative_arts",
+          "notes": "Educators pre-fill clear plastic bottles with different fillings (bells, pom-poms, dry pasta) and glue and tape the lids shut before children see them. Children decorate with large stickers and shake. Check lids stay sealed. Adaptation: offer bottle-free options like wooden spoons on pots; to extend, compare which bottle sounds loudest."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Parade",
+          "domain": "outdoor",
+          "notes": "March around the yard with shakers and drums, stopping and starting with the music. Adaptation: push younger toddlers in a buggy with a shaker; to extend, take turns being parade leader."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Loud and Quiet",
+          "domain": "cognitive",
+          "notes": "Play instruments loudly, then very quietly, following an educator's big and small hand signals. Adaptation: offer ear defenders to children sensitive to sound; to extend, children give the signal."
+        },
+        {
+          "time": "10:30",
+          "title": "Scarf Dancing",
+          "domain": "physical",
+          "notes": "Wave scarves high and low, spin and toss to different kinds of music. Adaptation: seated children can wave scarves from a chair; to extend, make scarves follow a leader."
+        },
+        {
+          "time": "15:00",
+          "title": "Songs From Home",
+          "domain": "language_literacy",
+          "notes": "Invite families to share a song in their home language. Sing or play one or two recordings and join the actions. Adaptation: play short clips for shorter attention; to extend, learn one word in the new language."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Drum Circle",
+          "domain": "creative_arts",
+          "notes": "Sit in a circle with hand drums, upside-down pots and wooden spoons, copying a simple beat an educator plays: fast, slow, loud, soft. Adaptation: help children drum on their laps or a cushion; to extend, let a child start the beat for others to copy."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Music Wall",
+          "domain": "outdoor",
+          "notes": "Hang pots, pans and wooden spoons on a fence for children to bang and explore sounds. Adaptation: lower items for crawling children; to extend, find the highest and lowest sound."
+        },
+        {
+          "time": "15:00",
+          "title": "Ring Around the Rosie",
+          "domain": "physical",
+          "notes": "Hold hands in a circle, walk around and fall down gently on the rug. Adaptation: children who prefer not to hold hands can hold a hoop; to extend, walk faster then slower."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Animal Music Guessing",
+          "domain": "cognitive",
+          "notes": "Move to music like different animals: slow like a turtle, jumpy like a frog, stomping like an elephant. Adaptation: show animal pictures; to extend, children choose the animal."
+        },
+        {
+          "time": "10:30",
+          "title": "Song Picture Book",
+          "domain": "language_literacy",
+          "notes": "Read a picture book based on a familiar song, singing the pages together. Adaptation: point to pictures as you sing; to extend, pause and let children fill in the last word."
+        },
+        {
+          "time": "15:00",
+          "title": "Calm Music Rest",
+          "domain": "self_care",
+          "notes": "After active play, lie on mats listening to soft music and practising slow breathing. Adaptation: offer a soft toy or blanket; to extend, tense and relax fists and toes."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Friends Band",
+          "domain": "social_emotional",
+          "notes": "Each child picks an instrument and the group plays a song together, taking turns for short solos. Adaptation: let children swap instruments freely; to extend, take a bow and clap for each friend."
+        },
+        {
+          "time": "10:30",
+          "title": "Obstacle Course to Music",
+          "domain": "physical",
+          "notes": "Set up a simple course with cushions, a tunnel and a low balance beam. Move through it while music plays. Adaptation: spot children on the beam or use a line on the floor; to extend, move through backwards or in a different way."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Rhythm Walk",
+          "domain": "outdoor",
+          "notes": "Take a walk and clap to the rhythm of footsteps, listening for birds, cars and wind. Adaptation: educators carry or push younger children; to extend, copy a sound you heard."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Fall Harvest",
+    "theme": "Fall Harvest: how food grows, is gathered and shared",
+    "age_group": "preschool",
+    "description": "Preschoolers investigate pumpkins, apples, squash and corn from Ontario farms, exploring where food comes from and how communities gather and share it.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Harvest Basket Wonder Circle",
+          "domain": "cognitive",
+          "notes": "Share a basket of whole fall produce (pumpkin, squash, apples, corn, potatoes). Children describe colour, shape, weight and texture and ask questions to record on a wonder chart. Adaptation: pass items in pairs for children who need support; to extend, predict which is heaviest and test on a balance scale."
+        },
+        {
+          "time": "10:30",
+          "title": "Pumpkin Investigation",
+          "domain": "cognitive",
+          "notes": "Cut open a pumpkin (educator only) and let children scoop seeds and pulp with spoons. Count seeds in groups of ten and describe the smell and feel. Adaptation: offer gloves or tongs for children who dislike the texture; to extend, measure the pumpkin with string."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Harvest Relay",
+          "domain": "outdoor",
+          "notes": "Carry 'harvest' items (bean bags, small pumpkins) from one basket to another across the yard in teams. Adaptation: shorten the distance or use a wagon; to extend, carry items on a spoon or with a partner."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Farm to Table Story",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about food growing on a farm and arriving at a market or table. Discuss the people who help: farmers, drivers, grocers, cooks. Adaptation: use props to act out the steps; to extend, children retell the story in order with picture cards."
+        },
+        {
+          "time": "10:30",
+          "title": "Apple Print Painting",
+          "domain": "creative_arts",
+          "notes": "Cut apples in half (educator) and let children dip them in paint to make prints, noticing the star shape inside. Adaptation: add a handle made from a fork for easier grip; to extend, make patterns like red, yellow, red, yellow."
+        },
+        {
+          "time": "15:00",
+          "title": "Apple Taste Test Graph",
+          "domain": "self_care",
+          "notes": "Taste red, green and yellow apple slices (check allergy lists) and vote for a favourite on a class graph. Practise washing hands and serving yourself. Adaptation: offer applesauce for children who need softer textures; to extend, count the votes and compare."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Sharing the Harvest",
+          "domain": "social_emotional",
+          "notes": "Talk about how families and communities share food, including food banks and community gardens. Invite children to share a food their family enjoys in the fall. Adaptation: offer picture cards of foods for children learning English; to extend, plan a class food drive with families."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Garden Clean-Up",
+          "domain": "outdoor",
+          "notes": "Help tidy the garden beds: pull finished plants, collect seeds and fill wheelbarrows. Wear gloves and wash hands after. Adaptation: give children who prefer a smaller job a watering can or a bucket; to extend, dig for potatoes or carrots if planted."
+        },
+        {
+          "time": "15:00",
+          "title": "Corn Husk Sensory Tub",
+          "domain": "cognitive",
+          "notes": "Explore dried corn husks, cobs and squash in a sensory tub with scoops and baskets. Avoid loose dried kernels for children who mouth items. Adaptation: supervise closely and remove small pieces; to extend, compare fresh and dried corn."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Harvest Word Wall",
+          "domain": "language_literacy",
+          "notes": "Build a word wall with pictures and labels: pumpkin, apple, squash, corn, harvest. Children find the first letter of each word. Adaptation: include home-language labels from families; to extend, children write or trace a word."
+        },
+        {
+          "time": "10:30",
+          "title": "Vegetable Soup Cooking",
+          "domain": "self_care",
+          "notes": "Wash and cut soft vegetables with child-safe knives to make a class soup (check allergy lists; an educator handles all heat and stove use). Supervise closely. Adaptation: children can tear herbs or add ingredients to the pot; to extend, write a recipe with pictures."
+        },
+        {
+          "time": "15:00",
+          "title": "Scarecrow Movement Game",
+          "domain": "physical",
+          "notes": "Children freeze like scarecrows while the 'farmer' tries to make them laugh, then walk floppy like scarecrows. Adaptation: offer a seated version; to extend, balance on one foot while frozen."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Harvest Counting Market",
+          "domain": "cognitive",
+          "notes": "Set up a pretend market with real or toy produce, baskets and play money. Children buy and sell, counting items. Adaptation: use numbers up to 5 for some children; to extend, add prices and simple addition."
+        },
+        {
+          "time": "10:30",
+          "title": "Harvest Still Life Drawing",
+          "domain": "creative_arts",
+          "notes": "Place a pumpkin, apples and squash on a table and invite children to observe and draw them with oil pastels. Adaptation: offer tracing templates; to extend, add shadows and details with a second colour."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Nature Harvest Walk",
+          "domain": "outdoor",
+          "notes": "Walk to find signs of harvest: seeds, pinecones, acorns, fallen leaves. Collect in bags to sort back inside. Adaptation: pair children with a buddy; to extend, make a tally chart of what was found."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Community Helpers",
+    "theme": "Community Helpers: the people who keep our neighbourhood safe, healthy and running",
+    "age_group": "preschool",
+    "description": "Preschoolers learn about the many jobs people do in their community, from paramedics to librarians to sanitation workers, and practise those roles through play.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Who Helps Us? Circle",
+          "domain": "social_emotional",
+          "notes": "Show photos of diverse community helpers (firefighter, nurse, crossing guard, librarian, bus driver, sanitation worker) and ask children who they know. Avoid gendered job words, e.g. firefighter not fireman. Adaptation: use picture cards for children learning English; to extend, children share jobs of people they know."
+        },
+        {
+          "time": "10:30",
+          "title": "Hospital Dramatic Play",
+          "domain": "social_emotional",
+          "notes": "Set up a clinic with stethoscopes, bandages, clipboards and dolls with varied skin tones and abilities. Children take turns as patients, nurses and doctors. Adaptation: model simple scripts; to extend, write pretend prescriptions."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Traffic Safety Game",
+          "domain": "outdoor",
+          "notes": "Play Red Light, Green Light with a crossing guard stop sign. Practise stopping, looking and listening. Adaptation: use visual signs as well as words; to extend, add a yellow slow-down light."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Firefighter Safety Talk",
+          "domain": "language_literacy",
+          "notes": "Read a book about fire safety and learn 'stop, drop and roll' and the number 9-1-1. Adaptation: show pictures of each step; to extend, children draw their family's meeting spot."
+        },
+        {
+          "time": "10:30",
+          "title": "Stop, Drop and Roll Practice",
+          "domain": "physical",
+          "notes": "Practise stop, drop and roll on mats, and crawling low under a pretend smoke line (a string). Adaptation: offer help rolling or a seated version; to extend, time how quickly the group can do it."
+        },
+        {
+          "time": "15:00",
+          "title": "Fire Truck Painting",
+          "domain": "creative_arts",
+          "notes": "Paint large cardboard boxes red to make a fire truck, adding paper plate wheels. Adaptation: offer large rollers for children with limited grip; to extend, add a ladder and label it."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Library Visit or Library Corner",
+          "domain": "language_literacy",
+          "notes": "Visit a local library or set up a library corner with book cards and a scanner. Children borrow and return books. Adaptation: use picture labels on bins; to extend, make library cards with names."
+        },
+        {
+          "time": "10:30",
+          "title": "Mail Carrier Letters",
+          "domain": "language_literacy",
+          "notes": "Children draw or write a letter to a friend and 'deliver' it to cubby mailboxes. Adaptation: offer name stamps and stickers; to extend, add addresses and pretend stamps."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Construction Site",
+          "domain": "outdoor",
+          "notes": "Use the sandbox as a construction site with trucks, shovels, hard hats and safety vests. Build roads and buildings. Adaptation: provide larger tools for easier grip; to extend, draw a plan before building."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Helper Tools Match",
+          "domain": "cognitive",
+          "notes": "Match tools to helpers: stethoscope to nurse, hose to firefighter, book to librarian. Adaptation: start with three matches; to extend, children invent a new tool for a helper."
+        },
+        {
+          "time": "10:30",
+          "title": "Healthy Teeth With the Dentist",
+          "domain": "self_care",
+          "notes": "Learn how to brush teeth using a large model and toothbrush. Talk about dental hygienists and dentists. Adaptation: brush a toy animal's teeth; to extend, count brushing for 2 minutes with a timer."
+        },
+        {
+          "time": "15:00",
+          "title": "Grocery Store Math",
+          "domain": "cognitive",
+          "notes": "Set up a grocery store with empty food boxes, a cash register and play money. Children count items and pay. Adaptation: use one-to-one counting to 5; to extend, add prices up to 10."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Thank-You Cards",
+          "domain": "social_emotional",
+          "notes": "Make thank-you cards for community helpers in the neighbourhood (school staff, librarians, bus drivers). Adaptation: offer pre-printed words to trace; to extend, children dictate a message."
+        },
+        {
+          "time": "10:30",
+          "title": "Community Helper Visit",
+          "domain": "language_literacy",
+          "notes": "Invite a family member or local helper (paramedic, crossing guard, baker) to talk about their job. Children prepare questions. Adaptation: help children practise one question; to extend, record answers on a chart."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Neighbourhood Walk",
+          "domain": "outdoor",
+          "notes": "Walk the neighbourhood to spot helpers and places: mailboxes, fire hydrants, bus stops. Adaptation: use a walking rope and buddy pairs; to extend, map the walk when you return."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Bugs & Creepy Crawlies",
+    "theme": "Bugs and Creepy Crawlies: insects, worms and spiders in our backyard",
+    "age_group": "preschool",
+    "description": "Preschoolers become bug scientists, observing insects and worms respectfully, learning body parts and life cycles, and caring for the tiny creatures that share our space.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Bug Scientists Circle",
+          "domain": "cognitive",
+          "notes": "Introduce magnifying glasses and a bug chart. Ask what children know and wonder about bugs; record on a KWL chart. Adaptation: use real photos alongside words; to extend, children sort bugs by number of legs."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Bug Hunt",
+          "domain": "outdoor",
+          "notes": "Search under logs and leaves with magnifiers and clear bug viewers. Observe gently and return each bug where it was found. Adaptation: pair children who are nervous with a confident buddy; to extend, tally bugs found."
+        },
+        {
+          "time": "15:00",
+          "title": "Bug Body Parts Drawing",
+          "domain": "creative_arts",
+          "notes": "Draw a bug with three body parts, six legs and antennae using markers or pastels. Adaptation: offer a body outline to add legs to; to extend, label the parts with help."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Caterpillar Story",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about a caterpillar becoming a butterfly and sequence the stages with picture cards. Adaptation: act out each stage with body movements; to extend, retell using first, next, then, last."
+        },
+        {
+          "time": "10:30",
+          "title": "Butterfly Symmetry Painting",
+          "domain": "creative_arts",
+          "notes": "Paint on one half of a folded butterfly shape, then press to make a symmetrical print. Adaptation: use thick paint and larger shapes; to extend, talk about matching patterns on real butterflies."
+        },
+        {
+          "time": "15:00",
+          "title": "Caterpillar Crawl Relay",
+          "domain": "physical",
+          "notes": "Children form a caterpillar line holding shoulders and crawl or walk together through an obstacle course. Adaptation: allow walking instead of crawling; to extend, add a tunnel 'cocoon'."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Worm Observation",
+          "domain": "cognitive",
+          "notes": "Observe earthworms in a clear container of soil. Talk about how they help gardens. Wash hands after. Adaptation: use a video or pictures for children who do not want to look closely; to extend, measure a worm with string."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Worm Hotel",
+          "domain": "outdoor",
+          "notes": "Build a worm habitat in the garden with soil, leaves and water, then check it through the week. Adaptation: give children a watering job if they avoid touching soil; to extend, record changes with drawings."
+        },
+        {
+          "time": "15:00",
+          "title": "Bug Snack",
+          "domain": "self_care",
+          "notes": "Make 'ants on a log' with celery and a seed or sunflower butter (check allergy lists and use a nut-free spread). Practise handwashing first. Adaptation: offer soft cucumber slices instead of celery; to extend, count the ants."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Spider Web Counting",
+          "domain": "cognitive",
+          "notes": "Count legs on a spider and eyes on a picture, then count pom-poms in a paper web. Adaptation: count to 5 with one-to-one support; to extend, add and take away spiders."
+        },
+        {
+          "time": "10:30",
+          "title": "Yarn Spider Web Art",
+          "domain": "creative_arts",
+          "notes": "Weave yarn through a paper plate with holes punched around the edge to make a spider web, wrapping tape around the yarn end like a needle. Adaptation: pre-thread the first strand or use a large plastic lacing needle; to extend, add a paper spider with eight legs and name it."
+        },
+        {
+          "time": "15:00",
+          "title": "Being Kind to Bugs",
+          "domain": "social_emotional",
+          "notes": "Talk about why we are gentle with bugs and how they help: pollinating, making soil. Role-play safe ways to move a bug outside. Adaptation: use a puppet bug; to extend, make a class 'bug kindness' rule poster."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Bug Word Hunt",
+          "domain": "language_literacy",
+          "notes": "Hide bug picture cards with first letters around the room for children to find and match to letters on a chart. Adaptation: match picture to picture; to extend, sound out and write the whole word."
+        },
+        {
+          "time": "10:30",
+          "title": "Bug Movement Game",
+          "domain": "physical",
+          "notes": "Move like different bugs: flutter like a butterfly, hop like a grasshopper, wiggle like a worm, buzz like a bee. Adaptation: seated movements; to extend, children invent a bug movement."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Pollinator Garden",
+          "domain": "outdoor",
+          "notes": "Plant pollinator-friendly flowers or seeds in the garden and add a shallow water dish with stones for bees. Supervise water. Adaptation: offer large seeds; to extend, make a sign for the garden."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Spring & Growing Things",
+    "theme": "Spring and Growing Things: seeds, plants and new life",
+    "age_group": "preschool",
+    "description": "Preschoolers plant, observe and measure seeds and plants, noticing the signs of spring and learning what living things need to grow.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Signs of Spring Circle",
+          "domain": "language_literacy",
+          "notes": "Talk about signs of spring: melting snow, buds, birds, rain. Record ideas on a chart and read a book about spring. Adaptation: show real photos of Ontario springtime; to extend, children predict what they will see outside."
+        },
+        {
+          "time": "10:30",
+          "title": "Seed Planting Cups",
+          "domain": "cognitive",
+          "notes": "Plant bean or sunflower seeds in clear cups with soil so roots are visible. Label with names. Supervise small seeds. Adaptation: offer large seeds only; to extend, plant one seed with no water and compare."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Spring Scavenger Hunt",
+          "domain": "outdoor",
+          "notes": "Search the yard for a bud, a bird, a puddle, something green and something new. Tick off a picture checklist. Adaptation: pair with a buddy; to extend, photograph each find."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "What Plants Need",
+          "domain": "cognitive",
+          "notes": "Discuss what plants need to grow: water, sunlight, soil and air, using a simple diagram and a real potted plant. Place one plant in a dark cupboard to compare over the week. Adaptation: use real props (watering can, lamp, soil) for each need; to extend, children design their own test for one need."
+        },
+        {
+          "time": "10:30",
+          "title": "Flower Painting With Real Flowers",
+          "domain": "creative_arts",
+          "notes": "Use flowers and leaves as brushes to paint, then observe real flowers in a vase and paint what you see. Materials: washable paint, fresh or fallen flowers, paper, smocks. Adaptation: offer thick-handled brushes; to extend, mix colours to match a petal exactly and name the new colour."
+        },
+        {
+          "time": "15:00",
+          "title": "Grow Like a Seed Movement",
+          "domain": "physical",
+          "notes": "Curl up small as a seed on the rug while an educator narrates rain falling and sun shining, then slowly sprout, grow leaves and stretch tall, swaying in the wind. Adaptation: grow from a seated position using arms; to extend, balance on tiptoes like a tall sunflower."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Seed Sorting",
+          "domain": "cognitive",
+          "notes": "Sort large seeds (beans, sunflower, pumpkin) by size and colour with tweezers or fingers. Supervise to avoid mouthing. Adaptation: use seed pictures instead for children who mouth items; to extend, graph the results."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Garden Planting",
+          "domain": "outdoor",
+          "notes": "Prepare a garden bed or planters and plant peas, lettuce or radishes. Talk about gardens in many cultures. Adaptation: offer a watering can job; to extend, measure spacing with a ruler."
+        },
+        {
+          "time": "15:00",
+          "title": "Garden Salad Taste",
+          "domain": "self_care",
+          "notes": "Wash and taste spring vegetables (lettuce, snap peas, radish) with a simple dip (check allergy lists). Adaptation: offer soft options; to extend, rate tastes with a thumbs-up chart."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Plant Journal",
+          "domain": "language_literacy",
+          "notes": "Start a plant journal: children observe their seed cup, draw what they see (roots, shoots, soil) and dictate or write one observation. Materials: small booklets, pencils, crayons, magnifiers. Adaptation: use stamps or stickers to show changes; to extend, add the date and a measurement each day."
+        },
+        {
+          "time": "10:30",
+          "title": "Baby Animals of Spring",
+          "domain": "social_emotional",
+          "notes": "Talk about baby animals born in spring and how families take care of little ones, in many ways and family shapes. Adaptation: use puppets; to extend, children share how they help care for someone."
+        },
+        {
+          "time": "15:00",
+          "title": "Rain Stick Making",
+          "domain": "creative_arts",
+          "notes": "Make rain sticks with paper towel tubes, foil and dried rice sealed with tape at both ends (educator seals). Adaptation: educators pre-fill; to extend, make soft and loud rain sounds."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Measure Our Sprouts",
+          "domain": "cognitive",
+          "notes": "Measure the seedlings planted on Monday with linking cubes or rulers and record each height on a class chart beside a drawing. Talk about which grew most and why. Adaptation: hold a paper strip against the plant and compare strips; to extend, predict next week's height and check."
+        },
+        {
+          "time": "10:30",
+          "title": "Garden Centre Dramatic Play",
+          "domain": "social_emotional",
+          "notes": "Set up a garden centre with pots, silk flowers, seed packets, aprons, watering cans and a cash register. Children take turns as gardeners, cashiers and customers, practising polite words and sharing. Adaptation: model simple roles and phrases; to extend, write price tags and make signs."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Puddle Jumping",
+          "domain": "outdoor",
+          "notes": "Put on rain boots and splash puddles, measuring depth with a stick and watching water flow. Supervise near water. Adaptation: offer a hand to hold; to extend, float leaves in a puddle."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Weather Watchers",
+    "theme": "Weather Watchers: sun, rain, wind, clouds and snow",
+    "age_group": "preschool",
+    "description": "Preschoolers observe, record and experiment with the weather each day, building scientific thinking and vocabulary about Ontario's changing skies.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Daily Weather Chart",
+          "domain": "cognitive",
+          "notes": "Look out the window together and record the weather on a chart with symbols: sunny, cloudy, rainy, windy, snowy. Choose a daily weather reporter to place the symbol. Materials: chart, picture symbols, outdoor thermometer. Adaptation: offer a choice of two symbols; to extend, read the thermometer and mark warm or cold."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Cloud Watching",
+          "domain": "outdoor",
+          "notes": "Lie or sit on blankets outside and watch the clouds. Describe their shapes, colours and how fast they move, and share what they look like. Adaptation: offer a chair or cushion for children who prefer sitting; to extend, sketch a cloud shape on a clipboard and name it."
+        },
+        {
+          "time": "15:00",
+          "title": "Puffy Cloud Painting",
+          "domain": "creative_arts",
+          "notes": "Paint clouds on blue paper with homemade puffy paint (white glue mixed with a little flour and water; check allergy lists for wheat). Materials: brushes, craft sticks, smocks. Adaptation: offer large cotton pads to glue for children who avoid sticky textures; to extend, learn the names cumulus, stratus and cirrus."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "What Do I Wear? Story",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about weather, then match real clothing to the weather: rain boots and coat for rain, sun hat for sun, mittens and toque for snow. Adaptation: use a basket of real clothes to hold and try; to extend, dress a paper doll for today's weather and explain the choice."
+        },
+        {
+          "time": "10:30",
+          "title": "Rain Cloud in a Jar",
+          "domain": "cognitive",
+          "notes": "Fill a clear jar with water, top it with a thick layer of shaving foam as a cloud, and use droppers to add coloured water until it 'rains' through. Supervise water and keep foam away from eyes. Adaptation: educators help squeeze droppers or use squeeze bottles; to extend, predict and count how many drops before it rains."
+        },
+        {
+          "time": "15:00",
+          "title": "Dress for the Weather Relay",
+          "domain": "self_care",
+          "notes": "In teams, take turns putting on a raincoat, hat and boots from a bin, walking to a cone and back, then taking them off for the next friend. Practise zippers and velcro. Adaptation: choose one clothing item only and allow extra time; to extend, add mittens and buttoning."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Wind Experiment",
+          "domain": "cognitive",
+          "notes": "Test which items move when a fan or hand-held fan blows on them: feather, block, paper, leaf, scarf, cup. Children predict first and sort results into 'moves' and 'stays'. Adaptation: test just two items; to extend, graph the results and talk about light and heavy."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Streamer and Kite Run",
+          "domain": "outdoor",
+          "notes": "Run outside with crepe-paper streamers and paper-bag kites, watching which way the wind blows them. Adaptation: children can walk or wave streamers from a bench; to extend, tie a ribbon to the fence as a wind sock and check it each day."
+        },
+        {
+          "time": "15:00",
+          "title": "Windy Day Movement",
+          "domain": "physical",
+          "notes": "Move to music like a gentle breeze, a strong gust, a spinning tornado and then calm air, ending lying still on the rug. Adaptation: seated movements with arms and scarves; to extend, children take turns calling out the wind type for others."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Weather and Our Feelings",
+          "domain": "social_emotional",
+          "notes": "Talk about how different weather makes us feel: happy in the sun, cozy in the rain, worried in a thunderstorm. Share ideas for feeling safe during storms, like a hug or a favourite blanket. Adaptation: offer feeling picture cards; to extend, draw a favourite weather day and explain why."
+        },
+        {
+          "time": "10:30",
+          "title": "Weather Reporter Studio",
+          "domain": "language_literacy",
+          "notes": "Set up a TV weather studio with a map of Ontario, weather symbols and a pretend microphone. Children take turns presenting the weather. Adaptation: give a sentence starter like 'Today it is...'; to extend, give a forecast for tomorrow and check it the next day."
+        },
+        {
+          "time": "15:00",
+          "title": "Rainbow Making",
+          "domain": "creative_arts",
+          "notes": "Make rainbows with a plastic prism or a clear plastic cup of water in a sunny window, then paint rainbow arcs. Supervise water near windows. Adaptation: use coloured cellophane on the window for cloudy days; to extend, name the rainbow colours in order."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Weather Week Graph",
+          "domain": "cognitive",
+          "notes": "Count the symbols from this week's weather chart and build a bar graph with cubes or stickers. Which weather happened most and least? Adaptation: count with one-to-one support up to five; to extend, compare with last week or predict next week."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Rain Gauge",
+          "domain": "outdoor",
+          "notes": "Set up a clear plastic container outdoors as a rain gauge, marking levels with tape. Check it each morning after rain. Adaptation: use a large container with bold lines; to extend, measure with a ruler and record in a weather journal."
+        },
+        {
+          "time": "15:00",
+          "title": "Warm Soup Snack",
+          "domain": "self_care",
+          "notes": "Share a warm vegetable soup or broth on a cool day. Check allergy lists; the educator handles all heat and serves soup at a safe temperature. Talk about warm foods families eat on cold days in different cultures. Adaptation: cool soup further for sensitive children; to extend, vote on favourite warm foods."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Transportation",
+    "theme": "Transportation: how people and things move by land, water and air",
+    "age_group": "preschool",
+    "description": "Preschoolers explore vehicles that move on land, water and air, building ramps, testing speed and learning about the many ways families travel.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "How Did You Get Here? Graph",
+          "domain": "cognitive",
+          "notes": "Make a picture graph of how each child travelled today: walking, car, bus, bike, subway, stroller or wheelchair. Each child adds their photo or name to a column. Adaptation: use picture symbols and point to choose; to extend, count and compare the most and least common ways."
+        },
+        {
+          "time": "10:30",
+          "title": "Ramp Races",
+          "domain": "cognitive",
+          "notes": "Build ramps from blocks and boards and race toy cars down them. Change the ramp height and see what happens to speed and distance. Materials: planks, blocks, cars, masking tape. Adaptation: use larger vehicles and one simple ramp; to extend, measure distance with blocks or a tape measure."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Trike Road",
+          "domain": "outdoor",
+          "notes": "Draw roads, crosswalks and parking spots with sidewalk chalk and ride trikes, balance bikes and scooters, with helmets on. Add stop signs and a crossing guard. Adaptation: offer push cars or wagons for children not riding; to extend, number the parking spots and match to licence plates."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "The Wheels on the Bus",
+          "domain": "language_literacy",
+          "notes": "Sing The Wheels on the Bus with actions, then invent new verses about other vehicles or passengers. Read a picture book about buses or streetcars. Adaptation: use actions and picture cards for each verse; to extend, children draw their new verse for a class song book."
+        },
+        {
+          "time": "10:30",
+          "title": "Cardboard Box Vehicles",
+          "domain": "creative_arts",
+          "notes": "Decorate large cardboard boxes as cars, buses or boats using paint, paper plate wheels and markers. Cut shoulder straps so children can 'drive' them. Adaptation: offer paint rollers for easier grip; to extend, add a licence plate with letters from their name."
+        },
+        {
+          "time": "15:00",
+          "title": "Traffic Light Game",
+          "domain": "physical",
+          "notes": "Move around the room when a child holds up green, slow down for yellow and stop for red. Adaptation: pair colour cards with sounds (a bell for stop) for children who need another cue; to extend, add signs like 'hop' or 'turn around'."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Sink or Float Boats",
+          "domain": "cognitive",
+          "notes": "Test which items float in a tub of water, then build boats from foil and see how many large blocks each holds before sinking. Supervise water play closely. Adaptation: offer pre-made boats and large items; to extend, test different boat shapes and record results."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Water Table Boats",
+          "domain": "outdoor",
+          "notes": "Float boats in an outdoor water table and move them by blowing through straws, pushing waves with hands or pouring water. Supervise water at all times and empty the table after. Adaptation: push boats with hands if blowing is hard; to extend, race boats and time them."
+        },
+        {
+          "time": "15:00",
+          "title": "Boats in Canada Story",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about boats and look at photos of canoes, ferries, lake freighters and sailboats in Canada. Talk about canoes as an Indigenous invention. Adaptation: show real photos and toy boats to hold; to extend, children retell the story or describe their favourite boat."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Airport Dramatic Play",
+          "domain": "social_emotional",
+          "notes": "Set up an airport with tickets, suitcases, a security check, rows of chairs and a pilot's seat. Children take turns as travellers, pilots and flight crew. Adaptation: model roles and simple phrases; to extend, write tickets with destinations and check passports."
+        },
+        {
+          "time": "10:30",
+          "title": "Paper Airplane Flying",
+          "domain": "physical",
+          "notes": "Fold and fly paper airplanes in a large space or outside, then measure how far they flew with footsteps. Adaptation: educators pre-fold planes for children to decorate and throw; to extend, test two designs and compare which flies farthest."
+        },
+        {
+          "time": "15:00",
+          "title": "Travel Safety Talk",
+          "domain": "self_care",
+          "notes": "Talk about staying safe when travelling: car seats, seatbelts, helmets, holding hands in parking lots and crossing at crosswalks. Practise buckling a doll into a toy car seat. Adaptation: use a picture sequence; to extend, make a travel safety poster."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Land, Water or Air Sort",
+          "domain": "cognitive",
+          "notes": "Sort vehicle pictures and toys onto three mats: land, water and air. Talk about vehicles that go in more than one place, like a float plane. Adaptation: start with two groups; to extend, add a space group and explain your choices."
+        },
+        {
+          "time": "10:30",
+          "title": "Tire Track Painting",
+          "domain": "creative_arts",
+          "notes": "Roll toy cars and trucks through washable paint and across long paper to make track patterns, then add roads and buildings with markers. Materials: smocks, trays, wipes. Adaptation: use large vehicles for easier grip; to extend, compare tracks from different wheels."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Train Walk",
+          "domain": "outdoor",
+          "notes": "Hold a walking rope and travel like a train around the yard or block, stopping at 'stations' (the slide, the tree, the gate) to let passengers on and off. Adaptation: keep a slow pace and a hand to hold; to extend, children take turns as conductor and name the stations."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Healthy Bodies",
+    "theme": "Healthy Bodies: food, movement, rest and taking care of ourselves",
+    "age_group": "preschool",
+    "description": "Preschoolers explore what keeps bodies healthy, including nourishing food, active play, rest, hygiene and calm, building lifelong well-being habits.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "My Body Can Circle",
+          "domain": "social_emotional",
+          "notes": "Talk about all the things our bodies can do and celebrate that every body is different and moves in its own way, including with wheelchairs, walkers or hearing aids. Adaptation: use pictures and let children show instead of tell; to extend, children share one thing their body did today."
+        },
+        {
+          "time": "10:30",
+          "title": "Heartbeat Exploration",
+          "domain": "cognitive",
+          "notes": "Listen to heartbeats with a toy stethoscope or cardboard tube before and after jumping for one minute. Talk about the heart as a muscle that works harder when we move. Adaptation: feel the pulse on the neck or wrist with help; to extend, count beats for 10 seconds and compare."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Active Play Stations",
+          "domain": "outdoor",
+          "notes": "Set up stations outdoors: skipping ropes, chalk hopscotch, bean bag toss and a balance beam or line. Rotate in small groups. Adaptation: offer adapted stations such as seated bean bag toss for children with mobility needs; to extend, count and record jumps or throws."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Food for Our Bodies Story",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about healthy eating, then look at Canada's Food Guide plate: vegetables and fruit, whole grains and protein foods, with water to drink. Adaptation: use real or play food to hold; to extend, sort food pictures onto a paper plate."
+        },
+        {
+          "time": "10:30",
+          "title": "Rainbow Fruit Kebabs",
+          "domain": "self_care",
+          "notes": "Wash hands, then thread soft fruit pieces onto blunt wooden sticks or straws. Check allergy lists before choosing fruit. Talk about eating many colours. Adaptation: arrange fruit on a plate instead of sticks; to extend, make a repeating colour pattern and name it."
+        },
+        {
+          "time": "15:00",
+          "title": "Pretend Grocery Store",
+          "domain": "cognitive",
+          "notes": "Play grocery store with empty food packages and play food. Children fill a basket with foods for a meal and talk about everyday and sometimes foods without calling any food bad. Adaptation: focus on fruit and vegetables; to extend, plan a lunch and count the items."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Glitter Germs Handwashing",
+          "domain": "self_care",
+          "notes": "Put a little glitter or lotion with glitter on hands as pretend germs, shake hands with a friend, then see how soap and water wash them away but water alone does not. Practise the steps. Adaptation: use a picture sequence and hand-over-hand support; to extend, time 20 seconds with a song."
+        },
+        {
+          "time": "10:30",
+          "title": "Yoga Adventure",
+          "domain": "physical",
+          "notes": "Follow a simple yoga story with poses like tree, cat, cow, butterfly and mountain, ending in rest. Materials: mats or towels, calm music. Adaptation: offer seated versions of each pose; to extend, hold poses longer or invent a new pose for the story."
+        },
+        {
+          "time": "15:00",
+          "title": "Life-Size Body Tracing",
+          "domain": "creative_arts",
+          "notes": "Trace each child's body on large paper and let them paint or colour in clothes, hair and features, using paint and crayons in many skin tones. Adaptation: trace hands and feet for children who prefer not to lie down; to extend, label body parts like heart, lungs and bones."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Rest and Sleep Talk",
+          "domain": "social_emotional",
+          "notes": "Talk about why bodies need sleep and rest, and share bedtime routines from home, which look different in every family. Read a calm bedtime story. Adaptation: use picture cards of routines; to extend, children draw their bedtime routine in order."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Obstacle Course",
+          "domain": "outdoor",
+          "notes": "Build an outdoor obstacle course where children crawl through a tunnel, jump over ropes, balance on a beam and climb a low structure. Adaptation: offer alternative routes around each obstacle; to extend, time the course or add a new challenge designed by the children."
+        },
+        {
+          "time": "15:00",
+          "title": "Calm Breathing and Stretching",
+          "domain": "self_care",
+          "notes": "After active play, practise calming breaths like smelling a flower and blowing out a candle, and 'bumblebee' humming breaths, then gentle stretches. Adaptation: blow a feather or pinwheel to see the breath; to extend, a child leads the group in a breathing exercise."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Healthy Habits Class Book",
+          "domain": "language_literacy",
+          "notes": "Make a class book of healthy habits with photos from the week and children's words: washing hands, moving, resting, eating well. Adaptation: children dictate their words to an educator; to extend, children write or copy a sentence."
+        },
+        {
+          "time": "10:30",
+          "title": "Dance Party Workout",
+          "domain": "physical",
+          "notes": "Dance to music from many cultures, then stop and feel how fast the heart is beating and how breathing changes. Adaptation: seated dancing with scarves; to extend, compare fast songs and slow songs and how the body feels after each."
+        },
+        {
+          "time": "15:00",
+          "title": "Smoothie Making",
+          "domain": "self_care",
+          "notes": "Make fruit smoothies with children adding washed fruit and yogurt or a dairy-free option; the educator operates the blender. Check allergy lists and dietary needs first. Adaptation: offer small tasting cups for cautious eaters; to extend, vote on a name for the smoothie and graph favourite fruits."
+        }
+      ]
+    }
+  },
+  {
+    "title": "My Family & Home",
+    "theme": "My Family and Home: the people, places and traditions that make us who we are",
+    "age_group": "mixed",
+    "description": "Children of all ages share who lives with them, what home looks like and what their families enjoy, celebrating every family shape and culture in the group.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Family Photo Sharing",
+          "domain": "social_emotional",
+          "notes": "Each child shares a family photo or drawing and names the people in it, whatever their family looks like: one parent, two parents, grandparents, guardians, foster or blended families. Materials: photos families send in, paper for drawings. Adaptation: infants look at a soft photo book on an educator's lap; school-age children interview a younger child about their family."
+        },
+        {
+          "time": "10:30",
+          "title": "Family Portrait Drawing",
+          "domain": "creative_arts",
+          "notes": "Draw or paint family portraits with skin-tone crayons and paper in many shades, markers and large paper. Include pets and anyone the child counts as family. Adaptation: toddlers scribble with chunky crayons while an educator writes their words; school-age children add labels and a background showing their home."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Homes Walk",
+          "domain": "outdoor",
+          "notes": "Walk the neighbourhood noticing different kinds of homes: houses, apartments, townhouses, homes above shops. Talk about how every home is different. Adaptation: infants ride in a stroller and hear the words; school-age children count doors or windows and keep a tally."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Hello in Our Home Languages",
+          "domain": "language_literacy",
+          "notes": "Learn to say hello in each family's home language, with help from families or recordings. Make a hello poster with each word and a photo. Adaptation: infants hear the words sung in a greeting song; older children write the words and teach them to younger ones."
+        },
+        {
+          "time": "10:30",
+          "title": "Build a Home",
+          "domain": "cognitive",
+          "notes": "Build homes with large blocks, cardboard boxes and blankets. Talk about rooms and who uses them. Adaptation: toddlers stack and knock down large soft blocks; school-age children draw a floor plan first and measure with a tape measure."
+        },
+        {
+          "time": "15:00",
+          "title": "Helping at Home Jobs",
+          "domain": "self_care",
+          "notes": "Practise home jobs with child-sized tools: setting the table, folding cloths, wiping tables, watering plants. Adaptation: toddlers carry napkins or cups to the table; school-age children make a picture job chart for the week."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Family Food Stories",
+          "domain": "language_literacy",
+          "notes": "Share favourite family foods and start a group recipe book with recipes families send in. Talk about foods from many cultures. Adaptation: toddlers point to food pictures; school-age children write the recipe steps and draw the dish."
+        },
+        {
+          "time": "10:30",
+          "title": "Cooking a Family Recipe",
+          "domain": "self_care",
+          "notes": "Prepare a simple no-bake or lightly cooked recipe shared by a family. Check allergy lists and dietary needs first; the educator handles all knives and heat, and children are supervised throughout. Adaptation: toddlers wash vegetables and stir; older children read the recipe and measure ingredients."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Games From Home",
+          "domain": "outdoor",
+          "notes": "Play games family members remember from childhood: hopscotch, tag, skipping rhymes, clapping games from different countries. Adaptation: infants play on a blanket nearby with soft balls; older children teach the rules to younger ones."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Who Lives in My Home Graph",
+          "domain": "cognitive",
+          "notes": "Make a simple graph of how many people and pets live in each home, with no right or wrong number. Adaptation: toddlers place a sticker by their photo; school-age children count columns and compare which number is most common."
+        },
+        {
+          "time": "10:30",
+          "title": "House Collage",
+          "domain": "creative_arts",
+          "notes": "Create a house collage with pre-cut shapes, fabric scraps and magazine pictures on cardstock. Adaptation: toddlers use large pre-cut shapes and glue sticks only, with no small pieces; school-age children cut their own windows, doors and furniture."
+        },
+        {
+          "time": "15:00",
+          "title": "Family Music Dance",
+          "domain": "physical",
+          "notes": "Dance to songs families have shared from home, in any language. Adaptation: infants are held and swayed gently or bounce on a lap; school-age children teach a dance step to the group."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Our Family Book",
+          "domain": "language_literacy",
+          "notes": "Put together a group book with one page per child showing their family and home, then read it together. Adaptation: infants look at the photos and hear names; school-age children read pages aloud to younger children."
+        },
+        {
+          "time": "10:30",
+          "title": "Handprint Family Tree",
+          "domain": "creative_arts",
+          "notes": "Make a tree on large paper with handprint leaves, adding names of people who love each child. Materials: washable paint, markers, wipes. Adaptation: infants and toddlers have handprints or footprints taken gently; older children write names and draw portraits."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Family Picnic",
+          "domain": "outdoor",
+          "notes": "Have an afternoon snack picnic outside on blankets and invite family members if possible. Check allergy lists and label foods. Adaptation: infants have their own bottles or foods from home; school-age children help plan and set up."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Nature Explorers",
+    "theme": "Nature Explorers: discovering plants, rocks, birds and bugs outdoors",
+    "age_group": "mixed",
+    "description": "Children of all ages explore the natural world close to home, collecting, observing and caring for nature together, with older children mentoring younger ones.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Nature Walk and Collect",
+          "domain": "outdoor",
+          "notes": "Walk to a park or around the yard with bags or baskets to collect leaves, pinecones, bark and large rocks. Only collect things already on the ground. Adaptation: infants touch leaves and grass from the stroller; school-age children use a picture checklist and lead a buddy."
+        },
+        {
+          "time": "10:30",
+          "title": "Nature Sort",
+          "domain": "cognitive",
+          "notes": "Sort the collection by type, size and colour on trays. Keep anything small enough to choke on away from infants and toddlers. Adaptation: toddlers sort large items into two baskets; school-age children make a labelled chart or Venn diagram."
+        },
+        {
+          "time": "15:00",
+          "title": "Nature Journals",
+          "domain": "language_literacy",
+          "notes": "Start a nature journal: draw a favourite find and write or dictate a sentence about it. Materials: clipboards, paper, pencils, crayons. Adaptation: toddlers make leaf rubbings with chunky crayons; school-age children add measurements and descriptive words."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Bird Watching",
+          "domain": "outdoor",
+          "notes": "Sit quietly outside and watch and listen for birds with toy or real binoculars. Talk about local birds like chickadees, robins and crows. Adaptation: infants listen and watch on a blanket; school-age children use a simple bird guide and tally sightings."
+        },
+        {
+          "time": "10:30",
+          "title": "Pinecone Bird Feeders",
+          "domain": "creative_arts",
+          "notes": "Spread sunflower or soy butter on pinecones and roll in birdseed (check allergy lists; use nut-free spreads). Hang them where children can watch from a window. Adaptation: keep seed away from infants and toddlers who mouth items, and let them decorate a large paper bird instead; older children tie and hang the feeders."
+        },
+        {
+          "time": "15:00",
+          "title": "Fly Like a Bird",
+          "domain": "physical",
+          "notes": "Flap, hop, soar and land like different birds to music, then 'migrate' across the room. Adaptation: infants flap arms with a gentle hand-over-hand; school-age children plan a migration route with stops."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Rock Explorers",
+          "domain": "cognitive",
+          "notes": "Examine rocks with magnifying glasses, comparing weight, colour and texture, and test which ones scratch others. Use only rocks bigger than a child's fist. Adaptation: toddlers hold and drop large rocks into a bucket; school-age children weigh them and order by weight."
+        },
+        {
+          "time": "10:30",
+          "title": "Rock Painting",
+          "domain": "creative_arts",
+          "notes": "Paint large, smooth rocks with washable or acrylic paint and let them dry for the garden. Materials: smocks, brushes, newspaper. Adaptation: toddlers paint big rocks with fat brushes; older children design patterns or kindness messages."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Rock Garden",
+          "domain": "outdoor",
+          "notes": "Place the painted rocks in a garden or along a path and make a short trail. Adaptation: infants watch and touch the rocks with an educator; school-age children plan the layout and make a sign."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Nature Picture Book",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about exploring nature, pausing to connect it to things found this week. Adaptation: infants explore a touch-and-feel board book; school-age children read a page to the group or research a question at the library."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Mud Kitchen",
+          "domain": "outdoor",
+          "notes": "Play in a mud kitchen with pots, spoons, bowls, water jugs and soil. Supervise water at all times. Adaptation: toddlers scoop and pour with large tools; school-age children write mud 'recipes' and run a pretend cafe."
+        },
+        {
+          "time": "15:00",
+          "title": "Clean Up and Wash",
+          "domain": "self_care",
+          "notes": "Wash hands, faces and tools after mud play, using a picture sequence at the sink. Change into dry clothes as needed. Adaptation: toddlers get hand-over-hand help; school-age children lead the tool-washing station."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Caring for Nature Circle",
+          "domain": "social_emotional",
+          "notes": "Talk about how we look after nature: leaving plants to grow, putting litter in bins, being gentle with creatures. Adaptation: toddlers help water a plant; school-age children make a 'nature rules' poster for the program."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Litter Clean-Up",
+          "domain": "outdoor",
+          "notes": "Pick up litter in the yard or park with gloves and grabbers; educators handle anything sharp or unsafe. Wash hands after. Adaptation: infants watch from the stroller; school-age children sort items into recycling and garbage and count them."
+        },
+        {
+          "time": "15:00",
+          "title": "Nature Music",
+          "domain": "creative_arts",
+          "notes": "Make music with sticks, pinecones, leaves and large rocks, and try natural sounds like tapping and rustling. Adaptation: toddlers shake a sealed bottle of leaves; older children compose a short rhythm pattern for the group to copy."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Canadian Wildlife",
+    "theme": "Canadian Wildlife: animals of Ontario's forests, lakes and skies",
+    "age_group": "mixed",
+    "description": "Children of all ages meet animals that live in Ontario and across Canada, such as beavers, loons, moose and black bears, learning about their homes and how to share the land respectfully.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Meet Canadian Animals",
+          "domain": "language_literacy",
+          "notes": "Show real photos of a beaver, moose, loon, black bear, red fox and snowy owl. Name each one, make sounds and share one fact. Adaptation: infants look at a board book with animal pictures; school-age children find one new fact in a library book or kids' nature site."
+        },
+        {
+          "time": "10:30",
+          "title": "Animal Habitat Sort",
+          "domain": "cognitive",
+          "notes": "Sort animal pictures by where they live: forest, lake or wetland, sky. Use three coloured mats as habitats. Adaptation: toddlers match an animal to one of two habitats; school-age children add food and shelter needs for each."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Animal Tracks",
+          "domain": "outdoor",
+          "notes": "Look for real tracks in mud or snow, then press animal-track stamps or feet into mud or sand to make trails. Adaptation: infants feel sand or snow with mittens; school-age children match tracks to a track chart."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Beaver Builders",
+          "domain": "cognitive",
+          "notes": "Build a beaver dam with sticks, stones and blocks in a sensory tub, then pour water to test it. Supervise water play. Adaptation: toddlers stack large blocks and splash; school-age children test and improve their design."
+        },
+        {
+          "time": "10:30",
+          "title": "Beaver Picture Book",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about beavers, noticing lodges, dams and teeth. Adaptation: infants look at the pictures on a lap; older children retell the story in order or write a beaver fact."
+        },
+        {
+          "time": "15:00",
+          "title": "Beaver Tail Slap Game",
+          "domain": "physical",
+          "notes": "Slap hands on the floor like beaver tails as a warning, then swim across the room on tummies or scooter boards. Adaptation: infants pat a drum; school-age children run a relay carrying 'sticks' to build a lodge."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Loon Call Listening",
+          "domain": "creative_arts",
+          "notes": "Listen to recordings of loon calls and other lake sounds. Copy the calls and make lake music with drums and shakers. Adaptation: infants listen on a lap; school-age children compose a short lake soundscape."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Canoe Pretend",
+          "domain": "outdoor",
+          "notes": "Spread blue fabric as a lake outdoors and paddle in a cardboard or pretend canoe with pool noodle paddles. Talk about canoes as part of Canada's history, including Indigenous peoples. Adaptation: infants sit on the fabric with an educator; older children steer and give paddling directions."
+        },
+        {
+          "time": "15:00",
+          "title": "Loon Art",
+          "domain": "creative_arts",
+          "notes": "Paint loons with black and white paint on blue paper, adding patterns with cotton swabs. Adaptation: toddlers paint freely with big brushes; school-age children paint from a photo and add the red eye and neck stripes."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Bears and Rest",
+          "domain": "social_emotional",
+          "notes": "Talk about black bears resting through winter and how our bodies need rest. Share cozy things that help each child feel calm. Adaptation: infants snuggle with a soft toy; school-age children draw a bear den and explain it."
+        },
+        {
+          "time": "10:30",
+          "title": "Blanket Bear Cave",
+          "domain": "cognitive",
+          "notes": "Build a cave with blankets over a table and take turns crawling in with flashlights to 'hibernate' and count stuffed animals inside. Adaptation: toddlers crawl in with an educator; school-age children design the cave and make a sign."
+        },
+        {
+          "time": "15:00",
+          "title": "Berry Snack",
+          "domain": "self_care",
+          "notes": "Share berries like blueberries or strawberries, as bears do. Check allergy lists and cut berries to safe sizes (halved or quartered for toddlers). Wash hands first. Adaptation: infants have pureed fruit; older children count and graph favourites."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Animal Charades",
+          "domain": "physical",
+          "notes": "Act out Canadian animals for friends to guess: waddling bear, flapping loon, sneaky fox, tall moose. Adaptation: toddlers copy an educator's movements; school-age children give clues without words."
+        },
+        {
+          "time": "10:30",
+          "title": "Our Canadian Animals Book",
+          "domain": "language_literacy",
+          "notes": "Make a group book with a page per animal, using drawings, photos and facts collected this week. Adaptation: toddlers add large stickers and scribbles; school-age children write the facts and read the book aloud."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Wildlife Watch",
+          "domain": "outdoor",
+          "notes": "Walk the yard or park looking for local wildlife: squirrels, chipmunks, birds, insects. Watch quietly from a distance and never feed wild animals. Adaptation: infants ride in a stroller; school-age children use a picture checklist."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Ocean & Water",
+    "theme": "Ocean and Water: how water moves, who lives in it and keeping it clean",
+    "age_group": "mixed",
+    "description": "Children explore how water moves, what lives in oceans and Great Lakes, and how to take care of water, with play adapted for every age in the group.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Where Is Water? Circle",
+          "domain": "cognitive",
+          "notes": "Talk about where we find water: taps, rain, lakes, oceans, and our bodies. Show a map with the Great Lakes and Canada's three oceans. Adaptation: infants splash hands in a shallow bowl with an educator; school-age children list how their family uses water in a day."
+        },
+        {
+          "time": "10:30",
+          "title": "Water Play Station",
+          "domain": "cognitive",
+          "notes": "Explore water with cups, funnels, jugs and sponges in a water table. Supervise water play constantly and empty tubs after use. Adaptation: infants splash in a shallow tray on a towel; school-age children measure how many cups fill each container."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Water Painting",
+          "domain": "outdoor",
+          "notes": "Paint fences, walls and sidewalks with water and large brushes, watching the pictures disappear in the sun. Adaptation: toddlers use wide brushes and sponges; school-age children write letters or words and time how long they last."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Ocean Animals Story",
+          "domain": "language_literacy",
+          "notes": "Read a picture book about ocean animals like whales, octopuses and sea turtles. Talk about which live off Canada's coasts. Adaptation: infants look at a bath-safe or board book; school-age children share a fact they know or look one up."
+        },
+        {
+          "time": "10:30",
+          "title": "Paper Plate Fish",
+          "domain": "creative_arts",
+          "notes": "Make fish from paper plates with paint, tissue paper and markers. Adaptation: toddlers paint with big brushes and large pieces only; school-age children cut fins and add scales in patterns."
+        },
+        {
+          "time": "15:00",
+          "title": "Swim Like Sea Creatures",
+          "domain": "physical",
+          "notes": "Move like sea creatures to music: slither like an eel, float like a jellyfish, glide like a whale. Adaptation: infants wiggle on a mat during tummy time; school-age children run a sea creature relay."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Sink or Float",
+          "domain": "cognitive",
+          "notes": "Test items in a tub of water and sort them into sink and float groups. Use items bigger than a choke tube. Adaptation: toddlers drop large items and watch; school-age children predict first and record results on a chart."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Sprinkler Play",
+          "domain": "outdoor",
+          "notes": "Play in a sprinkler or with splash mats on a warm day, with sunscreen, hats and water breaks. Supervise closely and keep surfaces non-slip. Adaptation: infants sit near a gentle spray with an educator; school-age children invent sprinkler games."
+        },
+        {
+          "time": "15:00",
+          "title": "Drinking Water Habits",
+          "domain": "self_care",
+          "notes": "Talk about why bodies need water and practise pouring water into cups independently. Adaptation: infants have their bottles or cups offered; school-age children track how many cups they drink on a chart."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Keeping Water Clean",
+          "domain": "social_emotional",
+          "notes": "Show a tub of 'dirty' water with safe litter (paper, plastic lids) and work together to clean it with nets. Talk about caring for lakes and oceans. Adaptation: toddlers scoop with large nets; school-age children make a poster on protecting water."
+        },
+        {
+          "time": "10:30",
+          "title": "Ocean in a Bottle",
+          "domain": "creative_arts",
+          "notes": "Fill clear bottles with water, a drop of blue food colouring and a little oil to make waves; the educator glues and tapes the lids shut. Adaptation: toddlers watch and tip sealed bottles only; older children add large sealed items and compare wave patterns."
+        },
+        {
+          "time": "15:00",
+          "title": "Ocean Songs and Rhymes",
+          "domain": "language_literacy",
+          "notes": "Sing songs and rhymes about fish, boats and whales, adding actions. Adaptation: infants are rocked and hear the rhythm; school-age children lead a verse or invent a new one."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Fishing and Counting",
+          "domain": "cognitive",
+          "notes": "Fish for large paper or foam fish with numbers using magnetic rods (large magnets only, secured inside the rod and fish). Count the catch. Adaptation: toddlers count to three with support; school-age children add the numbers on their fish."
+        },
+        {
+          "time": "10:30",
+          "title": "Outdoor Sand Beach",
+          "domain": "outdoor",
+          "notes": "Turn the sandbox into a beach with shovels, pails, shells too large to swallow and water to make wet sand. Adaptation: infants touch sand with close supervision so it stays out of mouths; school-age children build sandcastles and moats."
+        },
+        {
+          "time": "15:00",
+          "title": "Ocean Wave Dance",
+          "domain": "physical",
+          "notes": "Dance with a parachute or large sheet, making small ripples and big waves while a soft toy 'boat' bounces. Adaptation: infants lie under the gently moving sheet; school-age children call out wave sizes."
+        }
+      ]
+    }
+  },
+  {
+    "title": "Colours & Shapes",
+    "theme": "Colours and Shapes: finding colour and shape all around us",
+    "age_group": "mixed",
+    "description": "Children explore colours and shapes through mixing, building and hunting, with activities that stretch from a baby's first high-contrast pictures to school-age patterns and design.",
+    "days": {
+      "monday": [
+        {
+          "time": "09:30",
+          "title": "Colour Hunt",
+          "domain": "cognitive",
+          "notes": "Hunt for a colour of the day around the room and bring items to a matching coloured mat. Adaptation: infants look at high-contrast or bright colour cards; school-age children list and count items in each colour."
+        },
+        {
+          "time": "10:30",
+          "title": "Colour Mixing Discovery",
+          "domain": "creative_arts",
+          "notes": "Mix primary colours with washable paint on paper plates to discover new colours. Materials: red, yellow, blue paint, brushes, smocks. Adaptation: toddlers squish paint inside sealed zip bags; school-age children predict results and make a colour chart."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Colour Walk",
+          "domain": "outdoor",
+          "notes": "Walk outside looking for colours in nature and the neighbourhood: red leaves, blue sky, yellow signs. Adaptation: infants ride in a stroller while an educator names colours; school-age children tally each colour found."
+        }
+      ],
+      "tuesday": [
+        {
+          "time": "09:30",
+          "title": "Shape Picture Book",
+          "domain": "language_literacy",
+          "notes": "Read a book about shapes, then find the shapes in the room. Adaptation: infants explore a touch-and-feel shape book; school-age children find 3D shapes like spheres and cylinders."
+        },
+        {
+          "time": "10:30",
+          "title": "Shape Building",
+          "domain": "cognitive",
+          "notes": "Build with shape blocks and magnetic tiles, talking about corners and sides. Adaptation: toddlers stack large soft blocks; school-age children build a structure using a set number of shapes."
+        },
+        {
+          "time": "15:00",
+          "title": "Shape Hopscotch",
+          "domain": "physical",
+          "notes": "Tape or chalk shapes on the floor and hop, jump or step from shape to shape as they are called. Adaptation: toddlers walk from shape to shape holding a hand; school-age children hop on one foot or follow a pattern."
+        }
+      ],
+      "wednesday": [
+        {
+          "time": "09:30",
+          "title": "Colours and Feelings",
+          "domain": "social_emotional",
+          "notes": "Talk about how colours can remind us of feelings, and that everyone may see it differently. Children pick a colour that matches how they feel today. Adaptation: infants look at bright scarves; school-age children draw their feelings in colour."
+        },
+        {
+          "time": "10:30",
+          "title": "Rainbow Snack",
+          "domain": "self_care",
+          "notes": "Make a rainbow plate with colourful fruit and vegetables. Check allergy lists and cut food to safe sizes for younger children. Wash hands first. Adaptation: infants have soft or pureed options; school-age children arrange a pattern and name each colour."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Chalk Shapes",
+          "domain": "outdoor",
+          "notes": "Draw giant shapes with chunky sidewalk chalk and colour them in, then play a game of 'run to the circle'. Adaptation: toddlers scribble freely; school-age children draw shape pictures like a house or robot."
+        }
+      ],
+      "thursday": [
+        {
+          "time": "09:30",
+          "title": "Shape Collage Art",
+          "domain": "creative_arts",
+          "notes": "Create pictures from pre-cut paper shapes glued onto cardstock. Adaptation: toddlers use large shapes and glue sticks only; school-age children cut their own shapes and make a picture from them."
+        },
+        {
+          "time": "10:30",
+          "title": "Colour Sorting Baskets",
+          "domain": "cognitive",
+          "notes": "Sort toys and objects into coloured baskets. Adaptation: toddlers sort two colours with large items; school-age children sort by two attributes, such as colour and shape."
+        },
+        {
+          "time": "15:00",
+          "title": "Colour Scarf Dance",
+          "domain": "physical",
+          "notes": "Dance with coloured scarves, waving when your colour is called. Adaptation: infants watch the scarves float above them; school-age children lead and call colours."
+        }
+      ],
+      "friday": [
+        {
+          "time": "09:30",
+          "title": "Our Colour Book",
+          "domain": "language_literacy",
+          "notes": "Make a group colour book with a page for each colour, using drawings and magazine pictures. Adaptation: toddlers add large stickers; school-age children write colour words and read the pages aloud."
+        },
+        {
+          "time": "10:30",
+          "title": "Light Table Colours",
+          "domain": "cognitive",
+          "notes": "Explore coloured transparent shapes and cellophane on a light table or window, layering colours to mix them. Adaptation: toddlers use large pieces only; school-age children create repeating patterns."
+        },
+        {
+          "time": "15:00",
+          "title": "Outdoor Rainbow Parade",
+          "domain": "outdoor",
+          "notes": "Parade around the yard with colourful streamers and ribbons, marching to music. Adaptation: infants ride in a stroller decorated with ribbons; school-age children lead the parade and choose the route."
+        }
+      ]
+    }
+  }
+]

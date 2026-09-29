@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\Storage;
  */
 class MarketingTranslationController extends Controller
 {
-    private const LANGS = ['fr' => 'Canadian French (fr-CA)', 'es' => 'neutral Latin-American Spanish'];
+    private const LANGS = ['fr' => 'Canadian French (fr-CA)', 'es' => 'neutral Latin-American Spanish', 'hi' => 'Hindi (Devanagari)'];
     private const MAX_ITEMS = 40;
     private const MAX_LEN = 2000;          // a sentence or paragraph
     private const MAX_POST_LEN = 16000;    // a whole blog article body (keys "post|…")

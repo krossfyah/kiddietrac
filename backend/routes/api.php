@@ -502,7 +502,7 @@ Route::post('/marketing-site/chat/end', [\App\Http\Controllers\Api\MarketingSite
 Route::get('/marketing-site/chat/poll', [\App\Http\Controllers\Api\WebChatController::class, 'poll'])->middleware('throttle:90,1,mkpoll');
 Route::post('/marketing-site/chat/human', [\App\Http\Controllers\Api\WebChatController::class, 'wantHuman'])->middleware('throttle:6,1,mkhuman');
 // Marketing-site auto-translation: the page reports text it has no FR/ES for; translated once, served after.
-Route::get('/marketing-site/i18n/{lang}/extra', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'extra'])->where('lang', 'fr|es')->middleware('throttle:120,1,mki18nx');
+Route::get('/marketing-site/i18n/{lang}/extra', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'extra'])->where('lang', 'fr|es|hi')->middleware('throttle:120,1,mki18nx');
 Route::post('/marketing-site/i18n/missing', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'missing'])->middleware('throttle:20,1,mki18n');
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1');
@@ -1896,6 +1896,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/lesson-plans',        [LessonPlanController::class, 'show']);
         Route::put('/lesson-plans',        [LessonPlanController::class, 'upsert']);
         Route::get('/lesson-plans/list',   [LessonPlanController::class, 'listForRoom']);
+        // weekly templates (2026-09-29): browse + preview, use, save a week as one
+        Route::get('/lesson-plan-templates',              [\App\Http\Controllers\Api\LessonPlanTemplateController::class, 'index']);
+        Route::post('/lesson-plan-templates',             [\App\Http\Controllers\Api\LessonPlanTemplateController::class, 'store']);
+        Route::delete('/lesson-plan-templates/{id}',      [\App\Http\Controllers\Api\LessonPlanTemplateController::class, 'destroy'])->where('id', '[0-9]+');
+        Route::post('/lesson-plan-templates/{id}/used',   [\App\Http\Controllers\Api\LessonPlanTemplateController::class, 'used'])->where('id', '[0-9]+');
     });
     
     Route::middleware('role:centre_director,agency_admin')->prefix('director')->group(function () {
