@@ -851,9 +851,17 @@ class SmsSettingsController extends Controller
         }
 
         // ── VOICE ──
+        /* The account a typed number is credited to: the tester's own if it is theirs,
+           else one in this agency (see VoiceController::testRecipient). "Newest account
+           with this number" landed on a suppressed duplicate and was refused silently. */
+        $who = \App\Http\Controllers\Api\VoiceController::testRecipient($agencyId, (int) $request->user()->id, $to);
+        if ($who['voice_opted_out']) {
+            return $this->sendResult($request, $agencyId, $channel, $to, false,
+                'That number has asked not to be telephoned. A test is not a reason to override that.');
+        }
         $ok = app(\App\Http\Controllers\Api\VoiceController::class)->callOne(
             $agencyId,
-            (int) ($owner->id ?? 0),
+            $who['user_id'],
             $to,
             'This is a test call from Kiddie Trac for ' . $agencyName
                 . '. If you were not expecting this call you can ignore it. Goodbye.',

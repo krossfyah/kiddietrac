@@ -194,6 +194,41 @@ final class VoiceController extends Controller
     }
 
     /**
+     * Whose number is this, for a TEST call to a typed number? (2026-09-29)
+     *
+     * One number can sit on several accounts. Anthony's is on four: his own (#1) and
+     * three others, the newest in an agency with notifications switched off. The old
+     * lookup took the newest account, so a test to his own number was run as that
+     * account, refused silently by the do-not-contact check (gate 1, which writes no
+     * row) and reported as "the call could not be placed".
+     *
+     * So: the person testing, if the number is theirs; else an account in THIS agency;
+     * else nobody (0). Refuse if ANY account on the number opted out of calls, because
+     * a "do not ring me" belongs to the handset, not to one of its accounts.
+     *
+     * @return array{user_id:int, voice_opted_out:bool}
+     */
+    public static function testRecipient(int $agencyId, int $requesterId, string $e164): array
+    {
+        $last10 = substr(preg_replace('/\D/', '', $e164) ?? '', -10);
+        $accounts = DB::table('users')
+            ->whereRaw("RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', ''), 10) = ?", [$last10])
+            ->whereNull('deleted_at')
+            ->orderByDesc('id')->get(['id', 'voice_opt_out']);
+
+        $optedOut = $accounts->contains(fn ($a) => (int) ($a->voice_opt_out ?? 0) === 1);
+        $ids = $accounts->pluck('id')->map(fn ($i) => (int) $i)->all();
+
+        if (in_array($requesterId, $ids, true)) {
+            return ['user_id' => $requesterId, 'voice_opted_out' => $optedOut];
+        }
+        $inAgency = $ids ? DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', true)
+            ->whereIn('user_id', $ids)->orderByDesc('user_id')->value('user_id') : null;
+
+        return ['user_id' => (int) ($inAgency ?: 0), 'voice_opted_out' => $optedOut];
+    }
+
+    /**
      * POST /admin/voice/test-call
      *
      * Rings the signed-in admin's OWN profile number by default. It can also ring a
@@ -249,10 +284,8 @@ final class VoiceController extends Controller
             if ($to === '') {
                 return response()->json(['ok' => false, 'message' => 'That is not a number we can dial. Use the full form, like +16475550123.'], 422);
             }
-            $owner = DB::table('users')
-                ->whereRaw("RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', ''), 10) = ?", [substr(preg_replace('/\D/', '', $to) ?? '', -10)])
-                ->orderByDesc('id')->first(['id', 'voice_opt_out']);
-            if ($owner && (int) ($owner->voice_opt_out ?? 0) === 1) {
+            $who = self::testRecipient($agencyId, (int) $u->id, $to);
+            if ($who['voice_opted_out']) {
                 return response()->json(['ok' => false, 'message' => 'That number has asked not to be telephoned. A test is not a reason to override that.'], 422);
             }
             $bucket = 'kt.testsend:' . $agencyId . ':' . now()->format('YmdH');
@@ -264,7 +297,7 @@ final class VoiceController extends Controller
             $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your agency');
             $message = 'This is a test call from Kiddie Trac for ' . $agencyName . '. ' . $message;
             $phone = $to;
-            $callUserId = (int) ($owner->id ?? 0);
+            $callUserId = $who['user_id'];
         }
 
         if ($phone === '') {
@@ -293,6 +326,7 @@ final class VoiceController extends Controller
            voice setup works, which is the one thing this button exists to do. Here it
            only ever applies to a call the recipient asked for, on their own number, in
            the same second. A standing "do not ring me" is still honoured. */
+        $lastRow = (int) DB::table('voice_calls')->max('id');
         $ok = $this->callOne(
             $agencyId,
             $callUserId,
@@ -319,7 +353,13 @@ final class VoiceController extends Controller
         $switchOn = (bool) DB::table('agencies')->where('id', $agencyId)->value('voice_enabled');
 
         if (! $ok) {
-            $why = (string) (($call->error ?? '') ?: 'the call could not be placed');
+            /* Refused before a row was written: that is only ever the do-not-contact
+               check (callOne gate 1). Say so rather than "could not be placed". */
+            $wrote = $call && (int) $call->id > $lastRow;
+            $why = $wrote ? (string) (($call->error ?? '') ?: 'the call could not be placed')
+                : ((\App\Support\Suppression::isUser($callUserId)
+                    ? 'notifications are switched off for the account this number belongs to (its agency has them off, or the account is deactivated)'
+                    : 'the call could not be placed'));
 
             return response()->json(['ok' => false, 'message' => 'Not placed — ' . $why], 422);
         }
