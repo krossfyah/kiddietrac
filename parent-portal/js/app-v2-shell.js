@@ -315,7 +315,6 @@
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
           { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
           { hash: 'donations',        label: 'Donations',        icon: '💝' },
-          { hash: 'donations',        label: 'Donations',        icon: '💝' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Administration', items: [
@@ -366,7 +365,7 @@
              billing-the-agencies screens live. Anthony went to Settings and did not find
              it, which is the whole argument. */
           ...(isPlatformAdmin_v22p34
-            ? [{ hash: 'backups', label: 'Backups', icon: '🗄️' }]
+            ? [{ hash: 'backups', label: 'Backups', icon: '🗄️' }, { hash: 'compliance-evidence', label: 'Compliance evidence', icon: '🛡️' }]
             : []),
           /* Two-factor lives in the personal profile for EVERY role now — this entry
              used to be the exception, kept because agency admins and centre directors
@@ -1035,7 +1034,7 @@
     'tuition-increases': 'Plan and communicate a fee increase.',
     'sibling-discounts': 'Discounts for second and subsequent children.',
     'donations': 'Fundraising campaigns, gifts and donation receipts.',
-    'donations': 'Fundraising campaigns, gifts and donation receipts.',
+    'compliance-evidence': 'SOC 2 readiness: policies, the control matrix and live evidence exports.',
     'vacation-holds': 'Places held while a family is away.',
     'expenses': 'Suppliers, purchase orders and bills.',
     'quickbooks': 'Sync invoices and payments with QuickBooks.',

@@ -664,6 +664,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
                must never be one click from gone. */
             Route::post('/security-alerts/resolve-all', [\App\Http\Controllers\Api\SecurityController::class, 'resolveAllAlerts']);
             Route::post('/security-alerts/clear',       [\App\Http\Controllers\Api\SecurityController::class, 'clearAlerts']);
+            // SOC 2 readiness: Settings -> Compliance evidence (2026-09-29)
+            Route::get ('/compliance-evidence', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'summary']);
+            Route::get ('/compliance-evidence/access-review.csv', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'accessReviewCsv']);
+            Route::get ('/compliance-evidence/security-events.csv', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'authEventsCsv']);
+            Route::get ('/compliance-evidence/backups.csv', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'backupsCsv']);
+            Route::get ('/compliance-evidence/schedule.txt', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'scheduleTxt']);
+            Route::get ('/compliance-evidence/changes.txt', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'changesTxt']);
+            Route::get ('/compliance-evidence/documents/{file}', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'document'])->where('file', '[0-9a-z-]+\.md');
+            Route::get ('/compliance-evidence/access-reviews', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'reviews']);
+            Route::post('/compliance-evidence/access-reviews', [\App\Http\Controllers\Api\ComplianceEvidenceController::class, 'recordReview']);
             Route::get('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'listAgencies']);
             Route::post('/agencies', [\App\Http\Controllers\Api\PlatformController::class, 'createAgency']);
             Route::patch('/agencies/{agency}', [\App\Http\Controllers\Api\PlatformController::class, 'updateAgency']);
