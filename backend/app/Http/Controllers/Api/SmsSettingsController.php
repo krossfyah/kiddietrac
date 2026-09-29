@@ -252,27 +252,43 @@ class SmsSettingsController extends Controller
         $http = fn () => \Illuminate\Support\Facades\Http::withToken($key)->acceptJson()->timeout(20)
             ->baseUrl('https://api.telnyx.com/v2/');
 
-        $bal = $http()->get('balance');
-        if (! $bal->successful()) {
-            throw new \RuntimeException('balance HTTP ' . $bal->status());
+        /* IN PARALLEL (2026-09-29). Balance plus the first page of each record type were
+           five calls one after another: "perf.slow_request ... telnyx-usage took 3.2s".
+           They go out together now, so a cold load costs one round trip, not five. */
+        $base = 'https://api.telnyx.com/v2/';
+        $q = fn (string $type, int $page) => ['filter[record_type]' => $type, 'filter[date_range]' => 'last_30_days',
+            'page[size]' => 250, 'page[number]' => $page];
+        $types = ['messaging', 'call-control', 'sip-trunking'];
+        $first = \Illuminate\Support\Facades\Http::pool(function ($pool) use ($key, $base, $q, $types) {
+            $reqs = [$pool->as('balance')->withToken($key)->acceptJson()->timeout(20)->get($base . 'balance')];
+            foreach ($types as $t) {
+                $reqs[] = $pool->as($t)->withToken($key)->acceptJson()->timeout(20)->get($base . 'detail_records', $q($t, 1));
+            }
+
+            return $reqs;
+        });
+
+        $bal = $first['balance'];
+        if (! ($bal instanceof \Illuminate\Http\Client\Response) || ! $bal->successful()) {
+            throw new \RuntimeException('balance ' . (($bal instanceof \Illuminate\Http\Client\Response) ? 'HTTP ' . $bal->status() : 'unreachable'));
         }
 
-        // Every billing record of one type for the last 30 days (a few pages at most here).
-        $records = function (string $type) use ($http): array {
-            $out = [];
-            for ($page = 1; $page <= 8; $page++) {
-                $r = $http()->get('detail_records', [
-                    'filter[record_type]' => $type, 'filter[date_range]' => 'last_30_days',
-                    'page[size]' => 250, 'page[number]' => $page,
-                ]);
-                if (! $r->successful()) {
-                    throw new \RuntimeException($type . ' records HTTP ' . $r->status());
-                }
-                $d = $r->json('data') ?? [];
-                $out = array_merge($out, $d);
-                if (count($d) < 250) {
+        /* Every billing record of one type for the last 30 days. Paged by Telnyx's own
+           total_pages: it caps page[size] at 50 whatever is asked for, so "fewer than 250
+           means last page" stopped after 50 records and silently dropped the rest. */
+        $records = function (string $type) use ($http, $first, $q): array {
+            $r = $first[$type];
+            if (! ($r instanceof \Illuminate\Http\Client\Response) || ! $r->successful()) {
+                throw new \RuntimeException($type . ' records ' . (($r instanceof \Illuminate\Http\Client\Response) ? 'HTTP ' . $r->status() : 'unreachable'));
+            }
+            $out = $r->json('data') ?? [];
+            $pages = min(10, (int) ($r->json('meta.total_pages') ?? 1));
+            for ($page = 2; $page <= $pages; $page++) {
+                $more = $http()->get('detail_records', $q($type, $page));
+                if (! $more->successful()) {
                     break;
                 }
+                $out = array_merge($out, $more->json('data') ?? []);
             }
 
             return $out;

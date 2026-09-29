@@ -150,6 +150,12 @@
         Api.get(`/operations/menu?centre_id=${cid}&week_start=${weekStartStr}`).catch(() => ({})),
         allergyPanel(cid),
       ]);
+      /* LEFT BEFORE IT LOADED (support ticket #105, 2026-09-27). #appMain is a fresh node
+         per screen, so if you tap away while the week is loading, `main` is no longer on
+         the page: the grid was drawn into a detached node and the document-wide lookup
+         for #mp-prev found nothing: "Cannot set properties of null (setting 'onclick')".
+         Stop instead; the lookups below also read from `main`, not the whole page. */
+      if (!main.isConnected) { return; }
       /* A week nobody has created yet opens as PUBLISHED, so an educator who fills
          it in and presses Save has actually submitted it to families. It used to
          default to draft, which meant the menu was saved and then seen by no one.
@@ -268,11 +274,11 @@
       </div>`;
 
       const go = (delta) => { cur.setDate(cur.getDate() + delta); load(); };
-      document.getElementById('mp-prev').onclick = () => go(-7);
-      document.getElementById('mp-next').onclick = () => go(7);
-      const todayBtn = document.getElementById('mp-today'); if (todayBtn) todayBtn.onclick = () => { cur = _mondayOf(new Date()); load(); };
+      main.querySelector('#mp-prev').onclick = () => go(-7);
+      main.querySelector('#mp-next').onclick = () => go(7);
+      const todayBtn = main.querySelector('#mp-today'); if (todayBtn) todayBtn.onclick = () => { cur = _mondayOf(new Date()); load(); };
 
-      const centreSel = document.getElementById('mp-centre');
+      const centreSel = main.querySelector('#mp-centre');
       if (centreSel) {
         centreSel.onchange = () => {
           cid = parseInt(centreSel.value, 10);
@@ -310,7 +316,7 @@
           t.style.border = _menuEditing ? '1px solid #E5E7EB' : '1px solid transparent';
           t.style.background = _menuEditing ? '#fff' : 'transparent';
         });
-        var st = document.getElementById('mp-status');
+        var st = main.querySelector('#mp-status');
         if (st) { st.disabled = !_menuEditing; st.style.opacity = _menuEditing ? '' : '.65'; }
 
         Array.prototype.forEach.call(document.querySelectorAll('#mp-grid input, table input[data-m]'), function (i) {
@@ -325,12 +331,12 @@
             i.style.cursor = 'default';
           }
         });
-        var eb = document.getElementById('mp-edit');
-        var sb = document.getElementById('mp-save');
+        var eb = main.querySelector('#mp-edit');
+        var sb = main.querySelector('#mp-save');
         if (eb) { eb.innerHTML = _menuEditing ? '✓ Done' : '✏️ Edit'; }
         if (sb) { sb.style.display = _menuEditing ? '' : 'none'; }
       }
-      var _eb = document.getElementById('mp-edit');
+      var _eb = main.querySelector('#mp-edit');
       if (_eb) { _eb.onclick = function () { _menuEditing = !_menuEditing; applyMenuMode(); }; }
       applyMenuMode();
 
@@ -386,22 +392,22 @@
         };
       });
 
-      document.getElementById('mp-save').onclick = async () => {
+      main.querySelector('#mp-save').onclick = async () => {
         const items = [];
         main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach(inp => {
           const name = inp.value.trim(); if (!name) return;
           const allergens = main.querySelector(`input[data-d="${inp.dataset.d}"][data-m="${inp.dataset.m}"][data-f="allergens"]`).value.trim();
           items.push({ day_of_week: +inp.dataset.d, meal_type: inp.dataset.m, name, allergens: allergens || null });
         });
-        const status = document.getElementById('mp-status').value;
-        const msg = document.getElementById('mp-msg');
+        const status = main.querySelector('#mp-status').value;
+        const msg = main.querySelector('#mp-msg');
         msg.textContent = 'Saving…'; msg.style.color = '#6B7280';
         try {
           const meal_times = {};
           main.querySelectorAll('input[data-meal-time]').forEach(t => {
             if (t.value) { meal_times[t.getAttribute('data-meal-time')] = t.value; }
           });
-          await Api.post('/operations/menu', { centre_id: cid, week_start: weekStartStr, status, notes: document.getElementById('mp-notes').value, items, meal_times });
+          await Api.post('/operations/menu', { centre_id: cid, week_start: weekStartStr, status, notes: main.querySelector('#mp-notes').value, items, meal_times });
           msg.textContent = status === 'published' ? 'Published — families notified.' : 'Saved.'; msg.style.color = '#047857';
           /* Save IS the completion — no second confirmation. Only on success: a failed
              save keeps the grid editable, because the work is still in the boxes and
@@ -426,6 +432,7 @@
       main.innerHTML = '<div style="padding:24px;color:#64748B;">Loading menu…</div>';
       const weekStartStr = _ymd(cur);
       const r = await Api.get(`/parent/menu?week_start=${weekStartStr}`).catch(() => ({}));
+      if (!main.isConnected) { return; }   // left the screen while it loaded (ticket #105)
       const centre = r && r.centre; const items = (r && r.items) || [];
       const mealTimes = (r && r.meal_times) || {};
       const openDays = (r && Array.isArray(r.open_days) && r.open_days.length) ? r.open_days : [1, 2, 3, 4, 5];
