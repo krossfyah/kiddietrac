@@ -2211,6 +2211,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/admin/voice/test-call', [\App\Http\Controllers\Api\VoiceController::class, 'testCall'])->middleware('throttle:5,1,vxtest'); // rings a real phone
         Route::get ('/admin/voice/calls',     [\App\Http\Controllers\Api\VoiceController::class, 'calls']);
         Route::get ('/admin/voice/voices',    [\App\Http\Controllers\Api\VoiceController::class, 'voices']);
+        Route::get ('/admin/voice/categories', [\App\Http\Controllers\Api\VoiceController::class, 'categories']);
     });
 
     // ---- AI features ----

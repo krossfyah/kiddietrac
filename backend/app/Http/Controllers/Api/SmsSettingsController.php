@@ -174,6 +174,8 @@ class SmsSettingsController extends Controller
                Its own master switch, off until somebody turns it on. Credentials arriving
                on this screen must not be enough on their own to start ringing parents. */
             'voice_enabled' => (bool) ($agency->voice_enabled ?? false),
+            // Which broadcast reasons may place calls (VoiceController::CATEGORIES).
+            'voice_categories' => \App\Http\Controllers\Api\VoiceController::categoryList($agencyId),
             'voice_ready' => Telnyx::voiceConfig($agencyId) !== null,
 
             /* Per-agency webhook addresses. The agency is in the PATH because a webhook
@@ -296,8 +298,52 @@ class SmsSettingsController extends Controller
             }
         }
 
-        $total30 = $msg['cost'] + $voice['cost'];
-        $total7 = $msg['cost7'] + $voice['cost7'];
+        /* TELNYX'S RECORDS LAG (2026-09-29). The same query that returned 31 message and
+           50 call records at 13:31 returned 1 and 0 at 14:15, with no date filter at all.
+           So the card read "0 sent, 0 placed" while 37 texts and 3 calls had gone out.
+           Counts now come from KiddieTrac's own log, which knows every send it made.
+           Telnyx supplies the RATES whenever its records cover what we sent (at least
+           80%), and those rates are remembered. While its records are behind, spend is
+           our counts × the remembered rates, and the card says it is an estimate. */
+        $own = function (int $days) use ($agencyId) {
+            $since = now()->subDays($days);
+            $t = DB::table('sms_messages')->where('agency_id', $agencyId)->where('provider', 'telnyx')
+                ->where('created_at', '>=', $since);
+
+            return [
+                'out' => (clone $t)->where('direction', 'out')->whereIn('status', ['sent', 'delivered', 'failed'])->count(),
+                'in' => (clone $t)->where('direction', 'in')->count(),
+                'calls' => DB::table('voice_calls')->where('agency_id', $agencyId)->where('created_at', '>=', $since)
+                    ->whereNotIn('status', ['skipped', 'queued'])->count(),
+            ];
+        };
+        $o30 = $own(30);
+        $o7 = $own(7);
+        $complete = $msg['out'] >= 0.8 * $o30['out'] && $voice['out'] >= 0.8 * $o30['calls'];
+
+        $rateKey = 'telnyx-rates-' . $agencyId;
+        $rates = Cache::get($rateKey, []);
+        if ($complete && $msg['out'] >= 5) {
+            $rates['text'] = $msg['cost'] / max(1, $msg['out'] + $msg['in']);
+        }
+        if ($complete && $voice['out'] >= 1) {
+            $rates['call'] = $voice['out_cost'] / $voice['out'];
+        }
+        if ($complete) {
+            Cache::put($rateKey, $rates, 86400 * 45);
+        }
+
+        if ($complete) {
+            $total30 = $msg['cost'] + $voice['cost'];
+            $total7 = $msg['cost7'] + $voice['cost7'];
+        } else {
+            $pt = (float) ($rates['text'] ?? 0);
+            $pc = (float) ($rates['call'] ?? 0);
+            $total30 = ($o30['out'] + $o30['in']) * $pt + $o30['calls'] * $pc;
+            $total7 = ($o7['out'] + $o7['in']) * $pt + $o7['calls'] * $pc;
+            $msg['cost'] = ($o30['out'] + $o30['in']) * $pt;
+            $voice['cost'] = $o30['calls'] * $pc;
+        }
         // The faster of the two paces, so the estimate errs towards "top up sooner".
         $perDay = max($total30 / 30, $total7 / 7);
         $balance = (float) ($bal->json('data.balance') ?? 0);
@@ -310,15 +356,18 @@ class SmsSettingsController extends Controller
             ->distinct()->count('u.id');
         $textable = (clone $people)->where('u.sms_opt_in', 1)->distinct()->count('u.id');
 
-        $perText = $msg['out'] ? $msg['cost'] / max(1, $msg['out'] + $msg['in']) : null;
-        $perCall = $voice['out'] ? $voice['out_cost'] / $voice['out'] : null;
+        $perText = isset($rates['text']) ? (float) $rates['text'] : null;
+        $perCall = isset($rates['call']) ? (float) $rates['call'] : null;
 
         return [
             'balance' => $balance,
             'currency' => (string) ($bal->json('data.currency') ?? 'USD'),
             'available_credit' => (float) ($bal->json('data.available_credit') ?? $balance),
-            'texts' => ['sent' => $msg['out'], 'received' => $msg['in'], 'parts' => $msg['parts'], 'cost' => round($msg['cost'], 4)],
-            'calls' => ['outbound' => $voice['out'], 'inbound' => $voice['in'], 'minutes' => round($voice['billed_sec'] / 60, 1), 'cost' => round($voice['cost'], 4)],
+            // Counts from KiddieTrac's own log. Calls INTO the number never pass through us,
+            // so those are Telnyx's figure, or null while its records are behind.
+            'texts' => ['sent' => $o30['out'], 'received' => $o30['in'], 'cost' => round($msg['cost'], 4)],
+            'calls' => ['outbound' => $o30['calls'], 'inbound' => $complete ? $voice['in'] : null, 'cost' => round($voice['cost'], 4)],
+            'estimated' => ! $complete,
             'cost_30d' => round($total30, 4),
             'cost_7d' => round($total7, 4),
             'per_day' => round($perDay, 4),
@@ -434,6 +483,8 @@ class SmsSettingsController extends Controller
             'telnyx_voice_voice'          => ['nullable', 'string', 'max:80'],
             'telnyx_voice_language'       => ['nullable', 'string', 'max:12'],
             'voice_enabled'               => ['nullable', 'boolean'],
+            'voice_categories'            => ['nullable', 'array'],
+            'voice_categories.*'          => ['string', 'in:' . implode(',', array_keys(\App\Http\Controllers\Api\VoiceController::CATEGORIES))],
         ], [
             'api_key_sid.regex' => 'An API Key SID looks like SK followed by 32 characters.',
             'account_sid.regex' => 'An Account SID looks like AC followed by 32 characters. An OAuth client id (OQ…) will not work here.',
@@ -535,6 +586,17 @@ class SmsSettingsController extends Controller
         if ($request->exists('sms_enabled')) {
             DB::table('agencies')->where('id', $agencyId)
                 ->update(['sms_enabled' => $request->boolean('sms_enabled') ? 1 : 0]);
+        }
+
+        // The reasons that may place calls. An empty list is allowed: voice on, no reason rings.
+        if ($request->exists('voice_categories')) {
+            $raw = DB::table('agencies')->where('id', $agencyId)->value('settings');
+            $settings = $raw ? (json_decode((string) $raw, true) ?: []) : [];
+            $settings['voice_categories'] = array_values(array_intersect(
+                array_keys(\App\Http\Controllers\Api\VoiceController::CATEGORIES),
+                (array) ($data['voice_categories'] ?? [])
+            ));
+            DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings)]);
         }
 
         /* Never the token, not even its length. An audit row is read by more people than

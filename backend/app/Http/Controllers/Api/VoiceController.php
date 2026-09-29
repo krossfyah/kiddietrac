@@ -51,6 +51,58 @@ final class VoiceController extends Controller
     /** Long enough for a closure notice read twice; short enough that nobody hangs up. */
     private const MAX_SCRIPT = 800;
 
+    /* WHICH REASONS MAY RING PHONES (2026-09-29). Anthony: "we would like to choose what
+       categories and not just all announcements". Calls only ever go out from a
+       broadcast with a Reason; each agency now chooses which reasons may place calls,
+       on Carrier settings → Voice calls. Stored in agencies.settings.voice_categories.
+       The five urgent reasons start on; "Not an emergency" starts off, because
+       ringing people for routine news should be a deliberate choice. Enforced in
+       announce() and again in callOne(), so no path can place a call for a reason
+       that is switched off. Test calls are exempt. */
+    public const CATEGORIES = [
+        'closure' => 'Closure',
+        'evacuation' => 'Evacuation',
+        'lockdown' => 'Lockdown',
+        'illness' => 'Illness at the centre',
+        'emergency' => 'Other emergency',
+        'broadcast' => 'Not an emergency',
+    ];
+    public const DEFAULT_CATEGORIES = ['closure', 'evacuation', 'lockdown', 'illness', 'emergency'];
+
+    /** The reasons this agency allows calls for. */
+    public static function allowedCategories(int $agencyId): array
+    {
+        $raw = DB::table('agencies')->where('id', $agencyId)->value('settings');
+        $s = $raw ? (json_decode((string) $raw, true) ?: []) : [];
+        if (! array_key_exists('voice_categories', $s) || ! is_array($s['voice_categories'])) {
+            return self::DEFAULT_CATEGORIES;
+        }
+
+        return array_values(array_intersect(array_keys(self::CATEGORIES), $s['voice_categories']));
+    }
+
+    /** [{key,label,urgent,enabled}] for the settings screen and the broadcast screen. */
+    public static function categoryList(int $agencyId): array
+    {
+        $on = self::allowedCategories($agencyId);
+
+        return array_map(fn ($k) => [
+            'key' => $k,
+            'label' => self::CATEGORIES[$k],
+            'urgent' => BroadcastAudience::isEmergency($k),
+            'enabled' => in_array($k, $on, true),
+        ], array_keys(self::CATEGORIES));
+    }
+
+    /** GET /admin/voice/categories */
+    public function categories(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAccess($request, $agencyId);
+
+        return response()->json(['data' => self::categoryList($agencyId)]);
+    }
+
     // -- sending ------------------------------------------------------------
 
     /** POST /admin/voice/announce */
@@ -70,6 +122,13 @@ final class VoiceController extends Controller
         ]);
 
         $category = strtolower(trim((string) ($data['category'] ?? 'emergency'))) ?: 'emergency';
+        if (! in_array($category, self::allowedCategories($agencyId), true)) {
+            return response()->json([
+                'message' => 'Calls for "' . (self::CATEGORIES[$category] ?? $category) . '" are switched off for this agency. '
+                    . 'Choose which reasons may place calls in Carrier settings → Voice calls.',
+                'errors' => ['category' => ['Calls are switched off for this reason.']],
+            ], 422);
+        }
 
         if ($missing = BroadcastAudience::missingSelector($data)) {
             return response()->json([
@@ -426,6 +485,11 @@ final class VoiceController extends Controller
         //    $selfTest (testCall only: the caller's own number) is the one exception.
         if (! $selfTest && ! DB::table('agencies')->where('id', $agencyId)->value('voice_enabled')) {
             return $write('skipped', 'voice calls disabled for this agency');
+        }
+
+        // 2b. The reasons this agency allows calls for (tests exempt).
+        if ($category !== 'test' && ! in_array($category, self::allowedCategories($agencyId), true)) {
+            return $write('skipped', 'calls for this reason (' . $category . ') are switched off for this agency');
         }
 
         $user = DB::table('users')->where('id', $userId)->select('sms_opt_in', 'voice_opt_out')->first();

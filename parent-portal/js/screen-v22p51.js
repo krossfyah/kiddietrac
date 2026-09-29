@@ -1150,6 +1150,29 @@
     const catRow = document.getElementById('sms-cat-l');
     const catSel = document.getElementById('sms-cat');
     catSel.addEventListener('change', function () { try { refreshReach(); } catch (e) {} });
+
+    /* Only the reasons this agency allows calls for (Carrier settings → Voice calls,
+       2026-09-29). Unticked reasons are removed from the list; the server refuses
+       them anyway. With none allowed, the voice channel says so instead. */
+    let voiceCatsLoaded = false;
+    let voiceCatsNone = false;
+    function loadVoiceCats() {
+      if (voiceCatsLoaded) { return Promise.resolve(); }
+      return Api.get('/admin/voice/categories').then(function (r) {
+        voiceCatsLoaded = true;
+        const on = ((r && r.data) || []).filter(function (c) { return c.enabled; }).map(function (c) { return c.key; });
+        Array.prototype.slice.call(catSel.options).forEach(function (o) {
+          if (on.indexOf(o.value) === -1) { o.remove(); }
+        });
+        voiceCatsNone = catSel.options.length === 0;
+        if (voiceCatsNone) {
+          const o = document.createElement('option');
+          o.value = ''; o.textContent = 'No reasons are switched on for calls';
+          catSel.appendChild(o);
+        }
+        if (channel === 'voice') { syncChannel(); }
+      }).catch(function () { voiceCatsLoaded = true; });
+    }
     const note = document.getElementById('sms-note');
     const bodyLabel = document.getElementById('sms-body-l');
     const recentH = document.getElementById('sms-recent-h');
@@ -1163,13 +1186,17 @@
         b.style.borderColor = on ? '#1F6080' : '#CBD5E1';
       });
       const voice = channel === 'voice';
+      if (voice) { loadVoiceCats(); }
       catRow.style.display = voice ? '' : 'none';
       catSel.style.display = voice ? '' : 'none';
+      sendBtn.disabled = voice && voiceCatsNone;
       bodyLabel.textContent = voice ? 'Announcement' : 'Message';
       sendBtn.textContent = voice ? 'Place calls' : 'Send broadcast';
       recentH.textContent = voice ? 'Recent calls' : 'Sent & received';
       body.maxLength = LIMIT[channel];
-      note.textContent = voice
+      note.textContent = voice && voiceCatsNone
+        ? 'No reasons are switched on for calls. Choose them in Carrier settings → Voice calls.'
+        : voice
         ? 'Read aloud by an automated voice. An emergency reason reaches everyone with a phone '
           + 'number on file; anything else only reaches people who agreed to be contacted. Nobody '
           + 'who asked not to be telephoned is ever called.'

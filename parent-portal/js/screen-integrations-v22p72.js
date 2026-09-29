@@ -1197,6 +1197,20 @@
       +         'Place announcement calls for this agency</label>'
       +       '<div style="' + hint + 'margin-left:28px;">Off until you turn it on. Saving credentials on its own '
       +         'never starts phones ringing.</div>'
+      /* Which broadcast reasons may place calls (2026-09-29). */
+      +       '<div style="margin-top:16px;"><label style="' + lbl + '">Reasons that may place calls</label>'
+      +         '<div id="vx-cats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px;margin-top:4px;">'
+      +           (s.voice_categories || []).map(function (c) {
+                    return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13.5px;color:#0F172A;cursor:pointer;padding:4px 0;">'
+                      + '<input type="checkbox" data-vx-cat="' + esc(c.key) + '"' + (c.enabled ? ' checked' : '') + ' style="width:16px;height:16px;margin-top:2px;">'
+                      + '<span><b>' + esc(c.label) + '</b><br><span style="font-size:12px;color:#64748B;">'
+                      + (c.urgent ? 'Urgent: calls everyone with a phone, except anyone who asked not to be called'
+                        : 'Calls only people who agreed to be contacted')
+                      + '</span></span></label>';
+                  }).join('')
+      +         '</div>'
+      +         '<div style="' + hint + '">Calls only go out when someone sends a broadcast as a voice call and picks one of '
+      +           'these reasons. Anything unticked is not offered there, and is refused if tried. Saved with <b>Save</b>.</div></div>'
       +       '<div style="margin-top:16px;"><label style="' + lbl + '">Call events webhook</label>'
       +         '<code style="' + mono + '">' + esc(s.telnyx_voice_webhook || '') + '</code>'
       +         '<div style="' + hint + '">Set this on the Call Control application. Without it a call connects '
@@ -1269,11 +1283,15 @@
           +   tile('Balance', money(u.balance), runway, low ? 'bad' : '')
           +   tile('Last 30 days', money(u.cost_30d), money(u.per_day, 3) + ' a day recently')
           +   tile('Texts (30 days)', String((u.texts || {}).sent || 0) + ' sent', ((u.texts || {}).received || 0) + ' received · ' + money((u.texts || {}).cost))
-          +   tile('Calls (30 days)', String((u.calls || {}).outbound || 0) + ' placed', ((u.calls || {}).inbound || 0) + ' received · ' + money((u.calls || {}).cost))
+          +   tile('Calls (30 days)', String((u.calls || {}).outbound || 0) + ' placed',
+                ((u.calls || {}).inbound == null ? '' : ((u.calls || {}).inbound + ' received · ')) + money((u.calls || {}).cost))
           + '</div>'
           + '<div style="' + hint + 'margin-top:10px;">Actual cost per text ' + money(u.per_text, 3) + ' (carrier fee included) · per call '
           +   money(u.per_call, 3) + (callout.length ? ' · One agency-wide message: ' + callout.join(', ') : '') + '. '
-          +   'From Telnyx\'s own billing records. The number\'s monthly rental is not included.'
+          +   (u.estimated
+                ? 'Telnyx\'s billing records are behind right now, so spend is estimated from KiddieTrac\'s own log at your recent Telnyx rates. '
+                : 'Costs from Telnyx\'s own billing records; counts from KiddieTrac\'s log. ')
+          +   'The number\'s monthly rental is not included.'
           +   (low ? ' <b style="color:#B91C1C;">Top up, or turn on auto-recharge in Telnyx → Billing, so an emergency call-out cannot stop part-way.</b>' : '')
           + '</div></div>';
         var rb = document.getElementById('tx-usage-refresh');
@@ -1390,6 +1408,9 @@
         telnyx_voice_voice: val('vx-voice'),
         telnyx_voice_language: val('vx-lang'),
         voice_enabled: document.getElementById('vx-enabled').checked,
+        voice_categories: Array.prototype.map.call(
+          document.querySelectorAll('#vx-cats input[data-vx-cat]:checked'),
+          function (i) { return i.getAttribute('data-vx-cat'); }),
       };
       // Secrets are only sent when something was typed, so a blank box keeps the stored one.
       if (val('sms-token')) { body.auth_token = val('sms-token'); }
