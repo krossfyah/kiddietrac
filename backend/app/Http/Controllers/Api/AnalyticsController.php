@@ -64,20 +64,25 @@ final class AnalyticsController extends Controller
     public function hdlhGaps(Request $request, int $childId): JsonResponse
     {
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
-        // Count observations by HDLH domain
-        $obsByDomain = DB::table('observations')
-            ->where('child_id', $childId)
-            ->where('framework', 'HDLH')
-            ->whereNotNull('domain')
-            ->select('domain', DB::raw('COUNT(*) as count'))
-            ->groupBy('domain')
-            ->pluck('count', 'domain');
-
-        $domains = ['Belonging', 'Well-being', 'Engagement', 'Expression'];
-        $rows = collect($domains)->map(function ($d) use ($obsByDomain) {
-            $c = (int) ($obsByDomain[$d] ?? 0);
-            return ['domain' => $d, 'count' => $c, 'status' => $c >= 5 ? 'strong' : ($c >= 2 ? 'moderate' : 'gap')];
-        });
+        /* Framework-aware (2026-09-29). This used to count observations whose domain was
+           literally "Belonging" etc -- but domains are stored as social_emotional,
+           physical, ... so every child showed four gaps. Now each observation counts toward
+           the agency framework's areas it is linked to (or its domain maps to). */
+        $agencyId = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')->where('c.id', $childId)->value('ce.agency_id');
+        $fw = \App\Support\LearningFrameworks::forAgency($agencyId ? (int) $agencyId : null);
+        $counts = array_fill_keys(array_column($fw['areas'], 'key'), 0);
+        DB::table('observations')->where('child_id', $childId)
+            ->select('domain', 'hdlh_milestones')->orderBy('id')
+            ->chunk(500, function ($obs) use (&$counts, $fw) {
+                foreach ($obs as $o) {
+                    foreach (\App\Support\LearningFrameworks::areasOf($fw, (string) $o->domain, $o->hdlh_milestones) as $k) $counts[$k]++;
+                }
+            });
+        $rows = collect($fw['areas'])->map(function ($a) use ($counts) {
+            $c = (int) ($counts[$a['key']] ?? 0);
+            return ['key' => $a['key'], 'domain' => $a['label'], 'count' => $c, 'status' => $c >= 5 ? 'strong' : ($c >= 2 ? 'moderate' : 'gap')];
+        })->values();
         $gaps = $rows->where('status', 'gap')->count();
         $milestones = DB::table('milestone_records')
             ->where('child_id', $childId)
@@ -86,6 +91,7 @@ final class AnalyticsController extends Controller
             ->get()->groupBy('domain');
         return response()->json([
             'data' => $rows,
+            'framework' => ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']],
             'gaps_count' => $gaps,
             'milestones_by_domain' => $milestones,
         ]);

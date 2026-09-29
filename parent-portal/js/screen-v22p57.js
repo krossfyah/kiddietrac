@@ -231,25 +231,30 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading children…</div>';
     const childrenRes = await Api.get('/admin/children').catch(() => ({ data: [] }));
-    const children = (childrenRes.data || []).slice(0, 30);
+    // /admin/children answers {children:[...]}; reading .data showed "No children on file" to everyone.
+    const children = (childrenRes.children || childrenRes.data || []).slice(0, 30);
     if (!children.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No children on file.</div>'; return; }
     const results = [];
     for (const c of children) {
       const r = await Api.get(`/analytics/hdlh-gaps/${c.id}`).catch(() => null);
-      if (r) results.push({ ...c, gaps: r.gaps_count, domains: r.data });
+      if (r) results.push({ ...c, gaps: r.gaps_count, domains: r.data, fw: r.framework });
     }
+    /* Columns come from the agency's learning framework (2026-09-29) -- HDLH's four
+       foundations, EYFS's seven areas, and so on -- not four hardcoded names. */
+    const fw = (results.find(x => x.fw) || {}).fw || { name: 'How Does Learning Happen?', short: 'HDLH' };
+    const areas = ((results.find(x => (x.domains || []).length) || {}).domains || []).map(d => ({ key: d.key || d.domain, label: d.domain }));
     results.sort((a, b) => b.gaps - a.gaps);
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
-        <h2>🎯 HDLH gap detection</h2>
-        <p>Children with fewer observations in any of the four HDLH domains. Lower-rated ones first — those need attention.</p>
+        <h2>🎯 ${esc(fw.short)} gap detection</h2>
+        <p>Children with few observations in an area of ${esc(fw.name)}. Most gaps first — those need attention. (Fewer than 2 observations is a gap; 5 or more is strong.)</p>
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Child</th><th>Gaps</th><th>Belonging</th><th>Well-being</th><th>Engagement</th><th>Expression</th></tr></thead>
+          <thead><tr><th>Child</th><th>Gaps</th>${areas.map(a => `<th>${esc(a.label)}</th>`).join('')}</tr></thead>
           <tbody>${results.map(r => {
-            const domain = (name) => {
-              const d = (r.domains || []).find(x => x.domain === name);
+            const domain = (key) => {
+              const d = (r.domains || []).find(x => (x.key || x.domain) === key);
               if (!d) return '';
               const colour = d.status === 'gap' ? '#EF4444' : d.status === 'moderate' ? '#F59E0B' : '#10B981';
               return `<span class="kt-pill" style="background:${colour}22;color:${colour};">${d.count}</span>`;
@@ -257,8 +262,7 @@
             return `<tr>
               <td><strong>${esc(r.first_name)} ${esc(r.last_name)}</strong></td>
               <td><span class="kt-pill ${r.gaps >= 2 ? 'kt-pill-danger' : r.gaps === 1 ? 'kt-pill-warning' : 'kt-pill-success'}">${r.gaps}</span></td>
-              <td>${domain('Belonging')}</td><td>${domain('Well-being')}</td>
-              <td>${domain('Engagement')}</td><td>${domain('Expression')}</td>
+              ${areas.map(a => `<td>${domain(a.key)}</td>`).join('')}
             </tr>`;
           }).join('')}</tbody>
         </table>

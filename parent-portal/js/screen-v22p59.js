@@ -700,7 +700,7 @@
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>📑 Report cards</h2>
-        <p>Generate AI-drafted narratives per HDLH domain. Educators sign &amp; submit; a director/admin signs &amp; approves before it reaches the family.</p>
+        <p>Generate AI-drafted narratives for each area of your learning framework. Educators sign &amp; submit; a director/admin signs &amp; approves before it reaches the family.</p>
       </div>
       <div id="rc-pending"></div>
       <div class="kt-card">
@@ -725,6 +725,20 @@
         </div>
       </div>
     </div>`;
+    /* One narrative box per area of the agency's learning framework (2026-09-29). The
+       server returns `sections` [{key,label,text}]; older cards without it are HDLH. */
+    const rcLegacy = (card) => ['belonging', 'wellbeing', 'engagement', 'expression'].map(k => ({
+      key: k, label: k === 'wellbeing' ? 'Well-being' : k.charAt(0).toUpperCase() + k.slice(1), text: (card && card['narrative_' + k]) || '' }));
+    const rcBoxes = (sections) => (sections || []).map(x => `
+          <h4 style="margin:16px 0 6px;color:#1F6080;">${esc(x.label)}</h4>
+          <textarea data-rc-area="${esc(x.key)}" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(x.text || '')}</textarea>`).join('');
+    const rcCollect = () => {
+      const out = {};
+      document.querySelectorAll('#rc-out [data-rc-area]').forEach(t => { out[t.getAttribute('data-rc-area')] = t.value; });
+      return out;
+    };
+    const rcFwNote = (fw) => fw && fw.name ? `<div style="font-size:12.5px;color:#64748B;margin-top:6px;">Framework: <strong>${esc(fw.name)}</strong></div>` : '';
+
     document.getElementById('rc-gen').onclick = async () => {
       const cid = +document.getElementById('rc-cid').value;
       const term = document.getElementById('rc-term').value;
@@ -733,10 +747,10 @@
       btn.disabled = true; btn.textContent = 'Generating… (15-30 sec)';
       try {
         const r = await Api.post('/report-cards/generate', { child_id: cid, term });
-        document.getElementById('rc-out').innerHTML = ['belonging', 'wellbeing', 'engagement', 'expression'].map(d => `
-          <h4 style="margin:16px 0 6px;color:#1F6080;text-transform:capitalize;">${d.replace('wellbeing', 'Well-being')}</h4>
-          <textarea id="rc-${d}" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc((r.narratives || {})[d] || '')}</textarea>
-        `).join('') + `
+        const _secs = Array.isArray(r.sections) && r.sections.length ? r.sections
+          : rcLegacy({ narrative_belonging: (r.narratives || {}).belonging, narrative_wellbeing: (r.narratives || {}).wellbeing,
+                       narrative_engagement: (r.narratives || {}).engagement, narrative_expression: (r.narratives || {}).expression });
+        document.getElementById('rc-out').innerHTML = rcFwNote(r.framework) + rcBoxes(_secs) + `
           <h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4>
           <textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(r.next_steps || '')}</textarea>
           <div id="rc-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"></div>
@@ -746,10 +760,7 @@
         var _rcApprover = ['centre_director', 'agency_admin', 'platform_admin'].some(function (x) { return _rcRoles.indexOf(x) !== -1; });
         var saveEdits = async function (status) {
           await Api.patch(`/report-cards/${r.id}`, {
-            narrative_belonging: document.getElementById('rc-belonging').value,
-            narrative_wellbeing: document.getElementById('rc-wellbeing').value,
-            narrative_engagement: document.getElementById('rc-engagement').value,
-            narrative_expression: document.getElementById('rc-expression').value,
+            narratives: rcCollect(),
             next_steps: document.getElementById('rc-next').value,
             status: status || 'reviewed',
           });
@@ -787,9 +798,7 @@
       const card = ((list && list.data) || []).find(c => +c.id === cardId);
       if (!card) { alert('Card not found.'); return; }
       const out = document.getElementById('rc-out'); if (!out) return;
-      out.innerHTML = ['belonging', 'wellbeing', 'engagement', 'expression'].map(d =>
-        `<h4 style="margin:16px 0 6px;color:#1F6080;text-transform:capitalize;">${d.replace('wellbeing', 'Well-being')}</h4>` +
-        `<textarea id="rc-${d}" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(card['narrative_' + d] || '')}</textarea>`).join('') +
+      out.innerHTML = rcFwNote(card.framework_info) + rcBoxes(Array.isArray(card.sections) && card.sections.length ? card.sections : rcLegacy(card)) +
         `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(card.next_steps || '')}</textarea>` +
         (card.educator_signature ? `<div style="margin-top:14px;font-size:12px;color:#64748B;">Educator signature</div><img src="${esc(card.educator_signature)}" style="height:66px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:2px;">` : '') +
         `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
@@ -799,10 +808,7 @@
         </div>`;
       out.scrollIntoView({ behavior: 'smooth', block: 'start' });
       const save = () => Api.patch('/report-cards/' + cardId, {
-        narrative_belonging: document.getElementById('rc-belonging').value,
-        narrative_wellbeing: document.getElementById('rc-wellbeing').value,
-        narrative_engagement: document.getElementById('rc-engagement').value,
-        narrative_expression: document.getElementById('rc-expression').value,
+        narratives: rcCollect(),
         next_steps: document.getElementById('rc-next').value,
       });
       document.getElementById('rc-r-save').onclick = async () => { await save(); (window.KT && KT.toast) ? KT.toast('Saved.', 'success') : alert('Saved.'); };

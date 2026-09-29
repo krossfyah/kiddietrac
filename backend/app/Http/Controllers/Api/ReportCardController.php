@@ -51,7 +51,13 @@ final class ReportCardController extends Controller
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $rows = DB::table('report_cards')->where('child_id', $childId)
             ->orderByDesc('created_at')->get();
-        return response()->json(['data' => $rows]);
+        $current = \App\Support\LearningFrameworks::forAgency($this->agencyOfChild($childId));
+        foreach ($rows as $r) {
+            $fw = $this->frameworkOfCard($r, $current);
+            $r->framework_info = ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']];
+            $r->sections = $this->sectionsOf($r, $fw);
+        }
+        return response()->json(['data' => $rows, 'framework' => $current]);
     }
 
     public function generate(Request $request): JsonResponse
@@ -97,16 +103,17 @@ final class ReportCardController extends Controller
 
         // AI is OPTIONAL. If the key is absent (or a call fails) we still produce a
         // data-grounded draft from the child's logged records below — no more hard 503.
-        $key = $useAi ? env('ANTHROPIC_API_KEY') : null;
+        // config(), not env(): with the config cached env() returns null, which silently
+        // turned every report card into the template even when the AI was available.
+        $key = $useAi ? (config('services.anthropic.key') ?: null) : null;
+        $model = config('services.anthropic.model') ?: 'claude-haiku-4-5-20251001';
 
-        // Pull the child's logged records. IMPORTANT: observation `domain` values are the
-        // real developmental domains (social_emotional, physical, cognitive,
-        // language_literacy, creative_arts…), NOT the HDLH foundation names — so we MAP
-        // them below. (Previously this filtered observations by the HDLH name directly and
-        // matched almost nothing, starving both the AI prompt AND any fallback.)
+        // The agency's learning framework (2026-09-29): one narrative per framework area.
+        $fw = \App\Support\LearningFrameworks::forAgency($this->agencyOfChild((int) $child->id));
+
         $observations = DB::table('observations')->where('child_id', $child->id)
             ->orderByDesc('observed_at')->limit(200)
-            ->select('observed_at', 'domain', 'title', 'body')->get();
+            ->select('observed_at', 'domain', 'title', 'body', 'hdlh_milestones')->get();
         // BOTH care tables. The roster quick-log writes daily_events and the care
         // screen writes daily_care_logs; counting only the first meant a report card
         // described a fraction of the child's term — on one child, 12 moments of 54.
@@ -127,34 +134,30 @@ final class ReportCardController extends Controller
         }
         $eventCounts = collect($eventCounts);
 
-        // HDLH foundation → the real observation domains that feed it.
-        $map = [
-            'Belonging'  => ['belonging', 'social_emotional', 'social-emotional'],
-            'Well-being' => ['well-being', 'wellbeing', 'physical'],
-            'Engagement' => ['engagement', 'cognitive'],
-            'Expression' => ['expression', 'language_literacy', 'language-literacy', 'creative_arts', 'creative-arts'],
-        ];
+        // Each observation counts toward the areas it was linked to, or -- when it has no
+        // links (manual, no-AI, older records) -- the area its domain maps to.
+        foreach ($observations as $o) {
+            $o->areas = \App\Support\LearningFrameworks::areasOf($fw, (string) $o->domain, $o->hdlh_milestones);
+        }
 
         $narratives = [];
-        foreach (array_keys($map) as $d) {
-            $keyName = strtolower(str_replace('-', '', $d));
-            $obsForDomain = $observations
-                ->filter(fn ($o) => in_array(strtolower((string) $o->domain), $map[$d], true))
-                ->values();
+        foreach ($fw['areas'] as $area) {
+            $obsForArea = $observations->filter(fn ($o) => in_array($area['key'], $o->areas, true))->values();
             $text = '';
             if ($key) {
-                $obsLines = $obsForDomain->take(20)
+                $obsLines = $obsForArea->take(20)
                     ->map(fn ($o) => '- ' . Carbon::parse($o->observed_at)->format('M j') . ': '
                         . ($o->title ? $o->title . ' — ' : '') . $o->body)->implode("\n");
-                $prompt = "Write a warm, specific 4-5 sentence narrative for {$child->first_name}'s report card under the HDLH '{$d}' domain. "
-                    . "Use {$child->first_name}'s name naturally. Avoid generic phrases. "
+                $prompt = "Write a warm, specific 4-5 sentence narrative for {$child->first_name}'s report card under the "
+                    . "'{$area['label']}' area of {$fw['name']} ({$area['hint']}). "
+                    . "Use {$child->first_name}'s name naturally. Avoid generic phrases. Use only facts from the observations. "
                     . "Mention 1-2 concrete moments from the observations + 1 growth area.\n\n"
-                    . "Observations feeding this domain:\n" . ($obsLines ?: '(none logged)');
+                    . "Observations feeding this area:\n" . ($obsLines ?: '(none logged)');
                 try {
                     $res = Http::withHeaders([
                         'x-api-key' => $key, 'anthropic-version' => '2023-06-01', 'content-type' => 'application/json',
                     ])->timeout(45)->post('https://api.anthropic.com/v1/messages', [
-                        'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                        'model' => $model,
                         'max_tokens' => 500,
                         'messages' => [['role' => 'user', 'content' => $prompt]],
                     ]);
@@ -163,13 +166,11 @@ final class ReportCardController extends Controller
                     $text = '';
                 }
             }
-            // Fallback: whenever the AI is unavailable OR returned nothing for this domain,
-            // build a data-grounded draft from the child's own logged observations/events so
-            // the feature always yields an editable starting narrative (status stays 'draft').
             if ($text === '') {
-                $text = $this->templateNarrative($child->first_name, (string) $data['term'], $d, $obsForDomain, $eventCounts);
+                $text = $this->templateNarrative($child->first_name, (string) $data['term'], $area['label'],
+                    lcfirst(rtrim((string) $area['hint'], '.')), $obsForArea, $eventCounts);
             }
-            $narratives[$keyName] = $text;
+            $narratives[$area['key']] = $text;
         }
 
         $nextSteps = '';
@@ -179,7 +180,7 @@ final class ReportCardController extends Controller
                 $res = Http::withHeaders([
                     'x-api-key' => $key, 'anthropic-version' => '2023-06-01', 'content-type' => 'application/json',
                 ])->timeout(45)->post('https://api.anthropic.com/v1/messages', [
-                    'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                    'model' => $model,
                     'max_tokens' => 400,
                     'messages' => [['role' => 'user', 'content' => $nextPrompt]],
                 ]);
@@ -189,7 +190,7 @@ final class ReportCardController extends Controller
             }
         }
         if ($nextSteps === '') {
-            $nextSteps = $this->templateNextSteps($child->first_name, $observations, $map);
+            $nextSteps = $this->templateNextSteps($child->first_name, $observations, $fw);
         }
 
         $exists = DB::table('report_cards')->where('child_id', $child->id)->where('term', $data['term'])->first();
@@ -197,10 +198,13 @@ final class ReportCardController extends Controller
             'child_id' => $child->id,
             'term' => $data['term'],
             'generated_by_user_id' => $byUserId,
+            // HDLH keys match the four legacy columns; other frameworks leave them empty.
             'narrative_belonging' => $narratives['belonging'] ?? '',
             'narrative_wellbeing' => $narratives['wellbeing'] ?? '',
             'narrative_engagement' => $narratives['engagement'] ?? '',
             'narrative_expression' => $narratives['expression'] ?? '',
+            'narratives' => json_encode($narratives, JSON_UNESCAPED_UNICODE),
+            'framework' => $fw['key'],
             'next_steps' => $nextSteps,
             'status' => 'draft',
             'updated_at' => now(),
@@ -216,6 +220,8 @@ final class ReportCardController extends Controller
         return [
             'id' => $id,
             'narratives' => $narratives,
+            'sections' => array_map(fn ($a) => ['key' => $a['key'], 'label' => $a['label'], 'text' => $narratives[$a['key']] ?? ''], $fw['areas']),
+            'framework' => ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']],
             'next_steps' => $nextSteps,
             'source' => $key ? 'ai' : 'summary',
         ];
@@ -226,19 +232,14 @@ final class ReportCardController extends Controller
      * domain). Summarises the child's REAL logged observations for the mapped HDLH domain so
      * directors get a specific, editable starting draft instead of a blank field.
      */
-    private function templateNarrative(string $name, string $term, string $domain, $obs, $eventCounts): string
+    private function templateNarrative(string $name, string $term, string $domain, string $focus, $obs, $eventCounts): string
     {
-        $focus = [
-            'Belonging'  => 'building relationships and a sense of security',
-            'Well-being' => 'self-regulation, physical skills and healthy routines',
-            'Engagement' => 'exploring, problem-solving and curiosity',
-            'Expression' => 'communication, language and creative expression',
-        ][$domain] ?? 'growth and learning';
+        $isWellbeing = (bool) preg_match('/well-?being|physical|health/i', $domain);
 
         $n = $obs->count();
         if ($n === 0) {
             $extra = '';
-            if ($domain === 'Well-being') {
+            if ($isWellbeing) {
                 $meals = (int) ($eventCounts['meal'] ?? 0) + (int) ($eventCounts['snack'] ?? 0);
                 $naps = (int) ($eventCounts['nap_start'] ?? ($eventCounts['nap'] ?? 0));
                 if ($meals || $naps) {
@@ -268,25 +269,66 @@ final class ReportCardController extends Controller
         return $s;
     }
 
-    /** Fallback next-steps: target the domain with the fewest logged observations. */
-    private function templateNextSteps(string $name, $observations, array $map): string
+    /** Fallback next-steps: target the framework area with the fewest logged observations. */
+    private function templateNextSteps(string $name, $observations, array $fw): string
     {
         $counts = [];
-        foreach ($map as $d => $reals) {
-            $counts[$d] = $observations->filter(fn ($o) => in_array(strtolower((string) $o->domain), $reals, true))->count();
+        foreach ($fw['areas'] as $a) {
+            $counts[$a['key']] = $observations->filter(fn ($o) => in_array($a['key'], $o->areas ?? [], true))->count();
         }
         asort($counts);
         $weakest = (string) array_key_first($counts);
-        $foci = [
-            'Belonging'  => 'connection and a sense of belonging',
-            'Well-being' => 'self-help routines and active physical play',
-            'Engagement' => 'sustained, hands-on exploration',
-            'Expression' => 'language-rich conversation and creative activities',
-        ];
-        $step1 = $foci[$weakest] ?? 'continued all-round development';
+        $area = collect($fw['areas'])->firstWhere('key', $weakest);
+        $step1 = $area ? strtolower($area['label']) . ' (' . lcfirst(rtrim((string) $area['hint'], '.')) . ')' : 'continued all-round development';
         return "1. Continue offering experiences that strengthen {$name}'s {$step1}.\n"
             . "2. Share {$name}'s current interests with the family so learning continues at home.\n"
-            . "3. Capture more observations across all four HDLH domains next term to build a fuller picture of {$name}'s growth.";
+            . "3. Capture more observations across all " . count($fw['areas']) . " areas of {$fw['short']} next term to build a fuller picture of {$name}'s growth.";
+    }
+
+    /** child -> family -> centre -> agency. */
+    private function agencyOfChild(int $childId): ?int
+    {
+        $id = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')->where('c.id', $childId)->value('ce.agency_id');
+        return $id ? (int) $id : null;
+    }
+
+    /** The framework a card was written in: its own, else legacy HDLH. */
+    private function frameworkOfCard(object $card, array $current): array
+    {
+        $key = (string) ($card->framework ?? '');
+        if ($key === '' || $key === 'HDLH') {
+            return $current['key'] === 'HDLH' ? $current : $this->hdlh();
+        }
+        if ($key === $current['key']) return $current;
+        $all = \App\Support\LearningFrameworks::all();
+        if (! isset($all[$key]) || $key === 'CUSTOM') {
+            // A custom framework since changed: label the stored keys as they are.
+            $n = json_decode((string) ($card->narratives ?? ''), true) ?: [];
+            return ['key' => $key, 'name' => $key === 'CUSTOM' ? 'Custom framework' : $key, 'short' => $key,
+                'areas' => array_map(fn ($k) => ['key' => $k, 'label' => ucwords(str_replace('_', ' ', (string) $k)), 'hint' => ''], array_keys($n))];
+        }
+        $f = $all[$key];
+        return ['key' => $key, 'name' => $f['name'], 'short' => $f['short'],
+            'areas' => array_map(fn ($k, $v) => ['key' => $k, 'label' => $v[0], 'hint' => $v[1]], array_keys($f['areas']), $f['areas'])];
+    }
+
+    private function hdlh(): array
+    {
+        $f = \App\Support\LearningFrameworks::all()['HDLH'];
+        return ['key' => 'HDLH', 'name' => $f['name'], 'short' => $f['short'],
+            'areas' => array_map(fn ($k, $v) => ['key' => $k, 'label' => $v[0], 'hint' => $v[1]], array_keys($f['areas']), $f['areas'])];
+    }
+
+    /** [{key,label,text}] for a card, from narratives JSON or the legacy HDLH columns. */
+    public function sectionsOf(object $card, array $fw): array
+    {
+        $n = json_decode((string) ($card->narratives ?? ''), true);
+        if (! is_array($n) || ! $n) {
+            $n = ['belonging' => $card->narrative_belonging ?? '', 'wellbeing' => $card->narrative_wellbeing ?? '',
+                  'engagement' => $card->narrative_engagement ?? '', 'expression' => $card->narrative_expression ?? ''];
+        }
+        return array_map(fn ($a) => ['key' => $a['key'], 'label' => $a['label'], 'text' => (string) ($n[$a['key']] ?? '')], $fw['areas']);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -302,7 +344,19 @@ final class ReportCardController extends Controller
             'narrative_expression' => 'nullable|string',
             'next_steps' => 'nullable|string',
             'status' => 'nullable|in:draft,reviewed,submitted,sent',
+            'narratives' => 'nullable|array',
+            'narratives.*' => 'nullable|string|max:5000',
         ]);
+        // Per-area narratives (2026-09-29). Merged into what is stored; HDLH keys are
+        // mirrored into the legacy columns so older readers stay in step.
+        if (array_key_exists('narratives', $data)) {
+            $cur = json_decode((string) ($row->narratives ?? ''), true) ?: [];
+            $merged = array_merge($cur, array_map(fn ($v) => (string) $v, (array) $data['narratives']));
+            foreach (['belonging', 'wellbeing', 'engagement', 'expression'] as $k) {
+                if (array_key_exists($k, (array) $data['narratives'])) $data['narrative_' . $k] = (string) $data['narratives'][$k];
+            }
+            $data['narratives'] = json_encode($merged, JSON_UNESCAPED_UNICODE);
+        }
         DB::table('report_cards')->where('id', $id)->update($data + ['updated_at' => now()]);
         return response()->json(['status' => 'updated']);
     }
@@ -480,8 +534,10 @@ final class ReportCardController extends Controller
             $u = DB::table('users')->where('id', $uid)->first();
             return $u ? (trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: $u->email) : null;
         };
+        $fw = $this->frameworkOfCard($row, \App\Support\LearningFrameworks::forAgency($agency->id ?? null));
         $html = view('pdf.report_card', [
             'card' => $row, 'child' => $child, 'family' => $family, 'agency' => $agency,
+            'sections' => $this->sectionsOf($row, $fw), 'frameworkName' => $fw['name'],
             'educatorName' => $nameOf($row->submitted_by_user_id ?? null),
             'adminName' => $nameOf($row->approved_by_user_id ?? null),
         ])->render();

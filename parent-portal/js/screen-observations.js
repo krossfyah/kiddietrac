@@ -24,15 +24,28 @@
     } catch (e) { return d; }
   }
 
+  /* The agency's learning framework (2026-09-29): observation links are to ITS areas
+     (HDLH foundations, EYFS areas, ...). Loaded once; labels fall back to the HDLH names
+     and then to a readable key, so a link from an older framework still shows. */
+  var FW = null;
+  var FW_LEGACY = { belonging: 'Belonging', wellbeing: 'Well-being', engagement: 'Engagement', expression: 'Expression' };
+  var FW_COLOURS = [['#FEF3C7', '#92400E'], ['#DCFCE7', '#166534'], ['#DBEAFE', '#1E40AF'], ['#EDE9FE', '#5B21B6'],
+                    ['#FCE7F3', '#9D174D'], ['#FFEDD5', '#9A3412'], ['#CCFBF1', '#115E59'], ['#E0E7FF', '#3730A3']];
+  async function loadFramework() {
+    if (FW) { return FW; }
+    try { FW = (await Api.get('/agency/learning-framework')).framework; } catch (e) { FW = null; }
+    return FW;
+  }
+  function fwShort() { return FW ? (FW.short || 'Framework') : 'HDLH'; }
   function foundationBadge(f) {
-    const map = {
-      belonging:  { bg: '#FEF3C7', fg: '#92400E', label: 'Belonging' },
-      wellbeing:  { bg: '#DCFCE7', fg: '#166534', label: 'Well-being' },
-      engagement: { bg: '#DBEAFE', fg: '#1E40AF', label: 'Engagement' },
-      expression: { bg: '#EDE9FE', fg: '#5B21B6', label: 'Expression' },
-    };
-    const m = map[f] || { bg: '#F3F4F6', fg: '#374151', label: f };
-    return '<span style="background:' + m.bg + ';color:' + m.fg + ';padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;">' + m.label + '</span>';
+    var idx = -1, label = null;
+    if (FW && FW.areas) {
+      for (var i = 0; i < FW.areas.length; i++) { if (FW.areas[i].key === f) { idx = i; label = FW.areas[i].label; break; } }
+    }
+    if (idx < 0) { idx = ['belonging', 'wellbeing', 'engagement', 'expression'].indexOf(f); label = FW_LEGACY[f] || null; }
+    var c = idx >= 0 ? FW_COLOURS[idx % FW_COLOURS.length] : ['#F3F4F6', '#374151'];
+    label = label || String(f || '').replace(/_/g, ' ').replace(/^\w/, function (x) { return x.toUpperCase(); });
+    return '<span style="background:' + c[0] + ';color:' + c[1] + ';padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;">' + esc(label) + '</span>';
   }
 
   /* ============================================================
@@ -198,6 +211,7 @@
 
     let data;
     try {
+      await loadFramework();
       data = await Api.get('/provider/observations?limit=30&sort=' + encodeURIComponent(obsSort) + '&dir=' + encodeURIComponent(obsDir));
     } catch (e) {
       Dom.clear(listEl);
@@ -335,6 +349,76 @@
     if (k) { try { localStorage.removeItem(k); } catch (e) {} }
   }
 
+  /* ── Speak it (2026-09-29) ─────────────────────────────────────────────
+     Anthony: educators should be able to SAY what they saw. The browser's own speech
+     recognition (Chrome, Edge, Safari) turns speech into text in the box, live, in the
+     portal's language; nothing is recorded or uploaded by us. The Android app's WebView
+     has no speech recognition, so there -- and in any browser without it -- we point to
+     the microphone on the phone's keyboard, which does the same job. The educator
+     always reviews the text before "Structure with AI". */
+  function mountDictation(box, ta, onChange) {
+    if (!box || !ta) { return; }
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      box.innerHTML = '<span style="font-size:12px; color:var(--kt-text-muted);">🎤 Prefer to talk? Tap the microphone on your keyboard and speak, then check the text.</span>';
+      return;
+    }
+    var langs = { fr: 'fr-CA', es: 'es-MX', hi: 'hi-IN' };
+    var ui = '';
+    try { ui = (window.KT && KT.i18n && KT.i18n.locale && KT.i18n.locale()) || document.documentElement.lang || ''; } catch (e) {}
+    ui = String(ui).slice(0, 2).toLowerCase();
+    box.innerHTML =
+      '<button type="button" class="btn btn-secondary" id="kt-mic" aria-pressed="false" style="display:inline-flex; align-items:center; gap:6px;">🎤 <span>Speak it</span></button>' +
+      '<span id="kt-mic-state" aria-live="polite" style="font-size:12px; color:var(--kt-text-muted);">Talk instead of typing — the words appear in the box for you to check.</span>';
+    var btn = box.querySelector('#kt-mic'), state = box.querySelector('#kt-mic-state');
+    var rec = null, on = false, base = '', finalText = '';
+    function setOn(v) {
+      on = v;
+      btn.setAttribute('aria-pressed', v ? 'true' : 'false');
+      btn.querySelector('span').textContent = v ? 'Stop' : 'Speak it';
+      btn.style.background = v ? '#DC2626' : '';
+      btn.style.color = v ? '#fff' : '';
+      state.textContent = v ? '● Listening… speak naturally, then press Stop.' : 'Talk instead of typing — the words appear in the box for you to check.';
+      state.style.color = v ? '#DC2626' : '';
+    }
+    function start() {
+      rec = new SR();
+      rec.lang = langs[ui] || 'en-CA';
+      rec.continuous = true;
+      rec.interimResults = true;
+      base = ta.value && !/\s$/.test(ta.value) ? ta.value + ' ' : ta.value;
+      finalText = '';
+      rec.onresult = function (ev) {
+        var interim = '';
+        for (var i = ev.resultIndex; i < ev.results.length; i++) {
+          var t = ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) { finalText += t.replace(/^\s+/, '') + ' '; } else { interim += t; }
+        }
+        ta.value = (base + finalText + interim).slice(0, 3000);
+        if (onChange) { onChange(); }
+      };
+      rec.onerror = function (ev) {
+        var why = ev && ev.error;
+        setOn(false);
+        state.style.color = '#B45309';
+        state.textContent = why === 'not-allowed' || why === 'service-not-allowed'
+          ? 'Microphone access was blocked. Allow the microphone for this site, or use the mic on your keyboard.'
+          : (why === 'no-speech' ? 'We didn\u2019t hear anything. Try again a little closer to the microphone.' : 'Speech recognition stopped. You can press Speak it again.');
+      };
+      rec.onend = function () {
+        if (on) { try { rec.start(); return; } catch (e) {} }   // browsers stop after a pause; keep going until Stop
+        setOn(false);
+        ta.value = ta.value.replace(/\s+$/, '');
+        if (onChange) { onChange(); }
+      };
+      try { rec.start(); setOn(true); } catch (e) { setOn(false); }
+    }
+    function stop() { on = false; try { rec && rec.stop(); } catch (e) {} setOn(false); }
+    btn.addEventListener('click', function () { if (on) { stop(); } else { start(); } });
+    // Leaving the form stops the microphone.
+    window.addEventListener('hashchange', stop, { once: true });
+  }
+
   async function renderObservationNew(main, ctx) {
     Dom.clear(main);
 
@@ -422,6 +506,7 @@
         '<div class="form-row" style="margin-top:14px;">' +
           '<label>What did you observe? *</label>' +
           '<textarea id="kt-raw" rows="6" required minlength="10" maxlength="3000" placeholder="Be factual and specific. Example: \'Aria stacked five blocks in a vertical tower, knocked them down, and laughed. She tried again, this time arranging them in a circle and asked Sophia to join her.\'" style="padding:12px; border:1.5px solid var(--kt-border); border-radius:8px; font-family:inherit; line-height:1.5; width:100%;"></textarea>' +
+          '<div id="kt-dictate" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:8px;"></div>' +
           '<div style="font-size:11px; color:var(--kt-text-faint); margin-top:6px;">Tip: write what you saw, not how you felt about it. The AI will surface skills.</div>' +
         '</div>' +
 
@@ -451,6 +536,10 @@
         if (rawEl && rawEl.value.trim()) { saveDraft(childEl.value, rawEl.value); }
       });
     }
+
+    mountDictation(wrap.querySelector('#kt-dictate'), rawEl, function () {
+      saveDraft(childEl ? childEl.value : '', rawEl.value);
+    });
 
     // Offer back anything left unfinished.
     (function () {
@@ -526,6 +615,7 @@
   }
 
   function renderStep2(wrap, res, childId, rawText) {
+    if (!FW) { loadFramework().then(function () { if (FW) { renderStep2(wrap, res, childId, rawText); } }); }
     const step1 = wrap.querySelector('#kt-step-1');
     const step2 = wrap.querySelector('#kt-step-2');
     if (!step1 || !step2) { return; }
@@ -561,7 +651,9 @@
              ['physical','Physical'],
              ['language_literacy','Language & literacy'],
              ['cognitive','Cognitive'],
-             ['creative_arts','Creative arts']].map(function (d) {
+             ['creative_arts','Creative arts'],
+             ['self_care','Self-care'],
+             ['outdoor','Outdoor']].map(function (d) {
               return '<option value="' + d[0] + '"' + (d[0] === structured.domain ? ' selected' : '') + '>' + esc(d[1]) + '</option>';
             }).join('') +
           '</select>' +
@@ -575,7 +667,7 @@
 
         (milestones.length > 0 ?
           '<div style="margin-top:14px;">' +
-            '<label style="font-size:13px; font-weight:600;">HDLH Milestones detected</label>' +
+            '<label style="font-size:13px; font-weight:600;">' + esc(fwShort()) + ' links detected</label>' +
             '<div style="margin-top:8px;">' +
               milestones.map(function (m) {
                 return '<div style="background:var(--kt-bg); padding:10px; border-radius:8px; margin-bottom:6px;">' +
@@ -585,7 +677,7 @@
                 '</div>';
               }).join('') +
             '</div>' +
-          '</div>' : '<div style="margin-top:14px; padding:12px; background:var(--kt-bg); border-radius:8px; font-size:13px; color:var(--kt-text-muted);">No specific HDLH milestones detected. The observation will still save.</div>') +
+          '</div>' : '<div style="margin-top:14px; padding:12px; background:var(--kt-bg); border-radius:8px; font-size:13px; color:var(--kt-text-muted);">No specific ' + esc(fwShort()) + ' links detected. The observation will still save.</div>') +
 
         '<div style="margin-top:18px; display:flex; gap:10px; align-items:center;">' +
           '<label style="display:flex; align-items:center; gap:6px; cursor:pointer;">' +

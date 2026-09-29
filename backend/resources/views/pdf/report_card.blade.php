@@ -22,17 +22,21 @@
     <strong>Issued:</strong> {{ now()->format('F j, Y') }}
   </div>
 
+  {{-- One section per area of the agency's learning framework (2026-09-29). --}}
   @php
-    $domains = [
+    $domains = isset($sections) ? array_map(fn ($x) => [$x['label'], $x['text']], $sections) : [
       ['Belonging', $card->narrative_belonging],
       ['Well-being', $card->narrative_wellbeing],
       ['Engagement', $card->narrative_engagement],
       ['Expression', $card->narrative_expression],
     ];
   @endphp
+  @if (!empty($frameworkName))
+    <div class="meta" style="margin-top:-6px">Framework: {{ $frameworkName }}</div>
+  @endif
   @foreach ($domains as [$d, $text])
     <h2>{{ $d }}</h2>
-    <div class="domain"><p>{{ $text ?: 'No narrative recorded for this domain.' }}</p></div>
+    <div class="domain"><p>{{ $text ?: 'No narrative recorded for this area.' }}</p></div>
   @endforeach
 
   @if (!empty($card->next_steps))

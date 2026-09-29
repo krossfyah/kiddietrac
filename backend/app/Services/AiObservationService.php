@@ -24,6 +24,7 @@ class AiObservationService
 {
     protected string $apiKey;
     protected string $model;
+    protected array $framework = [];
 
     public function __construct()
     {
@@ -43,8 +44,10 @@ class AiObservationService
      * @param string $rawText
      * @return array{success:bool, structured?:array, error?:string, tokens_used?:int, model?:string}
      */
-    public function structure(Child $child, string $rawText): array
+    public function structure(Child $child, string $rawText, ?array $framework = null): array
     {
+        // The agency's learning framework (2026-09-29); HDLH when the caller has none.
+        $this->framework = $framework ?: \App\Support\LearningFrameworks::forAgency(null);
         if (! $this->isConfigured()) {
             return ['success' => false, 'error' => 'AI service not configured (missing API key)'];
         }
@@ -108,6 +111,7 @@ class AiObservationService
 
             // Parse JSON from the model. The model should return only JSON.
             $structured = $this->parseStructured($text);
+            if ($structured !== null) { $structured = $this->normalise($structured); }
             if ($structured === null) {
                 Log::error('AiObservationService: could not parse model output', [
                     'child_id' => $child->id,
@@ -157,15 +161,39 @@ class AiObservationService
         return $parsed;
     }
 
+    /* Keep the model inside the platform's vocabulary: a domain the rest of KiddieTrac
+       recognises, and framework areas that belong to the agency's framework. */
+    private function normalise(array $s): array
+    {
+        $alias = ['language' => 'language_literacy', 'creative_expression' => 'creative_arts', 'creative' => 'creative_arts',
+                  'social' => 'social_emotional', 'emotional' => 'social_emotional', 'motor' => 'physical'];
+        $d = strtolower(trim((string) ($s['domain'] ?? '')));
+        $d = $alias[$d] ?? $d;
+        $s['domain'] = in_array($d, \App\Support\LearningFrameworks::DOMAINS, true) ? $d : 'social_emotional';
+        $keys = array_column($this->framework['areas'] ?? [], 'key');
+        $s['hdlh_milestones'] = array_values(array_filter(array_map(function ($m) use ($keys) {
+            if (! is_array($m)) return null;
+            $f = strtolower(trim((string) ($m['foundation'] ?? $m['area'] ?? '')));
+            $f = str_replace(['-', ' '], '_', $f) === 'well_being' ? 'wellbeing' : str_replace(['-', ' '], '_', $f);
+            if (! in_array($f, $keys, true)) return null;
+            return ['foundation' => $f, 'milestone' => mb_substr((string) ($m['milestone'] ?? ''), 0, 160), 'evidence' => mb_substr((string) ($m['evidence'] ?? ''), 0, 300)];
+        }, (array) ($s['hdlh_milestones'] ?? []))));
+        return $s;
+    }
+
     protected function systemPrompt(): string
     {
+        $fw = $this->framework;
+        $areaKeys = implode('|', array_column($fw['areas'], 'key'));
+        $areaLines = implode("\n", array_map(fn ($a) => '    * ' . $a['key'] . ' - ' . $a['label'] . ': ' . $a['hint'], $fw['areas']));
+        $domains = implode('|', \App\Support\LearningFrameworks::DOMAINS);
+        $name = $fw['name'] . ' (' . $fw['short'] . ', ' . $fw['region'] . ')';
+
         return <<<PROMPT
-You are part of Kiddietrac, a Canadian childcare platform. Your job is to take an
+You are part of Kiddietrac, a childcare platform. Your job is to take an
 educator's freeform observation note about a child and structure it into a JSON
 object that:
-
-  1. Categorizes the observation under Ontario's "How Does Learning Happen" (HDLH)
-     pedagogical framework
+  1. Links the observation to the areas of the agency's learning framework: {$name}
   2. Identifies developmental milestones demonstrated
   3. Produces a warm, factual one-paragraph summary suitable for the child's parent
 
@@ -173,10 +201,10 @@ Your output MUST be valid JSON only — no markdown, no preamble, no code fences
 
 JSON schema:
 {
-  "domain": "cognitive|social_emotional|physical|language|creative_expression",
+  "domain": "{$domains}",
   "hdlh_milestones": [
     {
-      "foundation": "belonging|wellbeing|engagement|expression",
+      "foundation": "{$areaKeys}",
       "milestone": "<short 5-12 word skill or behaviour demonstrated>",
       "evidence": "<short factual quote-like sentence from the educator note>"
     }
@@ -186,16 +214,14 @@ JSON schema:
 
 RULES (non-negotiable):
 - Use ONLY facts present in the educator's note. Never invent details.
-- "domain" must match what's predominantly observed.
-- "hdlh_milestones" should have 1-3 items (don't pad). Each foundation:
-    * belonging   - relationship, connection, identity, family
-    * wellbeing   - health, safety, regulation, body awareness, emotional regulation
-    * engagement  - exploration, focus, curiosity, problem-solving, persistence
-    * expression  - communication, language, art, music, dramatic play, self-expression
+- "domain" must match what's predominantly observed, from the list above exactly.
+- "hdlh_milestones" should have 1-3 items (don't pad). "foundation" must be one of these
+  framework area keys exactly:
+{$areaLines}
 - "parent_summary" is for the family — friendly but specific. Use the child's name.
   No emoji. Maximum one exclamation mark. Refer to facts, not adjectives like "amazing".
 - If the observation is too vague to extract milestones, return hdlh_milestones=[].
-- Write in Canadian English by default.
+- Write the parent_summary in the same language as the educator's note (Canadian English by default).
 PROMPT;
     }
 

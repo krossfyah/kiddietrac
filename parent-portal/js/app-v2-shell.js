@@ -347,7 +347,7 @@
           { hash: 'signed-docs',      label: 'Signed documents', icon: '✍' },
           { hash: 'drip-campaigns',   label: 'Drip campaigns',  icon: '💧' },
           { hash: 'curriculum',       label: 'Curriculum',      icon: '📚' },
-          { hash: 'hdlh-gaps',        label: 'HDLH gaps',       icon: '🎯' },
+          { hash: 'hdlh-gaps',        label: 'Framework gaps',  icon: '🎯' },
           { hash: 'videos',           label: 'Video feed',      icon: '🎬' },
           { hash: 'photo-tagging',    label: 'Photo AI tagging',icon: '🪄' },
           { hash: 'conferences',      label: 'Conferences',     icon: '🗣' },
@@ -357,6 +357,7 @@
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'payment-providers',  label: 'Payment providers',       icon: '💳' },
+          { hash: 'learning-framework', label: 'Learning framework',      icon: '🧭' },
           /* SETTINGS, not Reseller. Backups are platform-level (one database sits behind
              every agency, so the controller still requires platform_admin) but "where do
              I check the backups" is a settings question, and Reseller is where the
@@ -940,7 +941,8 @@
     'lesson-plans': 'Weekly plans for each room.',
     'observations': 'Learning stories and developmental observations for each child.',
     'curriculum': 'Curriculum framework and coverage.',
-    'hdlh-gaps': 'Where your programme is light against How Does Learning Happen.',
+    'hdlh-gaps': 'Where your programme is light against your learning framework.',
+    'learning-framework': 'The framework you plan and report against: HDLH, ELECT, BC ELF, Flight, EYFS and more.',
     'schedule': 'Who is working, and where.',
     'staff-calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',
     'calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',

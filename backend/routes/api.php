@@ -490,6 +490,9 @@ Route::any('/login', function () { return response()->json(['message' => 'Unauth
 Route::get('/branding', [BrandingController::class, 'show']);
 Route::get('/marketing-site/config', [\App\Http\Controllers\Api\MarketingSiteController::class, 'publicConfig']);
 Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead'])->middleware('throttle:5,1,mklead');
+// Website booking wizard (2026-09-29): month availability + book a meeting
+Route::get('/marketing-site/booking/availability', [\App\Http\Controllers\Api\MarketingBookingController::class, 'availability'])->middleware('throttle:60,1,mkbooka');
+Route::post('/marketing-site/booking', [\App\Http\Controllers\Api\MarketingBookingController::class, 'store'])->middleware('throttle:6,60,mkbook');
 Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit'])->middleware('throttle:60,1,mkhit');
 Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat'])->middleware('throttle:45,1,mkchat');
 // A finished conversation goes to sales as a transcript. Throttled hard: one chat
@@ -619,6 +622,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/agency/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'show']);
+        Route::get('/agency/learning-framework', [\App\Http\Controllers\Api\LearningFrameworkController::class, 'show']);
 
     // v22p7: MFA (TOTP) enrolment endpoints — Phase A
     Route::prefix('auth/mfa')->group(function () {
@@ -2124,6 +2128,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'show']);
         Route::post('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'update']);
         Route::post('/admin/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'set']);
+        Route::post('/admin/learning-framework', [\App\Http\Controllers\Api\LearningFrameworkController::class, 'update']);
         Route::patch('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'update']);
     });
 

@@ -44,7 +44,7 @@ class AiObservationController extends Controller
         if (! $child) return response()->json(['error' => 'Child not found'], 404);
 
         try {
-            $result = $this->ai->structure($child, $data['raw_text']);
+            $result = $this->ai->structure($child, $data['raw_text'], \App\Support\LearningFrameworks::forAgency($this->agencyOfChild((int) $child->id)));
         } catch (\Throwable $e) {
             $result = ['success' => false, 'error' => $e->getMessage()];
         }
@@ -146,6 +146,7 @@ class AiObservationController extends Controller
             'ai_processed_at'      => now(),
             'educator_reviewed_at' => now(),
             'shared_with_family'   => $data['shared_with_family'] ?? false,
+            'framework'            => \App\Support\LearningFrameworks::forAgency($this->agencyOfChild((int) $data['child_id']))['key'],
         ]);
 
         return response()->json(['data' => $observation], 201);
@@ -288,5 +289,15 @@ class AiObservationController extends Controller
             'sort' => strtolower((string) $request->query('sort', 'date')),
             'dir' => $dir,
         ]);
+    }
+
+    /** child -> family -> centre -> agency (2026-09-29, for the agency's learning framework). */
+    private function agencyOfChild(int $childId): ?int
+    {
+        $id = \Illuminate\Support\Facades\DB::table('children as c')
+            ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->where('c.id', $childId)->value('ce.agency_id');
+        return $id ? (int) $id : null;
     }
 }
