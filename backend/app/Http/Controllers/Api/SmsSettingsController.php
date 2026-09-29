@@ -187,6 +187,139 @@ class SmsSettingsController extends Controller
     }
 
     /**
+     * GET /admin/sms-settings/telnyx-usage — the Telnyx balance and what the last 30 days
+     * actually cost, straight from Telnyx's own billing records (2026-09-29).
+     *
+     * Anthony: "can you also display the usage and balance in the portal". Nothing on
+     * this screen said what the account held or how fast it was being spent. A prepaid
+     * balance that runs dry mid-way through an emergency call-out fails silently from
+     * a parent's side. The rates are what this account was really charged (carrier fees
+     * included), not a price list, so the projection moves with them. Cached ten
+     * minutes. ?refresh=1 re-reads.
+     */
+    public function telnyxUsage(Request $request): JsonResponse
+    {
+        $this->assertAdmin($request);
+        $agencyId = $this->resolveAgencyId($request);
+        $key = Telnyx::apiKey($agencyId);
+        if ($key === '') {
+            return response()->json(['configured' => false]);
+        }
+
+        $cacheKey = 'telnyx-usage-' . $agencyId;
+        if ($request->boolean('refresh')) {
+            Cache::forget($cacheKey);
+        }
+
+        try {
+            $data = Cache::remember($cacheKey, 600, function () use ($key, $agencyId) {
+                return self::buildTelnyxUsage($key, $agencyId);
+            });
+        } catch (\Throwable $e) {
+            Log::warning('Telnyx usage: ' . $e->getMessage(), ['agency' => $agencyId]);
+
+            return response()->json(['configured' => true, 'error' => 'Telnyx did not answer: ' . mb_substr($e->getMessage(), 0, 160)], 200);
+        }
+
+        return response()->json(['configured' => true] + $data);
+    }
+
+    private static function buildTelnyxUsage(string $key, int $agencyId): array
+    {
+        $http = fn () => \Illuminate\Support\Facades\Http::withToken($key)->acceptJson()->timeout(20)
+            ->baseUrl('https://api.telnyx.com/v2/');
+
+        $bal = $http()->get('balance');
+        if (! $bal->successful()) {
+            throw new \RuntimeException('balance HTTP ' . $bal->status());
+        }
+
+        // Every billing record of one type for the last 30 days (a few pages at most here).
+        $records = function (string $type) use ($http): array {
+            $out = [];
+            for ($page = 1; $page <= 8; $page++) {
+                $r = $http()->get('detail_records', [
+                    'filter[record_type]' => $type, 'filter[date_range]' => 'last_30_days',
+                    'page[size]' => 250, 'page[number]' => $page,
+                ]);
+                if (! $r->successful()) {
+                    throw new \RuntimeException($type . ' records HTTP ' . $r->status());
+                }
+                $d = $r->json('data') ?? [];
+                $out = array_merge($out, $d);
+                if (count($d) < 250) {
+                    break;
+                }
+            }
+
+            return $out;
+        };
+
+        $weekAgo = now()->subDays(7);
+        $recent = fn ($row) => ! empty($row['created_at'] ?? $row['started_at'] ?? null)
+            && \Carbon\Carbon::parse($row['created_at'] ?? $row['started_at'])->gte($weekAgo);
+
+        // Texts: Telnyx bills the message rate AND a carrier fee per message.
+        $msg = ['out' => 0, 'in' => 0, 'parts' => 0, 'cost' => 0.0, 'cost7' => 0.0];
+        foreach ($records('messaging') as $m) {
+            $c = (float) ($m['cost'] ?? 0) + (float) ($m['carrier_fee'] ?? 0);
+            if (($m['direction'] ?? '') === 'outbound') { $msg['out']++; $msg['parts'] += (int) ($m['parts'] ?? 1); }
+            else { $msg['in']++; }
+            $msg['cost'] += $c;
+            if ($recent($m)) { $msg['cost7'] += $c; }
+        }
+
+        /* Calls: one call is billed twice over: the Call Control leg and the carrier
+           (sip-trunking) leg, each its own record. Outbound minutes round up to a full 60s. */
+        $voice = ['out' => 0, 'in' => 0, 'billed_sec' => 0, 'cost' => 0.0, 'cost7' => 0.0, 'out_cost' => 0.0];
+        foreach (['call-control', 'sip-trunking'] as $type) {
+            foreach ($records($type) as $c) {
+                $cost = (float) ($c['cost'] ?? 0);
+                $voice['cost'] += $cost;
+                if ($recent($c)) { $voice['cost7'] += $cost; }
+                if (($c['direction'] ?? '') === 'outbound') { $voice['out_cost'] += $cost; }
+                if ($type === 'sip-trunking') {      // count each call once
+                    if (($c['direction'] ?? '') === 'outbound') { $voice['out']++; } else { $voice['in']++; }
+                    $voice['billed_sec'] += (int) ($c['billed_sec'] ?? 0);
+                }
+            }
+        }
+
+        $total30 = $msg['cost'] + $voice['cost'];
+        $total7 = $msg['cost7'] + $voice['cost7'];
+        // The faster of the two paces, so the estimate errs towards "top up sooner".
+        $perDay = max($total30 / 30, $total7 / 7);
+        $balance = (float) ($bal->json('data.balance') ?? 0);
+
+        // Who an agency-wide message would reach, for the "one call-out costs" line.
+        $people = DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+            ->where('ra.agency_id', $agencyId)->where('ra.active', true)
+            ->whereNotNull('u.phone')->where('u.phone', '!=', '');
+        $callable = (clone $people)->where(function ($q) { $q->whereNull('u.voice_opt_out')->orWhere('u.voice_opt_out', 0); })
+            ->distinct()->count('u.id');
+        $textable = (clone $people)->where('u.sms_opt_in', 1)->distinct()->count('u.id');
+
+        $perText = $msg['out'] ? $msg['cost'] / max(1, $msg['out'] + $msg['in']) : null;
+        $perCall = $voice['out'] ? $voice['out_cost'] / $voice['out'] : null;
+
+        return [
+            'balance' => $balance,
+            'currency' => (string) ($bal->json('data.currency') ?? 'USD'),
+            'available_credit' => (float) ($bal->json('data.available_credit') ?? $balance),
+            'texts' => ['sent' => $msg['out'], 'received' => $msg['in'], 'parts' => $msg['parts'], 'cost' => round($msg['cost'], 4)],
+            'calls' => ['outbound' => $voice['out'], 'inbound' => $voice['in'], 'minutes' => round($voice['billed_sec'] / 60, 1), 'cost' => round($voice['cost'], 4)],
+            'cost_30d' => round($total30, 4),
+            'cost_7d' => round($total7, 4),
+            'per_day' => round($perDay, 4),
+            'days_left' => $perDay > 0 ? (int) floor($balance / $perDay) : null,
+            'per_text' => $perText !== null ? round($perText, 4) : null,
+            'per_call' => $perCall !== null ? round($perCall, 4) : null,
+            'reach' => ['callable' => $callable, 'textable' => $textable],
+            'fetched_at' => now()->utc()->toIso8601String(),
+        ];
+    }
+
+    /**
      * The last few connection tests for this agency, newest first.
      *
      * Read back out of the audit log rather than from a table of its own: a credential

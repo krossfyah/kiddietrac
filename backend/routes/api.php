@@ -2053,6 +2053,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch('/admin/country', [\App\Http\Controllers\Api\CurrencyController::class, 'updateCountry']);
         // Twilio credentials per agency, set from the portal rather than .env.
         Route::get  ('/admin/sms-settings',      [\App\Http\Controllers\Api\SmsSettingsController::class, 'show']);
+        Route::get  ('/admin/sms-settings/telnyx-usage', [\App\Http\Controllers\Api\SmsSettingsController::class, 'telnyxUsage']);
         Route::patch('/admin/sms-settings',      [\App\Http\Controllers\Api\SmsSettingsController::class, 'update']);
         Route::post ('/admin/sms-settings/test', [\App\Http\Controllers\Api\SmsSettingsController::class, 'test']);
         /* SENDS A REAL ONE to a number typed on the screen. Agency admins only, and

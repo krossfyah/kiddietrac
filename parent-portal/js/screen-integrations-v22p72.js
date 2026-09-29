@@ -976,6 +976,7 @@
       +     '<p>The carriers this agency sends text messages and places announcement calls through.</p>'
       +     '<div style="margin-top:6px;font-size:11px;opacity:.6;">Screen build '
       +       esc(SCREEN_BUILD) + '</div></div>'
+      +   '<div id="tx-usage"></div>'
 
       /* ── channel tabs ── */
       +   '<div style="display:flex;gap:6px;margin-top:16px;flex-wrap:wrap;" id="sv-tabs">'
@@ -1208,6 +1209,61 @@
       +     '</div>'
       +   '</div>'
       + '</div>';
+
+    /* ── TELNYX USAGE + BALANCE (2026-09-29) ──
+       Anthony: "can you also display the usage and balance in the portal". Loaded after
+       the page draws: it is two calls to Telnyx, and the rest of the screen should not
+       wait on them. */
+    function loadTxUsage(refresh) {
+      var box = document.getElementById('tx-usage');
+      if (!box) return;
+      box.innerHTML = '<div class="kt-card" style="margin-top:16px;font-size:13px;color:#64748B;">Loading Telnyx balance…</div>';
+      api().get('/admin/sms-settings/telnyx-usage' + (refresh ? '?refresh=1' : '')).then(function (u) {
+        if (!u || !u.configured) { box.innerHTML = ''; return; }
+        if (u.error) { box.innerHTML = '<div style="margin-top:16px;">' + note('warn', esc(u.error)) + '</div>'; return; }
+        var cur = u.currency || 'USD';
+        function money(n, dp) {
+          if (n == null) return '—';
+          try { return new Intl.NumberFormat('en-CA', { style: 'currency', currency: cur, minimumFractionDigits: dp || 2, maximumFractionDigits: dp || 2 }).format(n); }
+          catch (e) { return '$' + Number(n).toFixed(dp || 2); }
+        }
+        var low = u.days_left != null && u.days_left < 14;
+        var runway = u.days_left == null ? 'No spend in the last 30 days'
+          : (u.days_left > 365 ? 'Over a year at the current pace' : 'About ' + u.days_left + ' day' + (u.days_left === 1 ? '' : 's') + ' at the current pace');
+        var tile = function (label, value, sub, tone) {
+          return '<div style="flex:1 1 150px;min-width:0;background:' + (tone === 'bad' ? '#FEF2F2' : '#F8FAFC') + ';border:1px solid '
+            + (tone === 'bad' ? '#FECACA' : '#E2E8F0') + ';border-radius:10px;padding:10px 12px;">'
+            + '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;">' + label + '</div>'
+            + '<div style="font-size:19px;font-weight:800;color:' + (tone === 'bad' ? '#B91C1C' : '#0F172A') + ';margin-top:2px;">' + value + '</div>'
+            + '<div style="font-size:12px;color:#64748B;margin-top:2px;">' + sub + '</div></div>';
+        };
+        var r = u.reach || {};
+        var callout = [];
+        if (u.per_call != null && r.callable) callout.push('calling all ' + r.callable + ' people with a phone ≈ ' + money(u.per_call * r.callable));
+        if (u.per_text != null && r.textable) callout.push('texting the ' + r.textable + ' who opted in ≈ ' + money(u.per_text * r.textable));
+        box.innerHTML = '<div class="kt-card" style="margin-top:16px;">'
+          + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'
+          +   '<div style="font-size:14px;font-weight:800;color:#0F172A;">Telnyx balance &amp; usage</div>'
+          +   '<button type="button" id="tx-usage-refresh" data-kt-iconized="1" style="margin-left:auto;height:28px;padding:0 10px;background:#fff;'
+          +     'color:#1F6080;border:1px solid #CBD5E1;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;">Refresh</button></div>'
+          + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          +   tile('Balance', money(u.balance), runway, low ? 'bad' : '')
+          +   tile('Last 30 days', money(u.cost_30d), money(u.per_day, 3) + ' a day recently')
+          +   tile('Texts (30 days)', String((u.texts || {}).sent || 0) + ' sent', ((u.texts || {}).received || 0) + ' received · ' + money((u.texts || {}).cost))
+          +   tile('Calls (30 days)', String((u.calls || {}).outbound || 0) + ' placed', ((u.calls || {}).inbound || 0) + ' received · ' + money((u.calls || {}).cost))
+          + '</div>'
+          + '<div style="' + hint + 'margin-top:10px;">Actual cost per text ' + money(u.per_text, 3) + ' (carrier fee included) · per call '
+          +   money(u.per_call, 3) + (callout.length ? ' · One agency-wide message: ' + callout.join(', ') : '') + '. '
+          +   'From Telnyx\'s own billing records. The number\'s monthly rental is not included.'
+          +   (low ? ' <b style="color:#B91C1C;">Top up, or turn on auto-recharge in Telnyx → Billing, so an emergency call-out cannot stop part-way.</b>' : '')
+          + '</div></div>';
+        var rb = document.getElementById('tx-usage-refresh');
+        if (rb) rb.addEventListener('click', function () { loadTxUsage(true); });
+      }).catch(function (e) {
+        box.innerHTML = '<div style="margin-top:16px;">' + note('warn', 'Could not load the Telnyx balance' + (e && e.message ? ' — ' + esc(e.message) : '') + '.') + '</div>';
+      });
+    }
+    if (t.has_api_key) loadTxUsage(false);
 
     // ── channel tabs ──
     var panes = {};
