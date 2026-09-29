@@ -240,7 +240,13 @@ final class SmsController extends Controller
         //
         // Logged as a skipped row rather than dropped silently, so "why did that not
         // send?" has an answer.
-        if (! DB::table('users')->where('id', $userId)->value('sms_opt_in')) {
+        //
+        // SHARED PHONES (2026-09-29): consent is resolved for the HANDSET within this
+        // agency, so an opt-in on another of the same person's accounts here counts, a
+        // later "no" on any of them wins, and the account whose consent was used is
+        // recorded. See App\Support\Handset.
+        $consent = \App\Support\Handset::smsConsent($agencyId, $userId, $phone);
+        if (! $consent['ok']) {
             $gateRow = DB::table('sms_messages')->insertGetId([
                 'agency_id' => $agencyId,
                 'to_user_id' => $userId,
@@ -248,7 +254,26 @@ final class SmsController extends Controller
                 'body' => $body,
                 'category' => $category,
                 'status' => 'skipped',
-                'error' => 'no sms consent',
+                'error' => $consent['reason'],
+                'created_at' => now(),
+            ]);
+            \App\Support\SmsInbound::audit($gateRow);
+
+            return false;
+        }
+
+        // One handset, one copy: the same words to this number just now went already.
+        $dupOf = \App\Support\Handset::duplicateOf('sms_messages', $agencyId, $phone, $body);
+        if ($dupOf !== null) {
+            $gateRow = DB::table('sms_messages')->insertGetId([
+                'agency_id' => $agencyId,
+                'to_user_id' => $userId,
+                'to_phone' => $phone,
+                'body' => $body,
+                'category' => $category,
+                'status' => 'skipped',
+                'error' => 'duplicate: already sent to this phone' . ($dupOf ? ' (account #' . $dupOf . ')' : '')
+                    . ' in the last ' . \App\Support\Handset::DUPLICATE_MINUTES . ' minutes',
                 'created_at' => now(),
             ]);
             \App\Support\SmsInbound::audit($gateRow);
@@ -259,6 +284,7 @@ final class SmsController extends Controller
         $rowId = DB::table('sms_messages')->insertGetId([
             'agency_id'  => $agencyId,
             'to_user_id' => $userId,
+            'consent_user_id' => $consent['via'],
             'to_phone'   => $phone,
             'body'       => $body,
             'category'   => $category,

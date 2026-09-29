@@ -856,6 +856,11 @@
 
   async function renderSmsSettings(main) {
     main.setAttribute('data-kt-pretty', '1');
+    /* A settings form: a background re-render (a save in another tab, return-to-app)
+       can only throw away what is being typed and put you back on the Text messages
+       tab. Reported mid voice-test, 2026-09-29. Opted out of both refreshers; the
+       screen still redraws itself after its own Save, and remembers the tab. */
+    main.setAttribute('data-kt-no-autorefresh', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
 
     var s;
@@ -1219,6 +1224,7 @@
       +       '</div>'
       +       '<div style="' + hint + 'margin-top:8px;">The test rings only the number above, or your own profile '
       +         'number when that is blank. It works while voice calls are off, so you can try it before switching them on.</div>'
+      +       '<div id="vx-testlog" style="margin-top:14px;"></div>'
       +     '</div>'
       +   '</div>'
       + '</div>';
@@ -1291,8 +1297,15 @@
           o.style.borderColor = on ? '#1F6080' : '#CBD5E1';
         });
         Object.keys(panes).forEach(function (k) { panes[k].style.display = k === key ? '' : 'none'; });
+        // Remembered, so a re-render (after a Save, say) does not throw you back to Text.
+        try { sessionStorage.setItem('kt_sv_tab', key); } catch (e) {}
       });
     });
+    try {
+      var svSaved = sessionStorage.getItem('kt_sv_tab');
+      var svBtn = svSaved && main.querySelector('[data-sv-tab="' + svSaved + '"]');
+      if (svBtn && svSaved !== 'text') { svBtn.click(); }
+    } catch (e) {}
 
     /* ── carrier tabs ──
        showCarrier() also repaints the "sending" badge and the Test button, so the page
@@ -1554,6 +1567,60 @@
     }
     var vxText = document.getElementById('vx-test-text');
     var vxCount = document.getElementById('vx-test-count');
+    // The test message and number survive a re-render too.
+    try {
+      var vxKeep = JSON.parse(sessionStorage.getItem('kt_vx_test') || '{}');
+      if (vxText && vxKeep.text) { vxText.value = vxKeep.text; }
+      if (vxTo && vxKeep.to) { vxTo.value = vxKeep.to; vxTo.dispatchEvent(new Event('input')); }
+    } catch (e) {}
+    function vxRemember() {
+      try { sessionStorage.setItem('kt_vx_test', JSON.stringify({ text: vxText ? vxText.value : '', to: vxTo ? vxTo.value : '' })); } catch (e) {}
+    }
+    if (vxText) vxText.addEventListener('input', vxRemember);
+    if (vxTo) vxTo.addEventListener('input', vxRemember);
+
+    /* VOICE TEST LOG (2026-09-29). Anthony: "add test log for voice calls". The last
+       test calls from voice_calls: when, who pressed it, the number, how it ended and
+       why, and what was read out. Refreshed while a test is followed. */
+    var VX_TONE = { completed: ['#ECFDF5', '#065F46'], spoken: ['#ECFDF5', '#065F46'], answered: ['#EFF6FF', '#1E40AF'],
+      ringing: ['#EFF6FF', '#1E40AF'], queued: ['#F1F5F9', '#475569'] };
+    function vxWhen(ts) {
+      if (!ts) return '';
+      try {
+        var iso = String(ts).replace(' ', 'T');
+        if (!/[zZ]|[+-]\d\d:?\d\d$/.test(iso)) iso += 'Z';
+        return new Date(iso).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          timeZone: (window.KT && KT.agencyTz && KT.agencyTz()) || undefined });
+      } catch (e) { return String(ts); }
+    }
+    function renderVxLog(rows) {
+      var host = document.getElementById('vx-testlog');
+      if (!host) return;
+      var tests = (rows || []).filter(function (r) { return r.category === 'test'; }).slice(0, 8);
+      if (!tests.length) {
+        host.innerHTML = '<div class="kt-card" style="color:#94A3B8;font-size:12.5px;padding:14px 16px;">No test calls yet.</div>';
+        return;
+      }
+      host.innerHTML = '<div class="kt-card" style="padding:6px 16px 10px;">'
+        + '<div style="font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;padding:10px 0 2px;">Test log</div>'
+        + tests.map(function (r) {
+          var tone = VX_TONE[r.status] || ['#FEF2F2', '#991B1B'];
+          var label = (VX_STEP[r.status] || r.status || '').replace(/^✓ /, '');
+          if (r.status === 'completed') label = 'Completed';
+          return '<div style="padding:9px 0;border-bottom:1px solid #F1F5F9;">'
+            + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:#334155;">'
+            +   '<span style="padding:2px 8px;border-radius:999px;font-weight:800;font-size:11.5px;background:' + tone[0] + ';color:' + tone[1] + ';">' + esc(label) + '</span>'
+            +   '<b>' + esc(r.to_phone || '') + '</b>' + (r.to_name ? ' <span style="color:#64748B;">' + esc(r.to_name) + '</span>' : '')
+            +   (r.duration_secs ? ' <span style="color:#64748B;">· ' + esc(r.duration_secs) + 's</span>' : '')
+            +   '<span style="margin-left:auto;color:#64748B;">' + esc(vxWhen(r.created_at)) + (r.started_by ? ' · by ' + esc(r.started_by) : '') + '</span></div>'
+            + (r.error ? '<div style="font-size:12px;color:#B91C1C;margin-top:3px;">' + esc(r.error) + '</div>' : '')
+            + '<div style="font-size:12px;color:#64748B;margin-top:3px;">“' + esc(String(r.body || '').slice(0, 160)) + (String(r.body || '').length > 160 ? '…' : '') + '”</div>'
+            + '</div>';
+        }).join('')
+        + '<div style="font-size:11px;color:#94A3B8;padding:8px 0 0;">The last 8 test calls. Refused ones are listed with the reason.</div></div>';
+    }
+    function loadVxLog() { api().get('/admin/voice/calls').then(function (r) { renderVxLog((r && r.data) || []); }).catch(function () {}); }
+    loadVxLog();
     function vxCounted() { if (vxText && vxCount) { vxCount.textContent = vxText.value.length + ' / 600'; } }
     if (vxText) { vxText.addEventListener('input', vxCounted); vxCounted(); }
 
@@ -1576,6 +1643,7 @@
         var txt = (VX_STEP[row.status] || row.status) + (row.error ? ': ' + row.error : '');
         if (txt !== last) {
           last = txt;
+          renderVxLog(rows);
           say('vx-msg', txt, ['failed', 'skipped', 'no_answer', 'busy', 'rejected'].indexOf(row.status) === -1);
         }
         if (['completed', 'failed', 'skipped', 'no_answer', 'busy', 'rejected'].indexOf(row.status) !== -1) { return; }
@@ -1604,6 +1672,7 @@
       } catch (e) {
         say('vx-msg', (e && e.message) || 'The call could not be placed.', false);
       }
+      loadVxLog();
       btn.disabled = false;
     });
   }

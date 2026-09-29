@@ -79,10 +79,21 @@ class SmsSettingsController extends Controller
        and switch on texting for all of its centres at once. */
     private function assertAdmin(Request $request): void
     {
-        $ok = DB::table('role_assignments')
-            ->where('user_id', $request->user()->id)->where('active', 1)
-            ->whereIn('role', ['agency_admin', 'platform_admin'])
-            ->exists();
+        /* ADMIN OF *THIS* AGENCY (2026-09-29). This used to ask "admin anywhere?", while
+           resolveAgencyId() accepts any agency the user holds ANY role in. So an agency
+           admin who was also a parent (or educator) at a second agency could pick that
+           agency and read or change its carrier credentials, balance and test sends.
+           Nobody held that combination yet except a platform admin; closed before
+           anybody did. Same rule as VoiceController::assertAgencyAccess. */
+        $uid = $request->user()->id;
+        $isPlatform = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->where('role', 'platform_admin')->exists();
+        if ($isPlatform) {
+            return;
+        }
+        $agencyId = $this->resolveAgencyId($request);
+        $ok = $agencyId && DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->where('agency_id', $agencyId)->where('role', 'agency_admin')->exists();
         abort_unless($ok, 403, 'Agency admins only');
     }
 

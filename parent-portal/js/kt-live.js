@@ -38,7 +38,12 @@
      Matched on intent now, not on one spelling: /read, -read, mark-read, read-all
      and /seen are all receipts, and a receipt says nothing about what the user is
      looking at. (Anthony, 2026-09-08) */
-  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track)/i;
+  /* Carrier TESTS (2026-09-29): a test call, test text or connection check changes
+     nothing another screen shows, but as a POST it rang the bus and re-rendered
+     Carrier settings half a second later, which put it back on the Text messages
+     tab and wiped the test message being typed. Reported as "when testing voice
+     calls the screen keeps jumping back to text messages". */
+  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track|admin\/voice\/test-call|admin\/sms-settings\/test(-send)?\b)/i;
 
   /* Screens that keep THEMSELVES fresh, and must never be torn down and rebuilt
      underneath the person using them.

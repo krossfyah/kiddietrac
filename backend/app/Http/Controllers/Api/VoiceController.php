@@ -273,7 +273,10 @@ final class VoiceController extends Controller
            hour per agency, shared with the SMS test. The words are prefixed with who is
            calling, because the person answering may not be the one who typed. */
         if ($typed !== '') {
-            $roles = DB::table('role_assignments')->where('user_id', $u->id)->where('active', true)->pluck('role')->all();
+            // Admin of THIS agency (or platform), like the SMS test-send and carrier settings.
+            $roles = DB::table('role_assignments')->where('user_id', $u->id)->where('active', true)
+                ->where(function ($q) use ($agencyId) { $q->where('agency_id', $agencyId)->orWhere('role', 'platform_admin'); })
+                ->pluck('role')->all();
             if (! array_intersect(['agency_admin', 'platform_admin'], $roles)) {
                 return response()->json(['ok' => false, 'message' => 'Only agency admins can test-call another number. Leave it blank to call your own.'], 403);
             }
@@ -295,9 +298,12 @@ final class VoiceController extends Controller
             }
             \Illuminate\Support\Facades\Cache::put($bucket, $used + 1, now()->addHour());
             $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your agency');
-            $message = 'This is a test call from Kiddie Trac for ' . $agencyName . '. ' . $message;
             $phone = $to;
             $callUserId = $who['user_id'];
+            // Introduce the caller to anyone who is not the tester, unless the words already do.
+            if ($callUserId !== (int) $u->id && stripos($message, 'test call from Kiddie Trac') === false) {
+                $message = 'This is a test call from Kiddie Trac for ' . $agencyName . '. ' . $message;
+            }
         }
 
         if ($phone === '') {
@@ -424,9 +430,14 @@ final class VoiceController extends Controller
 
         $user = DB::table('users')->where('id', $userId)->select('sms_opt_in', 'voice_opt_out')->first();
 
-        // 3. A standing "do not ring me" wins over everything, emergency included.
+        // 3. A standing "do not ring me" wins over everything, emergency included, and
+        //    it belongs to the HANDSET: any account on this number (App\Support\Handset).
         if ($user && (int) ($user->voice_opt_out ?? 0) === 1) {
             return $write('skipped', 'this person has opted out of phone calls');
+        }
+        $noRing = \App\Support\Handset::voiceOptedOut($phone);
+        if ($noRing) {
+            return $write('skipped', 'this phone has opted out of calls (account #' . $noRing . ')');
         }
 
         /* 4. Anything that is not an emergency needs an actual yes. The emergency list
@@ -442,9 +453,24 @@ final class VoiceController extends Controller
               It does NOT bypass gate 3. A standing "do not ring me" stays absolute, and
               a number that belongs to somebody who has opted out is refused by the
               caller before it ever reaches here. */
-        if (! $bypassOptIn && ! BroadcastAudience::isEmergency($category)
-            && ! ($user && (int) ($user->sms_opt_in ?? 0) === 1)) {
-            return $write('skipped', 'no consent for non-emergency calls');
+        $consentVia = null;
+        if (! $bypassOptIn && ! BroadcastAudience::isEmergency($category)) {
+            // Resolved for the handset within this agency, as for texts (Handset::smsConsent).
+            $c = \App\Support\Handset::smsConsent($agencyId, $userId, $phone);
+            if (! $c['ok']) {
+                return $write('skipped', 'no consent for non-emergency calls' . ($c['reason'] !== 'no sms consent' ? ': ' . $c['reason'] : ''));
+            }
+            $consentVia = $c['via'];
+        }
+
+        // One handset, one call: the same announcement to this number just now went already.
+        // Tests are exempt, so the same test can be run twice in a row.
+        if ($category !== 'test') {
+            $dupOf = \App\Support\Handset::duplicateOf('voice_calls', $agencyId, $phone, $script);
+            if ($dupOf !== null) {
+                return $write('skipped', 'duplicate: this phone was already called' . ($dupOf ? ' (account #' . $dupOf . ')' : '')
+                    . ' in the last ' . \App\Support\Handset::DUPLICATE_MINUTES . ' minutes');
+            }
         }
 
         $cfg = Telnyx::voiceConfig($agencyId);
@@ -471,6 +497,7 @@ final class VoiceController extends Controller
         $rowId = DB::table('voice_calls')->insertGetId([
             'agency_id' => $agencyId,
             'to_user_id' => $userId,
+            'consent_user_id' => $consentVia,
             'to_phone' => $phone,
             'body' => $script,
             'category' => $category,
@@ -508,13 +535,16 @@ final class VoiceController extends Controller
 
         $rows = DB::table('voice_calls as v')
             ->leftJoin('users as u', 'u.id', '=', 'v.to_user_id')
+            ->leftJoin('users as sb', 'sb.id', '=', 'v.started_by_id')
             ->where('v.agency_id', $agencyId)
             ->orderByDesc('v.created_at')
             ->limit(200)
             ->select(
                 'v.id', 'v.to_phone', 'v.body', 'v.category', 'v.status', 'v.error',
                 'v.answered_at', 'v.ended_at', 'v.duration_secs', 'v.created_at',
-                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as to_name")
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as to_name"),
+                DB::raw("TRIM(CONCAT(COALESCE(sb.first_name,''),' ',COALESCE(sb.last_name,''))) as started_by"),
+                'v.consent_user_id'
             )
             ->get();
 
