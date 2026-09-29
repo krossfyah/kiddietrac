@@ -30,9 +30,9 @@ final class ComplianceController extends Controller
         $rows = DB::table('families as f')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
-            ->where('f.cwelcc_enrolled', 1)
+            ->join('cwelcc_enrolments as e', function ($j) { $j->on('e.family_id', '=', 'f.id')->whereNull('e.enrolled_to'); })
             ->whereNull('f.deleted_at')
-            ->select('f.id', 'f.family_name', 'f.cwelcc_enrolled_at', 'f.cwelcc_subsidy_rate', 'c.name as centre_name', 'f.centre_id')
+            ->select('f.id', 'f.family_name', 'e.enrolled_from as cwelcc_enrolled_at', 'e.subsidy_rate as cwelcc_subsidy_rate', 'c.name as centre_name', 'f.centre_id')
             ->get();
         return response()->json(['data' => $rows]);
     }
@@ -41,7 +41,7 @@ final class ComplianceController extends Controller
     {
         $data = $request->validate([
             'enrolled' => 'required|boolean',
-            'enrolled_at' => 'nullable|date',
+            'enrolled_at' => 'nullable|date',          // start day, or the last day when ending
             'subsidy_rate' => 'nullable|numeric|min:0|max:100',
         ]);
         // SECURITY: the family MUST belong to the caller's active agency. This took
@@ -50,12 +50,26 @@ final class ComplianceController extends Controller
         $famAgency = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('f.id', $familyId)->value('c.agency_id');
         abort_unless($famAgency && (int) $famAgency === (int) $agencyId, 403, 'That family is not in your agency.');
-        DB::table('families')->where('id', $familyId)->update([
-            'cwelcc_enrolled' => $data['enrolled'] ? 1 : 0,
-            'cwelcc_enrolled_at' => $data['enrolled_at'] ?? null,
-            'cwelcc_subsidy_rate' => $data['subsidy_rate'] ?? null,
-            'updated_at' => now(),
-        ]);
+
+        /* Through CwelccHistory (2026-09-29): this overwrote the family's flag, date and
+           rate in place, which erased the family from past reports on un-enrolment and
+           re-priced past months on a rate change. */
+        $day = ! empty($data['enrolled_at']) ? Carbon::parse($data['enrolled_at'])->toDateString()
+            : \App\Support\AgencyTime::today($agencyId);
+        $rate = isset($data['subsidy_rate']) ? (float) $data['subsidy_rate'] : null;
+        $by = (int) $request->user()->id;
+        $open = \App\Support\CwelccHistory::open($familyId);
+        if ($data['enrolled']) {
+            $err = $open
+                ? \App\Support\CwelccHistory::changeRate($familyId, $day, $rate, $by)
+                : \App\Support\CwelccHistory::enrol($familyId, $day, $rate, $by);
+        } else {
+            $err = \App\Support\CwelccHistory::end($familyId, $day, $by);
+        }
+        if ($err) {
+            return response()->json(['message' => $err], 422);
+        }
+
         return response()->json(['status' => 'updated']);
     }
 
@@ -63,52 +77,71 @@ final class ComplianceController extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         $month = (string) $request->query('month', Carbon::now()->format('Y-m'));
-        // Compute on the fly from payments + invoices for enrolled families
         $start = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         $end = $start->copy()->endOfMonth();
-        $rows = DB::table('children as ch')
-            ->join('families as f', 'f.id', '=', 'ch.family_id')
-            ->join('centres as c', 'c.id', '=', 'f.centre_id')
-            ->where('c.agency_id', $agencyId)
-            ->where('f.cwelcc_enrolled', 1)
-            ->whereNull('ch.deleted_at')
-            ->whereNull('f.deleted_at')
-            ->select(
-                'ch.id as child_id',
-                DB::raw("CONCAT(ch.first_name,' ',ch.last_name) as child_name"),
-                'f.id as family_id', 'f.family_name', 'f.cwelcc_subsidy_rate',
-                'c.id as centre_id', 'c.name as centre_name'
-            )
-            ->get();
 
-        $report = $rows->map(function ($r) use ($start, $end, $month) {
+        /* HISTORICAL (2026-09-29). This read families.cwelcc_enrolled as it is TODAY, for
+           any month: a family that left CWELCC vanished from every past report, a family
+           that joined in July appeared in March, and a rate change re-priced past months.
+           It now reads the enrolment periods in force during the month, at their own
+           rate, and keeps archived families and children.
+
+           It was also per CHILD while summing the FAMILY's invoices on every child's row,
+           so a family with two children was claimed twice. One row per family period; an
+           invoice counts toward the period covering its issue date. */
+        $periods = DB::table('cwelcc_enrolments as e')
+            ->join('families as f', 'f.id', '=', 'e.family_id')
+            ->join('centres as c', 'c.id', '=', DB::raw('COALESCE(e.centre_id, f.centre_id)'))
+            ->where('c.agency_id', $agencyId)
+            ->where('e.enrolled_from', '<=', $end->toDateString())
+            ->where(function ($w) use ($start) {
+                $w->whereNull('e.enrolled_to')->orWhere('e.enrolled_to', '>=', $start->toDateString());
+            })
+            ->orderBy('f.family_name')->orderBy('e.enrolled_from')
+            ->get(['e.id as period_id', 'e.family_id', 'e.enrolled_from', 'e.enrolled_to', 'e.subsidy_rate',
+                'f.family_name', 'f.deleted_at as family_archived', 'c.id as centre_id', 'c.name as centre_name']);
+
+        $report = $periods->map(function ($p) use ($start, $end, $month) {
+            $from = max($start->toDateString(), $p->enrolled_from);
+            $to = min($end->toDateString(), $p->enrolled_to ?: $end->toDateString());
             $invoiced = (float) DB::table('invoices')
-                ->where('family_id', $r->family_id)
-                ->whereBetween('issued_at', [$start, $end])
+                ->where('family_id', $p->family_id)
+                ->whereBetween('issued_at', [$from . ' 00:00:00', $to . ' 23:59:59'])
+                // A voided invoice was never owed and a draft was never sent -- neither is
+                // a fee the family was charged, so neither belongs in a subsidy claim.
+                ->whereNotIn('status', ['void', 'draft'])
                 ->sum('total');
-            $rate = (float) ($r->cwelcc_subsidy_rate ?? 50);
+            // Children of the family during the month, archived ones included.
+            $kids = DB::table('children')->where('family_id', $p->family_id)
+                ->where(function ($w) use ($start) { $w->whereNull('deleted_at')->orWhere('deleted_at', '>=', $start); })
+                ->where(function ($w) use ($start) { $w->whereNull('withdrawn_at')->orWhere('withdrawn_at', '>=', $start); })
+                ->orderBy('first_name')->get(['first_name', 'last_name']);
+            $rate = (float) ($p->subsidy_rate ?? 50);
             $subsidy = round($invoiced * ($rate / 100), 2);
-            $parent = round($invoiced - $subsidy, 2);
+
             return [
-                'child_id' => $r->child_id,
-                'child_name' => $r->child_name,
-                'family_id' => $r->family_id,
-                'family_name' => $r->family_name,
-                'centre_id' => $r->centre_id,
-                'centre_name' => $r->centre_name,
+                'family_id' => $p->family_id,
+                'family_name' => $p->family_name . ($p->family_archived ? ' (archived)' : ''),
+                'child_name' => $kids->map(fn ($k) => trim($k->first_name . ' ' . $k->last_name))->implode(', '),
+                'child_count' => $kids->count(),
+                'centre_id' => $p->centre_id,
+                'centre_name' => $p->centre_name,
+                'period_from' => $p->enrolled_from,
+                'period_to' => $p->enrolled_to,
                 'gross_fee' => $invoiced,
                 'subsidy_rate' => $rate,
                 'subsidy_amount' => $subsidy,
-                'parent_portion' => $parent,
+                'parent_portion' => round($invoiced - $subsidy, 2),
                 'month' => $month,
             ];
         });
 
         $totals = [
-            'gross' => $report->sum('gross_fee'),
-            'subsidy' => $report->sum('subsidy_amount'),
-            'parent' => $report->sum('parent_portion'),
-            'child_count' => $report->count(),
+            'gross' => round($report->sum('gross_fee'), 2),
+            'subsidy' => round($report->sum('subsidy_amount'), 2),
+            'parent' => round($report->sum('parent_portion'), 2),
+            'child_count' => $report->sum('child_count'),
+            'family_count' => $report->pluck('family_id')->unique()->count(),
         ];
         return response()->json(['data' => $report, 'totals' => $totals, 'month' => $month]);
     }
@@ -145,7 +178,7 @@ final class ComplianceController extends Controller
         return response()->streamDownload(function () use ($body) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
-            fputcsv($h, ['Child', 'Family', 'Centre', 'Gross fee', 'Subsidy rate %', 'Subsidy $', 'Parent portion $']);
+            fputcsv($h, ['Children', 'Family', 'Centre', 'Gross fee', 'Subsidy rate %', 'Subsidy $', 'Parent portion $']);
             foreach ($body['data'] as $r) {
                 fputcsv($h, [$r['child_name'], $r['family_name'], $r['centre_name'], $r['gross_fee'], $r['subsidy_rate'], $r['subsidy_amount'], $r['parent_portion']]);
             }

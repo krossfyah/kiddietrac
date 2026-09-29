@@ -18,7 +18,7 @@
   </div>
   <table>
     <thead>
-      <tr><th>Child</th><th>Family</th><th>Centre</th><th class="amount">Gross fee</th><th class="amount">Rate</th><th class="amount">Subsidy</th><th class="amount">Parent</th></tr>
+      <tr><th>Children</th><th>Family</th><th>Centre</th><th class="amount">Gross fee</th><th class="amount">Rate</th><th class="amount">Subsidy</th><th class="amount">Parent</th></tr>
     </thead>
     <tbody>
       @forelse ($rows as $r)

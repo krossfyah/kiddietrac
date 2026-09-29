@@ -804,16 +804,17 @@
       </div>
       <table style="width:100%;border-collapse:collapse;margin-top:24px;">
         <thead><tr>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Child</th>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Family</th>
+          <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Children</th>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Centre</th>
           <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Gross</th>
           <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Subsidy</th>
           <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Parent</th>
         </tr></thead>
         <tbody>${(r.data || []).map(row => `<tr>
-          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(row.child_name)}</td>
-          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(row.family_name)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;"><div style="font-weight:600;">${esc(row.family_name)}</div>
+            <div style="font-size:11.5px;color:#64748B;">Enrolled ${subDay(row.period_from)}${row.period_to ? ' – ' + subDay(row.period_to) : ''} · ${esc(row.subsidy_rate)}%</div></td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(row.child_name || '—')}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(row.centre_name)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;">$${row.gross_fee.toFixed(2)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;">$${row.subsidy_amount.toFixed(2)}</td>

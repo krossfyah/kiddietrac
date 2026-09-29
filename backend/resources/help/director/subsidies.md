@@ -16,11 +16,34 @@ centres.
 
 ## CWELCC
 
-The monthly CWELCC report for families enrolled in CWELCC: each child's gross fees, the
-subsidy and the parent portion, with totals. Pick a **Month** to see another month, and
-download it with **⤓ CSV** or **⤓ PDF** for your claim.
+The monthly CWELCC report: one row per enrolled family, with its children, the fees
+invoiced that month, the subsidy at the family's rate, and the parent portion. Pick a
+**Month** to see another month, and download it with **⤓ CSV** or **⤓ PDF** for your
+claim.
+
+The report reads each family's **enrolment periods**, so a past month always shows what
+applied then: a family that has since left CWELCC still appears in the months it was
+enrolled, and a rate change only affects months from its start date. Voided and draft
+invoices are not counted.
 
 [[show: #cwelcc @ CWELCC | Show me the CWELCC tab]]
+
+## On the family record
+
+Open a family (**Families**, then the family) and scroll to **Subsidies**. It shows the
+family's whole history: every CWELCC enrolment period with its rate and who recorded it,
+and every provincial subsidy granted under the family, including ended ones and ones
+removed as mistakes.
+
+Directors and admins record CWELCC changes there:
+
+- **Enrol in CWELCC** — from a date, at a rate.
+- **Change rate** — the new rate applies from the date you pick; earlier months keep the
+  old rate.
+- **End CWELCC** — the last day. Earlier months keep their enrolment.
+
+A change never rewrites an earlier period, so a claim reads the same later as it did
+when it was filed. Every change is written to the audit log.
 
 ## Provincial subsidy
 
@@ -66,6 +89,7 @@ amount and dates.
 
 ## Questions
 
+??? A family left CWELCC. Will it vanish from last spring's report? | No. The report reads the enrolment periods, so the family stays in every month it was enrolled.
 ??? Where did "CWELCC subsidies" go? | It is now Subsidies, with CWELCC as the first tab. The report is unchanged.
 ??? Does a provincial subsidy show on the parent's invoice? | Yes. The invoice shows the tuition, a Subsidy line taking the amount off, and the balance the family owes.
 ??? Can a child have CWELCC and a provincial subsidy? | The CWELCC report is worked out from the family's CWELCC enrolment. On an invoice, a child has one subsidy line at a time, and the Provincial subsidy tab refuses an overlapping one.

@@ -7144,6 +7144,125 @@
      invisible on the record it was about.
 
      Fails quietly: a document list is worth showing an apology for, not an error page. */
+  /* The family's subsidy history. CWELCC changes are recorded here as new dated
+     periods (CwelccHistory) -- a closed period is never rewritten, so past claims stay
+     as filed. Provincial subsidies are managed on Subsidies -> Provincial subsidy. */
+  function renderFamilySubsidies(host, familyId, archived) {
+    Dom.clear(host);
+    host.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' }, 'Loading…'));
+    var day = function (d) {
+      var m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+      return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+    };
+    var todayStr = (function () { var d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })();
+    var roles = []; try { roles = (JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) {}
+    var canEdit = !archived && roles.some(function (r) { return ['agency_admin', 'centre_director', 'platform_admin'].indexOf(r) !== -1; });
+
+    Api.get('/compliance/families/' + familyId + '/subsidies').then(function (r) {
+      Dom.clear(host);
+      var cw = (r && r.cwelcc) || [];
+      var prov = (r && r.provincial) || [];
+      var open = cw.filter(function (p) { return !p.to; })[0] || null;
+
+      var sub = function (t) { return Dom.el('div', { style: 'font-size:12px;font-weight:800;color:var(--ink-700);margin:6px 0 6px;' }, t); };
+      var line = function (main, meta, tone) {
+        var row = Dom.el('div', { style: 'padding:8px 10px;background:var(--ink-50);border-radius:6px;margin-bottom:6px;' + (tone ? 'opacity:.7;' : '') });
+        row.appendChild(Dom.el('div', { style: 'font-weight:600;font-size:13px;' }, main));
+        if (meta) row.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-top:2px;' }, meta));
+        return row;
+      };
+
+      host.appendChild(sub('CWELCC'));
+      if (!cw.length) {
+        host.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-bottom:6px;' }, 'Never enrolled in CWELCC.'));
+      }
+      cw.forEach(function (p) {
+        host.appendChild(line(
+          (p.to ? day(p.from) + ' – ' + day(p.to) : 'Since ' + day(p.from)) + (p.rate != null ? ' · ' + p.rate + '%' : ''),
+          [p.to ? 'Ended' : 'Current', p.started_by ? 'recorded by ' + p.started_by : (p.source === 'backfill' ? 'from the earlier enrolment flag' : ''),
+            p.ended_by ? 'ended by ' + p.ended_by : ''].filter(Boolean).join(' · '),
+          !!p.to));
+      });
+      if (canEdit) {
+        var bar = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 12px;' });
+        var btn = function (label, fn) {
+          var b = Dom.el('button', { type: 'button', 'data-kt-iconized': '1',
+            style: 'height:30px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:700;font-size:12.5px;cursor:pointer;' }, label);
+          b.addEventListener('click', fn); return b;
+        };
+        if (!open) bar.appendChild(btn('Enrol in CWELCC', function () { cwelccDialog('enrol'); }));
+        else {
+          bar.appendChild(btn('Change rate', function () { cwelccDialog('rate'); }));
+          bar.appendChild(btn('End CWELCC', function () { cwelccDialog('end'); }));
+        }
+        host.appendChild(bar);
+      }
+
+      host.appendChild(sub('Provincial subsidy'));
+      if (!prov.length) {
+        host.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-bottom:6px;' }, 'No provincial subsidies.'));
+      }
+      prov.forEach(function (x) {
+        var st = { active: 'Active', upcoming: 'Starts later', ended: 'Ended', removed: 'Removed (entered by mistake)' }[x.status] || x.status;
+        host.appendChild(line(
+          x.child_name + ' · $' + Number(x.monthly_amount).toFixed(2) + '/month',
+          [st, day(x.valid_from) + ' – ' + (x.valid_to ? day(x.valid_to) : 'no end date'), x.case_number ? 'case ' + x.case_number : ''].filter(Boolean).join(' · '),
+          x.status === 'ended' || x.status === 'removed'));
+      });
+      if (canEdit) {
+        var go = Dom.el('button', { type: 'button', 'data-kt-iconized': '1',
+          style: 'height:30px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:700;font-size:12.5px;cursor:pointer;margin-top:2px;' },
+          'Manage provincial subsidies →');
+        go.addEventListener('click', function () {
+          try { sessionStorage.setItem('kt_subsidy_tab', 'provincial'); } catch (e) {}
+          try { Shell.Modal.close(); } catch (e) {}
+          location.hash = '#cwelcc';
+        });
+        host.appendChild(go);
+      }
+
+      function cwelccDialog(action) {
+        var title = { enrol: 'Enrol in CWELCC', rate: 'Change the CWELCC rate', end: 'End CWELCC' }[action];
+        var ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:10000000;padding:16px;';
+        var fld = 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;';
+        var lbl = 'display:block;font-size:12px;font-weight:700;color:#374151;margin:10px 0 4px;';
+        ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:20px;">'
+          + '<h3 style="margin:0 0 8px;font-size:17px;color:#0F172A;">' + title + '</h3>'
+          + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;">'
+          + (action === 'end' ? 'The last day of CWELCC for this family. Earlier months keep their enrolment.'
+            : action === 'rate' ? 'The new rate applies from this day. Earlier months keep the rate they had.'
+            : 'CWELCC applies from this day.') + '</div>'
+          + '<label style="' + lbl + '">' + (action === 'end' ? 'Last day' : 'From') + '</label>'
+          + '<input type="date" data-cw-date style="' + fld + '" value="' + todayStr + '">'
+          + (action !== 'end' ? '<label style="' + lbl + '">Subsidy rate (%)</label><input type="number" min="0" max="100" step="0.01" data-cw-rate style="' + fld + '" value="' + (open && open.rate != null ? open.rate : '') + '">' : '')
+          + '<div data-cw-err style="color:#B91C1C;font-size:13px;min-height:18px;margin-top:8px;"></div>'
+          + '<div style="display:flex;justify-content:flex-end;gap:8px;"><button type="button" data-cw-cancel style="background:#F1F5F9;color:#334155;border:0;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;">Cancel</button>'
+          + '<button type="button" data-cw-ok style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:8px;font-weight:800;cursor:pointer;">Save</button></div></div>';
+        document.body.appendChild(ov);
+        ov.querySelector('[data-cw-cancel]').onclick = function () { ov.remove(); };
+        ov.querySelector('[data-cw-ok]').onclick = function () {
+          var d = ov.querySelector('[data-cw-date]').value;
+          var rEl = ov.querySelector('[data-cw-rate]');
+          var body = { action: action, date: d };
+          if (rEl && rEl.value !== '') body.rate = parseFloat(rEl.value);
+          if (!d) { ov.querySelector('[data-cw-err]').textContent = 'Enter the date.'; return; }
+          var ok = ov.querySelector('[data-cw-ok]'); ok.disabled = true;
+          Api.post('/compliance/families/' + familyId + '/cwelcc', body).then(function () {
+            ov.remove(); renderFamilySubsidies(host, familyId, archived);
+          }).catch(function (e) {
+            ok.disabled = false;
+            ov.querySelector('[data-cw-err]').textContent = (e && e.message) || 'Could not save.';
+          });
+        };
+      }
+    }).catch(function (e) {
+      Dom.clear(host);
+      host.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' },
+        /40[34]/.test(String(e && e.message)) ? 'Subsidies are shown to directors and admins.' : 'Could not load subsidies.'));
+    });
+  }
+
   function renderFamilyDocuments(host, familyId) {
     Dom.clear(host);
     host.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' }, 'Loading…'));
@@ -7540,6 +7659,15 @@
       var _phHost = Dom.el('div', {});
       body.appendChild(_phHost);
       renderProviderHistory(_phHost, familyId);
+
+      /* SUBSIDIES (2026-09-29). Anthony: "subsidy should always tie back to the family
+         records for compliance and historical reporting purposes". Every CWELCC
+         enrolment period and every provincial subsidy granted under this family,
+         ended and removed ones included. */
+      body.appendChild(famSectionHead('SUBSIDIES', null, null));
+      var _subHost = Dom.el('div', {});
+      body.appendChild(_subHost);
+      renderFamilySubsidies(_subHost, familyId, !!data.is_archived);
 
       body.appendChild(famSectionHead('NOTES', null, null));
       var _notesHost = Dom.el('div', {});

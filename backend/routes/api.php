@@ -2577,6 +2577,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch ('/compliance/subsidies/{id}',       [\App\Http\Controllers\Api\SubsidyController::class, 'update'])->where('id', '[0-9]+');
         Route::post  ('/compliance/subsidies/{id}/end',   [\App\Http\Controllers\Api\SubsidyController::class, 'end'])->where('id', '[0-9]+');
         Route::delete('/compliance/subsidies/{id}',       [\App\Http\Controllers\Api\SubsidyController::class, 'destroy'])->where('id', '[0-9]+');
+        // The family record's subsidy history, and CWELCC enrolment changes as dated periods.
+        Route::get   ('/compliance/families/{id}/subsidies', [\App\Http\Controllers\Api\SubsidyController::class, 'familyHistory'])->where('id', '[0-9]+');
+        Route::post  ('/compliance/families/{id}/cwelcc',    [\App\Http\Controllers\Api\SubsidyController::class, 'familyCwelcc'])->where('id', '[0-9]+');
         Route::get ('/compliance/retention',               [\App\Http\Controllers\Api\ComplianceController::class, 'retentionReport']);
         Route::get ('/compliance/expiry-calendar',         [\App\Http\Controllers\Api\ComplianceController::class, 'expiryCalendar']);
     });

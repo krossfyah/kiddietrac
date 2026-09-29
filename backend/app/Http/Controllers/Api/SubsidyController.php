@@ -45,7 +45,8 @@ class SubsidyController extends Controller
 
         $q = $this->baseQuery($agencyId, $centres)
             ->where('s.type', self::TYPE)
-            ->where('s.active', 1);
+            ->where('s.active', 1)
+            ->when($request->filled('family_id'), fn ($w) => $w->where('f.id', (int) $request->query('family_id')));
         if (! $request->boolean('all')) {
             $q->where('s.valid_from', '<=', $end->toDateString())
               ->where(function ($w) use ($start) {
@@ -112,6 +113,8 @@ class SubsidyController extends Controller
         $centres = $this->centreScope($request, $agencyId);
         $data = $this->validated($request, true);
         $child = $this->childInScope((int) $data['child_id'], $agencyId, $centres);
+        $fam = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->where('ch.id', $child->id)->first(['f.id', 'f.centre_id']);
 
         if ($clash = $this->overlap((int) $child->id, $data['valid_from'], $data['valid_to'] ?? null, null)) {
             return $this->overlapError($clash);
@@ -127,7 +130,14 @@ class SubsidyController extends Controller
             'approved_at' => $data['approved_at'] ?? null,
             'notes' => $data['notes'] ?? null,
             'active' => 1,
+            // Fixed at creation: the family and centre the subsidy was granted under.
+            // Reports and the family record read these, so the history stays with the
+            // family even if the child later moves family or is archived.
+            'family_id' => $fam->id ?? null,
+            'centre_id' => $fam->centre_id ?? null,
+            'created_by_id' => (int) $request->user()->id,
             'created_at' => now(),
+            'updated_at' => now(),
         ]);
         $this->audit($request, $agencyId, 'subsidy.created', $child, null, $this->row($id));
 
@@ -154,7 +164,7 @@ class SubsidyController extends Controller
 
         $upd = array_intersect_key($data, array_flip(['case_number', 'monthly_amount', 'valid_from', 'valid_to', 'approved_at', 'notes']));
         if ($upd) {
-            DB::table('subsidies')->where('id', $id)->update($upd);
+            DB::table('subsidies')->where('id', $id)->update($upd + ['updated_at' => now()]);
         }
         $this->audit($request, $agencyId, 'subsidy.updated', $child, (array) $before, $this->row($id));
 
@@ -173,7 +183,7 @@ class SubsidyController extends Controller
             return response()->json(['message' => 'The last day cannot be before the subsidy started (' . $before->valid_from . ').',
                 'errors' => ['valid_to' => ['Before the start date.']]], 422);
         }
-        DB::table('subsidies')->where('id', $id)->update(['valid_to' => $to]);
+        DB::table('subsidies')->where('id', $id)->update(['valid_to' => $to, 'ended_by_id' => (int) $request->user()->id, 'updated_at' => now()]);
         $this->audit($request, $agencyId, 'subsidy.ended', $child, (array) $before, $this->row($id));
 
         return response()->json(['data' => $this->shape($this->fetch($id), $agencyId)]);
@@ -185,13 +195,100 @@ class SubsidyController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $centres = $this->centreScope($request, $agencyId);
         [$before, $child] = $this->ownedRow($id, $agencyId, $centres);
-        DB::table('subsidies')->where('id', $id)->update(['active' => 0]);
+        DB::table('subsidies')->where('id', $id)->update(['active' => 0, 'removed_at' => now(), 'removed_by_id' => (int) $request->user()->id]);
         $this->audit($request, $agencyId, 'subsidy.removed', $child, (array) $before, null);
 
         return response()->json(['removed' => true]);
     }
 
+    /**
+     * GET /compliance/families/{id}/subsidies -- the family record's Subsidies section:
+     * every CWELCC enrolment period and every provincial subsidy granted under this
+     * family, including ended ones and ones removed as mistakes (marked), newest first.
+     */
+    public function familyHistory(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $centres = $this->centreScope($request, $agencyId);
+        $this->familyInScope($familyId, $agencyId, $centres);
+
+        $cwelcc = \App\Support\CwelccHistory::periods($familyId)->map(fn ($p) => [
+            'id' => (int) $p->id,
+            'from' => $p->enrolled_from,
+            'to' => $p->enrolled_to,
+            'rate' => $p->subsidy_rate !== null ? (float) $p->subsidy_rate : null,
+            'source' => $p->source,
+            'started_by' => $p->started_by ?: null,
+            'ended_by' => $p->ended_by ?: null,
+        ]);
+        $prov = $this->baseQuery($agencyId, $centres)
+            ->where('s.type', self::TYPE)
+            ->where('f.id', $familyId)
+            ->orderByDesc('s.valid_from')->get()
+            ->map(fn ($r) => $this->shape($r, $agencyId));
+
+        return response()->json(['cwelcc' => $cwelcc, 'provincial' => $prov,
+            'can_edit' => true]);
+    }
+
+    /**
+     * POST /compliance/families/{id}/cwelcc {action: enrol|rate|end, date, rate}
+     * Records a change as a new dated period; never rewrites a closed one.
+     */
+    public function familyCwelcc(Request $request, int $familyId): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $centres = $this->centreScope($request, $agencyId);
+        $fam = $this->familyInScope($familyId, $agencyId, $centres);
+        $data = $request->validate([
+            'action' => ['required', 'in:enrol,rate,end'],
+            'date' => ['required', 'date'],
+            'rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
+        $day = Carbon::parse($data['date'])->toDateString();
+        $rate = isset($data['rate']) ? (float) $data['rate'] : null;
+        $by = (int) $request->user()->id;
+        $before = \App\Support\CwelccHistory::open($familyId);
+        $err = match ($data['action']) {
+            'enrol' => \App\Support\CwelccHistory::enrol($familyId, $day, $rate, $by),
+            'rate' => \App\Support\CwelccHistory::changeRate($familyId, $day, $rate, $by),
+            'end' => \App\Support\CwelccHistory::end($familyId, $day, $by),
+        };
+        if ($err) {
+            return response()->json(['message' => $err], 422);
+        }
+        try {
+            \App\Support\Audit::write([
+                'user_id' => $by, 'agency_id' => $agencyId,
+                'action' => 'cwelcc.' . ($data['action'] === 'rate' ? 'rate_changed' : ($data['action'] === 'end' ? 'ended' : 'enrolled')),
+                'entity_type' => 'family', 'entity_id' => $familyId,
+                'payload' => json_encode([
+                    'summary' => ['enrol' => 'Enrolled ', 'rate' => 'Changed the CWELCC rate for ', 'end' => 'Ended CWELCC for '][$data['action']]
+                        . $fam->family_name . ($data['action'] === 'enrol' ? ' in CWELCC' : '') . ' from ' . $day
+                        . ($rate !== null ? ' at ' . $rate . '%' : ''),
+                    'family' => $fam->family_name, 'date' => $day, 'rate' => $rate,
+                    'before' => $before, 'after' => \App\Support\CwelccHistory::open($familyId),
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+
+        return $this->familyHistory($request, $familyId);
+    }
+
     // -- helpers -----------------------------------------------------------------
+
+    private function familyInScope(int $familyId, int $agencyId, ?array $centres): object
+    {
+        $fam = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('f.id', $familyId)->where('c.agency_id', $agencyId)
+            ->when($centres !== null, fn ($w) => $w->whereIn('c.id', $centres))
+            ->first(['f.id', 'f.family_name', 'f.centre_id']);
+        abort_unless($fam, 404, 'That family was not found.');
+
+        return $fam;
+    }
 
     private function validated(Request $request, bool $creating): array
     {
@@ -252,14 +349,16 @@ class SubsidyController extends Controller
 
     private function baseQuery(int $agencyId, ?array $centres)
     {
+        // The family and centre the subsidy was granted under (s.family_id / s.centre_id),
+        // falling back to the child's current ones for rows from before they existed.
+        // Archived children are NOT filtered out: this is history.
         return DB::table('subsidies as s')
             ->join('children as ch', 'ch.id', '=', 's.child_id')
-            ->join('families as f', 'f.id', '=', 'ch.family_id')
-            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->join('families as f', 'f.id', '=', DB::raw('COALESCE(s.family_id, ch.family_id)'))
+            ->join('centres as c', 'c.id', '=', DB::raw('COALESCE(s.centre_id, f.centre_id)'))
             ->where('c.agency_id', $agencyId)
             ->when($centres !== null, fn ($w) => $w->whereIn('c.id', $centres))
-            ->whereNull('ch.deleted_at')
-            ->select('s.*', 'ch.first_name', 'ch.last_name', 'f.id as family_id', 'f.family_name',
+            ->select('s.*', 'ch.first_name', 'ch.last_name', 'ch.deleted_at as child_archived', 'f.id as family_id', 'f.family_name',
                 'c.id as centre_id', 'c.name as centre_name',
                 DB::raw('(select en.monthly_fee from enrollments en where en.child_id = ch.id and en.end_date is null order by en.start_date desc limit 1) as monthly_fee'));
     }
@@ -268,10 +367,10 @@ class SubsidyController extends Controller
     {
         return DB::table('subsidies as s')
             ->join('children as ch', 'ch.id', '=', 's.child_id')
-            ->join('families as f', 'f.id', '=', 'ch.family_id')
-            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->join('families as f', 'f.id', '=', DB::raw('COALESCE(s.family_id, ch.family_id)'))
+            ->join('centres as c', 'c.id', '=', DB::raw('COALESCE(s.centre_id, f.centre_id)'))
             ->where('s.id', $id)
-            ->select('s.*', 'ch.first_name', 'ch.last_name', 'f.id as family_id', 'f.family_name',
+            ->select('s.*', 'ch.first_name', 'ch.last_name', 'ch.deleted_at as child_archived', 'f.id as family_id', 'f.family_name',
                 'c.id as centre_id', 'c.name as centre_name',
                 DB::raw('(select en.monthly_fee from enrollments en where en.child_id = ch.id and en.end_date is null order by en.start_date desc limit 1) as monthly_fee'))
             ->first();
@@ -288,7 +387,8 @@ class SubsidyController extends Controller
         return [
             'id' => (int) $r->id,
             'child_id' => (int) $r->child_id,
-            'child_name' => trim($r->first_name . ' ' . $r->last_name),
+            'child_name' => trim($r->first_name . ' ' . $r->last_name) . (! empty($r->child_archived) ? ' (archived)' : ''),
+            'family_id' => isset($r->family_id) ? (int) $r->family_id : null,
             'family_name' => $r->family_name,
             'centre_name' => $r->centre_name,
             'case_number' => $r->case_number,
@@ -298,7 +398,7 @@ class SubsidyController extends Controller
             'valid_to' => $r->valid_to,
             'approved_at' => $r->approved_at,
             'notes' => $r->notes,
-            'status' => $status,
+            'status' => (isset($r->active) && ! $r->active) ? 'removed' : $status,
             'in_month' => $inMonth,
         ];
     }
