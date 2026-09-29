@@ -877,14 +877,16 @@
       </div>
       <table style="width:100%;border-collapse:collapse;margin-top:20px;">
         <thead><tr>
-          ${['Child', 'Family', 'Centre', 'Case number', 'Monthly', 'Tuition', 'From', 'To', 'Status', ''].map((h, i) => `<th style="text-align:${i === 4 || i === 5 ? 'right' : 'left'};padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${h}</th>`).join('')}
+          ${['Child', 'Family', 'Centre', 'Case number', 'Subsidy', 'Tuition', 'From', 'To', 'Status', ''].map((h, i) => `<th style="text-align:${i === 4 || i === 5 ? 'right' : 'left'};padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${h}</th>`).join('')}
         </tr></thead>
-        <tbody>${rows.map((x) => { const c = chip(x.status); const over = x.monthly_fee != null && x.monthly_amount > x.monthly_fee; return `<tr>
+        <tbody>${rows.map((x) => { const c = chip(x.status); const over = x.monthly_fee != null && x.month_amount > x.monthly_fee; return `<tr>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;font-weight:600;">${esc(x.child_name)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(x.family_name)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(x.centre_name)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(x.case_number || '—')}</td>
-          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;${over ? 'color:#B91C1C;' : ''}" ${over ? 'title="More than this child\'s monthly tuition"' : ''}>${money(x.monthly_amount)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;${over ? 'color:#B91C1C;' : ''}" ${over ? 'title="More than this child\'s monthly tuition — the invoice caps it at the tuition"' : ''}>${x.amount_basis === 'daily'
+            ? `${money(x.daily_amount)}/day<div style="font-size:11.5px;color:#64748B;">${x.month_days} day${x.month_days === 1 ? '' : 's'} · ${money(x.month_amount)}</div>`
+            : `${money(x.monthly_amount)}/mo`}${(x.documents || []).length ? `<div style="font-size:11.5px;color:#64748B;">📎 ${x.documents.length}</div>` : ''}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;color:#64748B;">${x.monthly_fee != null ? money(x.monthly_fee) : '—'}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${subDay(x.valid_from)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${x.valid_to ? subDay(x.valid_to) : 'No end date'}</td>
@@ -908,7 +910,7 @@
       const x = byId(b.getAttribute('data-ps-remove'));
       const ok = window.KT && KT.confirm ? await KT.confirm({
         title: 'Remove this subsidy?',
-        description: `Only for a subsidy entered by mistake. ${x.child_name}'s ${money(x.monthly_amount)}/month will no longer come off future invoices. To stop a real subsidy, use End subsidy instead so its history is kept.`,
+        description: `Only for a subsidy entered by mistake. ${x.child_name}'s ${x.amount_basis === 'daily' ? money(x.daily_amount) + '/day' : money(x.monthly_amount) + '/month'} will no longer come off future invoices. To stop a real subsidy, use End subsidy instead so its history is kept.`,
         okLabel: 'Remove',
       }) : true;
       if (!ok) return;
@@ -936,56 +938,139 @@
   const fld = 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;';
   const lbl = 'display:block;font-size:12px;font-weight:700;color:#374151;margin:10px 0 4px;';
 
+  /* Uploads go straight to fetch: multipart must not get a hand-set Content-Type, and
+     the active agency travels with it like every other call. */
+  async function subUpload(subsidyId, files) {
+    const fd = new FormData();
+    Array.prototype.forEach.call(files, (f) => fd.append('files[]', f, f.name));
+    const headers = { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token'), Accept: 'application/json' };
+    const aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) headers['X-Active-Agency-Id'] = aid;
+    const r = await fetch(apiBase() + '/compliance/subsidies/' + subsidyId + '/documents', { method: 'POST', headers, body: fd });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.message || (j.errors && Object.values(j.errors)[0] && Object.values(j.errors)[0][0]) || ('Upload failed (' + r.status + ')'));
+    return j.documents || [];
+  }
+  const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+
   function subsidyDialog(pane, x, children) {
     const editing = !!x;
+    const basis0 = editing ? (x.amount_basis || 'monthly') : 'monthly';
     const m = subModal(editing ? `Edit subsidy — ${x.child_name}` : 'Add a provincial subsidy', `
       ${editing ? '' : `<label style="${lbl}">Child</label>
         <select id="sm-child" style="${fld}"><option value="">— Choose a child —</option>
           ${children.map((c) => `<option value="${c.id}">${esc(c.name)} · ${esc(c.family_name || '')}${c.centre_name ? ' · ' + esc(c.centre_name) : ''}</option>`).join('')}</select>`}
       <label style="${lbl}">Case number</label>
       <input id="sm-case" maxlength="120" style="${fld}" value="${esc(editing ? (x.case_number || '') : '')}" placeholder="From the subsidy approval letter">
-      <label style="${lbl}">Monthly amount ($)</label>
-      <input id="sm-amt" type="number" min="0.01" step="0.01" style="${fld}" value="${editing ? x.monthly_amount : ''}">
+      <label style="${lbl}">The subsidy is paid</label>
+      <div class="kt-segmented" data-kt-no-tips style="display:inline-flex;gap:6px;">
+        <button type="button" data-sm-basis="monthly" data-kt-iconized="1">Per month</button>
+        <button type="button" data-sm-basis="daily" data-kt-iconized="1">Per day</button>
+      </div>
+      <div id="sm-monthly-wrap">
+        <label style="${lbl}">Monthly amount ($)</label>
+        <input id="sm-amt" type="number" min="0.01" step="0.01" style="${fld}" value="${editing && basis0 === 'monthly' ? x.monthly_amount : ''}">
+      </div>
+      <div id="sm-daily-wrap">
+        <label style="${lbl}">Daily amount ($)</label>
+        <input id="sm-daily" type="number" min="0.01" step="0.01" style="${fld}" value="${editing && basis0 === 'daily' ? x.daily_amount : ''}">
+        <div style="font-size:12px;color:#64748B;margin-top:4px;line-height:1.45;">Each month this comes off as the daily amount × the days the child is scheduled to attend, not counting days the centre is closed.</div>
+      </div>
       <div style="display:flex;gap:10px;">
         <div style="flex:1;"><label style="${lbl}">First day</label><input id="sm-from" type="date" style="${fld}" value="${editing ? x.valid_from : todayLocal().slice(0, 8) + '01'}"></div>
         <div style="flex:1;"><label style="${lbl}">Last day (optional)</label><input id="sm-to" type="date" style="${fld}" value="${editing && x.valid_to ? x.valid_to : ''}"></div>
       </div>
       <label style="${lbl}">Approved on (optional)</label>
       <input id="sm-approved" type="date" style="${fld}" value="${editing && x.approved_at ? x.approved_at : ''}">
+      <label style="${lbl}">Documents from the province or government</label>
+      <div id="sm-docs"></div>
+      <input id="sm-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.heic,.heif,.webp,.doc,.docx" style="${fld}padding:6px;">
+      <div style="font-size:11.5px;color:#64748B;margin-top:3px;">Approval letter, renewal or notice. PDF, photo or Word, up to 15 MB each. Only staff can open them.</div>
       <label style="${lbl}">Notes (optional)</label>
       <textarea id="sm-notes" rows="2" maxlength="1000" style="${fld}resize:vertical;">${esc(editing ? (x.notes || '') : '')}</textarea>
-      <div style="font-size:12px;color:#64748B;margin-top:8px;line-height:1.5;">While it applies, this amount comes off the child's tuition on each monthly invoice. Invoices already issued are not changed.</div>`);
+      <div style="font-size:12px;color:#64748B;margin-top:8px;line-height:1.5;">While it applies, the subsidy comes off the child's tuition on each monthly invoice (never more than the tuition). Invoices already issued are not changed.</div>`);
+
+    let basis = basis0;
+    const paintBasis = () => {
+      m.querySelectorAll('[data-sm-basis]').forEach((b) => {
+        const on = b.getAttribute('data-sm-basis') === basis;
+        b.style.cssText = 'height:32px;padding:0 14px;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;'
+          + (on ? 'background:#1F6080;color:#fff;border:1px solid #1F6080;' : 'background:#fff;color:#334155;border:1px solid #CBD5E1;');
+      });
+      m.querySelector('#sm-monthly-wrap').style.display = basis === 'monthly' ? '' : 'none';
+      m.querySelector('#sm-daily-wrap').style.display = basis === 'daily' ? '' : 'none';
+    };
+    m.querySelectorAll('[data-sm-basis]').forEach((b) => b.addEventListener('click', () => { basis = b.getAttribute('data-sm-basis'); paintBasis(); }));
+    paintBasis();
+
+    // Documents already on file (editing): download or remove.
+    let docs = editing ? (x.documents || []).slice() : [];
+    const docsHost = m.querySelector('#sm-docs');
+    const paintDocs = () => {
+      docsHost.innerHTML = docs.map((d) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:6px;font-size:13px;">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 ${esc(d.name)} <span style="color:#94A3B8;">· ${kb(d.size)}</span></span>
+          <button type="button" data-doc-get="${d.id}" style="border:0;background:none;color:#1F6080;font-weight:700;cursor:pointer;">Download</button>
+          <button type="button" data-doc-del="${d.id}" style="border:0;background:none;color:#B91C1C;font-weight:700;cursor:pointer;">Remove</button></div>`).join('');
+      docsHost.querySelectorAll('[data-doc-get]').forEach((b) => b.onclick = () => {
+        const d = docs.find((q) => String(q.id) === b.getAttribute('data-doc-get'));
+        downloadAuthed(`/compliance/subsidies/${x.id}/documents/${d.id}`, d.name);
+      });
+      docsHost.querySelectorAll('[data-doc-del]').forEach((b) => b.onclick = async () => {
+        try { docs = (await Api.delete(`/compliance/subsidies/${x.id}/documents/${b.getAttribute('data-doc-del')}`)).documents || []; paintDocs(); renderProvincialPane(pane); }
+        catch (e) { m.querySelector('#sm-err').textContent = e.message || 'Could not remove.'; }
+      });
+    };
+    paintDocs();
+
     m.querySelector('[data-sm-ok]').onclick = async () => {
       const err = m.querySelector('#sm-err');
       const body = {
         case_number: m.querySelector('#sm-case').value.trim() || null,
-        monthly_amount: parseFloat(m.querySelector('#sm-amt').value),
+        amount_basis: basis,
         valid_from: m.querySelector('#sm-from').value,
         valid_to: m.querySelector('#sm-to').value || null,
         approved_at: m.querySelector('#sm-approved').value || null,
         notes: m.querySelector('#sm-notes').value.trim() || null,
       };
+      if (basis === 'daily') body.daily_amount = parseFloat(m.querySelector('#sm-daily').value);
+      else body.monthly_amount = parseFloat(m.querySelector('#sm-amt').value);
       if (!editing) body.child_id = parseInt(m.querySelector('#sm-child').value, 10) || null;
       if (!editing && !body.child_id) { err.textContent = 'Choose the child.'; return; }
-      if (!(body.monthly_amount > 0)) { err.textContent = 'Enter the monthly amount.'; return; }
+      if (!((basis === 'daily' ? body.daily_amount : body.monthly_amount) > 0)) { err.textContent = basis === 'daily' ? 'Enter the daily amount.' : 'Enter the monthly amount.'; return; }
       if (!body.valid_from) { err.textContent = 'Enter the first day.'; return; }
       if (body.valid_to && body.valid_to < body.valid_from) { err.textContent = 'The last day cannot be before the first day.'; return; }
+      const files = m.querySelector('#sm-files').files;
+      for (let i = 0; i < files.length; i++) {
+        if (files[i].size > 15 * 1024 * 1024) { err.textContent = files[i].name + ' is over 15 MB.'; return; }
+      }
       const ok = m.querySelector('[data-sm-ok]'); ok.disabled = true; ok.textContent = 'Saving…';
+      let saved = null;
       try {
-        if (editing) await Api.patch('/compliance/subsidies/' + x.id, body);
-        else await Api.post('/compliance/subsidies', body);
-        m.remove();
-        renderProvincialPane(pane);
+        saved = editing ? await Api.patch('/compliance/subsidies/' + x.id, body) : await Api.post('/compliance/subsidies', body);
       } catch (e) {
         ok.disabled = false; ok.textContent = 'Save';
         err.textContent = (e && (e.data && e.data.message)) || e.message || 'Could not save.';
+        return;
       }
+      const id = editing ? x.id : (saved && saved.data && saved.data.id);
+      if (files.length && id) {
+        ok.textContent = 'Uploading…';
+        try { await subUpload(id, files); }
+        catch (e) {
+          // The subsidy is saved; say so, and leave the dialog open on it for a retry.
+          renderProvincialPane(pane);
+          ok.disabled = false; ok.textContent = 'Save';
+          err.textContent = 'The subsidy was saved, but the document was not uploaded: ' + (e.message || 'try again') + '. Open it with Edit to add the document.';
+          return;
+        }
+      }
+      m.remove();
+      renderProvincialPane(pane);
     };
   }
 
   function endDialog(pane, x) {
     const m = subModal(`End subsidy — ${x.child_name}`, `
-      <div style="font-size:13px;color:#475569;line-height:1.5;">${money(x.monthly_amount)}/month${x.case_number ? ', case ' + esc(x.case_number) : ''}, since ${subDay(x.valid_from)}. Invoices issued after the last day no longer include it.</div>
+      <div style="font-size:13px;color:#475569;line-height:1.5;">${x.amount_basis === 'daily' ? money(x.daily_amount) + '/day' : money(x.monthly_amount) + '/month'}${x.case_number ? ', case ' + esc(x.case_number) : ''}, since ${subDay(x.valid_from)}. Invoices issued after the last day no longer include it.</div>
       <label style="${lbl}">Last day</label>
       <input id="sm-to" type="date" style="${fld}" value="${todayLocal()}" min="${esc(x.valid_from)}">`);
     const ok = m.querySelector('[data-sm-ok]'); ok.textContent = 'End subsidy';

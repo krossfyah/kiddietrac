@@ -1807,24 +1807,36 @@ final class InvoiceController extends Controller
                 $subsidyTotal = 0;
                 $lineItems = [];
 
+                /* SUBSIDIES (2026-09-29): worked out ONCE PER CHILD by SubsidyAmount
+                   (monthly amount, or daily amount x scheduled care days this month),
+                   capped at that child's tuition, and spread across the child's lines.
+                   This looped per ENROLMENT, so a child split across two rooms or
+                   providers had the subsidy taken off twice, and a subsidy larger than
+                   the tuition drove the invoice negative. */
+                $childFee = [];
+                foreach ($childEnrollments as $en) {
+                    $childFee[$en->child_id] = ($childFee[$en->child_id] ?? 0) + (float) $en->monthly_fee;
+                }
+                $subsidyLeft = [];
+                $subsidyLabel = [];
+                foreach (array_keys($childFee) as $cid) {
+                    $sa = \App\Support\SubsidyAmount::forChildMonth((int) $cid, $issueDate->toDateString(), $issueDate->copy()->startOfMonth()->toDateString());
+                    $subsidyLeft[$cid] = $sa ? min($sa['amount'], $childFee[$cid]) : 0.0;
+                    $subsidyLabel[$cid] = $sa ? $sa['label'] : null;
+                }
+
                 foreach ($childEnrollments as $en) {
                     $subtotal += (float) $en->monthly_fee;
 
-                    $subsidy = DB::table('subsidies')
-                        ->where('child_id', $en->child_id)
-                        ->where('active', true)
-                        ->where('valid_from', '<=', $issueDate)
-                        ->where(function ($q) use ($issueDate) {
-                            $q->whereNull('valid_to')->orWhere('valid_to', '>=', $issueDate);
-                        })
-                        ->first();
-                    $subsidyAmount = $subsidy ? (float) $subsidy->monthly_amount : 0;
+                    $subsidyAmount = round(min($subsidyLeft[$en->child_id] ?? 0, (float) $en->monthly_fee), 2);
+                    $subsidyLeft[$en->child_id] = ($subsidyLeft[$en->child_id] ?? 0) - $subsidyAmount;
                     $subsidyTotal += $subsidyAmount;
 
                     $lineItems[] = [
                         'description' => "Tuition — {$en->first_name} {$en->last_name} ({$en->room_name})",
                         'amount' => $en->monthly_fee,
                         'subsidy' => $subsidyAmount,
+                        'subsidy_label' => $subsidyAmount > 0 ? ($subsidyLabel[$en->child_id] ?? 'Subsidy') : null,
                         'net' => $en->monthly_fee - $subsidyAmount,
                     ];
                 }
@@ -2659,13 +2671,11 @@ final class InvoiceController extends Controller
             return null;
         }
 
-        $subsidy = DB::table('subsidies')
-            ->where('child_id', $childId)
-            ->where('active', true)
-            ->first();
+        // Same maths as the invoice run (SubsidyAmount), for this month.
+        $sa = \App\Support\SubsidyAmount::forChildMonth($childId, now()->toDateString(), now()->startOfMonth()->toDateString());
 
         $subtotal = (float) $enrollment->monthly_fee;
-        $subsidyAmount = $subsidy ? (float) $subsidy->monthly_amount : 0;
+        $subsidyAmount = $sa ? min($sa['amount'], $subtotal) : 0;
         $total = $subtotal - $subsidyAmount;
 
         return [

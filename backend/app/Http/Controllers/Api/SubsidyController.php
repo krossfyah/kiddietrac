@@ -54,7 +54,9 @@ class SubsidyController extends Controller
               });
         }
         $rows = $q->orderBy('ch.last_name')->orderBy('ch.first_name')->orderByDesc('s.valid_from')
-            ->get()->map(fn ($r) => $this->shape($r, $agencyId, $start, $end));
+            ->get();
+        $docs = $this->docsFor($rows->pluck('id')->all());
+        $rows = $rows->map(fn ($r) => $this->shape($r, $agencyId, $start, $end, $docs));
 
         $children = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
@@ -75,7 +77,7 @@ class SubsidyController extends Controller
             'data' => $rows,
             'month' => $month,
             'totals' => ['children' => $rows->pluck('child_id')->unique()->count(),
-                'monthly' => round((float) $rows->where('in_month', true)->sum('monthly_amount'), 2)],
+                'monthly' => round((float) $rows->where('in_month', true)->sum('month_amount'), 2)],
             'children' => $children,
         ]);
     }
@@ -94,12 +96,20 @@ class SubsidyController extends Controller
             })
             ->orderBy('ch.last_name')->get();
 
-        return response()->streamDownload(function () use ($rows) {
+        $monthStart = $start->toDateString();
+
+        return response()->streamDownload(function () use ($rows, $monthStart) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Child', 'Family', 'Centre', 'Case number', 'Monthly amount', 'From', 'To', 'Approved', 'Notes']);
+            fputcsv($out, ['Child', 'Family', 'Centre', 'Case number', 'Basis', 'Daily amount', 'Monthly amount',
+                'Scheduled days this month', 'Amount this month', 'From', 'To', 'Approved', 'Notes']);
             foreach ($rows as $r) {
+                $c = \App\Support\SubsidyAmount::forSubsidyMonth($r, $monthStart);
+                $daily = ($r->amount_basis ?? 'monthly') === 'daily';
                 fputcsv($out, [trim($r->first_name . ' ' . $r->last_name), $r->family_name, $r->centre_name,
-                    $r->case_number, number_format((float) $r->monthly_amount, 2, '.', ''),
+                    $r->case_number, $daily ? 'Daily' : 'Monthly',
+                    $daily ? number_format((float) $r->daily_amount, 2, '.', '') : '',
+                    $daily ? '' : number_format((float) $r->monthly_amount, 2, '.', ''),
+                    $c['days'] ?? '', number_format($c['amount'], 2, '.', ''),
                     $r->valid_from, $r->valid_to, $r->approved_at, $r->notes]);
             }
             fclose($out);
@@ -124,7 +134,9 @@ class SubsidyController extends Controller
             'child_id' => $child->id,
             'type' => self::TYPE,
             'case_number' => $data['case_number'] ?? null,
-            'monthly_amount' => $data['monthly_amount'],
+            'monthly_amount' => $data['monthly_amount'] ?? 0,
+            'amount_basis' => $data['amount_basis'] ?? 'monthly',
+            'daily_amount' => $data['daily_amount'] ?? null,
             'valid_from' => $data['valid_from'],
             'valid_to' => $data['valid_to'] ?? null,
             'approved_at' => $data['approved_at'] ?? null,
@@ -141,7 +153,7 @@ class SubsidyController extends Controller
         ]);
         $this->audit($request, $agencyId, 'subsidy.created', $child, null, $this->row($id));
 
-        return response()->json(['data' => $this->shape($this->fetch($id), $agencyId)], 201);
+        return response()->json(['data' => $this->shape($this->fetch($id), $agencyId, null, null, $this->docsFor([$id]))], 201);
     }
 
     /** PATCH /compliance/subsidies/{id} */
@@ -162,13 +174,13 @@ class SubsidyController extends Controller
             return $this->overlapError($clash);
         }
 
-        $upd = array_intersect_key($data, array_flip(['case_number', 'monthly_amount', 'valid_from', 'valid_to', 'approved_at', 'notes']));
+        $upd = array_intersect_key($data, array_flip(['case_number', 'monthly_amount', 'amount_basis', 'daily_amount', 'valid_from', 'valid_to', 'approved_at', 'notes']));
         if ($upd) {
             DB::table('subsidies')->where('id', $id)->update($upd + ['updated_at' => now()]);
         }
         $this->audit($request, $agencyId, 'subsidy.updated', $child, (array) $before, $this->row($id));
 
-        return response()->json(['data' => $this->shape($this->fetch($id), $agencyId)]);
+        return response()->json(['data' => $this->shape($this->fetch($id), $agencyId, null, null, $this->docsFor([$id]))]);
     }
 
     /** POST /compliance/subsidies/{id}/end {valid_to} -- the subsidy's last day. */
@@ -186,7 +198,7 @@ class SubsidyController extends Controller
         DB::table('subsidies')->where('id', $id)->update(['valid_to' => $to, 'ended_by_id' => (int) $request->user()->id, 'updated_at' => now()]);
         $this->audit($request, $agencyId, 'subsidy.ended', $child, (array) $before, $this->row($id));
 
-        return response()->json(['data' => $this->shape($this->fetch($id), $agencyId)]);
+        return response()->json(['data' => $this->shape($this->fetch($id), $agencyId, null, null, $this->docsFor([$id]))]);
     }
 
     /** DELETE /compliance/subsidies/{id} -- entered by mistake. Kept, marked inactive. */
@@ -224,8 +236,9 @@ class SubsidyController extends Controller
         $prov = $this->baseQuery($agencyId, $centres)
             ->where('s.type', self::TYPE)
             ->where('f.id', $familyId)
-            ->orderByDesc('s.valid_from')->get()
-            ->map(fn ($r) => $this->shape($r, $agencyId));
+            ->orderByDesc('s.valid_from')->get();
+        $pdocs = $this->docsFor($prov->pluck('id')->all());
+        $prov = $prov->map(fn ($r) => $this->shape($r, $agencyId, null, null, $pdocs));
 
         return response()->json(['cwelcc' => $cwelcc, 'provincial' => $prov,
             'can_edit' => true]);
@@ -277,7 +290,128 @@ class SubsidyController extends Controller
         return $this->familyHistory($request, $familyId);
     }
 
+    /**
+     * POST /compliance/subsidies/{id}/documents  (multipart: files[] or file)
+     * The province's or government's paperwork: approval letter, renewal, notice.
+     * Private disk, never public; one row per file.
+     */
+    public function uploadDocuments(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $centres = $this->centreScope($request, $agencyId);
+        [$row] = $this->docScope($id, $agencyId, $centres);
+        $request->validate([
+            'files' => ['sometimes', 'array', 'max:10'],
+            'files.*' => ['file', 'max:15360', 'mimes:pdf,jpg,jpeg,png,heic,heif,webp,doc,docx'],
+            'file' => ['sometimes', 'file', 'max:15360', 'mimes:pdf,jpg,jpeg,png,heic,heif,webp,doc,docx'],
+        ]);
+        $files = $request->file('files') ?: array_filter([$request->file('file')]);
+        if (! $files) {
+            return response()->json(['message' => 'Choose a file to upload.'], 422);
+        }
+        $saved = [];
+        foreach ($files as $f) {
+            $ext = strtolower($f->getClientOriginalExtension() ?: $f->extension() ?: 'bin');
+            $path = $f->storeAs('subsidy-docs/' . $agencyId . '/' . $row->id, \Illuminate\Support\Str::uuid() . '.' . $ext, 'local');
+            if (! $path) {
+                return response()->json(['message' => 'That file could not be saved. Try again.'], 500);
+            }
+            $saved[] = DB::table('subsidy_documents')->insertGetId([
+                'subsidy_id' => $row->id,
+                'family_id' => $row->family_id,
+                'path' => $path,
+                'original_name' => mb_substr($f->getClientOriginalName() ?: ('document.' . $ext), 0, 255),
+                'mime' => $f->getMimeType(),
+                'size' => (int) $f->getSize(),
+                'uploaded_by_id' => (int) $request->user()->id,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        $this->docAudit($request, $agencyId, 'subsidy.document_added', $row, DB::table('subsidy_documents')->whereIn('id', $saved)->pluck('original_name')->all());
+
+        return response()->json(['documents' => $this->docsFor([$row->id])[$row->id] ?? []], 201);
+    }
+
+    /** GET /compliance/subsidies/{id}/documents/{doc} -- streams the file to signed-in staff. */
+    public function downloadDocument(Request $request, int $id, int $doc)
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $centres = $this->centreScope($request, $agencyId);
+        [$row] = $this->docScope($id, $agencyId, $centres);
+        $d = DB::table('subsidy_documents')->where('id', $doc)->where('subsidy_id', $row->id)->whereNull('removed_at')->first();
+        abort_unless($d && \Illuminate\Support\Facades\Storage::disk('local')->exists($d->path), 404, 'That document was not found.');
+
+        return \Illuminate\Support\Facades\Storage::disk('local')->download($d->path, $d->original_name,
+            ['Content-Type' => $d->mime ?: 'application/octet-stream', 'Cache-Control' => 'private, no-store']);
+    }
+
+    /** DELETE /compliance/subsidies/{id}/documents/{doc} -- hidden, the file is kept. */
+    public function removeDocument(Request $request, int $id, int $doc): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $centres = $this->centreScope($request, $agencyId);
+        [$row] = $this->docScope($id, $agencyId, $centres);
+        $d = DB::table('subsidy_documents')->where('id', $doc)->where('subsidy_id', $row->id)->whereNull('removed_at')->first();
+        abort_unless($d, 404, 'That document was not found.');
+        DB::table('subsidy_documents')->where('id', $d->id)->update(['removed_at' => now(), 'removed_by_id' => (int) $request->user()->id, 'updated_at' => now()]);
+        $this->docAudit($request, $agencyId, 'subsidy.document_removed', $row, [$d->original_name]);
+
+        return response()->json(['documents' => $this->docsFor([$row->id])[$row->id] ?? []]);
+    }
+
     // -- helpers -----------------------------------------------------------------
+
+    /** subsidy id => [{id, name, size, uploaded_at, uploaded_by}] for live documents. */
+    private function docsFor(array $ids): array
+    {
+        if (! $ids) {
+            return [];
+        }
+        $out = [];
+        $rows = DB::table('subsidy_documents as d')->leftJoin('users as u', 'u.id', '=', 'd.uploaded_by_id')
+            ->whereIn('d.subsidy_id', $ids)->whereNull('d.removed_at')->orderBy('d.id')
+            ->get(['d.id', 'd.subsidy_id', 'd.original_name', 'd.size', 'd.mime', 'd.created_at',
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as uploaded_by")]);
+        foreach ($rows as $d) {
+            $out[(int) $d->subsidy_id][] = ['id' => (int) $d->id, 'name' => $d->original_name, 'size' => (int) $d->size,
+                'mime' => $d->mime, 'uploaded_at' => $d->created_at, 'uploaded_by' => $d->uploaded_by ?: null];
+        }
+
+        return $out;
+    }
+
+    /**
+     * [row] for a provincial subsidy whose FAMILY the caller may see -- ended and archived
+     * ones included, because their paperwork is exactly what an audit asks for.
+     */
+    private function docScope(int $id, int $agencyId, ?array $centres): array
+    {
+        $row = DB::table('subsidies as s')->join('children as ch', 'ch.id', '=', 's.child_id')
+            ->where('s.id', $id)->where('s.type', self::TYPE)
+            ->first(['s.*', DB::raw('COALESCE(s.family_id, ch.family_id) as family_id'), 'ch.first_name', 'ch.last_name']);
+        abort_unless($row, 404, 'That subsidy was not found.');
+        $this->familyInScope((int) $row->family_id, $agencyId, $centres);
+
+        return [$row];
+    }
+
+    private function docAudit(Request $request, int $agencyId, string $action, object $row, array $names): void
+    {
+        try {
+            \App\Support\Audit::write([
+                'user_id' => (int) $request->user()->id, 'agency_id' => $agencyId,
+                'action' => $action, 'entity_type' => 'child', 'entity_id' => (int) $row->child_id,
+                'payload' => json_encode([
+                    'summary' => ($action === 'subsidy.document_added' ? 'Added ' : 'Removed ') . implode(', ', $names)
+                        . ' on the provincial subsidy for ' . trim($row->first_name . ' ' . $row->last_name)
+                        . ($row->case_number ? ' (case ' . $row->case_number . ')' : ''),
+                    'subsidy_id' => (int) $row->id, 'files' => $names,
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+    }
 
     private function familyInScope(int $familyId, int $agencyId, ?array $centres): object
     {
@@ -296,7 +430,11 @@ class SubsidyController extends Controller
         $data = $request->validate([
             'child_id' => [$creating ? 'required' : 'prohibited', 'integer'],
             'case_number' => ['nullable', 'string', 'max:120'],
-            'monthly_amount' => [$req, 'numeric', 'min:0.01', 'max:99999'],
+            // Daily or monthly (2026-09-29). A daily amount comes off as that amount x
+            // the child's scheduled care days in the month (App\Support\SubsidyAmount).
+            'amount_basis' => ['sometimes', 'in:monthly,daily'],
+            'monthly_amount' => ['nullable', 'numeric', 'min:0.01', 'max:99999'],
+            'daily_amount' => ['nullable', 'numeric', 'min:0.01', 'max:9999'],
             'valid_from' => [$req, 'date'],
             'valid_to' => ['nullable', 'date'],
             'approved_at' => ['nullable', 'date'],
@@ -313,6 +451,24 @@ class SubsidyController extends Controller
         }
         if (isset($data['case_number'])) {
             $data['case_number'] = trim($data['case_number']) ?: null;
+        }
+        // The basis decides which amount is required; the other is cleared so a row
+        // never carries a stale figure that a later reader could mistake for the real one.
+        if ($creating || array_key_exists('amount_basis', $data) || array_key_exists('monthly_amount', $data) || array_key_exists('daily_amount', $data)) {
+            $basis = $data['amount_basis'] ?? ($creating ? 'monthly' : null);
+            if ($basis === 'daily' || ($basis === null && isset($data['daily_amount']))) {
+                if (empty($data['daily_amount'])) {
+                    abort(response()->json(['message' => 'Enter the daily amount.', 'errors' => ['daily_amount' => ['Required for a daily subsidy.']]], 422));
+                }
+                $data['amount_basis'] = 'daily';
+                $data['monthly_amount'] = 0;
+            } elseif ($basis === 'monthly' || isset($data['monthly_amount'])) {
+                if (empty($data['monthly_amount'])) {
+                    abort(response()->json(['message' => 'Enter the monthly amount.', 'errors' => ['monthly_amount' => ['Required for a monthly subsidy.']]], 422));
+                }
+                $data['amount_basis'] = 'monthly';
+                $data['daily_amount'] = null;
+            }
         }
 
         return $data;
@@ -376,8 +532,12 @@ class SubsidyController extends Controller
             ->first();
     }
 
-    private function shape(object $r, int $agencyId, ?Carbon $start = null, ?Carbon $end = null): array
+    private function shape(object $r, int $agencyId, ?Carbon $start = null, ?Carbon $end = null, array $docs = []): array
     {
+        // What it takes off the month shown (or this month), from the ONE calculation the
+        // invoice run uses -- a daily subsidy's figure depends on the scheduled days.
+        $monthStart = ($start ?: Carbon::parse(\App\Support\AgencyTime::today($agencyId)))->copy()->startOfMonth()->toDateString();
+        $calc = \App\Support\SubsidyAmount::forSubsidyMonth($r, $monthStart);
         // The agency's date, not UTC's: from 8pm Toronto the UTC date is already tomorrow.
         $today = \App\Support\AgencyTime::today($agencyId);
         $inMonth = $start === null || ($r->valid_from <= $end->toDateString()
@@ -393,6 +553,11 @@ class SubsidyController extends Controller
             'centre_name' => $r->centre_name,
             'case_number' => $r->case_number,
             'monthly_amount' => round((float) $r->monthly_amount, 2),
+            'amount_basis' => ($r->amount_basis ?? 'monthly') === 'daily' ? 'daily' : 'monthly',
+            'daily_amount' => isset($r->daily_amount) && $r->daily_amount !== null ? round((float) $r->daily_amount, 2) : null,
+            'month_amount' => $calc['amount'],
+            'month_days' => $calc['days'],
+            'documents' => $docs[(int) $r->id] ?? [],
             'monthly_fee' => $r->monthly_fee !== null ? round((float) $r->monthly_fee, 2) : null,
             'valid_from' => $r->valid_from,
             'valid_to' => $r->valid_to,
@@ -476,8 +641,10 @@ class SubsidyController extends Controller
                 'entity_id' => $child->id,
                 'payload' => json_encode([
                     'summary' => ucfirst(substr($action, 8)) . ' provincial subsidy for ' . $name
-                        . ' (' . ($r['case_number'] ?? 'no case number') . ', $' . number_format((float) ($r['monthly_amount'] ?? 0), 2)
-                        . '/month, ' . ($r['valid_from'] ?? '?') . ' to ' . (($r['valid_to'] ?? null) ?: 'open') . ')',
+                        . ' (' . ($r['case_number'] ?? 'no case number') . ', '
+                        . ((($r['amount_basis'] ?? 'monthly') === 'daily')
+                            ? '$' . number_format((float) ($r['daily_amount'] ?? 0), 2) . '/day of scheduled care, '
+                            : '$' . number_format((float) ($r['monthly_amount'] ?? 0), 2) . '/month, ') . ($r['valid_from'] ?? '?') . ' to ' . (($r['valid_to'] ?? null) ?: 'open') . ')',
                     'child' => $name,
                     'family' => $child->family_name ?? null,
                     'before' => $before,

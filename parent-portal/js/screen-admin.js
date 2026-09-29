@@ -7204,10 +7204,22 @@
       }
       prov.forEach(function (x) {
         var st = { active: 'Active', upcoming: 'Starts later', ended: 'Ended', removed: 'Removed (entered by mistake)' }[x.status] || x.status;
-        host.appendChild(line(
-          x.child_name + ' · $' + Number(x.monthly_amount).toFixed(2) + '/month',
+        var amt = x.amount_basis === 'daily'
+          ? '$' + Number(x.daily_amount).toFixed(2) + '/day (' + x.month_days + ' scheduled day' + (x.month_days === 1 ? '' : 's') + ' this month = $' + Number(x.month_amount).toFixed(2) + ')'
+          : '$' + Number(x.monthly_amount).toFixed(2) + '/month';
+        var pr = line(
+          x.child_name + ' · ' + amt,
           [st, day(x.valid_from) + ' – ' + (x.valid_to ? day(x.valid_to) : 'no end date'), x.case_number ? 'case ' + x.case_number : ''].filter(Boolean).join(' · '),
-          x.status === 'ended' || x.status === 'removed'));
+          x.status === 'ended' || x.status === 'removed');
+        /* The government's paperwork, downloadable by staff (authenticated fetch; the
+           files are on the private disk and have no public URL). */
+        (x.documents || []).forEach(function (d) {
+          var a = Dom.el('button', { type: 'button', 'data-kt-iconized': '1',
+            style: 'display:block;border:0;background:none;padding:2px 0;margin-top:3px;color:#1F6080;font-weight:700;font-size:12.5px;cursor:pointer;text-align:left;' }, '📎 ' + d.name);
+          a.addEventListener('click', function () { subDoc(x.id, d); });
+          pr.appendChild(a);
+        });
+        host.appendChild(pr);
       });
       if (canEdit) {
         var go = Dom.el('button', { type: 'button', 'data-kt-iconized': '1',
@@ -7219,6 +7231,19 @@
           location.hash = '#cwelcc';
         });
         host.appendChild(go);
+      }
+
+      function subDoc(subsidyId, d) {
+        var headers = { Authorization: 'Bearer ' + sessionStorage.getItem('kt_token') };
+        var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) headers['X-Active-Agency-Id'] = aid;
+        var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+        fetch(base + '/compliance/subsidies/' + subsidyId + '/documents/' + d.id, { headers: headers }).then(function (r) {
+          if (!r.ok) throw new Error('Download failed (' + r.status + ')');
+          return r.blob();
+        }).then(function (b) {
+          var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = d.name; document.body.appendChild(a); a.click();
+          setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+        }).catch(function (e) { if (window.KT && KT.toast) KT.toast('⚠️', 'Could not download', e.message || '', '#B91C1C'); });
       }
 
       function cwelccDialog(action) {

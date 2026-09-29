@@ -2577,6 +2577,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch ('/compliance/subsidies/{id}',       [\App\Http\Controllers\Api\SubsidyController::class, 'update'])->where('id', '[0-9]+');
         Route::post  ('/compliance/subsidies/{id}/end',   [\App\Http\Controllers\Api\SubsidyController::class, 'end'])->where('id', '[0-9]+');
         Route::delete('/compliance/subsidies/{id}',       [\App\Http\Controllers\Api\SubsidyController::class, 'destroy'])->where('id', '[0-9]+');
+        // The province's or government's documents on a subsidy (private disk, staff only).
+        Route::post  ('/compliance/subsidies/{id}/documents',        [\App\Http\Controllers\Api\SubsidyController::class, 'uploadDocuments'])->where('id', '[0-9]+');
+        Route::get   ('/compliance/subsidies/{id}/documents/{doc}',  [\App\Http\Controllers\Api\SubsidyController::class, 'downloadDocument'])->where(['id' => '[0-9]+', 'doc' => '[0-9]+']);
+        Route::delete('/compliance/subsidies/{id}/documents/{doc}',  [\App\Http\Controllers\Api\SubsidyController::class, 'removeDocument'])->where(['id' => '[0-9]+', 'doc' => '[0-9]+']);
         // The family record's subsidy history, and CWELCC enrolment changes as dated periods.
         Route::get   ('/compliance/families/{id}/subsidies', [\App\Http\Controllers\Api\SubsidyController::class, 'familyHistory'])->where('id', '[0-9]+');
         Route::post  ('/compliance/families/{id}/cwelcc',    [\App\Http\Controllers\Api\SubsidyController::class, 'familyCwelcc'])->where('id', '[0-9]+');

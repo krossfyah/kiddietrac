@@ -48,8 +48,15 @@ when it was filed. Every change is written to the audit log.
 ## Provincial subsidy
 
 A child's **provincial fee subsidy**: the case number from the approval letter, the
-monthly amount, and the dates it applies. **While it applies, the monthly amount comes
-off that child's tuition on the family's invoice** — the family is only billed the rest.
+amount (per month or per day), the dates it applies, and the government's documents.
+**While it applies, the subsidy comes off that child's tuition on the family's invoice**
+— the family is only billed the rest, and never less than zero.
+
+- **Per month** — the monthly amount comes off each invoice.
+- **Per day** — the daily amount × the days the child is **scheduled** to attend that
+  month (their booked weekdays), not counting days the centre is closed. Worked out when
+  the invoice is generated; the invoice line shows it, e.g. *Subsidy (21 scheduled days
+  × $20.00)*. Record holidays in the centre's calendar so they are not counted.
 
 [[show: #cwelcc @ Provincial subsidy | Show me the Provincial subsidy tab]]
 
@@ -57,9 +64,14 @@ off that child's tuition on the family's invoice** — the family is only billed
 
 - [ ] Press **＋ Add subsidy**.
 - [ ] Choose the **child**.
-- [ ] Enter the **case number** and the **monthly amount**.
+- [ ] Enter the **case number**, choose **Per month** or **Per day**, and enter the amount.
 - [ ] Set the **first day**, and the **last day** if the approval has one.
+- [ ] Under **Documents from the province or government**, attach the approval letter (PDF, photo or Word, up to 15 MB each). You can attach several.
 - [ ] Press **Save**.
+
+Documents are private: only signed-in directors and admins can open them, from the
+subsidy's **Edit** window or the family record. Removing one hides it; every upload and
+removal is in the audit log.
 
 The list shows each child's tuition beside the subsidy, and turns the amount red if the
 subsidy is more than the tuition — worth a second look.
