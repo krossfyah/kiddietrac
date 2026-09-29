@@ -1979,7 +1979,7 @@
         breakdown.appendChild(Dom.el('div', { style: 'color: var(--ink-600);' }, 'Subtotal'));
         breakdown.appendChild(Dom.el('div', { style: 'text-align: right;' }, '$' + inv.subtotal.toFixed(2)));
         if (inv.subsidy_amount > 0) {
-          breakdown.appendChild(Dom.el('div', { style: 'color: var(--ink-600);' }, 'CWELCC subsidy'));
+          breakdown.appendChild(Dom.el('div', { style: 'color: var(--ink-600);' }, 'Subsidy'));
           breakdown.appendChild(Dom.el('div', { style: 'text-align: right; color: var(--brand-green);' }, '−$' + inv.subsidy_amount.toFixed(2)));
         }
         breakdown.appendChild(Dom.el('div', { style: 'font-weight: 700; font-size: 16px; border-top: 1px solid var(--ink-200); padding-top: 8px;' }, 'Your portion'));
@@ -2460,7 +2460,7 @@
         bd.appendChild(Dom.el('div', { style: 'color:var(--ink-600);' }, 'Subtotal'));
         bd.appendChild(Dom.el('div', { style: 'text-align:right;' }, '$' + inv.subtotal.toFixed(2)));
         if (inv.subsidy_amount > 0) {
-          bd.appendChild(Dom.el('div', { style: 'color:var(--ink-600);' }, 'CWELCC subsidy'));
+          bd.appendChild(Dom.el('div', { style: 'color:var(--ink-600);' }, 'Subsidy'));
           bd.appendChild(Dom.el('div', { style: 'text-align:right;color:var(--brand-green);' }, '−$' + inv.subsidy_amount.toFixed(2)));
         }
         bd.appendChild(Dom.el('div', { style: 'font-weight:800;border-top:1px solid var(--ink-200);padding-top:7px;' }, 'Your portion'));
@@ -2595,7 +2595,7 @@
     const bd = Dom.el('div', { style: card('padding:16px;margin-bottom:14px;') });
     bd.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:13px;color:var(--ink-700);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px;' }, 'Breakdown'));
     const rows = [['Subtotal', money(inv.subtotal)]];
-    if (inv.subsidy_amount > 0) rows.push(['CWELCC subsidy', '−' + money(inv.subsidy_amount)]);
+    if (inv.subsidy_amount > 0) rows.push(['Subsidy', '−' + money(inv.subsidy_amount)]);
     if (inv.discount_amount > 0) rows.push(['Discount', '−' + money(inv.discount_amount)]);
     rows.push(['Total', money(inv.total)]);
     if (inv.amount_paid > 0) rows.push(['Paid', '−' + money(inv.amount_paid)]);

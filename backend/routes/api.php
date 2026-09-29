@@ -2570,6 +2570,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/compliance/cwelcc/monthly',          [\App\Http\Controllers\Api\ComplianceController::class, 'cwelccMonthlyReport']);
         Route::get ('/compliance/cwelcc/monthly/pdf',      [\App\Http\Controllers\Api\ComplianceController::class, 'cwelccMonthlyPdf']);
         Route::get ('/compliance/cwelcc/monthly/csv',      [\App\Http\Controllers\Api\ComplianceController::class, 'cwelccMonthlyCsv']);
+        // Provincial fee subsidies (2026-09-29): one per child at a time; invoices deduct them.
+        Route::get   ('/compliance/subsidies',            [\App\Http\Controllers\Api\SubsidyController::class, 'index']);
+        Route::get   ('/compliance/subsidies/csv',        [\App\Http\Controllers\Api\SubsidyController::class, 'csv']);
+        Route::post  ('/compliance/subsidies',            [\App\Http\Controllers\Api\SubsidyController::class, 'store']);
+        Route::patch ('/compliance/subsidies/{id}',       [\App\Http\Controllers\Api\SubsidyController::class, 'update'])->where('id', '[0-9]+');
+        Route::post  ('/compliance/subsidies/{id}/end',   [\App\Http\Controllers\Api\SubsidyController::class, 'end'])->where('id', '[0-9]+');
+        Route::delete('/compliance/subsidies/{id}',       [\App\Http\Controllers\Api\SubsidyController::class, 'destroy'])->where('id', '[0-9]+');
         Route::get ('/compliance/retention',               [\App\Http\Controllers\Api\ComplianceController::class, 'retentionReport']);
         Route::get ('/compliance/expiry-calendar',         [\App\Http\Controllers\Api\ComplianceController::class, 'expiryCalendar']);
     });

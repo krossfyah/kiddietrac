@@ -13,7 +13,7 @@ The **Billing** tab shows your monthly invoices and payment history.
 Each month, your centre director generates invoices for all enrolled families. Your invoice shows:
 
 - **Subtotal** — the full monthly tuition before any subsidy
-- **CWELCC subsidy** — the Ontario subsidy applied to reduce your cost
+- **Subsidy** — a subsidy that reduces your cost, such as a provincial fee subsidy your centre has on file for your child
 - **Your portion** — what you owe (subtotal minus subsidy)
 - **Due date** — when payment is expected (usually 15 days after issue)
 - **Status** — sent / paid / partial / overdue

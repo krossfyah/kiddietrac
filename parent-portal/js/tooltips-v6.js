@@ -74,7 +74,7 @@
     },
     {
       match: text => /your portion/i.test(text),
-      tooltip: "What you owe after the CWELCC subsidy is applied to the full tuition. Pay this amount to your centre directly (e-transfer, cheque, etc.).",
+      tooltip: "What you owe after any subsidy is applied to the full tuition. Pay this amount to your centre directly (e-transfer, cheque, etc.).",
       role: 'guardian',
     },
     {

@@ -25,7 +25,19 @@
 
   async function downloadAuthed(path, filename) {
     const tok = sessionStorage.getItem('kt_token');
-    const r = await fetch(apiBase() + path, { headers: { Authorization: 'Bearer ' + tok } });
+    /* The active agency goes with it (2026-09-29): without the header a platform admin
+       was answered "Select an agency first" and the CSV/PDF buttons saved that error
+       message as the file. */
+    const headers = { Authorization: 'Bearer ' + tok };
+    const aid = sessionStorage.getItem('kt_active_agency_id');
+    if (aid) headers['X-Active-Agency-Id'] = aid;
+    const r = await fetch(apiBase() + path, { headers });
+    if (!r.ok) {
+      let msg = 'Download failed (' + r.status + ')';
+      try { const j = await r.json(); if (j && j.message) msg = j.message; } catch (e) {}
+      if (window.KT && KT.toast) KT.toast('⚠️', 'Could not download', msg, '#B91C1C');
+      return;
+    }
     const blob = await r.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = filename;
@@ -739,15 +751,44 @@
     });
   }
 
-  // ============================ CWELCC report ============================
+  // ============================ Subsidies ============================
+  /* SUBSIDIES (2026-09-29). Anthony: "rename CWELLCC subsidies to Subsidies and add
+     CWELLCC as a subtab and add provincial subsidy as another subtab". The hash stays
+     #cwelcc so links, the launcher and permissions keep working; the nav label is
+     "Subsidies". The tab you were on is remembered for the session. */
   async function renderCwelcc(main) {
-    main.innerHTML = '<div style="padding:24px;">Loading CWELCC report…</div>';
-    const month = new Date().toISOString().slice(0, 7);
-    const r = await Api.get(`/compliance/cwelcc/monthly?month=${month}`);
+    let tab = 'cwelcc';
+    try { tab = sessionStorage.getItem('kt_subsidy_tab') || 'cwelcc'; } catch (e) {}
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+      <div class="kt-segmented" id="sub-tabs" data-kt-no-tips style="display:inline-flex;gap:6px;margin:0 0 18px;flex-wrap:wrap;">
+        <button type="button" data-sub-tab="cwelcc" data-kt-iconized="1">CWELCC</button>
+        <button type="button" data-sub-tab="provincial" data-kt-iconized="1">Provincial subsidy</button>
+      </div>
+      <div id="sub-pane"></div>
+    </div>`;
+    const pane = main.querySelector('#sub-pane');
+    const paint = (key) => {
+      main.querySelectorAll('[data-sub-tab]').forEach((b) => {
+        const on = b.getAttribute('data-sub-tab') === key;
+        b.style.cssText = 'height:32px;padding:0 16px;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;'
+          + (on ? 'background:#1F6080;color:#fff;border:1px solid #1F6080;' : 'background:#fff;color:#334155;border:1px solid #CBD5E1;');
+      });
+      try { sessionStorage.setItem('kt_subsidy_tab', key); } catch (e) {}
+      if (key === 'provincial') renderProvincialPane(pane); else renderCwelccPane(pane);
+    };
+    main.querySelectorAll('[data-sub-tab]').forEach((b) => b.addEventListener('click', () => paint(b.getAttribute('data-sub-tab'))));
+    paint(tab === 'provincial' ? 'provincial' : 'cwelcc');
+  }
+
+  async function renderCwelccPane(pane, monthArg) {
+    pane.innerHTML = '<div style="padding:8px 0;color:#64748B;">Loading CWELCC report…</div>';
+    const month = monthArg || new Date().toISOString().slice(0, 7);
+    const r = await Api.get(`/compliance/cwelcc/monthly?month=${month}`);
+    if (!pane.isConnected) return;
+    pane.innerHTML = `<div>
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <h2 style="margin:0 0 4px;color:#1F6080;">CWELCC subsidy report</h2>
+          <h3 style="margin:0 0 4px;color:#1F6080;font-size:16px;">CWELCC monthly report</h3>
           <div style="color:#6B7280;font-size:14px;">Month: <input id="cw-month" type="month" value="${month}" style="padding:6px;border:1px solid #E5E7EB;border-radius:4px;font-size:14px;"></div>
         </div>
         <div>
@@ -780,9 +821,180 @@
         </tr>`).join('') || '<tr><td colspan="6" style="padding:24px;color:#64748B;text-align:center;">No CWELCC-enrolled families for this month.</td></tr>'}</tbody>
       </table>
     </div>`;
-    document.getElementById('cw-month').onchange = (e) => { renderCwelcc(main); };
+    document.getElementById('cw-month').onchange = (e) => { renderCwelccPane(pane, e.target.value); };
     document.getElementById('cw-csv').onclick = () => downloadAuthed(`/compliance/cwelcc/monthly/csv?month=${document.getElementById('cw-month').value}`, `CWELCC-${month}.csv`);
     document.getElementById('cw-pdf').onclick = () => downloadAuthed(`/compliance/cwelcc/monthly/pdf?month=${document.getElementById('cw-month').value}`, `CWELCC-${month}.pdf`);
+  }
+
+
+  /* ---- Provincial subsidy ----
+     Each child's provincial fee subsidy: case number, monthly amount, the dates it
+     applies. While it applies, the monthly amount comes off that child's tuition on the
+     family's invoice -- invoices already read these records. One subsidy per child at a
+     time (the server refuses an overlap and names the one in the way). */
+  const subDay = (d) => {
+    // A date-only string parsed with new Date() is UTC midnight -- the day BEFORE in
+    // Toronto. Read the parts instead.
+    if (!d) return '';
+    const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return esc(d);
+    return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  const money = (n) => '$' + (Number(n) || 0).toFixed(2);
+  const todayLocal = () => { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+
+  async function renderProvincialPane(pane, opts) {
+    opts = opts || {};
+    const month = opts.month || (pane.dataset.subMonth || new Date().toISOString().slice(0, 7));
+    const all = opts.all != null ? opts.all : pane.dataset.subAll === '1';
+    pane.dataset.subMonth = month; pane.dataset.subAll = all ? '1' : '0';
+    pane.innerHTML = '<div style="padding:8px 0;color:#64748B;">Loading provincial subsidies…</div>';
+    let r;
+    try { r = await Api.get(`/compliance/subsidies?month=${month}` + (all ? '&all=1' : '')); }
+    catch (e) { if (pane.isConnected) pane.innerHTML = `<div style="padding:12px;color:#B91C1C;">${esc(e.message || 'Could not load subsidies.')}</div>`; return; }
+    if (!pane.isConnected) return;
+    const rows = r.data || [];
+    const chip = (st) => ({ active: ['#DCFCE7', '#166534', 'Active'], upcoming: ['#DBEAFE', '#1E40AF', 'Starts later'], ended: ['#F1F5F9', '#475569', 'Ended'] }[st] || ['#F1F5F9', '#475569', st]);
+    pane.innerHTML = `<div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h3 style="margin:0 0 4px;color:#1F6080;font-size:16px;">Provincial fee subsidy</h3>
+          <div style="color:#6B7280;font-size:13px;max-width:720px;line-height:1.5;">While a subsidy applies, its monthly amount comes off that child's tuition on the family's invoice. One subsidy per child at a time.</div>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:10px;flex-wrap:wrap;font-size:13px;color:#475569;">
+            <label>Month <input id="ps-month" type="month" value="${esc(month)}" style="padding:6px;border:1px solid #E5E7EB;border-radius:6px;font-size:13px;"></label>
+            <label style="display:flex;align-items:center;gap:6px;"><input id="ps-all" type="checkbox" ${all ? 'checked' : ''}> Show every subsidy, including ended</label>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="ps-add" data-kt-iconized="1" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;">＋ Add subsidy</button>
+          <button id="ps-csv" data-kt-iconized="1" style="background:#059669;color:#fff;border:0;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;">⤓ CSV</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;background:#EFF6FF;padding:14px 16px;border-radius:8px;"><div style="font-size:11px;color:#1E40AF;font-weight:700;">CHILDREN</div><div style="font-size:22px;font-weight:800;color:#1E40AF;">${(r.totals || {}).children || 0}</div></div>
+        <div style="flex:1;min-width:180px;background:#FEF3C7;padding:14px 16px;border-radius:8px;"><div style="font-size:11px;color:#92400E;font-weight:700;">SUBSIDY THIS MONTH</div><div style="font-size:22px;font-weight:800;color:#92400E;">${money((r.totals || {}).monthly)}</div></div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-top:20px;">
+        <thead><tr>
+          ${['Child', 'Family', 'Centre', 'Case number', 'Monthly', 'Tuition', 'From', 'To', 'Status', ''].map((h, i) => `<th style="text-align:${i === 4 || i === 5 ? 'right' : 'left'};padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rows.map((x) => { const c = chip(x.status); const over = x.monthly_fee != null && x.monthly_amount > x.monthly_fee; return `<tr>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;font-weight:600;">${esc(x.child_name)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(x.family_name)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(x.centre_name)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(x.case_number || '—')}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;${over ? 'color:#B91C1C;' : ''}" ${over ? 'title="More than this child\'s monthly tuition"' : ''}>${money(x.monthly_amount)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;color:#64748B;">${x.monthly_fee != null ? money(x.monthly_fee) : '—'}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${subDay(x.valid_from)}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${x.valid_to ? subDay(x.valid_to) : 'No end date'}</td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;"><span style="background:${c[0]};color:${c[1]};font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;">${c[2]}</span></td>
+          <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;white-space:nowrap;">
+            <button type="button" data-ps-edit="${x.id}">Edit</button>
+            ${x.status !== 'ended' ? `<button type="button" data-ps-end="${x.id}">End subsidy</button>` : ''}
+            <button type="button" data-ps-remove="${x.id}">Remove</button>
+          </td>
+        </tr>`; }).join('') || `<tr><td colspan="10" style="padding:24px;color:#64748B;text-align:center;">No provincial subsidies ${all ? 'yet' : 'for this month'}. Use <b>＋ Add subsidy</b> to record one.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+    const byId = (id) => rows.find((x) => String(x.id) === String(id));
+    pane.querySelector('#ps-month').onchange = (e) => renderProvincialPane(pane, { month: e.target.value });
+    pane.querySelector('#ps-all').onchange = (e) => renderProvincialPane(pane, { all: e.target.checked });
+    pane.querySelector('#ps-csv').onclick = () => downloadAuthed(`/compliance/subsidies/csv?month=${pane.dataset.subMonth}`, `Provincial-subsidies-${pane.dataset.subMonth}.csv`);
+    pane.querySelector('#ps-add').onclick = () => subsidyDialog(pane, null, r.children || []);
+    pane.querySelectorAll('[data-ps-edit]').forEach((b) => b.onclick = () => subsidyDialog(pane, byId(b.getAttribute('data-ps-edit')), r.children || []));
+    pane.querySelectorAll('[data-ps-end]').forEach((b) => b.onclick = () => endDialog(pane, byId(b.getAttribute('data-ps-end'))));
+    pane.querySelectorAll('[data-ps-remove]').forEach((b) => b.onclick = async () => {
+      const x = byId(b.getAttribute('data-ps-remove'));
+      const ok = window.KT && KT.confirm ? await KT.confirm({
+        title: 'Remove this subsidy?',
+        description: `Only for a subsidy entered by mistake. ${x.child_name}'s ${money(x.monthly_amount)}/month will no longer come off future invoices. To stop a real subsidy, use End subsidy instead so its history is kept.`,
+        okLabel: 'Remove',
+      }) : true;
+      if (!ok) return;
+      try { await Api.delete('/compliance/subsidies/' + x.id); renderProvincialPane(pane); }
+      catch (e) { if (KT.toast) KT.toast('⚠️', 'Not removed', e.message || '', '#B91C1C'); }
+    });
+    if (window.KT && KT.enhanceTables) { try { KT.enhanceTables(); } catch (e) {} }
+  }
+
+  function subModal(title, inner) {
+    const m = document.createElement('div');
+    m.className = 'kt-modal-overlay';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:10000;padding:16px;';
+    m.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px;max-height:90vh;overflow:auto;">
+      <h3 style="margin:0 0 14px;font-size:18px;color:#0F172A;">${esc(title)}</h3>${inner}
+      <div id="sm-err" style="color:#B91C1C;font-size:13px;min-height:18px;margin-top:8px;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">
+        <button type="button" data-sm-cancel style="background:#F1F5F9;color:#334155;border:0;padding:9px 16px;border-radius:8px;font-weight:700;cursor:pointer;">Cancel</button>
+        <button type="button" data-sm-ok style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:8px;font-weight:800;cursor:pointer;">Save</button>
+      </div></div>`;
+    document.body.appendChild(m);
+    m.querySelector('[data-sm-cancel]').onclick = () => m.remove();
+    return m;
+  }
+  const fld = 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;';
+  const lbl = 'display:block;font-size:12px;font-weight:700;color:#374151;margin:10px 0 4px;';
+
+  function subsidyDialog(pane, x, children) {
+    const editing = !!x;
+    const m = subModal(editing ? `Edit subsidy — ${x.child_name}` : 'Add a provincial subsidy', `
+      ${editing ? '' : `<label style="${lbl}">Child</label>
+        <select id="sm-child" style="${fld}"><option value="">— Choose a child —</option>
+          ${children.map((c) => `<option value="${c.id}">${esc(c.name)} · ${esc(c.family_name || '')}${c.centre_name ? ' · ' + esc(c.centre_name) : ''}</option>`).join('')}</select>`}
+      <label style="${lbl}">Case number</label>
+      <input id="sm-case" maxlength="120" style="${fld}" value="${esc(editing ? (x.case_number || '') : '')}" placeholder="From the subsidy approval letter">
+      <label style="${lbl}">Monthly amount ($)</label>
+      <input id="sm-amt" type="number" min="0.01" step="0.01" style="${fld}" value="${editing ? x.monthly_amount : ''}">
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;"><label style="${lbl}">First day</label><input id="sm-from" type="date" style="${fld}" value="${editing ? x.valid_from : todayLocal().slice(0, 8) + '01'}"></div>
+        <div style="flex:1;"><label style="${lbl}">Last day (optional)</label><input id="sm-to" type="date" style="${fld}" value="${editing && x.valid_to ? x.valid_to : ''}"></div>
+      </div>
+      <label style="${lbl}">Approved on (optional)</label>
+      <input id="sm-approved" type="date" style="${fld}" value="${editing && x.approved_at ? x.approved_at : ''}">
+      <label style="${lbl}">Notes (optional)</label>
+      <textarea id="sm-notes" rows="2" maxlength="1000" style="${fld}resize:vertical;">${esc(editing ? (x.notes || '') : '')}</textarea>
+      <div style="font-size:12px;color:#64748B;margin-top:8px;line-height:1.5;">While it applies, this amount comes off the child's tuition on each monthly invoice. Invoices already issued are not changed.</div>`);
+    m.querySelector('[data-sm-ok]').onclick = async () => {
+      const err = m.querySelector('#sm-err');
+      const body = {
+        case_number: m.querySelector('#sm-case').value.trim() || null,
+        monthly_amount: parseFloat(m.querySelector('#sm-amt').value),
+        valid_from: m.querySelector('#sm-from').value,
+        valid_to: m.querySelector('#sm-to').value || null,
+        approved_at: m.querySelector('#sm-approved').value || null,
+        notes: m.querySelector('#sm-notes').value.trim() || null,
+      };
+      if (!editing) body.child_id = parseInt(m.querySelector('#sm-child').value, 10) || null;
+      if (!editing && !body.child_id) { err.textContent = 'Choose the child.'; return; }
+      if (!(body.monthly_amount > 0)) { err.textContent = 'Enter the monthly amount.'; return; }
+      if (!body.valid_from) { err.textContent = 'Enter the first day.'; return; }
+      if (body.valid_to && body.valid_to < body.valid_from) { err.textContent = 'The last day cannot be before the first day.'; return; }
+      const ok = m.querySelector('[data-sm-ok]'); ok.disabled = true; ok.textContent = 'Saving…';
+      try {
+        if (editing) await Api.patch('/compliance/subsidies/' + x.id, body);
+        else await Api.post('/compliance/subsidies', body);
+        m.remove();
+        renderProvincialPane(pane);
+      } catch (e) {
+        ok.disabled = false; ok.textContent = 'Save';
+        err.textContent = (e && (e.data && e.data.message)) || e.message || 'Could not save.';
+      }
+    };
+  }
+
+  function endDialog(pane, x) {
+    const m = subModal(`End subsidy — ${x.child_name}`, `
+      <div style="font-size:13px;color:#475569;line-height:1.5;">${money(x.monthly_amount)}/month${x.case_number ? ', case ' + esc(x.case_number) : ''}, since ${subDay(x.valid_from)}. Invoices issued after the last day no longer include it.</div>
+      <label style="${lbl}">Last day</label>
+      <input id="sm-to" type="date" style="${fld}" value="${todayLocal()}" min="${esc(x.valid_from)}">`);
+    const ok = m.querySelector('[data-sm-ok]'); ok.textContent = 'End subsidy';
+    ok.onclick = async () => {
+      const to = m.querySelector('#sm-to').value;
+      if (!to) { m.querySelector('#sm-err').textContent = 'Enter the last day.'; return; }
+      ok.disabled = true;
+      try { await Api.post('/compliance/subsidies/' + x.id + '/end', { valid_to: to }); m.remove(); renderProvincialPane(pane); }
+      catch (e) { ok.disabled = false; m.querySelector('#sm-err').textContent = (e && (e.data && e.data.message)) || e.message || 'Could not save.'; }
+    };
   }
 
   // ============================ Cohort retention ============================
