@@ -356,9 +356,11 @@ final class VoiceController extends Controller
             $raw
         )) {
             Log::warning('Telnyx voice webhook: bad signature', ['agency' => $agency]);
+            Telnyx::noteWebhook($agency, false);
 
             return response('', 403);
         }
+        Telnyx::noteWebhook($agency, true);
 
         $body = json_decode($raw, true) ?: [];
         $event = (string) ($body['data']['event_type'] ?? '');

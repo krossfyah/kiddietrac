@@ -209,9 +209,11 @@ final class SmsConsentController extends Controller
             $raw
         )) {
             Log::warning('SMS inbound: bad Telnyx signature', ['agency' => $agency]);
+            \App\Support\Telnyx::noteWebhook($agency, false);
 
             return response('', 403);
         }
+        \App\Support\Telnyx::noteWebhook($agency, true);
 
         $body = json_decode($raw, true) ?: [];
         $event = (string) ($body['data']['event_type'] ?? '');

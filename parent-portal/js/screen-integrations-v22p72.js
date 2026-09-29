@@ -894,6 +894,33 @@
       : '<div style="margin-top:10px;">' + note('bad', 'This agency has all notifications switched off in '
         + 'Email settings, so nothing will send or ring even once a carrier is configured.') + '</div>';
 
+    /* TELNYX WEBHOOK REFUSED (2026-09-29). iLearn sent through Telnyx for five days
+       with the public key blank, so every delivery receipt was refused and a parent's
+       STOP would have been too. The only hint was a line at the bottom of the Telnyx
+       tab. Said here, at the top, whenever Telnyx carries texts and its calls back to us
+       cannot be verified: the key is blank, or the most recent call was refused (a
+       wrong key). */
+    var whNote = '';
+    try {
+      var tw = s.telnyx_webhook || {};
+      var txUsed = s.provider === 'telnyx' || (s.failover && s.telnyx_ready);
+      var fixIt = ' Paste it on the <b>Telnyx</b> tab: Mission Control → Keys &amp; Credentials → <b>Public Key</b>.';
+      if (txUsed && !String((s.telnyx || {}).public_key || '').trim()) {
+        whNote = note('bad', 'Telnyx is carrying your texts, but its <b>webhook public key is blank</b>, so every '
+          + 'delivery receipt and every reply from a parent, <b>including STOP</b>, is refused.' + fixIt);
+      } else if (tw.last_refused && (!tw.last_ok || tw.last_refused > tw.last_ok)) {
+        var when = tw.last_refused;
+        try {
+          when = new Date(tw.last_refused).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: 'numeric',
+            minute: '2-digit', timeZone: (window.KT && KT.agencyTz && KT.agencyTz()) || undefined });
+        } catch (e) {}
+        whNote = note('bad', 'The last call from Telnyx (' + esc(when) + ') was <b>refused</b>: its signature did '
+          + 'not match the webhook public key saved here, so receipts and replies, <b>including STOP</b>, are not '
+          + 'being recorded. Check the key belongs to this Telnyx account.' + fixIt);
+      }
+      if (whNote) { whNote = '<div style="margin-top:10px;">' + whNote + '</div>'; }
+    } catch (e) { whNote = ''; }
+
     // Sends per carrier over the last 30 days — the first question after switching.
     var stats = '';
     try {
@@ -988,7 +1015,7 @@
       +         '<input type="checkbox" id="sms-enabled"' + (s.sms_enabled ? ' checked' : '')
       +           ' style="width:18px;height:18px;cursor:pointer;">'
       +         'Send text messages for this agency</label>'
-      +       offNote
+      +       offNote + whNote
       +       stats
       +     '</div>'
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -349,6 +350,33 @@ final class Telnyx
      * Fails CLOSED: no key configured means nothing is accepted. An open webhook here
      * would let anyone opt a number in or out, or drive somebody else's call.
      */
+    /* WEBHOOK HEALTH (2026-09-29). iLearn ran for five days with every Telnyx webhook
+       refused: the public key had been left blank at setup, and a refusal is a 403 in a
+       log nobody reads. Sending kept working, so nothing looked wrong. But every
+       delivery receipt was lost, and a parent's STOP would have been too.
+
+       So both webhooks note when they last accepted and last refused a call from
+       Telnyx, and the SMS settings screen warns while the latest one was refused.
+       Timestamps only, never the body. */
+    public static function noteWebhook(int $agencyId, bool $accepted): void
+    {
+        try {
+            Cache::put('telnyx-wh-' . ($accepted ? 'ok' : 'refused') . '-' . $agencyId,
+                now()->utc()->toIso8601String(), 86400 * 30);
+        } catch (\Throwable $e) {
+            // Never let bookkeeping break the webhook itself.
+        }
+    }
+
+    /** ['last_ok' => ISO|null, 'last_refused' => ISO|null] */
+    public static function webhookHealth(int $agencyId): array
+    {
+        return [
+            'last_ok' => Cache::get('telnyx-wh-ok-' . $agencyId),
+            'last_refused' => Cache::get('telnyx-wh-refused-' . $agencyId),
+        ];
+    }
+
     public static function verifyWebhook(string $publicKeyB64, string $signatureB64, string $timestamp, string $rawBody): bool
     {
         $publicKeyB64 = trim($publicKeyB64);

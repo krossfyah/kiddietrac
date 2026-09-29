@@ -169,6 +169,8 @@ class SmsSettingsController extends Controller
                does not otherwise say whose Telnyx account it came from, and the signing
                key has to be chosen before anything in the body can be trusted. */
             'telnyx_inbound_webhook' => url('/api/v1/sms/telnyx/inbound/' . $agencyId),
+            // When Telnyx's webhooks were last accepted / refused (Telnyx::noteWebhook).
+            'telnyx_webhook' => Telnyx::webhookHealth($agencyId),
             'telnyx_voice_webhook' => url('/api/v1/voice/telnyx/webhook/' . $agencyId),
 
             // Sends per carrier over the last 30 days -- the first question anybody has
