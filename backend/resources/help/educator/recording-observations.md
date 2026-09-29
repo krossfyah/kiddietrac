@@ -43,6 +43,20 @@ Examples of observation-worthy moments:
 6. Optionally attach a photo
 7. Save
 
+## Say it instead of typing
+
+On **New observation**, press **🎤 Speak it** under the text box and just talk: what the child did, with whom, and what you noticed. The words appear in the box as you speak, in the language the portal is set to. Press **Stop** when you're done, then read it over and fix anything the microphone misheard before you continue.
+
+- The first time, your browser asks to use the microphone. Choose **Allow**.
+- In the KiddieTrac phone app, or a browser without speech recognition, tap the **microphone on your keyboard** instead. It does the same job.
+- Nothing is recorded or kept: only the text in the box is saved, and only when you save the observation.
+
+> **Tip:** Speak the way you'd write it: facts first ("Aria stacked five blocks, then counted them aloud"), not how you felt about it.
+
+## Your agency's learning framework
+
+When you press **Structure with AI**, KiddieTrac links the observation to the areas of the learning framework your agency uses: for example HDLH's Belonging, Well-being, Engagement and Expression, or the seven areas of EYFS. You'll see them as coloured tags on the review step, and they feed report cards and the framework gaps report. Your agency admin chooses the framework under **Settings → Learning framework**.
+
 ## What makes a good observation
 
 A good observation includes:

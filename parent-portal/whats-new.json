@@ -4,6 +4,51 @@
   {
    "type": "new",
    "date": "2026-09-29",
+   "icon": "🎤",
+   "title": "Speak your observations",
+   "body": "On a new observation, press Speak it and talk instead of typing: the words appear in the box, in the language the portal is set to, for you to check before saving. In the phone app, use the microphone on your keyboard.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "home_visitor",
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "🧭",
+   "title": "Choose your learning framework",
+   "body": "Settings → Learning framework: HDLH, ELECT, the BC Early Learning Framework, Flight, Accueillir la petite enfance, Head Start ELOF, EYFS, HighScope, or your own. Observations, report cards and the framework gaps report all follow it.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "improved",
+   "date": "2026-09-29",
+   "icon": "📑",
+   "title": "Report cards follow your framework",
+   "body": "Report cards now have one narrative for each area of your agency’s learning framework, on screen and in the PDF. The framework gaps report counts every child’s observations per area; it had been showing every area as a gap.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "educator"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "💝",
+   "title": "Donations & fundraising",
+   "body": "Finance → Donations: run campaigns with a shareable giving page, record gifts (e-Transfer, cheque, cash), and issue receipts. Registered charities issue official receipts for income tax purposes with CRA details and serial numbers; everyone else sends acknowledgements. Export the year to CSV.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
    "icon": "📋",
    "title": "Weekly lesson plan templates",
    "body": "Plan a week in minutes: in Lesson plans, choose Templates to browse ready-made toddler, preschool and mixed-age weeks, preview the whole week, and use it as a starting draft you can change before saving. Save your own best weeks as templates for your whole agency.",
