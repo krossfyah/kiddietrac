@@ -321,7 +321,7 @@ final class LessonPlanController extends Controller
         if (! $room) return false;
         $centre = DB::table('centres')->where('id', $room->centre_id)->first();
         if (! $centre) return false;
-        return DB::table('role_assignments')
+        $has = DB::table('role_assignments')
             ->where('user_id', $userId)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])
             ->where('active', true)
@@ -330,5 +330,11 @@ final class LessonPlanController extends Controller
                   ->orWhere('agency_id', $centre->agency_id);
             })
             ->exists();
+        if ($has) return true;
+        // 2026-09-29 (Anthony approved): the room check never got v22p98's platform_admin
+        // clause, so a platform admin switched into an agency could read its centre-wide
+        // plans but got 403 on every room plan. Same rule as hasCentreAccess.
+        $isPlatform = DB::table('role_assignments')->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
+        return $isPlatform && (int) $centre->agency_id === (int) request()->header('X-Active-Agency-Id');
     }
 }
