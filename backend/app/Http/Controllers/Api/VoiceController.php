@@ -132,12 +132,76 @@ final class VoiceController extends Controller
     }
 
     /**
+     * GET /admin/voice/voices — the voices worth offering, from Telnyx's own list
+     * (2026-09-29). Anthony: "can we switch voice types with telynx?". The Voice field
+     * took a free-text id nobody could be expected to know. Telnyx offers ~4,500 voices,
+     * so this keeps the ones that fit a Canadian childcare agency: Canadian English,
+     * Canadian French and US English, from AWS Polly and Azure (names people recognise,
+     * the language in the id), plus the two basic voices. Cached a day.
+     */
+    public function voices(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAccess($request, $agencyId);
+
+        $basic = [
+            ['id' => 'female', 'label' => 'Basic female', 'language' => '', 'group' => 'Basic (standard rate)'],
+            ['id' => 'male', 'label' => 'Basic male', 'language' => '', 'group' => 'Basic (standard rate)'],
+        ];
+        $key = Telnyx::apiKey($agencyId);
+        if ($key === '') {
+            return response()->json(['data' => $basic]);
+        }
+
+        $list = \Illuminate\Support\Facades\Cache::remember('telnyx-voices-v1', 86400, function () use ($key) {
+            $r = \Illuminate\Support\Facades\Http::withToken($key)->acceptJson()->timeout(30)
+                ->get('https://api.telnyx.com/v2/text-to-speech/voices');
+            if (! $r->successful()) {
+                throw new \RuntimeException('Telnyx voices HTTP ' . $r->status());
+            }
+            $groups = ['en-CA' => 'English (Canada)', 'fr-CA' => 'French (Canada)', 'en-US' => 'English (US)'];
+            $out = [];
+            foreach (($r->json('voices') ?? []) as $v) {
+                $lang = str_replace('_', '-', (string) ($v['language'] ?? ''));
+                $prov = strtolower((string) ($v['provider'] ?? ''));
+                $id = (string) ($v['id'] ?? '');
+                if (! isset($groups[$lang]) || ! in_array($prov, ['aws', 'azure'], true) || $id === '') {
+                    continue;
+                }
+                // Azure's "DragonHD" variants duplicate a voice at a higher tier; keep the plain one.
+                if (str_contains($id, 'DragonHD')) {
+                    continue;
+                }
+                $name = (string) ($v['name'] ?? '');
+                if ($name === '' || str_contains($name, '.')) {
+                    $name = preg_replace('/^(AWS\.Polly\.|Azure\.[a-z]{2}-[A-Z]{2}-)/', '', $id);
+                    $name = preg_replace('/(-?Neural)$/', '', $name);
+                }
+                $out[] = [
+                    'id' => $id,
+                    'label' => trim($name) . ' · ' . ucfirst(strtolower((string) ($v['gender'] ?? ''))) . ' · ' . ($prov === 'aws' ? 'AWS' : 'Azure'),
+                    'language' => $lang,
+                    'group' => $groups[$lang],
+                ];
+            }
+            usort($out, fn ($a, $b) => [array_search($a['group'], array_values($groups)), $a['label']]
+                <=> [array_search($b['group'], array_values($groups)), $b['label']]);
+
+            return $out;
+        });
+
+        return response()->json(['data' => array_merge($basic, $list)]);
+    }
+
+    /**
      * POST /admin/voice/test-call
      *
-     * Rings the number on the signed-in admin's OWN profile and nobody else's. A test
-     * that can name a recipient is a test that rings a parent at 9pm to prove a
-     * credential; pressing the button is the consent, and it can only ever be consent
-     * for yourself.
+     * Rings the signed-in admin's OWN profile number by default. It can also ring a
+     * number they type (2026-09-29, on Anthony's request) under the same fence as the
+     * SMS page's test send: agency/platform admins only, "I control this number"
+     * confirmed, opted-out numbers refused, the caller announced, five an hour per
+     * agency. The old rule ("a test that can name a recipient rings a parent at 9pm")
+     * is why that fence exists.
      */
     public function testCall(Request $request): JsonResponse
     {
@@ -148,7 +212,16 @@ final class VoiceController extends Controller
            testing". The test used to speak one fixed sentence, which proves the call
            connects but not how a real announcement will sound. The text is only ever
            spoken to the person who typed it, on their own number. */
-        $data = $request->validate(['message' => 'nullable|string|max:600']);
+        $data = $request->validate([
+            'message' => 'nullable|string|max:600',
+            // A number of your choosing (2026-09-29, Anthony: "allow me to enter a ph for the
+            // test call"). Same fence as the SMS page's test send, see below.
+            'to' => 'nullable|string|max:40',
+            'confirm' => 'nullable|boolean',
+            // Audition a voice before saving it: used for this one call only.
+            'voice' => ['nullable', 'string', 'max:120', 'regex:/^[A-Za-z0-9._:\-]+$/'],
+            'language' => ['nullable', 'string', 'max:12', 'regex:/^[a-z]{2}(-[A-Z]{2})?$/'],
+        ]);
         $message = trim(preg_replace('/\s+/u', ' ', (string) ($data['message'] ?? '')));
         if ($message === '') {
             $message = 'This is a test call from Kiddie Trac. Your voice announcements are working. Goodbye.';
@@ -156,8 +229,46 @@ final class VoiceController extends Controller
 
         $u = $request->user();
         $phone = trim((string) ($u->phone ?? ''));
+        $callUserId = (int) $u->id;
+        $typed = trim((string) ($data['to'] ?? ''));
+
+        /* A TYPED NUMBER gets the same fence as SmsSettingsController::testSend: agency
+           or platform admins only; they confirm they control the number; it must be
+           dialable; a number whose owner asked not to be telephoned is refused; five an
+           hour per agency, shared with the SMS test. The words are prefixed with who is
+           calling, because the person answering may not be the one who typed. */
+        if ($typed !== '') {
+            $roles = DB::table('role_assignments')->where('user_id', $u->id)->where('active', true)->pluck('role')->all();
+            if (! array_intersect(['agency_admin', 'platform_admin'], $roles)) {
+                return response()->json(['ok' => false, 'message' => 'Only agency admins can test-call another number. Leave it blank to call your own.'], 403);
+            }
+            if (! $request->boolean('confirm')) {
+                return response()->json(['ok' => false, 'message' => 'Confirm that you control the number you are calling.'], 422);
+            }
+            $to = Telnyx::e164($typed);
+            if ($to === '') {
+                return response()->json(['ok' => false, 'message' => 'That is not a number we can dial. Use the full form, like +16475550123.'], 422);
+            }
+            $owner = DB::table('users')
+                ->whereRaw("RIGHT(REGEXP_REPLACE(COALESCE(phone,''), '[^0-9]', ''), 10) = ?", [substr(preg_replace('/\D/', '', $to) ?? '', -10)])
+                ->orderByDesc('id')->first(['id', 'voice_opt_out']);
+            if ($owner && (int) ($owner->voice_opt_out ?? 0) === 1) {
+                return response()->json(['ok' => false, 'message' => 'That number has asked not to be telephoned. A test is not a reason to override that.'], 422);
+            }
+            $bucket = 'kt.testsend:' . $agencyId . ':' . now()->format('YmdH');
+            $used = (int) \Illuminate\Support\Facades\Cache::get($bucket, 0);
+            if ($used >= 5) {
+                return response()->json(['ok' => false, 'message' => 'That is 5 tests to other numbers this hour, which is the limit.'], 429);
+            }
+            \Illuminate\Support\Facades\Cache::put($bucket, $used + 1, now()->addHour());
+            $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your agency');
+            $message = 'This is a test call from Kiddie Trac for ' . $agencyName . '. ' . $message;
+            $phone = $to;
+            $callUserId = (int) ($owner->id ?? 0);
+        }
+
         if ($phone === '') {
-            return response()->json(['ok' => false, 'message' => 'Add a mobile number to your own profile first.'], 422);
+            return response()->json(['ok' => false, 'message' => 'Add a mobile number to your own profile first, or type a number to call.'], 422);
         }
         if (! Telnyx::voiceConfig($agencyId)) {
             return response()->json([
@@ -184,7 +295,7 @@ final class VoiceController extends Controller
            the same second. A standing "do not ring me" is still honoured. */
         $ok = $this->callOne(
             $agencyId,
-            (int) $u->id,
+            $callUserId,
             $phone,
             $message,
             'test',
@@ -192,13 +303,23 @@ final class VoiceController extends Controller
             true,
             true
         );
-        $callId = (int) DB::table('voice_calls')->where('agency_id', $agencyId)
-            ->where('to_user_id', $u->id)->where('category', 'test')->max('id');
+        $call = DB::table('voice_calls')->where('agency_id', $agencyId)->where('started_by_id', $u->id)
+            ->where('category', 'test')->orderByDesc('id')->first(['id', 'client_state', 'error']);
+        $callId = (int) ($call->id ?? 0);
+
+        // The voice to audition rides with THIS call only, keyed by its client_state;
+        // the webhook reads it when the call is answered. Saved settings are untouched.
+        $voice = trim((string) ($data['voice'] ?? ''));
+        if ($ok && $call && $voice !== '') {
+            \Illuminate\Support\Facades\Cache::put('vx-voice-ov-' . $call->client_state, [
+                'voice' => $voice,
+                'language' => trim((string) ($data['language'] ?? '')),
+            ], 900);
+        }
         $switchOn = (bool) DB::table('agencies')->where('id', $agencyId)->value('voice_enabled');
 
         if (! $ok) {
-            $why = (string) (DB::table('voice_calls')->where('agency_id', $agencyId)
-                ->where('to_user_id', $u->id)->orderByDesc('id')->value('error') ?: 'the call could not be placed');
+            $why = (string) (($call->error ?? '') ?: 'the call could not be placed');
 
             return response()->json(['ok' => false, 'message' => 'Not placed — ' . $why], 422);
         }
@@ -428,6 +549,11 @@ final class VoiceController extends Controller
                         'updated_at' => now(),
                     ]);
                     if ($cfg && $callControlId) {
+                        $ov = \Illuminate\Support\Facades\Cache::get('vx-voice-ov-' . $state);
+                        if (is_array($ov) && ($ov['voice'] ?? '') !== '') {
+                            $cfg['voice'] = $ov['voice'];
+                            if (($ov['language'] ?? '') !== '') { $cfg['language'] = $ov['language']; }
+                        }
                         $r = Telnyx::speak($cfg, $callControlId, (string) $call->body, $state);
                         if (! $r['ok']) {
                             DB::table('voice_calls')->where('id', $call->id)->update([

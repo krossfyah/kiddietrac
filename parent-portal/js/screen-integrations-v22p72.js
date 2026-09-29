@@ -1176,6 +1176,7 @@
       +         '<div style="' + hint + '">Shown on handsets that support caller ID name. Not every carrier passes it on.</div></div>'
       +       '<div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;">'
       +         '<div style="flex:1 1 240px;"><label style="' + lbl + '">Voice</label>'
+      +           '<select id="vx-voice-pick" style="' + fld + 'margin-bottom:6px;"><option value="">Choose a voice…</option></select>'
       +           '<input id="vx-voice" style="' + fld + '" placeholder="female" value="' + esc(t.voice_voice || '') + '">'
       +           '<div style="' + hint + '"><b>female</b> or <b>male</b> for the basic voice. A name like '
       +             '<b>AWS.Polly.Joanna-Neural</b> sounds far more natural and is billed at the premium rate.</div></div>'
@@ -1200,8 +1201,14 @@
       +       '<div style="margin-top:16px;"><label style="' + lbl + '" for="vx-test-text">Test message</label>'
       +         '<textarea id="vx-test-text" maxlength="600" rows="3" style="' + fld + 'height:auto;padding:8px 11px;'
       +           'resize:vertical;line-height:1.45;">This is a test call from Kiddie Trac. Your voice announcements are working. Goodbye.</textarea>'
-      +         '<div style="' + hint + 'display:flex;gap:8px;"><span>What the test call reads out, so you can hear how an '
-      +           'announcement will sound. Only you are called.</span><span id="vx-test-count" style="margin-left:auto;white-space:nowrap;"></span></div></div>'
+      +         '<div style="' + hint + 'display:flex;gap:8px;"><span>What the test call reads out, in the voice chosen above '
+      +           '(saved or not), so you can hear how an announcement will sound.</span><span id="vx-test-count" style="margin-left:auto;white-space:nowrap;"></span></div></div>'
+      +       '<div style="margin-top:12px;"><label style="' + lbl + '" for="vx-test-to">Number to call</label>'
+      +         '<input id="vx-test-to" type="tel" maxlength="40" style="' + fld + 'max-width:260px;" placeholder="Leave blank to call your own">'
+      +         '<label id="vx-test-confirm-row" style="display:none;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:#334155;cursor:pointer;">'
+      +           '<input type="checkbox" id="vx-test-confirm" style="width:16px;height:16px;"> I control this number</label>'
+      +         '<div style="' + hint + '">Blank rings the number on your own profile. Another number is for agency admins, '
+      +           'announces who is calling, and counts towards the 5 tests an hour.</div></div>'
       +       '<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;align-items:center;">'
       +         '<button type="button" id="vx-save" style="height:34px;padding:0 18px;background:#1F6080;color:#fff;'
       +           'border:0;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;">Save</button>'
@@ -1210,8 +1217,8 @@
       +           'font-size:13px;cursor:pointer;">Call my own number</button>'
       +         '<span id="vx-msg" style="font-size:13px;font-weight:700;"></span>'
       +       '</div>'
-      +       '<div style="' + hint + 'margin-top:8px;">The test rings the number on <b>your own</b> profile and '
-      +         'nobody else\'s. It works while voice calls are off, so you can try it before switching them on.</div>'
+      +       '<div style="' + hint + 'margin-top:8px;">The test rings only the number above, or your own profile '
+      +         'number when that is blank. It works while voice calls are off, so you can try it before switching them on.</div>'
       +     '</div>'
       +   '</div>'
       + '</div>';
@@ -1512,6 +1519,39 @@
       });
     });
 
+    /* Voice picker (2026-09-29): Telnyx's voices for Canadian English, Canadian
+       French and US English. Picking one fills the Voice and Language fields; the
+       text box stays for any other voice id. Save keeps it; the test uses it unsaved. */
+    var vxPick = document.getElementById('vx-voice-pick');
+    if (vxPick) {
+      api().get('/admin/voice/voices').then(function (res) {
+        var list = (res && res.data) || [], groups = {}, cur = val('vx-voice');
+        list.forEach(function (v) { (groups[v.group] = groups[v.group] || []).push(v); });
+        vxPick.innerHTML = '<option value="">Choose a voice…</option>' + Object.keys(groups).map(function (g) {
+          return '<optgroup label="' + esc(g) + '">' + groups[g].map(function (v) {
+            return '<option value="' + esc(v.id) + '" data-lang="' + esc(v.language || '') + '"' + (v.id === cur ? ' selected' : '') + '>' + esc(v.label) + '</option>';
+          }).join('') + '</optgroup>';
+        }).join('');
+      }).catch(function () {});
+      vxPick.addEventListener('change', function () {
+        var o = vxPick.options[vxPick.selectedIndex];
+        if (!o || !o.value) return;
+        var vi = document.getElementById('vx-voice'), li = document.getElementById('vx-lang');
+        if (vi) vi.value = o.value;
+        if (li && o.getAttribute('data-lang')) li.value = o.getAttribute('data-lang');
+      });
+    }
+    var vxTo = document.getElementById('vx-test-to');
+    var vxConfirm = document.getElementById('vx-test-confirm');
+    var vxConfirmRow = document.getElementById('vx-test-confirm-row');
+    if (vxTo && vxConfirmRow) {
+      vxTo.addEventListener('input', function () {
+        var typed = !!vxTo.value.trim();
+        vxConfirmRow.style.display = typed ? 'flex' : 'none';
+        var tb = document.getElementById('vx-test');
+        if (tb) { tb.textContent = typed ? 'Call this number' : 'Call my own number'; }
+      });
+    }
     var vxText = document.getElementById('vx-test-text');
     var vxCount = document.getElementById('vx-test-count');
     function vxCounted() { if (vxText && vxCount) { vxCount.textContent = vxText.value.length + ' / 600'; } }
@@ -1545,13 +1585,20 @@
     document.getElementById('vx-test').addEventListener('click', async function () {
       var btn = this;
       var text = vxText ? vxText.value.trim() : '';
+      var toVal = vxTo ? vxTo.value.trim() : '';
+      if (toVal && !(vxConfirm && vxConfirm.checked)) { say('vx-msg', 'Tick "I control this number" first.', false); return; }
       var ok = window.KT && KT.confirm
-        ? await KT.confirm({ title: 'Ring your own number now?', description: 'It rings the number on your profile and reads out your test message. Nobody else is called.', okLabel: 'Call me' })
+        ? await KT.confirm(toVal
+          ? { title: 'Call ' + toVal + ' now?', description: 'It says it is a test call from Kiddie Trac for your agency, then reads out your test message.', okLabel: 'Call' }
+          : { title: 'Ring your own number now?', description: 'It rings the number on your profile and reads out your test message. Nobody else is called.', okLabel: 'Call me' })
         : window.confirm('Ring your own number now?');
       if (!ok) { return; }
       btn.disabled = true; say('vx-msg', 'Placing the call…', true);
       try {
-        var r = await api().post('/admin/voice/test-call', { message: text });
+        var r = await api().post('/admin/voice/test-call', {
+          message: text, to: toVal, confirm: !!(vxConfirm && vxConfirm.checked),
+          voice: val('vx-voice'), language: val('vx-lang')
+        });
         say('vx-msg', (r && r.message) || 'Calling now.', true);
         if (r && r.call_id) { await vxFollow(r.call_id); }
       } catch (e) {
