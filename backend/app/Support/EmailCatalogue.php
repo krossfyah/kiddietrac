@@ -191,6 +191,15 @@ final class EmailCatalogue
                 'preview' => 'render', 'registry' => 'onboarding-welcome',
             ],
             [
+                'key' => 'staff-welcome', 'audience' => 'staff',
+                'name' => 'Staff welcome (educators & providers)',
+                'fires' => 'Once, when an educator, centre director or home visitor finishes onboarding.',
+                'to' => 'The new staff member; CC the director(s) of their centre and the agency admins',
+                'subject' => 'Welcome to {agency}, {first name}!',
+                'source' => 'Services/StaffWelcome.php',
+                'preview' => 'render', 'registry' => 'staff-welcome',
+            ],
+            [
                 'key' => 'onboarding-reminder', 'audience' => 'parents',
                 'name' => 'Finish setting up your account',
                 'fires' => 'Daily, to guardians invited but not yet onboarded.',

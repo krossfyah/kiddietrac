@@ -1466,7 +1466,14 @@ final class AuthController extends Controller
         // completes. Uses the branded layout (logo header + privacy/terms footer);
         // AccountNotice carries X-KT-Invite so it reaches a just-onboarded user
         // (agency master suppression still applies). Never block finishing on it.
+        /* Educators, directors and home visitors get the staff welcome instead, with their
+           director and the agency admins CC'd (App\Services\StaffWelcome, 2026-09-29).
+           It returns false for any other role, which then gets the general welcome below. */
+        $staffWelcomed = false;
         if ($isCompleting && ! $wasOnboarded) {
+            try { $staffWelcomed = \App\Services\StaffWelcome::send((int) $user->id); } catch (\Throwable $e) { $staffWelcomed = false; }
+        }
+        if ($isCompleting && ! $wasOnboarded && ! $staffWelcomed) {
             try {
                 $name   = trim((($data['first_name'] ?? $user->first_name) ?? '') . ' ' . (($data['last_name'] ?? $user->last_name) ?? ''));
                 $portal = config('app.url', 'https://app.kiddietrac.com');

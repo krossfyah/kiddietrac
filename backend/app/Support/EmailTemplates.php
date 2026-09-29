@@ -63,6 +63,43 @@ final class EmailTemplates
                 'merge_tags'  => ['name', 'agency_name', 'portal_url'],
             ],
 
+            /* STAFF WELCOME (2026-09-29). Anthony: "when a new educator/provider is onboarded
+               ... send out a welcome email ... and cc director/admin", then "add the agency's
+               values on how we care for children and explain some of the features of the
+               kiddietrac portal and guide them to the help section".
+
+               Sent once, when an educator, centre director or home visitor finishes
+               onboarding, to them with their centre's director(s) and the agency admins
+               CC'd (App\Services\StaffWelcome). The agency's care values are NOT a block
+               here: they are the "Our care" text of the Provider welcome template, the
+               same words parents read, so an agency writes its values once. The portal
+               tour, the help link and the "who to ask" card are built in. */
+            'staff-welcome' => [
+                'label'       => 'Staff welcome (educators & providers)',
+                'description' => "Sent once when an educator, director or home visitor finishes onboarding, with their centre's director and the agency admins copied. You control the heading, welcome, first steps and sign-off. Your care values come from the Provider welcome template's \"Our care\" text; the portal tour, help link and contacts are automatic.",
+                'fields'      => [
+                    ['k' => 'heading',     'label' => 'Heading',      'rich' => false, 'minH' => 0],
+                    ['k' => 'intro',       'label' => 'Welcome',      'rich' => false, 'minH' => 120],
+                    ['k' => 'first_steps', 'label' => 'First steps',  'rich' => false, 'minH' => 140],
+                    ['k' => 'signoff',     'label' => 'Sign-off',     'rich' => false, 'minH' => 60],
+                ],
+                'defaults'    => [
+                    'heading'     => "Welcome to {{agency_name}}, {{name}} 🎉",
+                    'intro'       => "We're so glad you're joining us as {{role_label}} at {{centre_name}}. Your KiddieTrac account is set up and ready to go.
+
+This email is a quick guide to how we care for children here, the tools you'll use every day, and where to find help.",
+                    'first_steps' => "1. Add a clear profile photo, so families recognise you.
+2. Install KiddieTrac on your phone: open the portal and add it to your home screen, or use the app.
+3. Open Help & guides and read the short guide for your role.
+4. Check your rooms and schedule, and say hello to your director.",
+                    'signoff'     => "Welcome to the team. We can't wait to see the difference you'll make.
+
+Warmly,
+The {{agency_name}} team",
+                ],
+                'merge_tags'  => ['name', 'agency_name', 'centre_name', 'role_label', 'director_names', 'portal_url'],
+            ],
+
             'invite' => [
                 'label'       => 'Invite / set-password',
                 'description' => "The invite email with the secure 'set your password' link, sent to new staff and parents. You control the wording; the secure button and expiry note are automatic.",
@@ -152,6 +189,8 @@ final class EmailTemplates
             'agency_name'       => $data['agency_name'] ?? 'your agency',
             'portal_url'        => $data['portal_url'] ?? 'https://app.kiddietrac.com',
             'date'              => $data['date'] ?? '',
+            'role_label'        => $data['role_label'] ?? 'a member of our team',
+            'director_names'    => $data['director_names'] ?? 'your director',
         ];
         return preg_replace_callback('/\{\{\s*([a-z_]+)\s*\}\}/', function ($m) use ($map) {
             return $map[$m[1]] ?? $m[0];
@@ -195,6 +234,9 @@ final class EmailTemplates
                     'preheader' => 'Your KiddieTrac account is ready to use.',
                 ]);
 
+            case 'staff-welcome':
+                return \App\Services\StaffWelcome::renderHtml($agencyId, $blocks, $data);
+
             case 'invite':
                 $body = '<div style="font-size:15px;line-height:1.65;color:#334155;margin-bottom:14px;">' . $F('intro') . '</div>'
                     . '<div style="font-size:14.5px;line-height:1.6;color:#334155;margin-bottom:6px;">' . $F('instructions') . '</div>'
@@ -232,6 +274,10 @@ final class EmailTemplates
             'agency_name'       => $agencyName,
             'portal_url'        => 'https://app.kiddietrac.com',
             'date'              => now()->format('l, j F Y'),
+            'role_label'        => 'an educator',
+            'role'              => 'educator',
+            'director_names'    => 'Jordan Lee',
+            'directors'         => [['name' => 'Jordan Lee', 'email' => 'director@example.com', 'phone' => '']],
         ];
     }
 
