@@ -611,6 +611,9 @@ Route::post('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::
 
 // v22p49 — Public tour booking. Throttled aggressively because the public
 // endpoint is the most-likely target for spam — 8 requests per hour per IP.
+// Donations: public giving page (2026-09-29). Pledges are throttled per IP.
+Route::get('/public/give/{slug}', [\App\Http\Controllers\Api\DonationController::class, 'publicCampaign'])->where('slug', '[a-z0-9-]+')->middleware('throttle:60,1,give');
+Route::post('/public/give/{slug}', [\App\Http\Controllers\Api\DonationController::class, 'publicPledge'])->where('slug', '[a-z0-9-]+')->middleware('throttle:6,60,givepledge');
 Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, 'publicTourBook'])
     ->middleware('throttle:8,60');
 
@@ -2129,6 +2132,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'update']);
         Route::post('/admin/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'set']);
         Route::post('/admin/learning-framework', [\App\Http\Controllers\Api\LearningFrameworkController::class, 'update']);
+        // Donations & fundraising (2026-09-29)
+        Route::get ('/admin/donations/settings', [\App\Http\Controllers\Api\DonationController::class, 'showSettings']);
+        Route::post('/admin/donations/settings', [\App\Http\Controllers\Api\DonationController::class, 'saveSettings']);
+        Route::get ('/admin/donations/campaigns', [\App\Http\Controllers\Api\DonationController::class, 'campaigns']);
+        Route::post('/admin/donations/campaigns', [\App\Http\Controllers\Api\DonationController::class, 'saveCampaign']);
+        Route::post('/admin/donations/campaigns/{id}', [\App\Http\Controllers\Api\DonationController::class, 'saveCampaign'])->where('id', '[0-9]+');
+        Route::get ('/admin/donations', [\App\Http\Controllers\Api\DonationController::class, 'index']);
+        Route::post('/admin/donations', [\App\Http\Controllers\Api\DonationController::class, 'store']);
+        Route::post('/admin/donations/{id}', [\App\Http\Controllers\Api\DonationController::class, 'update'])->where('id', '[0-9]+');
+        Route::post('/admin/donations/{id}/receipt', [\App\Http\Controllers\Api\DonationController::class, 'issueReceipt'])->where('id', '[0-9]+');
+        Route::get ('/admin/donations/export.csv', [\App\Http\Controllers\Api\DonationController::class, 'export']);
+        Route::post('/admin/donation-receipts/{id}/void', [\App\Http\Controllers\Api\DonationController::class, 'voidReceipt'])->where('id', '[0-9]+');
+        Route::post('/admin/donation-receipts/{id}/email', [\App\Http\Controllers\Api\DonationController::class, 'emailReceipt'])->where('id', '[0-9]+');
+        Route::get ('/admin/donation-receipts/{id}/pdf', [\App\Http\Controllers\Api\DonationController::class, 'receiptPdf'])->where('id', '[0-9]+');
         Route::patch('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'update']);
     });
 

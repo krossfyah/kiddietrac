@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Give · KiddieTrac</title>
+  <meta name="description" content="Support a childcare fundraising campaign.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#081C41">
+  <style>
+    :root { --brand: #1F6080; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 60px; }
+    .head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .head img { max-height: 48px; max-width: 160px; border-radius: 8px; }
+    .head b { font-size: 16px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 18px 40px -28px rgba(15, 23, 42, .35); }
+    h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
+    .desc { font-size: 15.5px; color: #334155; line-height: 1.65; white-space: pre-line; margin: 0 0 16px; }
+    .prog { height: 12px; background: #E2E8F0; border-radius: 8px; overflow: hidden; margin: 12px 0 6px; }
+    .prog i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), #6DBE45); }
+    .stats { font-size: 14px; color: var(--muted); }
+    .stats strong { color: var(--ink); font-size: 18px; }
+    h2 { font-size: 17px; margin: 22px 0 10px; }
+    .amts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .amt { border: 2px solid var(--line); background: #fff; border-radius: 12px; padding: 9px 16px; font-weight: 800; font-size: 15px; cursor: pointer; font-family: inherit; }
+    .amt.on { border-color: var(--brand); background: rgba(31, 96, 128, .08); color: var(--brand); }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .full { grid-column: 1 / -1; }
+    label { display: block; font-size: 12.5px; font-weight: 700; margin-bottom: 4px; color: #334155; }
+    input, select, textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; font-family: inherit; background: #fff; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); }
+    textarea { min-height: 70px; resize: vertical; }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .btn { display: block; width: 100%; margin-top: 16px; border: 0; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 800; color: #fff; background: var(--brand); cursor: pointer; font-family: inherit; }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .note { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+    .how { background: #F0F9FF; border: 1px solid #BAE6FD; border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.6; white-space: pre-line; margin-top: 12px; }
+    .err { color: #B91C1C; font-weight: 700; font-size: 13.5px; min-height: 18px; margin-top: 10px; }
+    .done { text-align: center; padding: 10px 0; }
+    .done .big { font-size: 54px; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; }
+    .foot a { color: var(--muted); }
+    @media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } h1 { font-size: 22px; } .card { padding: 18px; } }
+  </style>
+</head>
+<body>
+<main class="wrap" id="app"><div class="card">Loading…</div></main>
+<script>
+(function () {
+  'use strict';
+  var API = 'https://api.kiddietrac.com/api/v1';
+  var slug = (new URLSearchParams(location.search).get('c') || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  var app = document.getElementById('app');
+  var C = null, amount = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function money(v) { return '$' + Number(v || 0).toLocaleString('en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+  function fail(msg) { app.innerHTML = '<div class="card"><h1>Sorry</h1><p class="desc">' + esc(msg) + '</p></div>'; }
+  if (!slug) { return fail('This giving link is incomplete. Please check the link you were sent.'); }
+
+  fetch(API + '/public/give/' + slug, { headers: { Accept: 'application/json' } })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) { if (!res.ok) { return fail(res.j.message || 'This campaign is not available.'); } C = res.j; paint(); })
+    .catch(function () { fail('We could not load this page. Please try again in a moment.'); });
+
+  function paint() {
+    document.title = C.title + ' · ' + (C.agency.name || 'Give');
+    // The agency colour, but only when white text stays readable on it.
+    var hex = String(C.agency.colour || '').replace('#', '');
+    if (/^[0-9a-f]{6}$/i.test(hex)) {
+      var ch = [0, 2, 4].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      if (0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] < 0.3) { document.documentElement.style.setProperty('--brand', '#' + hex); }
+    }
+    var head = '<div class="head">' + (C.agency.logo ? '<img src="' + esc(C.agency.logo) + '" alt="">' : '') + '<b>' + esc(C.agency.name) + '</b></div>';
+    var prog = '';
+    if (C.raised !== null && C.raised !== undefined) {
+      var pct = C.goal ? Math.min(100, Math.round(C.raised / C.goal * 100)) : null;
+      prog = (C.goal ? '<div class="prog"><i style="width:' + pct + '%"></i></div>' : '')
+        + '<div class="stats"><strong>' + money(C.raised) + '</strong> raised' + (C.goal ? ' of ' + money(C.goal) + ' goal' : '')
+        + (C.donors ? ' · ' + C.donors + ' supporter' + (C.donors === 1 ? '' : 's') : '') + '</div>';
+    }
+    if (!C.open) {
+      app.innerHTML = head + '<div class="card"><h1>' + esc(C.title) + '</h1>' + prog + '<p class="desc" style="margin-top:14px">This campaign is no longer taking pledges. Thank you to everyone who gave.</p></div>';
+      return;
+    }
+    app.innerHTML = head + '<div class="card"><h1>' + esc(C.title) + '</h1>' + (C.description ? '<p class="desc">' + esc(C.description) + '</p>' : '') + prog
+      + '<form id="f" novalidate><h2>Choose an amount</h2><div class="amts">'
+      + (C.suggested || []).map(function (a) { return '<button type="button" class="amt" data-a="' + a + '">' + money(a) + '</button>'; }).join('')
+      + '</div><div class="grid" style="margin-top:10px"><div><label for="amt">Or another amount (' + esc(C.currency) + ')</label><input id="amt" name="amount" type="number" min="1" step="1" inputmode="decimal" placeholder="Amount"></div>'
+      + '<div><label for="method">How you’ll give</label><select id="method" name="method"><option value="etransfer">Interac e-Transfer</option><option value="cheque">Cheque</option><option value="cash">Cash</option><option value="other">Other</option></select></div></div>'
+      + '<h2>Your details</h2><div class="grid">'
+      + '<div><label for="fn">First name *</label><input id="fn" name="first_name" autocomplete="given-name" required></div>'
+      + '<div><label for="ln">Last name *</label><input id="ln" name="last_name" autocomplete="family-name" required></div>'
+      + '<div class="full"><label for="em">Email *</label><input id="em" name="email" type="email" autocomplete="email" required></div>'
+      + (C.official_receipts ? '<div class="full"><label for="ad">Mailing address (needed for a tax receipt)</label><input id="ad" name="address_line1" autocomplete="street-address"></div>'
+        + '<div><label for="ci">City</label><input id="ci" name="city" autocomplete="address-level2"></div>'
+        + '<div><label for="pr">Province</label><input id="pr" name="province" autocomplete="address-level1"></div>'
+        + '<div><label for="pc">Postal code</label><input id="pc" name="postal_code" autocomplete="postal-code"></div><div></div>' : '')
+      + '<div class="full"><label for="ms">A message (optional)</label><textarea id="ms" name="message" maxlength="1000"></textarea></div>'
+      + '<div class="full"><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" name="anonymous" style="width:auto"> Please don’t show my name publicly</label></div>'
+      + '<div class="hp" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div></div>'
+      + '<button class="btn" type="submit" id="go">Pledge my gift</button><div class="err" id="err" role="alert"></div>'
+      + '<p class="note">This records your pledge. ' + (C.instructions ? 'You’ll complete the gift using the instructions we show you and email you.' : 'The team will contact you about completing your gift.')
+      + (C.official_receipts ? ' Once it is received you’ll get an official receipt for income tax purposes.' : '') + '</p></form></div>'
+      + '<div class="foot">Powered by KiddieTrac · <a href="https://kiddietrac.com/privacy" target="_blank" rel="noopener">Privacy</a></div>';
+    var f = document.getElementById('f');
+    f.querySelectorAll('.amt').forEach(function (b) {
+      b.onclick = function () { amount = +b.getAttribute('data-a'); f.amount.value = ''; f.querySelectorAll('.amt').forEach(function (x) { x.classList.toggle('on', x === b); }); };
+    });
+    f.amount.oninput = function () { amount = null; f.querySelectorAll('.amt').forEach(function (x) { x.classList.remove('on'); }); };
+    f.onsubmit = function (e) {
+      e.preventDefault();
+      var err = document.getElementById('err'); err.textContent = '';
+      var amt = amount || +f.amount.value;
+      if (!(amt >= 1)) { err.textContent = 'Please choose or enter an amount.'; return; }
+      if (!f.first_name.value.trim() || !f.last_name.value.trim()) { err.textContent = 'Please enter your first and last name.'; return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.value.trim())) { err.textContent = 'Please enter a valid email address.'; return; }
+      var body = { amount: amt, method: f.method.value, first_name: f.first_name.value.trim(), last_name: f.last_name.value.trim(), email: f.email.value.trim(),
+        message: f.message.value.trim(), anonymous: f.anonymous.checked, website: f.website.value };
+      ['address_line1', 'city', 'province', 'postal_code'].forEach(function (k) { if (f[k]) { body[k] = f[k].value.trim(); } });
+      var btn = document.getElementById('go'); btn.disabled = true; btn.textContent = 'Sending…';
+      fetch(API + '/public/give/' + slug, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+        .then(function (res) {
+          if (!res.ok) {
+            btn.disabled = false; btn.textContent = 'Pledge my gift';
+            var m = res.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.' : (res.j.message || 'Something went wrong. Please try again.');
+            if (res.j.errors) { var first = Object.keys(res.j.errors)[0]; m = res.j.errors[first][0]; }
+            err.textContent = m; return;
+          }
+          app.innerHTML = head + '<div class="card done"><div class="big">💝</div><h1>Thank you, ' + esc(body.first_name) + '!</h1>'
+            + '<p class="desc">Your pledge of <strong>' + money(amt) + '</strong> to ' + esc(C.title) + ' has been recorded.</p>'
+            + (res.j.instructions ? '<div class="how" style="text-align:left"><strong>How to complete your gift</strong>\n' + esc(res.j.instructions) + '</div>' : '')
+            + '<p class="note">' + (res.j.thanked_by_email ? 'We’ve also emailed these details to ' + esc(body.email) + '.' : 'Please keep a note of these details.') + '</p></div>';
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = 'Pledge my gift'; err.textContent = 'We could not reach the server. Please try again.'; });
+    };
+  }
+})();
+</script>
+</body>
+</html>

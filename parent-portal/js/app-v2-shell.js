@@ -314,6 +314,8 @@
           { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
           { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
+          { hash: 'donations',        label: 'Donations',        icon: '💝' },
+          { hash: 'donations',        label: 'Donations',        icon: '💝' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Administration', items: [
@@ -1032,6 +1034,8 @@
     'tuition-plans': 'The fee plans a family can be placed on.',
     'tuition-increases': 'Plan and communicate a fee increase.',
     'sibling-discounts': 'Discounts for second and subsequent children.',
+    'donations': 'Fundraising campaigns, gifts and donation receipts.',
+    'donations': 'Fundraising campaigns, gifts and donation receipts.',
     'vacation-holds': 'Places held while a family is away.',
     'expenses': 'Suppliers, purchase orders and bills.',
     'quickbooks': 'Sync invoices and payments with QuickBooks.',
