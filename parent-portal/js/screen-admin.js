@@ -2327,15 +2327,41 @@
     const root = Dom.el('div', {});
     // v23: two-tab layout so the record isn't one long scroll. "Details" holds
     // profile/status/roles/notes/etc.; "Files" holds documents (incl. signed NDA).
-    const tabBar = Dom.el('div', { style: 'display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
+    /* PILL TABS (2026-09-29). Anthony: "the top bar where it shows you all of the
+       section needs to be redesigned as the text is all over the place". Ten
+       underline tabs in a ~560px dialog shrank until every label wrapped onto two or
+       three lines under its emoji. Now each tab is a compact one-line pill; they wrap
+       onto a second row when there is no room instead of squashing, and the one you
+       are on is filled. */
+    const tabBar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
+    /* On a phone the pills wrapped to five rows, a fifth of the screen. There they are
+       one row you swipe sideways instead, and the chosen tab scrolls into view. */
+    const _tabsSwipe = !!(window.matchMedia && window.matchMedia('(max-width: 600px)').matches);
+    if (_tabsSwipe) {
+      tabBar.style.flexWrap = 'nowrap';
+      tabBar.style.overflowX = 'auto';
+      tabBar.style.webkitOverflowScrolling = 'touch';
+      tabBar.style.scrollbarWidth = 'none';
+    }
     const paneDetails = Dom.el('div', {});
     const paneFiles = Dom.el('div', { style: 'display:none;' });
     const _tabs = [];
+    function paintTab(b, on) {
+      b.style.background = on ? '#1F6080' : '#fff';
+      b.style.color = on ? '#fff' : '#475569';
+      b.style.borderColor = on ? '#1F6080' : '#E2E8F0';
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
     function mkTab(label, pane) {
-      const b = Dom.el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:8px 4px;margin-bottom:-1px;font-size:13.5px;font-weight:700;color:#6B7280;cursor:pointer;' }, label);
+      const b = Dom.el('button', { type: 'button', role: 'tab', style: 'appearance:none;display:inline-flex;align-items:center;gap:6px;'
+        + 'height:30px;padding:0 10px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#475569;'
+        + 'font-size:12px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;flex:0 0 auto;' }, label);
+      // A tab, not an action: the icon-button pass must not shrink it to a bare glyph.
+      b.setAttribute('data-kt-iconized', '1');
       b.addEventListener('click', function () {
-        _tabs.forEach(function (t) { t.btn.style.color = '#6B7280'; t.btn.style.borderBottomColor = 'transparent'; t.pane.style.display = 'none'; });
-        b.style.color = '#1F6080'; b.style.borderBottomColor = '#1F6080'; pane.style.display = '';
+        _tabs.forEach(function (t) { paintTab(t.btn, false); t.pane.style.display = 'none'; });
+        paintTab(b, true); pane.style.display = '';
+        if (_tabsSwipe) { try { tabBar.scrollLeft = Math.max(0, b.offsetLeft - tabBar.offsetLeft - (tabBar.clientWidth - b.offsetWidth) / 2); } catch (e) {} }
       });
       _tabs.push({ btn: b, pane: pane });
       tabBar.appendChild(b);
@@ -2447,7 +2473,7 @@
       root.appendChild(paneAbout);
       if (window.KT && KT.AccountPanes && KT.AccountPanes.about) { KT.AccountPanes.about(paneAbout); }
     }
-    _detailsTab.style.color = '#1F6080'; _detailsTab.style.borderBottomColor = '#1F6080';
+    paintTab(_detailsTab, true);
     // Existing sections all append to `body` → point it at the Details pane so the
     // rest of this function is unchanged; only the Files card targets paneFiles.
     const body = paneDetails;
