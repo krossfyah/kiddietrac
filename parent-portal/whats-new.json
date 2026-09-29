@@ -4,6 +4,19 @@
   {
    "type": "new",
    "date": "2026-09-29",
+   "icon": "📋",
+   "title": "Weekly lesson plan templates",
+   "body": "Plan a week in minutes: in Lesson plans, choose Templates to browse ready-made toddler, preschool and mixed-age weeks, preview the whole week, and use it as a starting draft you can change before saving. Save your own best weeks as templates for your whole agency.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "agency_admin",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
    "icon": "🛡️",
    "title": "Safe Arrival",
    "body": "If a child who is scheduled today hasn't been signed in by their expected drop-off time and no absence was reported, KiddieTrac asks the parents — and if they don't answer, alerts the room's educators and the director. The new Safe Arrival board shows who still needs a call. An agency admin turns it on under Operations → Safe Arrival → Settings.",
