@@ -227,7 +227,12 @@
         + '<button type="button" class="et-reset" data-k="' + esc(f.k) + '" style="font-size:11px;color:#1F6080;background:none;border:none;cursor:pointer;font-weight:700;">↺ Reset to default</button></div>';
       var input = f.rich
         ? '<div class="et-editor" contenteditable="true" data-k="' + esc(f.k) + '" style="min-height:' + (f.minH || 80) + 'px;box-sizing:border-box;padding:11px 13px;border:1px solid #DCE3EC;border-radius:10px;font-size:14px;line-height:1.6;background:#fff;outline:none;color:#2A3D5F;">' + toHtml(blocks[f.k] || '') + '</div>'
-        : '<input class="et-plain" type="text" data-k="' + esc(f.k) + '" value="' + esc(blocks[f.k] || '') + '" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #DCE3EC;border-radius:10px;font-size:13.5px;color:#2A3D5F;">';
+        /* A plain field sized for more than one line (minH, e.g. the staff welcome's
+           numbered "First steps") is a textarea: an <input> silently drops the line
+           breaks, so saving flattened a list into one run-on line (2026-09-29). */
+        : (f.minH
+          ? '<textarea class="et-plain" data-k="' + esc(f.k) + '" rows="4" style="width:100%;min-height:' + f.minH + 'px;box-sizing:border-box;padding:10px 12px;border:1px solid #DCE3EC;border-radius:10px;font:inherit;font-size:13.5px;line-height:1.55;color:#2A3D5F;resize:vertical;">' + esc(blocks[f.k] || '') + '</textarea>'
+          : '<input class="et-plain" type="text" data-k="' + esc(f.k) + '" value="' + esc(blocks[f.k] || '') + '" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #DCE3EC;border-radius:10px;font-size:13.5px;color:#2A3D5F;">');
       return '<div style="margin-bottom:18px;">' + head + input + '</div>';
     }).join('');
 

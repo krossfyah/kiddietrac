@@ -565,6 +565,7 @@
         h.id = 'h-' + slugify(h.textContent) + '-' + i;
       });
       content.appendChild(wrapper);
+      try { wireInteractive(wrapper, article.slug); } catch (e) {}
 
       // Feedback widget
       const feedback = renderFeedbackWidget(article);
@@ -728,6 +729,134 @@
     return false;
   }
 
+  /* The interactive half of the guides: checklists that remember, buttons that take
+     you to the screen, screenshots you can zoom. */
+  function wireInteractive(root, slug) {
+    // Checklists — ticks remembered per article, in this browser only.
+    var boxes = Array.prototype.slice.call(root.querySelectorAll('.kt-help-check input'));
+    if (boxes.length) {
+      var key = 'kt_help_ck_' + slug, saved = [];
+      try { saved = JSON.parse(localStorage.getItem(key) || '[]'); } catch (e) {}
+      var bar = document.createElement('div');
+      bar.className = 'kt-help-progress';
+      var paint = function () {
+        var n = boxes.filter(function (b) { return b.checked; }).length;
+        bar.innerHTML = '<div class="kt-help-progress-t">' + (n === boxes.length ? '🎉 All done' : n + ' of ' + boxes.length + ' done') + '</div>'
+          + '<div class="kt-help-progress-bar"><span style="width:' + Math.round(100 * n / boxes.length) + '%"></span></div>';
+      };
+      boxes.forEach(function (b, i) {
+        b.checked = saved.indexOf(i) !== -1;
+        b.closest('li').classList.toggle('done', b.checked);
+        b.addEventListener('change', function () {
+          b.closest('li').classList.toggle('done', b.checked);
+          var on = []; boxes.forEach(function (x, j) { if (x.checked) on.push(j); });
+          try { localStorage.setItem(key, JSON.stringify(on)); } catch (e) {}
+          paint();
+        });
+      });
+      var firstList = boxes[0].closest('ul');
+      if (firstList) { firstList.classList.add('kt-help-checklist'); firstList.parentNode.insertBefore(bar, firstList); }
+      root.querySelectorAll('.kt-help-check').forEach(function (li) { var ul = li.closest('ul'); if (ul) ul.classList.add('kt-help-checklist'); });
+      paint();
+    }
+    // Open / Show me buttons.
+    root.querySelectorAll('.kt-help-go').forEach(function (b) {
+      b.addEventListener('click', function () { window.KT.helpGo(b.getAttribute('data-go'), b.getAttribute('data-find') || ''); });
+    });
+    // Screenshots: tap to see them full size.
+    root.querySelectorAll('img.kt-help-img').forEach(function (img) {
+      img.addEventListener('click', function () {
+        var ov = document.createElement('div');
+        ov.className = 'kt-help-zoom';
+        ov.innerHTML = '<img alt=""><div class="kt-help-zoom-x">✕</div>';
+        ov.querySelector('img').src = img.src;
+        ov.addEventListener('click', function () { ov.remove(); });
+        document.body.appendChild(ov);
+      });
+    });
+  }
+
+  /* Open a screen and point at something on it. `find` is the visible text of the thing
+     to ring; "Voice calls > Test message" clicks the element showing the first text
+     (usually a tab) and then rings the second. Defined on KT, not inside the help
+     screen, because it finishes its work on the screen it navigated to. */
+  window.KT = window.KT || {};
+  if (!window.KT.helpGo) {
+    window.KT.helpGo = function (hash, find) {
+      if (!document.getElementById('kt-help-ring-css')) {
+        var st = document.createElement('style');
+        st.id = 'kt-help-ring-css';
+        st.textContent = '.kt-help-ring{position:fixed;z-index:2147483600;pointer-events:none;border:3px solid #F59E0B;border-radius:10px;'
+          + 'box-shadow:0 0 0 4px rgba(245,158,11,.25),0 0 0 9999px rgba(15,23,42,.18);animation:ktHelpPulse 1.1s ease-in-out infinite;transition:all .15s;}'
+          + '.kt-help-ring-tag{position:absolute;left:0;top:-30px;background:#F59E0B;color:#1F2937;font:800 12px/1 system-ui,sans-serif;padding:6px 9px;border-radius:7px;white-space:nowrap;}'
+          + '@keyframes ktHelpPulse{0%,100%{box-shadow:0 0 0 4px rgba(245,158,11,.25),0 0 0 9999px rgba(15,23,42,.18)}50%{box-shadow:0 0 0 10px rgba(245,158,11,.10),0 0 0 9999px rgba(15,23,42,.18)}}';
+        document.head.appendChild(st);
+      }
+      var toast = function (t) { try { if (window.KT.toast) window.KT.toast('📖', 'Help', t, '#1F6080'); } catch (e) {} };
+      var target = String(hash || '').replace(/^#/, '');
+      if (target && location.hash.replace(/^#/, '') !== target) { location.hash = target; }
+      if (!find) { return; }
+      var steps = String(find).split(/\s*>\s*/).filter(Boolean);
+
+      function visible(el) {
+        if (!el || !el.getClientRects().length) return false;
+        var cs = getComputedStyle(el);
+        return cs.visibility !== 'hidden' && cs.display !== 'none' && parseFloat(cs.opacity || '1') > 0.05;
+      }
+      function locate(text) {
+        var t = text.toLowerCase(), best = null, bestLen = 1e9;
+        var scope = document.getElementById('appMain') || document.body;
+        var nodes = scope.querySelectorAll('button,a,[role="tab"],label,th,h1,h2,h3,h4,summary,input,select,textarea,span,div,td,li');
+        for (var i = 0; i < nodes.length; i++) {
+          var el = nodes[i];
+          // Never match the guide itself: straight after the hash change the help
+          // article is still on screen, and it names the very things it points at.
+          if (el.closest('.kt-help-markdown, .kt-help-content, .kt-help-go')) continue;
+          var own = ((el.getAttribute('placeholder') || '') + ' ' + (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
+          var txt = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          if ((txt.indexOf(t) === -1 && own.indexOf(t) === -1) || !visible(el)) continue;
+          var len = txt.length + (/^(BUTTON|A|INPUT|SELECT|TEXTAREA|LABEL|TH|SUMMARY)$/.test(el.tagName) ? 0 : 40);
+          if (len < bestLen) { best = el; bestLen = len; }
+        }
+        return best;
+      }
+      function ring(el, label) {
+        var old = document.querySelectorAll('.kt-help-ring'); old.forEach(function (o) { o.remove(); });
+        try { el.scrollIntoView({ block: 'center', behavior: 'auto' }); } catch (e) {}
+        var box = document.createElement('div');
+        box.className = 'kt-help-ring';
+        box.innerHTML = '<span class="kt-help-ring-tag">👉 ' + String(label).replace(/[<>&]/g, '') + '</span>';
+        document.body.appendChild(box);
+        var place = function () {
+          var r = el.getBoundingClientRect();
+          box.style.left = (r.left - 6) + 'px'; box.style.top = (r.top - 6) + 'px';
+          box.style.width = (r.width + 12) + 'px'; box.style.height = (r.height + 12) + 'px';
+        };
+        place();
+        var tick = setInterval(place, 120);
+        var done = function () { clearInterval(tick); box.remove(); document.removeEventListener('pointerdown', done, true); };
+        setTimeout(function () { document.addEventListener('pointerdown', done, true); }, 300);
+        setTimeout(done, 9000);
+      }
+      var started = Date.now(), i = 0;
+      (function step() {
+        // Wait for the target screen to replace the help screen before looking.
+        if (document.querySelector('.kt-help-markdown') && Date.now() - started < 9000) { return setTimeout(step, 250); }
+        var el = locate(steps[i]);
+        if (!el) {
+          if (Date.now() - started < 9000) { return setTimeout(step, 300); }
+          return toast('Could not find "' + steps[i] + '" on this screen. It may be on another tab or need a permission you do not have.');
+        }
+        if (i < steps.length - 1) {
+          try { el.click(); } catch (e) {}
+          i++; started = Date.now();
+          return setTimeout(step, 450);
+        }
+        ring(el, steps[i]);
+      })();
+    };
+  }
+
   function renderMarkdown(md) {
     let html = md;
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -748,16 +877,52 @@
       return t;
     });
 
+    /* INTERACTIVE GUIDES (2026-09-29). Anthony: "add visuals to help and guides with
+       images etc and make it interactive". Syntax an article can use:
+         ??? Question? | Answer            tap-to-expand Q&A
+         - [ ] Step                        a checklist the reader ticks (remembered)
+         [[open: #hash | Label]]           a button that opens that screen
+         [[show: #hash @ Text | Label]]    opens it and rings the element showing Text;
+                                           "@ Tab > Text" clicks the tab first
+         > **Tip:** / **Note:** / **Important:**   coloured callouts
+         ![Caption](url)                   a captioned screenshot; tap to zoom
+       Wired up after render by wireInteractive(); the ring itself is KT.helpGo, which
+       outlives this screen because it runs on the screen being shown. */
+    html = html.replace(/^\?\?\? (.+?) \| (.+)$/gm, '<details class="kt-help-qa"><summary>$1</summary><div class="kt-help-qa-a">$2</div></details>');
+    html = html.replace(/^- \[( |x|X)\] (.+)$/gm, '<li class="kt-help-check"><label><input type="checkbox"><span>$2</span></label></li>');
+
     html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
     html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    html = html.replace(/<blockquote>\*\*(Tip|Note|Important):\*\*/g, function (m, kind) {
+      var ic = { Tip: '💡', Note: 'ℹ️', Important: '⚠️' }[kind];
+      return '<blockquote class="kt-help-callout kt-help-callout-' + kind.toLowerCase() + '"><strong>' + ic + ' ' + kind + ':</strong>';
+    });
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
     // Images — MUST run before the inline-link rule so ![alt](src) isn't caught
     // by the [text](url) matcher. Used for annotated screenshots in guides.
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="kt-help-img" loading="lazy">');
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, function (m, alt, src) {
+      return '<figure class="kt-help-fig"><img src="' + src + '" alt="' + alt.replace(/"/g, '&quot;') + '" class="kt-help-img" loading="lazy">'
+        + (alt ? '<figcaption>' + alt + '</figcaption>' : '') + '</figure>';
+    });
+    // [[open: #hash | Label]] and [[show: #hash @ Text > Text | Label]] — before the wiki rule.
+    html = html.replace(/\[\[(open|show):\s*([^\]]+?)\]\]/g, function (m, kind, inner) {
+      var parts = inner.split(/\s*\|\s*/);
+      var target = parts[0], label = parts[1] || '';
+      var hash = target, find = '';
+      if (kind === 'show' && target.indexOf('@') !== -1) {
+        hash = target.slice(0, target.indexOf('@')).trim();
+        find = target.slice(target.indexOf('@') + 1).trim();
+      }
+      hash = hash.trim().replace(/^#/, '');
+      var q = function (v) { return String(v).replace(/"/g, '&quot;'); };
+      return '<button type="button" class="kt-help-go kt-help-go-' + kind + '" data-kt-iconized="1" data-go="' + q(hash) + '"'
+        + (find ? ' data-find="' + q(find) + '"' : '') + '>' + (kind === 'show' ? '👉 ' : '▶ ')
+        + (label || (kind === 'show' ? 'Show me' : 'Open')) + '</button>';
+    });
     html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#help/$1" class="kt-help-wiki">$1</a>');
     /* ANOTHER GUIDE IS NOT A WEBSITE.
 
@@ -790,12 +955,12 @@
       return '<a href="' + href + '" target="_blank" rel="noopener">' + text + '</a>';
     });
     html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
-    html = html.replace(/(<li>.*<\/li>(?:\n<li>.*<\/li>)*)/g, '<ul>$1</ul>');
+    html = html.replace(/(<li[^>]*>.*<\/li>(?:\n<li[^>]*>.*<\/li>)*)/g, '<ul>$1</ul>');
     html = html.replace(/^\d+\. (.+)$/gm, '<oli>$1</oli>');
     html = html.replace(/(<oli>.*<\/oli>(?:\n<oli>.*<\/oli>)*)/g, '<ol>$1</ol>');
     html = html.replace(/<oli>/g, '<li>').replace(/<\/oli>/g, '</li>');
     html = html.split(/\n\n+/).map(block => {
-      if (block.match(/^<(h\d|ul|ol|table|blockquote)/)) return block;
+      if (block.match(/^<(h\d|ul|ol|table|blockquote|details|figure|div)/)) return block;
       if (block.trim() === '') return '';
       return '<p>' + block.replace(/\n/g, '<br>') + '</p>';
     }).join('\n');
@@ -963,6 +1128,32 @@
       .kt-help-markdown td { padding: 10px 14px; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
       .kt-help-markdown img.kt-help-img { max-width: 100%; height: auto; display: block; margin: 16px 0; border: 1px solid #E5E7EB; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.07); }
       .kt-help-markdown a { color: #1F6080; text-decoration: underline; }
+      .kt-help-markdown figure.kt-help-fig { margin: 18px 0; }
+      .kt-help-markdown figure.kt-help-fig img.kt-help-img { margin: 0; cursor: zoom-in; }
+      .kt-help-markdown figcaption { font-size: 12.5px; color: #64748B; margin-top: 6px; text-align: center; }
+      .kt-help-zoom { position: fixed; inset: 0; z-index: 2147483600; background: rgba(15,23,42,.82); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
+      .kt-help-zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.4); background: #fff; }
+      .kt-help-zoom-x { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 22px; font-weight: 800; }
+      .kt-help-markdown blockquote.kt-help-callout { font-style: normal; color: #1F2937; border-radius: 10px; padding: 12px 16px; border-left-width: 4px; }
+      .kt-help-markdown .kt-help-callout-tip { background: #F0FDF4; border-left-color: #16A34A; }
+      .kt-help-markdown .kt-help-callout-note { background: #EFF6FF; border-left-color: #2563EB; }
+      .kt-help-markdown .kt-help-callout-important { background: #FFFBEB; border-left-color: #D97706; }
+      .kt-help-markdown button.kt-help-go { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; margin: 4px 6px 4px 0; border-radius: 999px; border: 1px solid #1F6080; background: #fff; color: #1F6080; font: 700 13px/1 inherit; cursor: pointer; }
+      .kt-help-markdown button.kt-help-go-show { background: #1F6080; color: #fff; }
+      .kt-help-markdown button.kt-help-go:hover { filter: brightness(1.08); box-shadow: 0 4px 12px rgba(31,96,128,.2); }
+      .kt-help-markdown details.kt-help-qa { border: 1px solid #E5E7EB; border-radius: 10px; margin: 8px 0; background: #fff; }
+      .kt-help-markdown details.kt-help-qa summary { cursor: pointer; padding: 11px 14px; font-weight: 700; color: #0F172A; list-style: none; }
+      .kt-help-markdown details.kt-help-qa summary::before { content: '＋'; color: #1F6080; font-weight: 800; margin-right: 8px; }
+      .kt-help-markdown details.kt-help-qa[open] summary::before { content: '－'; }
+      .kt-help-markdown .kt-help-qa-a { padding: 0 14px 12px 36px; color: #475569; }
+      .kt-help-markdown ul.kt-help-checklist { list-style: none; padding-left: 0; }
+      .kt-help-markdown li.kt-help-check label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 8px 10px; border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; }
+      .kt-help-markdown li.kt-help-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: #16A34A; flex: 0 0 auto; }
+      .kt-help-markdown li.kt-help-check.done span { color: #94A3B8; text-decoration: line-through; }
+      .kt-help-markdown .kt-help-progress { margin: 10px 0 6px; }
+      .kt-help-markdown .kt-help-progress-t { font-size: 12.5px; font-weight: 800; color: #166534; margin-bottom: 4px; }
+      .kt-help-markdown .kt-help-progress-bar { height: 6px; background: #E5E7EB; border-radius: 999px; overflow: hidden; }
+      .kt-help-markdown .kt-help-progress-bar span { display: block; height: 100%; background: linear-gradient(90deg,#16A34A,#8EC73C); transition: width .2s; }
       .kt-help-markdown a.kt-help-wiki { background: rgba(31, 96, 128, 0.08); padding: 1px 6px; border-radius: 4px; text-decoration: none; font-weight: 600; }
       .kt-help-markdown a.kt-help-wiki:hover { background: rgba(31, 96, 128, 0.18); }
       .kt-help-markdown strong { font-weight: 700; }
