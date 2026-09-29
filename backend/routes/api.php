@@ -870,6 +870,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // A parent's own notification preferences (email / SMS / in-app), e.g.
         // being told when their child is signed in or out. Scoped to the caller.
         Route::get('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'index']);
+        // Which kinds of texts and calls I want (My profile, 2026-09-29).
+        Route::get('/me/contact-prefs', [\App\Http\Controllers\Api\ContactPrefsController::class, 'index']);
+        Route::put('/me/contact-prefs', [\App\Http\Controllers\Api\ContactPrefsController::class, 'update']);
+        Route::put('/me/voice-opt-out', [\App\Http\Controllers\Api\ContactPrefsController::class, 'voiceOptOut']);
         // Consent to be texted at all — a separate question from which events you want,
         // and the one a carrier wants evidence of. See kiddietrac.com/privacy#sms.
         // Biometric unlock, reported by the device that enrolled. Enrolment has been a

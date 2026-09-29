@@ -60,6 +60,16 @@ final class SmsController extends Controller
         }
         BroadcastAudience::assertOwned($agencyId, $data);
 
+        // A kind of text this agency does not send is refused before anyone is looked up.
+        $bcCat = (string) ($data['category'] ?? 'broadcast');
+        if (\App\Support\ContactCategories::isOptionalSms($bcCat)
+            && ! in_array($bcCat, \App\Support\ContactCategories::smsAllowed($agencyId), true)) {
+            return response()->json([
+                'message' => '"' . \App\Support\ContactCategories::SMS[$bcCat][0] . '" are switched off for this agency. '
+                    . 'Choose which kinds of text it sends in Carrier settings → Text messages.',
+            ], 422);
+        }
+
         $recipients = $this->resolveRecipients($agencyId, $data);
         $sent = 0; $skipped = 0;
         foreach ($recipients as $r) {
@@ -229,6 +239,33 @@ final class SmsController extends Controller
             \App\Support\SmsInbound::audit($gateRow);
 
             return false;
+        }
+
+        /* KINDS OF TEXT (2026-09-29, App\Support\ContactCategories). The agency's list
+           of kinds it sends, then this person's own choice. Only the optional kinds are
+           checked: consent confirmations, STOP/HELP replies and tests always go. */
+        if (\App\Support\ContactCategories::isOptionalSms($category)) {
+            $why = null;
+            if (! in_array($category, \App\Support\ContactCategories::smsAllowed($agencyId), true)) {
+                $why = 'switched off for this agency: ' . \App\Support\ContactCategories::SMS[$category][0];
+            } elseif (! \App\Support\ContactCategories::userWants($userId, 'sms', $category)) {
+                $why = 'turned off by this person: ' . \App\Support\ContactCategories::SMS[$category][0];
+            }
+            if ($why !== null) {
+                $gateRow = DB::table('sms_messages')->insertGetId([
+                    'agency_id' => $agencyId,
+                    'to_user_id' => $userId,
+                    'to_phone' => $phone,
+                    'body' => $body,
+                    'category' => $category,
+                    'status' => 'skipped',
+                    'error' => $why,
+                    'created_at' => now(),
+                ]);
+                \App\Support\SmsInbound::audit($gateRow);
+
+                return false;
+            }
         }
 
         // Consent. The docblock above has always described this method as "a single point

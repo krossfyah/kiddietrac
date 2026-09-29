@@ -491,6 +491,10 @@ final class VoiceController extends Controller
         if ($category !== 'test' && ! in_array($category, self::allowedCategories($agencyId), true)) {
             return $write('skipped', 'calls for this reason (' . $category . ') are switched off for this agency');
         }
+        // 2c. The reasons this person wants calls for (My profile → Texts and phone calls).
+        if ($category !== 'test' && ! \App\Support\ContactCategories::userWants($userId, 'voice', $category)) {
+            return $write('skipped', 'this person turned off calls for ' . strtolower(self::CATEGORIES[$category] ?? $category));
+        }
 
         $user = DB::table('users')->where('id', $userId)->select('sms_opt_in', 'voice_opt_out')->first();
 

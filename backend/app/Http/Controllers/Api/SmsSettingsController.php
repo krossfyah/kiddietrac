@@ -174,6 +174,16 @@ class SmsSettingsController extends Controller
                Its own master switch, off until somebody turns it on. Credentials arriving
                on this screen must not be enough on their own to start ringing parents. */
             'voice_enabled' => (bool) ($agency->voice_enabled ?? false),
+            // Which kinds of text this agency sends (App\Support\ContactCategories::SMS).
+            'sms_categories' => (function () use ($agencyId) {
+                $on = \App\Support\ContactCategories::smsAllowed($agencyId);
+                $out = [];
+                foreach (\App\Support\ContactCategories::SMS as $k => [$label, $hint]) {
+                    $out[] = ['key' => $k, 'label' => $label, 'hint' => $hint, 'enabled' => in_array($k, $on, true)];
+                }
+
+                return $out;
+            })(),
             // Which broadcast reasons may place calls (VoiceController::CATEGORIES).
             'voice_categories' => \App\Http\Controllers\Api\VoiceController::categoryList($agencyId),
             'voice_ready' => Telnyx::voiceConfig($agencyId) !== null,
@@ -485,6 +495,8 @@ class SmsSettingsController extends Controller
             'voice_enabled'               => ['nullable', 'boolean'],
             'voice_categories'            => ['nullable', 'array'],
             'voice_categories.*'          => ['string', 'in:' . implode(',', array_keys(\App\Http\Controllers\Api\VoiceController::CATEGORIES))],
+            'sms_categories'              => ['nullable', 'array'],
+            'sms_categories.*'            => ['string', 'in:' . implode(',', array_keys(\App\Support\ContactCategories::SMS))],
         ], [
             'api_key_sid.regex' => 'An API Key SID looks like SK followed by 32 characters.',
             'account_sid.regex' => 'An Account SID looks like AC followed by 32 characters. An OAuth client id (OQ…) will not work here.',
@@ -586,6 +598,17 @@ class SmsSettingsController extends Controller
         if ($request->exists('sms_enabled')) {
             DB::table('agencies')->where('id', $agencyId)
                 ->update(['sms_enabled' => $request->boolean('sms_enabled') ? 1 : 0]);
+        }
+
+        // The kinds of text this agency sends.
+        if ($request->exists('sms_categories')) {
+            $raw = DB::table('agencies')->where('id', $agencyId)->value('settings');
+            $settings = $raw ? (json_decode((string) $raw, true) ?: []) : [];
+            $settings['sms_categories'] = array_values(array_intersect(
+                array_keys(\App\Support\ContactCategories::SMS),
+                (array) ($data['sms_categories'] ?? [])
+            ));
+            DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($settings)]);
         }
 
         // The reasons that may place calls. An empty list is allowed: voice on, no reason rings.

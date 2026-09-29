@@ -1022,6 +1022,17 @@
       +           ' style="width:18px;height:18px;cursor:pointer;">'
       +         'Send text messages for this agency</label>'
       +       offNote + whNote
+      /* Which kinds of text this agency sends (2026-09-29). */
+      +       '<div style="margin-top:16px;"><label style="' + lbl + '">Kinds of texts this agency sends</label>'
+      +         '<div id="sms-cats" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px;margin-top:4px;">'
+      +           (s.sms_categories || []).map(function (c) {
+                    return '<label style="display:flex;align-items:flex-start;gap:8px;font-size:13.5px;color:#0F172A;cursor:pointer;padding:4px 0;">'
+                      + '<input type="checkbox" data-sms-cat="' + esc(c.key) + '"' + (c.enabled ? ' checked' : '') + ' style="width:16px;height:16px;margin-top:2px;">'
+                      + '<span><b>' + esc(c.label) + '</b><br><span style="font-size:12px;color:#64748B;">' + esc(c.hint) + '</span></span></label>';
+                  }).join('')
+      +         '</div>'
+      +         '<div style="' + hint + '">Only people who agreed to texts receive any of these, and each person can turn '
+      +           'kinds off in their own profile. Consent confirmations and STOP replies always go. Saved with <b>Save</b>.</div></div>'
       +       stats
       +     '</div>'
 
@@ -1408,6 +1419,9 @@
         telnyx_voice_voice: val('vx-voice'),
         telnyx_voice_language: val('vx-lang'),
         voice_enabled: document.getElementById('vx-enabled').checked,
+        sms_categories: Array.prototype.map.call(
+          document.querySelectorAll('#sms-cats input[data-sms-cat]:checked'),
+          function (i) { return i.getAttribute('data-sms-cat'); }),
         voice_categories: Array.prototype.map.call(
           document.querySelectorAll('#vx-cats input[data-vx-cat]:checked'),
           function (i) { return i.getAttribute('data-vx-cat'); }),

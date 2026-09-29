@@ -1872,7 +1872,10 @@ final class AdminController extends Controller
         $prefRows = [];
         try {
             if (\Illuminate\Support\Facades\Schema::hasTable('notification_prefs') && $userIds) {
+                // "call:<reason>" rows are phone-call choices (ContactCategories), not an event
+                // with email/text/in-app channels, so they are not listed here.
                 foreach (DB::table('notification_prefs')->whereIn('user_id', $userIds)
+                    ->where('event_key', 'not like', 'call:%')
                     ->get(['user_id', 'event_key', 'email', 'sms', 'push']) as $pr) {
                     $prefRows[(int) $pr->user_id][] = [
                         'event' => str_replace('_', ' ', (string) $pr->event_key),
