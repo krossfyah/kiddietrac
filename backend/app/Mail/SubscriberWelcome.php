@@ -38,6 +38,9 @@ final class SubscriberWelcome extends Mailable
         return new Headers(text: [
             'List-Unsubscribe' => '<'.$this->unsubscribeUrl.'>',
             'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
+            // Sent only because this person just asked to subscribe: an agency's mail switch
+            // (their address may also belong to a family or staff account) must not cancel it.
+            'X-KT-Bypass-Suppression' => '1',
         ]);
     }
 

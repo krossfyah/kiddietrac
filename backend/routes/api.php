@@ -508,6 +508,8 @@ Route::post('/marketing-site/chat/human', [\App\Http\Controllers\Api\WebChatCont
 Route::get('/marketing-site/i18n/{lang}/extra', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'extra'])->where('lang', 'fr|es|hi')->middleware('throttle:120,1,mki18nx');
 Route::post('/marketing-site/i18n/missing', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'missing'])->middleware('throttle:20,1,mki18n');
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
+Route::post('/marketing-site/subscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'subscribeNewsletter'])->middleware('throttle:5,10,mknews');
+Route::post('/marketing-site/contact', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitContact'])->middleware('throttle:5,10,mkcontact');
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1');
 
 // PUBLIC — Zum Rails settlement callbacks. No auth: Zum calls this, not a user. Guarded

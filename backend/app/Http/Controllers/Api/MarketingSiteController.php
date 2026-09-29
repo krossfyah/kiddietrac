@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
@@ -246,6 +247,152 @@ final class MarketingSiteController extends Controller
             // never fail the subscribe because email delivery hiccuped
         }
         return response()->json(['ok' => true])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    /**
+     * POST /marketing-site/contact — the Contact page form (2026-09-29).
+     *
+     * It posted to a developer-only address and then said "Message sent to our team", so
+     * every enquiry from the contact page was lost. Now: a Sales pipeline lead (deduped on
+     * open leads) with the message as an activity, and an email to sales@ with every field,
+     * Reply-To the visitor. A contact enquiry is not newsletter consent, so it does NOT
+     * join the subscriber list.
+     */
+    public function submitContact(Request $request): JsonResponse
+    {
+        if (trim((string) $request->input('website', '')) !== '') {
+            return response()->json(['ok' => true])->header('Access-Control-Allow-Origin', '*');
+        }
+        $data = $request->validate([
+            'first_name' => 'required|string|max:80',
+            'last_name'  => 'nullable|string|max:80',
+            'email'      => 'required|email|max:160',
+            'phone'      => 'nullable|string|max:40',
+            'agency'     => 'nullable|string|max:160',
+            'interest'   => 'nullable|string|max:80',
+            'message'    => 'nullable|string|max:5000',
+        ]);
+        $email = strtolower(trim($data['email']));
+        $name = trim($data['first_name'] . ' ' . ($data['last_name'] ?? ''));
+        $agency = trim((string) ($data['agency'] ?? ''));
+        $interest = trim((string) ($data['interest'] ?? ''));
+        $message = trim((string) ($data['message'] ?? ''));
+        $this->appendLead(['email' => $email, 'name' => $name, 'agency' => $agency, 'source' => 'contact',
+            'ip' => substr((string) $request->ip(), 0, 45)]);
+
+        $leadId = null;
+        try {
+            $lead = \App\Models\SalesLead::where('email', $email)->where('status', 'open')->first();
+            if (! $lead) {
+                $lead = \App\Models\SalesLead::create([
+                    'name' => $name, 'company' => $agency ?: null, 'email' => $email, 'phone' => $data['phone'] ?? null,
+                    'source' => 'marketing-site', 'stage' => 'new', 'status' => 'open', 'last_activity_at' => now(),
+                    'notes' => 'Contact form' . ($interest ? ' — ' . $interest : '') . '.',
+                ]);
+            } else {
+                $lead->update(['last_activity_at' => now()]);
+            }
+            \App\Models\SalesActivity::create(['lead_id' => $lead->id, 'type' => 'note', 'done' => false,
+                'body' => 'Contact form' . ($interest ? ' (' . $interest . ')' : '') . ":\n" . ($message ?: '(no message)')]);
+            $leadId = $lead->id;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Contact form lead failed', ['email' => $email, 'error' => $e->getMessage()]);
+        }
+
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $rows = ['Name' => $name, 'Email' => $email, 'Phone' => $data['phone'] ?? '', 'Agency' => $agency, 'Interested in' => $interest];
+        $t = '';
+        foreach ($rows as $k => $v) {
+            $t .= '<tr><td style="padding:5px 14px 5px 0;color:#64748b;font-size:13px">' . $e($k) . '</td><td style="padding:5px 0;font-size:14px;font-weight:600">' . $e($v ?: '—') . '</td></tr>';
+        }
+        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px">'
+            . '<h2 style="margin:0 0 4px;font-size:19px;color:#0f172a">New message from the website contact form</h2>'
+            . '<p style="margin:0 0 14px;color:#64748b;font-size:13.5px">Reply to this email to answer them directly.' . ($leadId ? ' It is in Sales → Pipeline.' : '') . '</p>'
+            . '<table style="border-collapse:collapse;margin-bottom:14px">' . $t . '</table>'
+            . '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;font-size:14px;color:#0f172a">' . $e($message ?: '(no message)') . '</div></div>';
+        $sent = false;
+        try {
+            Mail::html($html, function ($m) use ($email, $name, $interest) {
+                $m->to('sales@kiddietrac.com')->subject('Website contact: ' . $name . ($interest ? ' — ' . $interest : ''))->replyTo($email, $name);
+                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            });
+            $sent = true;
+        } catch (\Throwable $ex) {
+            \Illuminate\Support\Facades\Log::error('Contact form email failed', ['email' => $email, 'error' => $ex->getMessage()]);
+        }
+        // Kept if either the pipeline or the email took it; fail loudly only when neither did.
+        if (! $leadId && ! $sent) {
+            return response()->json(['ok' => false, 'message' => 'We could not send your message. Please email info@kiddietrac.com or call 1-855-400-9996.'], 500)
+                ->header('Access-Control-Allow-Origin', '*');
+        }
+
+        return response()->json(['ok' => true])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    /**
+     * POST /marketing-site/subscribe — the footer newsletter form (2026-09-29).
+     *
+     * Anthony: "sign ups should add to subscriber list and send out confirmation that you
+     * are signed up email". Until now the form posted to http://localhost:5000 and showed
+     * "Subscribed!" while nothing was kept. A newsletter sign-up is NOT a sales lead: no
+     * CRM row and no email to sales@ (that is what /marketing-site/lead does). It joins
+     * site_subscribers, clears any earlier unsubscribe, and gets the branded confirmation
+     * with its unsubscribe link.
+     */
+    public function subscribeNewsletter(Request $request): JsonResponse
+    {
+        if (trim((string) $request->input('website', '')) !== '') {        // honeypot
+            return response()->json(['ok' => true])->header('Access-Control-Allow-Origin', '*');
+        }
+        $data = $request->validate([
+            'email' => 'required|email|max:160',
+            'name'  => 'nullable|string|max:120',
+            'lang'  => 'nullable|string|max:5',
+        ]);
+        $email = strtolower(trim($data['email']));
+        $name = trim((string) ($data['name'] ?? ''));
+        $was = DB::table('site_subscribers')->where('email', $email)->first();
+        $already = $was && empty($was->unsubscribed_at);
+        try {
+            DB::table('site_subscribers')->updateOrInsert(
+                ['email' => $email],
+                array_filter([
+                    'name' => $name ?: ($was->name ?? null),
+                    // Keep where they first came from; a newsletter re-sign-up is still them.
+                    'source' => $was->source ?? 'newsletter',
+                    'ip' => substr((string) $request->ip(), 0, 45),
+                    'subscribed_at' => $already ? ($was->subscribed_at ?? now()) : now(),
+                    'unsubscribed_at' => null,
+                    'unsubscribed_by' => null,
+                    'unsubscribe_note' => null,
+                    'updated_at' => now(),
+                    'created_at' => $was->created_at ?? now(),
+                ], fn ($v, $k) => $v !== null || in_array($k, ['unsubscribed_at', 'unsubscribed_by', 'unsubscribe_note'], true), ARRAY_FILTER_USE_BOTH)
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Newsletter subscribe failed', ['email' => $email, 'error' => $e->getMessage()]);
+            return response()->json(['ok' => false, 'message' => 'We could not sign you up just now. Please try again.'], 500)
+                ->header('Access-Control-Allow-Origin', '*');
+        }
+        self::unsuppressEmail($email);
+        $this->removeSuppression($email);
+
+        // Confirmation — sent even to someone already subscribed, so they know it worked.
+        $sent = false;
+        try {
+            Mail::to($email)->send(new \App\Mail\SubscriberWelcome(
+                $name ?: 'there',
+                $this->subUnsubscribeUrl($email),
+                'https://www.kiddietrac.com/privacy',
+                'https://www.kiddietrac.com/terms'
+            ));
+            $sent = true;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Newsletter confirmation failed', ['email' => $email, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['ok' => true, 'already' => $already, 'confirmation_sent' => $sent])
+            ->header('Access-Control-Allow-Origin', '*');
     }
 
     /** platform_admin — manually add a subscriber/lead from the dashboard. */
