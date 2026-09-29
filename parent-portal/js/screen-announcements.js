@@ -116,7 +116,7 @@
               var g = PAL[i % PAL.length];
               var scheduled = (a.scheduled_at && !a.sent_at);
               var chip = function (bg, fg, txt) { return '<span style="display:inline-flex;align-items:center;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:20px;background:' + bg + ';color:' + fg + ';">' + txt + '</span>'; };
-              var chips = [a.send_email ? chip('#EFF6FF', '#1D4ED8', '📧 Email') : '', a.send_push ? chip('#ECFDF5', '#047857', '🔔 Push') : '', scheduled ? chip('#FEF3C7', '#B45309', '⏱ Scheduled') : ''].filter(Boolean).join(' ');
+              var chips = [a.send_email ? chip('#EFF6FF', '#1D4ED8', '📧 Email') : '', a.send_push ? chip('#ECFDF5', '#047857', '🔔 Push') : '', a.send_voice ? chip('#FFFBEB', '#B45309', '📞 Voice') : '', scheduled ? chip('#FEF3C7', '#B45309', '⏱ Scheduled') : ''].filter(Boolean).join(' ');
               return `
                 <div class="kt-ann-card" data-id="${a.id}" style="display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #EDF1F6;border-left:5px solid ${g[0]};border-radius:16px;padding:13px;margin-bottom:11px;box-shadow:0 3px 12px -5px rgba(15,23,42,.18);">
                   ${selecting ? `<input type="checkbox" class="kt-ann-cb" data-id="${a.id}" ${selected[a.id] ? 'checked' : ''} style="width:20px;height:20px;margin-top:2px;flex-shrink:0;accent-color:${g[0]};">` : `<span style="flex:0 0 auto;width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,${g[0]},${g[1]});display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 6px 14px -6px ${g[0]};">📢</span>`}
@@ -177,6 +177,7 @@
         a.send_email ? '📧 Email' : '',
         a.send_push ? '🔔 Push' : '',
         a.send_sms ? '💬 SMS' : '',
+        a.send_voice ? '📞 Voice' : '',
       ].filter(Boolean).join(' · ') || 'In-app only';
       const status = a.sent_at ? 'Sent' : (a.scheduled_at ? 'Scheduled' : 'Draft');
 
@@ -430,7 +431,7 @@
 
   function annRow(a, i) {
     var scope = esc(a.centre_name || a.scope_type);
-    var chips = [a.send_email ? '📧' : '', a.send_push ? '🔔' : '', (a.scheduled_at && !a.sent_at) ? '⏱' : ''].filter(Boolean).join(' ');
+    var chips = [a.send_email ? '📧' : '', a.send_push ? '🔔' : '', a.send_voice ? '📞' : '', (a.scheduled_at && !a.sent_at) ? '⏱' : ''].filter(Boolean).join(' ');
     return `
       <tr class="kt-ann-row" data-idx="${i}" style="border-top:1px solid #F1F3F5;cursor:pointer;">
         <td style="padding:11px 14px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📍 ${scope}</td>
@@ -460,6 +461,7 @@
           <span>📍 ${esc(a.scope_type)} ${a.centre_name ? '· ' + esc(a.centre_name) : ''}</span>
           ${a.send_email ? '<span>📧 email</span>' : ''}
           ${a.send_push ? '<span>🔔 push</span>' : ''}
+          ${a.send_voice ? '<span>📞 voice</span>' : ''}
           ${a.scheduled_at && !a.sent_at ? '<span style="color:#F59E0B;">⏱ scheduled</span>' : ''}
         </div>
         <div style="font-size:14px;color:#374151;line-height:1.5;" class="kt-ann-body">${sanitizeHtml(a.body)}</div>
@@ -480,6 +482,8 @@
     var _annAgencyId = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id');
     var _annRole = getRole();
     var canSendAgencyWide = !!_annAgencyId && (_annRole === 'agency_admin' || _annRole === 'platform_admin');
+    // A phone call is a director/admin decision, as on SMS broadcast (2026-09-29).
+    var canCall = ['agency_admin', 'centre_director', 'platform_admin'].indexOf(_annRole) !== -1;
 
     // If no centres came back, the account can't broadcast (wrong role, or
     // active-agency not set). Surface it instead of showing an empty dropdown.
@@ -558,7 +562,16 @@
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_email" checked> 📧 Send email</label>
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_sms"> 📱 Send SMS</label>
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_push" checked> 🔔 In-app notification</label>
+              ${canCall ? `<label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="send_voice"> 📞 Voice call</label>` : ''}
             </div>
+            ${canCall ? `<div id="kt-voice-opts" style="display:none;border:1px solid #FCD34D;background:#FFFBEB;border-radius:10px;padding:10px 12px;">
+              <label style="font-size:12px;font-weight:700;color:#374151;">Reason for the call</label>
+              <select name="voice_category" style="${inp()};margin-top:4px;"><option value="">Loading…</option></select>
+              <div id="kt-voice-note" style="font-size:11.5px;color:#92400E;margin-top:6px;line-height:1.45;">
+                Rings each person's phone and reads the title and message aloud, up to 800 characters.
+                People who turned calls off, or said "don't phone me", are skipped; a
+                non-emergency only reaches people who agreed to be contacted.</div>
+            </div>` : ''}
             <details style="font-size:13px;">
               <summary style="cursor:pointer;color:#6B7280;">Schedule for later (optional)</summary>
               <input name="scheduled_at" type="datetime-local" style="${inp()};margin-top:8px;">
@@ -594,6 +607,41 @@
     });
 
     const formEl = $('#kt-ann-form', mount);
+
+    /* Voice call (2026-09-29): only the reasons this agency allows are offered, and
+       when calls are switched off for the agency the box says so instead of letting
+       somebody send an announcement that rings nobody. */
+    const voiceBox = formEl.querySelector('[name="send_voice"]');
+    let voiceLoaded = null;
+    function loadVoiceReasons() {
+      if (voiceLoaded) return voiceLoaded;
+      const sel = formEl.querySelector('[name="voice_category"]');
+      const note = formEl.querySelector('#kt-voice-note');
+      voiceLoaded = api('GET', '/admin/voice/categories').then((res) => {
+        const on = (res.data || []).filter((c) => c.enabled);
+        sel.innerHTML = '<option value="">— Choose a reason —</option>'
+          + on.map((c) => `<option value="${esc(c.key)}">${esc(c.label)}${c.urgent ? '' : ' (agreed contacts only)'}</option>`).join('');
+        if (!res.voice_on || !on.length) {
+          voiceBox.checked = false; voiceBox.disabled = true;
+          formEl.querySelector('#kt-voice-opts').style.display = 'block';
+          sel.disabled = true;
+          note.textContent = !res.voice_on
+            ? 'Voice calls are switched off for this agency. An agency admin turns them on in Settings → Carrier settings → Voice calls.'
+            : 'No call reasons are allowed for this agency. An agency admin chooses them in Settings → Carrier settings → Voice calls.';
+        }
+      }).catch(() => {
+        voiceBox.checked = false; voiceBox.disabled = true;
+        sel.innerHTML = '<option value="">Not available</option>'; sel.disabled = true;
+        note.textContent = 'Voice calls are not available to your account here.';
+      });
+      return voiceLoaded;
+    }
+    if (voiceBox) {
+      voiceBox.addEventListener('change', () => {
+        formEl.querySelector('#kt-voice-opts').style.display = voiceBox.checked ? 'block' : 'none';
+        if (voiceBox.checked) loadVoiceReasons();
+      });
+    }
     async function doSend() {
       const f = formEl;
       const statusEl = $('#kt-status', mount);
@@ -634,6 +682,30 @@
 
       const sched = f.querySelector('[name="scheduled_at"]').value;
 
+      const voiceOn = !!(f.querySelector('[name="send_voice"]') || {}).checked;
+      const voiceCat = voiceOn ? (f.querySelector('[name="voice_category"]') || {}).value || '' : '';
+      if (voiceOn && !voiceCat) {
+        statusEl.style.color = '#DC2626';
+        statusEl.textContent = '✗ Choose the reason for the phone call';
+        return;
+      }
+      if (voiceOn && sched) {
+        statusEl.style.color = '#DC2626';
+        statusEl.textContent = '✗ A phone call cannot be scheduled — send it now, or untick Voice call';
+        return;
+      }
+      // A call is neither silent nor undoable, so it asks first — as SMS broadcast does.
+      if (voiceOn && window.KT && KT.confirm) {
+        const reasonTxt = (f.querySelector('[name="voice_category"]').selectedOptions[0] || {}).textContent || voiceCat;
+        const ok = await KT.confirm({
+          title: 'Place phone calls?',
+          description: 'This rings the phones of the people this announcement goes to and reads it aloud (reason: '
+            + reasonTxt + '). Calls cannot be taken back once placed.',
+          okLabel: 'Place calls', tone: 'default',
+        });
+        if (!ok) return;
+      }
+
       // A file forces multipart; without one, keep the JSON path exactly as it was.
       let data;
       if (imgFile) {
@@ -647,6 +719,8 @@
         data.append('send_email', f.querySelector('[name="send_email"]').checked ? '1' : '0');
         data.append('send_sms', f.querySelector('[name="send_sms"]').checked ? '1' : '0');
         data.append('send_push', f.querySelector('[name="send_push"]').checked ? '1' : '0');
+        data.append('send_voice', voiceOn ? '1' : '0');
+        if (voiceOn) data.append('voice_category', voiceCat);
         if (sched) data.append('scheduled_at', sched);
         data.append('image', imgFile, imgFile.name);
       } else {
@@ -659,7 +733,9 @@
           send_email: f.querySelector('[name="send_email"]').checked,
           send_sms: f.querySelector('[name="send_sms"]').checked,
           send_push: f.querySelector('[name="send_push"]').checked,
+          send_voice: voiceOn,
         };
+        if (voiceOn) data.voice_category = voiceCat;
         if (sched) data.scheduled_at = sched;
       }
 
@@ -670,7 +746,8 @@
       try {
         const res = await api('POST', '/provider/announcements', data);
         statusEl.style.color = '#16A34A';
-        statusEl.textContent = res.scheduled ? '✓ Scheduled' : '✓ Sent to ' + (res.delivered_to || 0) + ' recipient(s)';
+        statusEl.textContent = res.scheduled ? '✓ Scheduled' : '✓ Sent to ' + (res.delivered_to || 0) + ' recipient(s)'
+          + (res.voice ? ' · 📞 calling ' + res.voice.calling + ', skipped ' + res.voice.skipped : '');
         setTimeout(() => { close(); renderProvider(container); }, 1200);
       } catch (err) {
         if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = orig; }

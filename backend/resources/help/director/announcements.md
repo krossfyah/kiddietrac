@@ -21,8 +21,9 @@ message and app notification.
 4. **Picture (optional)**: a JPEG, PNG or GIF, up to 5 MB.
 5. Enter a **Title** and write the body. Use the toolbar for bold, italic, underline,
    lists and links. Formatting is kept in the emailed copy.
-6. Choose how it goes out: **📧 Send email**, **📱 Send SMS**, **🔔 In-app notification**.
-   Email and in-app are ticked by default.
+6. Choose how it goes out: **📧 Send email**, **📱 Send SMS**, **🔔 In-app notification**,
+   and — for directors and agency admins — **📞 Voice call**. Email and in-app are ticked
+   by default.
 7. To send it later, open **Schedule for later (optional)** and pick a date and time.
 8. Press **Send**.
 
@@ -54,12 +55,34 @@ SMS sends as plain text, so keep it short. Texts only go to people with a mobile
 on file, and only when your agency's texting is set up. See
 [Carrier settings](carrier-settings).
 
+## Sending it as a phone call
+
+Tick **📞 Voice call** to also ring people's phones and read the announcement aloud —
+"Announcement from *your centre*", then the title and message (up to 800 characters).
+
+- [ ] Tick **📞 Voice call** and choose the **Reason for the call**.
+- [ ] Keep the wording short and plain: it is read by a synthetic voice.
+- [ ] Press **Send**, then **Place calls** to confirm. Calls cannot be taken back.
+
+Only the reasons your agency allows are offered (**Settings → Carrier settings → Voice
+calls**). If calls are switched off for your agency, the box says so and cannot be ticked.
+The same rules as [Announcement calls](voice-announcements) apply to every person: anyone
+who turned that reason off, or chose **Don't phone me at all**, is skipped; a
+non-emergency only reaches people who agreed to be contacted; a shared phone rings once.
+The result line reports how many are being called and how many were skipped.
+
+> **Note:** A phone call cannot be scheduled. Send it now, or untick Voice call.
+
+??? Why can't I see Voice call? | It is for centre directors and agency admins only, the same people who can place calls from SMS broadcast.
+??? Why is Voice call greyed out? | Calls are switched off for your agency, or no call reasons are allowed. An agency admin sets both in Settings → Carrier settings → Voice calls.
+
 ## How recipients get it
 
 - **In-app**: a notification, plus the announcement in their feed (**News** for parents
   and educators).
 - **Email**: the formatted version, sent from your agency's address when that is set up.
 - **SMS**: the plain-text version, only if you ticked **📱 Send SMS**.
+- **Phone call**: the announcement read aloud, only if you ticked **📞 Voice call**.
 
 > Who can use this: **Centre director** (their centres), **Agency admin** (whole agency).
 

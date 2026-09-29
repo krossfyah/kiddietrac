@@ -48,6 +48,9 @@ you cannot see. See [Carrier settings](carrier-settings).
 
 The result line reports **calling / skipped / total**.
 
+You can also ring people from an **Announcement**: tick **📞 Voice call** when posting it,
+and the announcement is read aloud to the same audience — see [Announcements](announcements).
+
 ## Which reasons your agency calls for
 
 An agency admin chooses under **Settings → Carrier settings → Voice calls → Reasons that

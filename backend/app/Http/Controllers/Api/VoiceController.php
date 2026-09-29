@@ -100,7 +100,9 @@ final class VoiceController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $this->assertAgencyAccess($request, $agencyId);
 
-        return response()->json(['data' => self::categoryList($agencyId)]);
+        // voice_on lets a composer say "calls are switched off" before anyone presses Send.
+        return response()->json(['data' => self::categoryList($agencyId),
+            'voice_on' => (bool) DB::table('agencies')->where('id', $agencyId)->value('voice_enabled')]);
     }
 
     // -- sending ------------------------------------------------------------

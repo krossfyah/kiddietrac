@@ -40,6 +40,10 @@ final class AnnouncementController extends Controller
             'send_email' => ['nullable', 'boolean'],
             'send_sms' => ['nullable', 'boolean'],
             'send_push' => ['nullable', 'boolean'],
+            // A phone call that reads the announcement out (2026-09-29). The reason
+            // decides who may be rung, exactly as on SMS broadcast -> Voice call.
+            'send_voice' => ['nullable', 'boolean'],
+            'voice_category' => ['nullable', 'string', 'max:40'],
             'scheduled_at' => ['nullable', 'date', 'after_or_equal:now'],
         ]);
 
@@ -54,6 +58,46 @@ final class AnnouncementController extends Controller
         }
 
         $data['audience'] = $data['audience'] ?? 'parents';
+
+        /* VOICE (2026-09-29). Anthony: "announcements add option to send via voice as
+           well". A call is neither silent nor undoable, so the same people who may place
+           one from SMS broadcast may place one here -- directors and agency admins, not
+           every educator who can post an announcement -- and only for a reason the
+           agency allows. Every per-person rule is enforced later, call by call, in
+           VoiceController::callOne. */
+        $data['send_voice'] = ! empty($data['send_voice']);
+        $data['voice_category'] = null;
+        if ($data['send_voice']) {
+            $vAgency = $this->resolveAgencyForScope($data['scope_type'], (int) $data['scope_id']);
+            $mayCall = $vAgency && DB::table('role_assignments')->where('user_id', $user->id)->where('active', true)
+                ->where(function ($q) use ($vAgency) {
+                    $q->where('role', 'platform_admin')
+                      ->orWhere(function ($w) use ($vAgency) {
+                          $w->where('agency_id', $vAgency)->whereIn('role', ['agency_admin', 'centre_director']);
+                      });
+                })->exists();
+            if (! $mayCall) {
+                return response()->json(['message' => 'Only a centre director or agency admin can send an announcement as a phone call.',
+                    'errors' => ['send_voice' => ['Not allowed for your role.']]], 403);
+            }
+            $cat = strtolower(trim((string) ($data['voice_category'] ?? $request->input('voice_category', ''))));
+            if (! isset(VoiceController::CATEGORIES[$cat])) {
+                return response()->json(['message' => 'Choose the reason for the phone call.',
+                    'errors' => ['voice_category' => ['Required for a voice call.']]], 422);
+            }
+            if (! in_array($cat, VoiceController::allowedCategories($vAgency), true)) {
+                return response()->json(['message' => 'Calls for "' . VoiceController::CATEGORIES[$cat] . '" are switched off for this agency. '
+                    . 'Choose which reasons may place calls in Carrier settings -> Voice calls.',
+                    'errors' => ['voice_category' => ['Calls are switched off for this reason.']]], 422);
+            }
+            // Scheduled announcements are not delivered by anything yet, so a scheduled
+            // call would silently never ring. Refuse it rather than pretend.
+            if (! empty($data['scheduled_at'])) {
+                return response()->json(['message' => 'A phone call cannot be scheduled. Send it now, or untick Voice call.',
+                    'errors' => ['scheduled_at' => ['Not available with a voice call.']]], 422);
+            }
+            $data['voice_category'] = $cat;
+        }
 
         // Re-encoded to something a carrier will actually forward — see
         // AnnouncementImage for why the original file is never sent as-is.
@@ -79,6 +123,8 @@ final class AnnouncementController extends Controller
             'send_email' => $data['send_email'] ?? 1,
             'send_sms' => $data['send_sms'] ?? 0,
             'send_push' => $data['send_push'] ?? 1,
+            'send_voice' => $data['send_voice'] ? 1 : 0,
+            'voice_category' => $data['voice_category'],
             'scheduled_at' => $data['scheduled_at'] ?? null,
             'sent_at' => empty($data['scheduled_at']) ? now() : null,
             'created_by_id' => $user->id,
@@ -102,6 +148,7 @@ final class AnnouncementController extends Controller
                 'has_image' => (bool) $image,
                 'delivered_to' => $delivered,
                 'scheduled' => !empty($data['scheduled_at']),
+                'voice' => $this->voiceResult,
             ]),
             'created_at' => now(),
         ]);
@@ -111,6 +158,8 @@ final class AnnouncementController extends Controller
             'announcement_id' => $announcementId,
             'delivered_to' => $delivered,
             'scheduled' => !empty($data['scheduled_at']),
+            'voice' => $this->voiceResult ? ['calling' => $this->voiceResult['placed'],
+                'skipped' => $this->voiceResult['skipped'], 'total' => $this->voiceResult['total']] : null,
         ], 201);
     }
 
@@ -196,6 +245,7 @@ final class AnnouncementController extends Controller
                     'centre_name' => $a->centre_name,
                     'send_email' => (bool) $a->send_email,
                     'send_push' => (bool) $a->send_push,
+                    'send_voice' => (bool) ($a->send_voice ?? false),
                     'sent_at' => $a->sent_at,
                     'scheduled_at' => $a->scheduled_at,
                     'sender' => trim(($a->sender_first ?? '') . ' ' . ($a->sender_last ?? '')),
@@ -322,6 +372,9 @@ final class AnnouncementController extends Controller
         return false;
     }
 
+    /** Filled by deliver() when the announcement also went out as phone calls. */
+    private ?array $voiceResult = null;
+
     private function deliver(int $announcementId, array $data, $sender): int
     {
         $userIds = $this->recipientUserIds($data['scope_type'], (int) $data['scope_id'],
@@ -421,6 +474,36 @@ final class AnnouncementController extends Controller
                     Log::warning('Announcement SMS failed', ['user' => $r->id, 'error' => $e->getMessage()]);
                 }
             }
+        }
+
+        // A phone call that reads the announcement out. Every gate lives in callOne:
+        // the agency's voice switch and reasons, each person's own choices, "don't
+        // phone me", consent for a non-emergency, one call per handset.
+        if (! empty($data['send_voice']) && $agencyId && ! empty($data['voice_category'])) {
+            $script = trim(($data['title'] ? rtrim($data['title'], " .!?") . '. ' : '') . preg_replace('/\s+/', ' ', $plain));
+            $script = 'Announcement from ' . $scopeName . '. ' . $script;
+            if (mb_strlen($script) > 800) $script = mb_substr($script, 0, 799) . '…';
+
+            $recips = DB::table('users')->whereIn('id', $userIds)->whereNotNull('phone')->where('phone', '!=', '')
+                ->get(['id', 'phone', 'first_name', 'last_name']);
+            $voiceCtl = app(VoiceController::class);
+            $placed = 0; $skipped = 0; $called = [];
+            foreach ($recips as $r) {
+                try {
+                    $ok = $voiceCtl->callOne($agencyId, (int) $r->id, (string) $r->phone, $script,
+                        $data['voice_category'], ((int) ($sender->id ?? 0)) ?: null);
+                } catch (\Throwable $e) {
+                    $ok = false;
+                    Log::warning('Announcement call failed', ['user' => $r->id, 'error' => $e->getMessage()]);
+                }
+                $ok ? $placed++ : $skipped++;
+                if ($ok) $called[] = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) . ' <' . $r->phone . '>';
+            }
+            // People with no number were never dialled, but they are part of the answer
+            // to "who did not get a call".
+            $noPhone = count($userIds) - $recips->count();
+            $this->voiceResult = ['category' => $data['voice_category'], 'placed' => $placed,
+                'skipped' => $skipped + max(0, $noPhone), 'total' => count($userIds), 'called' => $called];
         }
 
         // v23: actually push an OS notification when "In-app notification" is on.
