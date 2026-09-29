@@ -1196,6 +1196,12 @@
       +         '<div style="' + hint + '">Set this on the Call Control application. Without it a call connects '
       +           'and then sits in silence — the announcement is spoken in response to the "answered" event, '
       +           'because speaking any earlier plays it to a ringing handset nobody is holding.</div></div>'
+      /* Test message: what the test call reads out (2026-09-29). */
+      +       '<div style="margin-top:16px;"><label style="' + lbl + '" for="vx-test-text">Test message</label>'
+      +         '<textarea id="vx-test-text" maxlength="600" rows="3" style="' + fld + 'height:auto;padding:8px 11px;'
+      +           'resize:vertical;line-height:1.45;">This is a test call from Kiddie Trac. Your voice announcements are working. Goodbye.</textarea>'
+      +         '<div style="' + hint + 'display:flex;gap:8px;"><span>What the test call reads out, so you can hear how an '
+      +           'announcement will sound. Only you are called.</span><span id="vx-test-count" style="margin-left:auto;white-space:nowrap;"></span></div></div>'
       +       '<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;align-items:center;">'
       +         '<button type="button" id="vx-save" style="height:34px;padding:0 18px;background:#1F6080;color:#fff;'
       +           'border:0;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;">Save</button>'
@@ -1205,7 +1211,7 @@
       +         '<span id="vx-msg" style="font-size:13px;font-weight:700;"></span>'
       +       '</div>'
       +       '<div style="' + hint + 'margin-top:8px;">The test rings the number on <b>your own</b> profile and '
-      +         'nobody else\'s.</div>'
+      +         'nobody else\'s. It works while voice calls are off, so you can try it before switching them on.</div>'
       +     '</div>'
       +   '</div>'
       + '</div>';
@@ -1506,16 +1512,48 @@
       });
     });
 
+    var vxText = document.getElementById('vx-test-text');
+    var vxCount = document.getElementById('vx-test-count');
+    function vxCounted() { if (vxText && vxCount) { vxCount.textContent = vxText.value.length + ' / 600'; } }
+    if (vxText) { vxText.addEventListener('input', vxCounted); vxCounted(); }
+
+    /* Follow the test call through its webhooks, so "it worked" means the message was
+       actually read out, not only that Telnyx accepted the dial. */
+    var VX_STEP = {
+      queued: 'Dialling…', ringing: 'Ringing your phone…', answered: 'Answered, reading your message…',
+      spoken: 'Message read out, hanging up…', completed: '✓ Done: the call connected and your message was read out.',
+      no_answer: 'No answer. The call rang out.', busy: 'Your line was busy.', rejected: 'The call was declined.',
+      failed: 'The call failed', skipped: 'Not placed'
+    };
+    async function vxFollow(callId) {
+      var last = '';
+      for (var i = 0; i < 45; i++) {
+        await new Promise(function (res) { setTimeout(res, 2000); });
+        var rows = [];
+        try { rows = ((await api().get('/admin/voice/calls')) || {}).data || []; } catch (e) { continue; }
+        var row = rows.filter(function (x) { return +x.id === +callId; })[0];
+        if (!row) { continue; }
+        var txt = (VX_STEP[row.status] || row.status) + (row.error ? ': ' + row.error : '');
+        if (txt !== last) {
+          last = txt;
+          say('vx-msg', txt, ['failed', 'skipped', 'no_answer', 'busy', 'rejected'].indexOf(row.status) === -1);
+        }
+        if (['completed', 'failed', 'skipped', 'no_answer', 'busy', 'rejected'].indexOf(row.status) !== -1) { return; }
+      }
+    }
+
     document.getElementById('vx-test').addEventListener('click', async function () {
       var btn = this;
+      var text = vxText ? vxText.value.trim() : '';
       var ok = window.KT && KT.confirm
-        ? await KT.confirm('Ring your own number now with a short test announcement?')
+        ? await KT.confirm({ title: 'Ring your own number now?', description: 'It rings the number on your profile and reads out your test message. Nobody else is called.', okLabel: 'Call me' })
         : window.confirm('Ring your own number now?');
       if (!ok) { return; }
       btn.disabled = true; say('vx-msg', 'Placing the call…', true);
       try {
-        var r = await api().post('/admin/voice/test-call', {});
+        var r = await api().post('/admin/voice/test-call', { message: text });
         say('vx-msg', (r && r.message) || 'Calling now.', true);
+        if (r && r.call_id) { await vxFollow(r.call_id); }
       } catch (e) {
         say('vx-msg', (e && e.message) || 'The call could not be placed.', false);
       }

@@ -144,6 +144,16 @@ final class VoiceController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $this->assertAgencyAccess($request, $agencyId);
 
+        /* YOUR OWN WORDS (2026-09-29). Anthony: "add text to voice as well for the
+           testing". The test used to speak one fixed sentence, which proves the call
+           connects but not how a real announcement will sound. The text is only ever
+           spoken to the person who typed it, on their own number. */
+        $data = $request->validate(['message' => 'nullable|string|max:600']);
+        $message = trim(preg_replace('/\s+/u', ' ', (string) ($data['message'] ?? '')));
+        if ($message === '') {
+            $message = 'This is a test call from Kiddie Trac. Your voice announcements are working. Goodbye.';
+        }
+
         $u = $request->user();
         $phone = trim((string) ($u->phone ?? ''));
         if ($phone === '') {
@@ -156,9 +166,15 @@ final class VoiceController extends Controller
             ], 422);
         }
 
-        /* The agency switch is deliberately NOT bypassed. If it is off, a test call
-           would prove the credentials work and prove nothing about whether a real
-           announcement would go out -- which is the thing being tested. */
+        /* THE AGENCY SWITCH IS BYPASSED FOR THIS TEST ONLY (2026-09-29).
+           It used to be honoured here, on the grounds that a test with the switch off
+           proves nothing about a real announcement. In practice it meant the only way
+           to test was to switch voice ON FOR EVERY FAMILY first, so an emergency sent
+           while you were testing would ring them all. That was the wrong trade:
+           this call rings one number, the one on the caller's own profile, and a
+           standing "do not ring me" still wins (callOne gate 3). The reply says
+           plainly when the switch is off, so a passing test is not mistaken for
+           "families will be called". */
         /* PRESSING THE BUTTON IS THE CONSENT.
            Without the last argument this refuses itself: 'test' is not an emergency, so
            callOne requires the recipient to have opted in to being contacted -- and an
@@ -170,11 +186,15 @@ final class VoiceController extends Controller
             $agencyId,
             (int) $u->id,
             $phone,
-            'This is a test call from Kiddie Trac. Your voice announcements are working. Goodbye.',
+            $message,
             'test',
             (int) $u->id,
+            true,
             true
         );
+        $callId = (int) DB::table('voice_calls')->where('agency_id', $agencyId)
+            ->where('to_user_id', $u->id)->where('category', 'test')->max('id');
+        $switchOn = (bool) DB::table('agencies')->where('id', $agencyId)->value('voice_enabled');
 
         if (! $ok) {
             $why = (string) (DB::table('voice_calls')->where('agency_id', $agencyId)
@@ -183,7 +203,13 @@ final class VoiceController extends Controller
             return response()->json(['ok' => false, 'message' => 'Not placed — ' . $why], 422);
         }
 
-        return response()->json(['ok' => true, 'message' => 'Calling ' . $phone . ' now.']);
+        return response()->json([
+            'ok' => true,
+            'call_id' => $callId,
+            'voice_enabled' => $switchOn,
+            'message' => 'Calling ' . $phone . ' now.'
+                . ($switchOn ? '' : ' Voice calls are OFF for families, so only this test rings.'),
+        ]);
     }
 
     /**
@@ -198,7 +224,8 @@ final class VoiceController extends Controller
         string $script,
         string $category,
         ?int $startedBy = null,
-        bool $bypassOptIn = false
+        bool $bypassOptIn = false,
+        bool $selfTest = false
     ): bool {
         // 1. Do-not-contact: never ring a parent at a live agency while we are testing.
         if (\App\Support\Suppression::isUser($userId)) {
@@ -229,7 +256,8 @@ final class VoiceController extends Controller
         // 2. The per-agency master switch. Off by default, and turning it on is a
         //    deliberate act -- credentials arriving on a settings screen must not be
         //    enough on their own to start ringing parents.
-        if (! DB::table('agencies')->where('id', $agencyId)->value('voice_enabled')) {
+        //    $selfTest (testCall only: the caller's own number) is the one exception.
+        if (! $selfTest && ! DB::table('agencies')->where('id', $agencyId)->value('voice_enabled')) {
             return $write('skipped', 'voice calls disabled for this agency');
         }
 

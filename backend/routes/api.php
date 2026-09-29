@@ -2208,7 +2208,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
        test-call rings the caller's OWN number and nobody else's; see the controller. */
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::post('/admin/voice/announce',  [\App\Http\Controllers\Api\VoiceController::class, 'announce']);
-        Route::post('/admin/voice/test-call', [\App\Http\Controllers\Api\VoiceController::class, 'testCall']);
+        Route::post('/admin/voice/test-call', [\App\Http\Controllers\Api\VoiceController::class, 'testCall'])->middleware('throttle:5,1,vxtest'); // rings a real phone
         Route::get ('/admin/voice/calls',     [\App\Http\Controllers\Api\VoiceController::class, 'calls']);
     });
 
