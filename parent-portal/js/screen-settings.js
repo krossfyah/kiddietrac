@@ -430,6 +430,128 @@
     catch (e) { host.appendChild(el('div', { style: 'color:#B91C1C;font-size:13px;' }, ['Could not load security settings.'])); }
   };
 
+  /* TEXTS AND PHONE CALLS (2026-09-29). One card, two places: the Profile tab here,
+     and the "My profile" dialog an agency admin gets in User management, which mounts
+     it through KT.renderContactPrefs. Built once so the two cannot drift apart
+     (the same reason as the security card above). */
+  function buildContactPrefsCard() {
+    /* ── Texts and phone calls (2026-09-29) ──
+       Which kinds of texts and calls this person wants, among those their agency
+       sends, plus "Don't phone me at all". Every role, not only parents: staff get
+       texts and calls too. Each switch saves on its own. */
+    var cp = el('div', { style: CARD });
+    {
+      {
+        cp.appendChild(el('div', { style: SECT }, ['Texts and phone calls']));
+        var cpBody = el('div', {}, [el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;' }, ['Loading…'])]);
+        cp.appendChild(cpBody);
+
+        var cpRow = function (title, sub, on, onToggle, disabled) {
+          var row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #F1F5F9;' });
+          row.appendChild(el('div', { style: 'min-width:0;' }, [
+            el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, [title]),
+            el('div', { style: 'font-size:12px;color:#64748B;' }, [sub]),
+          ]));
+          var sw = mkSwitch();
+          sw.kt_set(!!on);
+          if (disabled) { sw.kt_disabled(true); }
+          sw.addEventListener('click', function () {
+            if (sw.disabled) return;
+            var next = sw.getAttribute('aria-pressed') !== 'true';
+            sw.kt_set(next);
+            onToggle(next).catch(function () {
+              sw.kt_set(!next);
+              if (KT.toast) KT.toast('⚠️', 'Could not save', 'Please try again.', '#B91C1C');
+            });
+          });
+          row.appendChild(sw);
+          return row;
+        };
+        var cpHead = function (t) { return el('div', { style: 'font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 2px;' }, [t]); };
+
+        Api.get('/me/contact-prefs').then(function (d) {
+          Dom.clear ? Dom.clear(cpBody) : (cpBody.innerHTML = '');
+          if (!d.has_phone) {
+            cpBody.appendChild(el('div', { style: 'font-size:13px;color:#64748B;padding:6px 0;' },
+              ['Add a mobile number to your profile to receive texts and calls.']));
+          }
+
+          // Texts. Sign in/out lives in "Notify me about…" above, beside email and in-app.
+          var texts = (d.sms || []).filter(function (c) { return c.key !== 'checkin'; });
+          if (texts.length) {
+            cpBody.appendChild(cpHead('Texts'));
+            if (!d.sms_opted_in) {
+              /* The consent ask lives here too: in the "My profile" dialog there is no
+                 "Notify me about…" section to send people to. Same wording, same record. */
+              var ask = el('div', { style: 'font-size:12.5px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin:6px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;' },
+                [el('span', { style: 'flex:1 1 220px;' }, ['You have not agreed to receive texts, so none of these are sent to you yet.'])]);
+              var askBtn = el('button', { type: 'button', style: 'height:30px;padding:0 12px;border-radius:8px;border:1px solid #FCD34D;background:#fff;color:#92400E;font-weight:800;font-size:12.5px;cursor:pointer;' }, ['Agree to receive texts']);
+              askBtn.dataset.ktIconized = '1';
+              askBtn.addEventListener('click', function () {
+                Api.get('/me/sms-consent').then(function (c) {
+                  if (!KT.confirm || !(c && c.consent_text)) { return; }
+                  return KT.confirm({ title: 'Receive text messages?', description: c.consent_text, okLabel: 'Yes', cancelLabel: 'No' })
+                    .then(function (ok) {
+                      if (!ok) { return; }
+                      return Api.post('/me/sms-consent', { agree: true }).then(function () {
+                        if (KT.toast) KT.toast('💬', 'Text messages on', 'We have sent you a confirmation text.', '#159FB4');
+                        var fresh = buildContactPrefsCard();
+                        if (cp.parentNode) { cp.parentNode.replaceChild(fresh, cp); }
+                      });
+                    });
+                }).catch(function (e) {
+                  var m = (e && e.data && e.data.message) || (e && e.message) || 'Could not turn text messages on.';
+                  if (KT.toast) KT.toast('⚠️', 'Not enabled', m, '#B91C1C');
+                });
+              });
+              ask.appendChild(askBtn);
+              cpBody.appendChild(ask);
+            }
+            texts.forEach(function (c) {
+              cpBody.appendChild(cpRow(c.label, c.hint, c.on, function (on) {
+                return Api.put('/me/contact-prefs', { channel: 'sms', key: c.key, on: on });
+              }, !d.sms_opted_in));
+            });
+          }
+
+          // Phone calls.
+          cpBody.appendChild(cpHead('Phone calls'));
+          if (!d.agency_voice_enabled) {
+            cpBody.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;padding:4px 0;' },
+              ['Your agency does not place announcement calls at the moment. Your choices here are kept for when it does.']));
+          }
+          var callRows = [];
+          (d.voice || []).forEach(function (c) {
+            var r = cpRow(c.label, c.urgent ? 'An urgent call about your centre.' : 'A non-urgent announcement by phone.', c.on,
+              function (on) { return Api.put('/me/contact-prefs', { channel: 'voice', key: c.key, on: on }); }, d.voice_opt_out);
+            callRows.push(r);
+            cpBody.appendChild(r);
+          });
+          cpBody.appendChild(cpRow('Don\'t phone me at all',
+            'Overrides everything above, emergencies included. Texts and email are not affected.', d.voice_opt_out,
+            function (on) {
+              return Api.put('/me/voice-opt-out', { opt_out: on }).then(function () {
+                callRows.forEach(function (r) {
+                  var s2 = r.querySelector('[aria-pressed]');
+                  if (s2 && s2.kt_disabled) { s2.kt_disabled(on); }
+                });
+              });
+            }));
+        }).catch(function () {
+          Dom.clear ? Dom.clear(cpBody) : (cpBody.innerHTML = '');
+          cpBody.appendChild(el('div', { style: 'color:#64748B;font-size:13px;' }, ['Could not load your text and call settings.']));
+        });
+      }
+    }
+    return cp;
+
+  }
+  KT.renderContactPrefs = function (host) {
+    host.innerHTML = '';
+    try { host.appendChild(buildContactPrefsCard()); }
+    catch (e) { host.appendChild(el('div', { style: 'color:#B91C1C;font-size:13px;' }, ['Could not load text and call settings.'])); }
+  };
+
   async function render(main, ctx) {
     Dom.clear ? Dom.clear(main) : (main.innerHTML = '');
     // Extra bottom padding so the last controls (Remove PIN / Sign out) clear the
@@ -877,92 +999,9 @@
       } catch (e) {}
     } catch (e) {}
 
-    /* ── Texts and phone calls (2026-09-29) ──
-       Which kinds of texts and calls this person wants, among those their agency
-       sends, plus "Don't phone me at all". Every role, not only parents: staff get
-       texts and calls too. Each switch saves on its own. */
-    try {
-      if (paneProfile) {
-        var cp = el('div', { style: CARD });
-        cp.appendChild(el('div', { style: SECT }, ['Texts and phone calls']));
-        var cpBody = el('div', {}, [el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;' }, ['Loading…'])]);
-        cp.appendChild(cpBody);
-        paneProfile.appendChild(cp);
-
-        var cpRow = function (title, sub, on, onToggle, disabled) {
-          var row = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #F1F5F9;' });
-          row.appendChild(el('div', { style: 'min-width:0;' }, [
-            el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, [title]),
-            el('div', { style: 'font-size:12px;color:#64748B;' }, [sub]),
-          ]));
-          var sw = mkSwitch();
-          sw.kt_set(!!on);
-          if (disabled) { sw.kt_disabled(true); }
-          sw.addEventListener('click', function () {
-            if (sw.disabled) return;
-            var next = sw.getAttribute('aria-pressed') !== 'true';
-            sw.kt_set(next);
-            onToggle(next).catch(function () {
-              sw.kt_set(!next);
-              if (KT.toast) KT.toast('⚠️', 'Could not save', 'Please try again.', '#B91C1C');
-            });
-          });
-          row.appendChild(sw);
-          return row;
-        };
-        var cpHead = function (t) { return el('div', { style: 'font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 2px;' }, [t]); };
-
-        Api.get('/me/contact-prefs').then(function (d) {
-          Dom.clear ? Dom.clear(cpBody) : (cpBody.innerHTML = '');
-          if (!d.has_phone) {
-            cpBody.appendChild(el('div', { style: 'font-size:13px;color:#64748B;padding:6px 0;' },
-              ['Add a mobile number to your profile to receive texts and calls.']));
-          }
-
-          // Texts. Sign in/out lives in "Notify me about…" above, beside email and in-app.
-          var texts = (d.sms || []).filter(function (c) { return c.key !== 'checkin'; });
-          if (texts.length) {
-            cpBody.appendChild(cpHead('Texts'));
-            if (!d.sms_opted_in) {
-              cpBody.appendChild(el('div', { style: 'font-size:12.5px;color:#92400E;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:8px 10px;margin:6px 0;' },
-                ['You have not agreed to receive texts, so none of these are sent to you yet. Turn texts on under "Notify me about…".']));
-            }
-            texts.forEach(function (c) {
-              cpBody.appendChild(cpRow(c.label, c.hint, c.on, function (on) {
-                return Api.put('/me/contact-prefs', { channel: 'sms', key: c.key, on: on });
-              }, !d.sms_opted_in));
-            });
-          }
-
-          // Phone calls.
-          cpBody.appendChild(cpHead('Phone calls'));
-          if (!d.agency_voice_enabled) {
-            cpBody.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;padding:4px 0;' },
-              ['Your agency does not place announcement calls at the moment. Your choices here are kept for when it does.']));
-          }
-          var callRows = [];
-          (d.voice || []).forEach(function (c) {
-            var r = cpRow(c.label, c.urgent ? 'An urgent call about your centre.' : 'A non-urgent announcement by phone.', c.on,
-              function (on) { return Api.put('/me/contact-prefs', { channel: 'voice', key: c.key, on: on }); }, d.voice_opt_out);
-            callRows.push(r);
-            cpBody.appendChild(r);
-          });
-          cpBody.appendChild(cpRow('Don\'t phone me at all',
-            'Overrides everything above, emergencies included. Texts and email are not affected.', d.voice_opt_out,
-            function (on) {
-              return Api.put('/me/voice-opt-out', { opt_out: on }).then(function () {
-                callRows.forEach(function (r) {
-                  var s2 = r.querySelector('[aria-pressed]');
-                  if (s2 && s2.kt_disabled) { s2.kt_disabled(on); }
-                });
-              });
-            }));
-        }).catch(function () {
-          Dom.clear ? Dom.clear(cpBody) : (cpBody.innerHTML = '');
-          cpBody.appendChild(el('div', { style: 'color:#64748B;font-size:13px;' }, ['Could not load your text and call settings.']));
-        });
-      }
-    } catch (e) {}
+    /* ── Texts and phone calls ── built by buildContactPrefsCard(), shared with the
+       "My profile" dialog in User management (KT.renderContactPrefs). */
+    try { if (paneProfile) { paneProfile.appendChild(buildContactPrefsCard()); } } catch (e) {}
 
     // Diagnostics: if the native app captured a crash (e.g. biometrics), show it
     // here so it can be screenshotted for support. Populated by MainActivity.

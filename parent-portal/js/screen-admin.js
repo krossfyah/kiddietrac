@@ -2374,6 +2374,8 @@
     try { _meId = (JSON.parse(sessionStorage.getItem('kt_user') || '{}') || {}).id || 0; } catch (e) {}
     const _isSelf = !!_meId && String(_meId) === String(user.id);
     const paneAbout = Dom.el('div', { style: 'display:none;' });
+    // Your own record only: which kinds of texts and calls you want (KT.renderContactPrefs).
+    const paneContact = Dom.el('div', { style: 'display:none;' });
 
     const _detailsTab = mkTab('Details', paneDetails);
     mkTab('📎 Files & documents', paneFiles);
@@ -2381,6 +2383,7 @@
     mkTab('🛡️ Background checks', paneChecks);
     mkTab('🕓 Clock in / out', paneClock);
     mkTab('🔐 Account & pay', paneAccount);
+    if (_isSelf) { mkTab('💬 Texts & calls', paneContact); }
     mkTab('🗄️ Data & retention', paneData);
     if (_isSelf) { mkTab('ℹ️ About', paneAbout); }
 
@@ -2438,6 +2441,9 @@
     root.appendChild(paneAccount);
     root.appendChild(paneData);
     if (_isSelf) {
+      root.appendChild(paneContact);
+      if (window.KT && KT.renderContactPrefs) { KT.renderContactPrefs(paneContact); }
+      else { paneContact.appendChild(Dom.el('div', { style: 'padding:16px;color:#B45309;font-size:13px;' }, 'Reload the page to see your text and call settings.')); }
       root.appendChild(paneAbout);
       if (window.KT && KT.AccountPanes && KT.AccountPanes.about) { KT.AccountPanes.about(paneAbout); }
     }
