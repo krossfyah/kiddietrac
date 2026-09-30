@@ -126,7 +126,9 @@ class WebsiteSupportController extends Controller
     public function voicemail(Request $request, string $token): Response
     {
         $expected = (string) PlatformSettings::get('voice.voicemail_token', '');
-        $bye = '<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you. We’ll be in touch soon. Goodbye.</Say><Hangup/></Response>';
+        // Same voice and wording as the greeting (Platform -> Phone & voicemail).
+        $cfg = PhoneLineController::config();
+        $bye = '<?xml version="1.0" encoding="UTF-8"?><Response>' . PhoneLineController::say((string) $cfg['goodbye'], (string) $cfg['voice']) . '<Hangup/></Response>';
         $xml = fn () => new Response($bye, 200, ['Content-Type' => 'text/xml']);
         if ($expected === '' || ! hash_equals($expected, $token)) {
             Log::warning('Voicemail callback with a bad token', ['ip' => $request->ip()]);

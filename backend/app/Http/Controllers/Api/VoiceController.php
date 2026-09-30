@@ -214,7 +214,15 @@ final class VoiceController extends Controller
             return response()->json(['data' => $basic]);
         }
 
-        $list = \Illuminate\Support\Facades\Cache::remember('telnyx-voices-v1', 86400, function () use ($key) {
+        $list = self::catalogue($key);
+
+        return response()->json(['data' => array_merge($basic, $list)]);
+    }
+
+    /** Telnyx voices for Canadian/US English and Canadian French (AWS + Azure), cached a day. Shared with the phone line. */
+    public static function catalogue(string $key): array
+    {
+        return \Illuminate\Support\Facades\Cache::remember('telnyx-voices-v1', 86400, function () use ($key) {
             $r = \Illuminate\Support\Facades\Http::withToken($key)->acceptJson()->timeout(30)
                 ->get('https://api.telnyx.com/v2/text-to-speech/voices');
             if (! $r->successful()) {
@@ -249,9 +257,7 @@ final class VoiceController extends Controller
                 <=> [array_search($b['group'], array_values($groups)), $b['label']]);
 
             return $out;
-        });
-
-        return response()->json(['data' => array_merge($basic, $list)]);
+                });
     }
 
     /**

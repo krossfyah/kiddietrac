@@ -2017,6 +2017,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post  ('/platform/invoices/{id}/issue',     [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'issue'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     Route::post  ('/platform/invoices/{id}/mark-paid', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'markPaid'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     Route::post  ('/platform/invoices/{id}/void',      [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'void'])->where('id', '[0-9]+')->middleware('role:platform_admin');
+    // Phone & voicemail (2026-09-29): greeting voice/wording + voicemail counts, platform admins.
+    Route::get   ('/platform/phone', [\App\Http\Controllers\Api\PhoneLineController::class, 'show'])->middleware('role:platform_admin');
+    Route::put   ('/platform/phone', [\App\Http\Controllers\Api\PhoneLineController::class, 'save'])->middleware('role:platform_admin');
+    Route::get   ('/platform/phone/voicemails', [\App\Http\Controllers\Api\PhoneLineController::class, 'voicemails'])->middleware('role:platform_admin');
+    Route::get   ('/platform/phone/voicemails/{id}/audio', [\App\Http\Controllers\Api\PhoneLineController::class, 'audio'])->where('id', '[0-9]+')->middleware('role:platform_admin');
+    Route::delete('/platform/phone/voicemails/{id}', [\App\Http\Controllers\Api\PhoneLineController::class, 'destroy'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     
     // White-label invoice preview (returns text/html)
     Route::get   ('/invoices/{id}/preview',            [InvoicePreviewController::class, 'previewExisting']);

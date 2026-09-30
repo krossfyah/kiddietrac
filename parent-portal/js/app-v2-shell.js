@@ -297,6 +297,7 @@
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
           { hash: 'maintenance',   label: 'Maintenance',      icon: '🛠️' },
           { hash: 'mail-settings', label: 'Email',            icon: '✉️' },
+          { hash: 'phone-voicemail', label: 'Phone & voicemail', icon: '📞' },
         ]}] : []),
         ...(isPlatformAdmin_v22p34 ? [{ label: 'Website', items: [{ hash: 'marketing-site', label: 'Website', icon: '🌐' }] }] : []),
         { label: 'Enrollment', items: [
@@ -955,6 +956,7 @@
     'payment-providers': 'Your own Zum Rails and Stripe accounts, per agency.',
     'late-events': 'Late arrivals and pick-ups awaiting a decision.',
     'billing-settings': 'Tax rate and other invoicing defaults.',
+    'phone-voicemail': 'The toll-free greeting (voice and wording) and the voicemails callers leave.',
     'calendar-settings': 'Choose which layers the calendar draws.',
     'tasks': 'Assign tasks to educators and track them to completion.',
     'my-tasks': 'Tasks assigned to you — mark them in progress or done.',
