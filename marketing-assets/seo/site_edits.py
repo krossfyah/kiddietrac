@@ -505,3 +505,14 @@ _apply_claims_chain = apply
 def apply(out):
     base = _apply_claims_chain(out)
     return _seo.seo(base) if _os.environ.get('K6_SEO', '1') != '0' else base
+
+
+# -- GA4 key events for form saves (analytics_edits.py); K6_GAEV=0 builds without --
+import analytics_edits as _gaev
+
+_apply_seo_chain = apply
+
+
+def apply(out):
+    base = _apply_seo_chain(out)
+    return _gaev.analytics(base) if _os.environ.get('K6_GAEV', '1') != '0' else base
