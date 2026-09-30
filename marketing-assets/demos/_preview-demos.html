@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Preview: interactive demos | KiddieTrac</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* PREVIEW for Anthony's review (2026-09-30): interactive product tour, product clips, a 3D device
+   showcase and lifestyle footage. Not linked, not in the sitemap, noindex. Every screen and clip is
+   the real portal on the demo agency, with real people removed before capture. */
+:root{--navy:#0a1f44;--navy2:#0c2857;--teal:#13b7cc;--teal-d:#0e8fa3;--green:#4bc47a;--lime:#8ec73c;--ink:#0f172a;--gray:#64748b;--line:#e2e8f0;--bg:#f6f9fc}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;font-family:Nunito,system-ui,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased}
+a{color:var(--teal-d)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+.pv-bar{position:sticky;top:0;z-index:50;background:#fff7e6;color:#7a4b00;font-weight:800;font-size:13px;text-align:center;padding:8px 12px;border-bottom:1px solid #fde2b0}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 0}
+header img{height:40px}
+header nav a{margin-left:18px;font-weight:800;text-decoration:none;color:var(--ink);font-size:14.5px}
+h2.sec{font-size:clamp(26px,3.4vw,40px);font-weight:900;letter-spacing:-.02em;margin:0 0 10px;text-align:center}
+p.lead{color:var(--gray);font-size:17px;line-height:1.6;text-align:center;max-width:720px;margin:0 auto 34px}
+.eyebrow{display:inline-block;font-weight:900;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--teal-d);background:#e6f8fb;border-radius:99px;padding:6px 12px;margin-bottom:12px}
+section{padding:70px 0}
+.center{text-align:center}
+
+/* ── 1. hero: 3D devices ── */
+.hero{background:radial-gradient(120% 70% at 50% 0%,rgba(19,183,204,.22),rgba(19,183,204,0) 60%),linear-gradient(168deg,var(--navy),var(--navy2) 50%,var(--navy));color:#fff;overflow:hidden;padding:60px 0 90px}
+.hero h1{font-size:clamp(32px,5vw,58px);font-weight:900;letter-spacing:-.03em;line-height:1.05;margin:0 0 16px;text-align:center}
+.hero h1 em{font-style:normal;background:linear-gradient(90deg,var(--teal),var(--green) 55%,var(--lime));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{color:#b9cbe0;font-size:18px;text-align:center;max-width:680px;margin:0 auto 26px;line-height:1.6}
+.stage{perspective:1600px;height:clamp(300px,46vw,560px);position:relative;margin-top:30px}
+.rig{position:absolute;inset:0;transform-style:preserve-3d;transition:transform .12s linear;will-change:transform}
+.laptop{position:absolute;left:50%;top:6%;width:min(78%,860px);transform:translateX(-56%) translateZ(0);transform-style:preserve-3d}
+.lid{position:relative;border-radius:18px 18px 6px 6px;background:#1b2537;padding:1.6% 1.6% 2.4%;box-shadow:0 40px 90px -30px rgba(0,0,0,.8),inset 0 0 0 2px #2c3a52}
+.lid .scr{position:relative;aspect-ratio:1440/900;border-radius:6px;overflow:hidden;background:#fff}
+.base{height:16px;margin:0 -7%;background:linear-gradient(#cfd8e3,#8e9bab);border-radius:0 0 18px 18px;box-shadow:0 18px 30px -12px rgba(0,0,0,.6)}
+.phone{position:absolute;right:max(4%,calc(50% - 560px));top:22%;width:min(23%,250px);transform:translateZ(120px) rotateY(-8deg);transform-style:preserve-3d}
+.phone .body{border-radius:36px;background:#101826;padding:9px;box-shadow:0 50px 90px -30px rgba(0,0,0,.85),inset 0 0 0 2px #2b364a}
+.phone .scr{position:relative;aspect-ratio:390/844;border-radius:28px;overflow:hidden;background:#fff}
+.phone .notch{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:34%;height:16px;background:#101826;border-radius:0 0 12px 12px;z-index:3}
+.scr img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top;opacity:0;transition:opacity .7s ease}
+.scr img.on{opacity:1}
+.glare{position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,rgba(255,255,255,.18),rgba(255,255,255,0) 40%);mix-blend-mode:screen;z-index:2}
+.shots{display:flex;gap:8px;justify-content:center;margin-top:28px;flex-wrap:wrap}
+.shots button{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#dbe7f3;font:800 13px Nunito,sans-serif;border-radius:99px;padding:8px 14px;cursor:pointer}
+.shots button.on{background:#fff;color:var(--navy)}
+@media (max-width:760px){.phone{width:30%;right:2%;top:30%}.laptop{width:92%;transform:translateX(-50%)}}
+
+/* ── 2. tour ── */
+.tabs{display:flex;justify-content:center;gap:8px;margin-bottom:26px}
+.tabs button{border:1px solid var(--line);background:#fff;font:800 14.5px Nunito,sans-serif;border-radius:99px;padding:10px 18px;cursor:pointer;color:var(--ink)}
+.tabs button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.tour{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:28px;align-items:center}
+.tour.m{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.frame{position:relative;background:#fff;border-radius:16px;box-shadow:0 30px 70px -30px rgba(15,23,42,.35);overflow:hidden;border:1px solid var(--line)}
+.frame .chrome{height:34px;background:#f1f5f9;display:flex;align-items:center;gap:6px;padding:0 12px;border-bottom:1px solid var(--line)}
+.frame .chrome i{width:10px;height:10px;border-radius:50%;background:#cbd5e1;display:block}
+.frame .chrome span{margin-left:10px;font-size:12px;color:var(--gray);font-weight:700;background:#fff;border-radius:6px;padding:3px 10px}
+.frame .view{position:relative}
+.frame img{display:block;width:100%;height:auto}
+.tour.m .frame{max-width:330px;margin:0 auto;border-radius:36px;border:9px solid #101826;box-shadow:0 40px 80px -30px rgba(15,23,42,.5)}
+.tour.m .frame .chrome{display:none}
+.hot{position:absolute;border:3px solid var(--teal);border-radius:12px;box-shadow:0 0 0 9999px rgba(10,31,68,.28),0 0 0 6px rgba(19,183,204,.25);transition:all .5s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.hot::after{content:'';position:absolute;right:-9px;top:-9px;width:18px;height:18px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 0 rgba(19,183,204,.6);animation:ping 1.6s infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(19,183,204,.6)}100%{box-shadow:0 0 0 16px rgba(19,183,204,0)}}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px}
+.card .n{font-weight:900;color:var(--teal-d);font-size:13px;letter-spacing:.08em}
+.card h3{font-size:24px;font-weight:900;margin:6px 0 10px;letter-spacing:-.01em}
+.card p{color:var(--gray);font-size:15.5px;line-height:1.65;margin:0 0 18px}
+.dots{display:flex;gap:6px;margin-bottom:18px}
+.dots b{width:26px;height:5px;border-radius:5px;background:#e2e8f0;cursor:pointer}
+.dots b.on{background:var(--teal)}
+.nav{display:flex;gap:8px}
+.btn{border:0;border-radius:12px;padding:12px 18px;font:900 14.5px Nunito,sans-serif;cursor:pointer}
+.btn.pri{background:linear-gradient(135deg,var(--teal),var(--green));color:#05263b}
+.btn.sec{background:#eef2f7;color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:default}
+@media (max-width:900px){.tour,.tour.m{grid-template-columns:minmax(0,1fr)}}
+
+/* ── 3. clips ── */
+.clips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.clip{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;cursor:zoom-in;transition:transform .25s}
+.clip:hover{transform:translateY(-4px)}
+.clip .v{position:relative;aspect-ratio:16/10;background:#e2e8f0}
+.clip.ph .v{aspect-ratio:16/10;background:linear-gradient(160deg,#e6f8fb,#eef7e9);display:flex;align-items:center;justify-content:center}
+.clip video{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+.clip.ph video{width:auto;height:92%;border-radius:18px;border:5px solid #101826;box-shadow:0 20px 40px -20px rgba(0,0,0,.5)}
+.clip .t{padding:16px 18px}
+.clip .t b{font-size:16.5px;font-weight:900}
+.clip .t span{display:block;color:var(--gray);font-size:14px;margin-top:4px;line-height:1.5}
+.lb{position:fixed;inset:0;background:rgba(10,20,40,.85);display:none;align-items:center;justify-content:center;z-index:100;padding:24px}
+.lb.on{display:flex}
+.lb video{max-width:min(1100px,96vw);max-height:86vh;border-radius:14px;background:#000}
+.lb button{position:absolute;top:18px;right:22px;background:#fff;border:0;border-radius:99px;width:40px;height:40px;font-size:22px;cursor:pointer}
+@media (max-width:900px){.clips{grid-template-columns:minmax(0,1fr)}}
+
+/* ── 4. footage ── */
+.film{position:relative;border-radius:24px;overflow:hidden;min-height:340px;display:flex;align-items:flex-end;margin-bottom:22px}
+.film video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.film::before{content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(10,31,68,.85),rgba(10,31,68,.1) 60%);z-index:1}
+.film .txt{position:relative;z-index:2;color:#fff;padding:30px}
+.film .txt h3{font-size:clamp(22px,3vw,34px);font-weight:900;margin:0 0 6px;letter-spacing:-.02em}
+.film .txt p{margin:0;color:#dbe7f3;font-size:16px;max-width:560px;line-height:1.55}
+.films{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}
+@media (max-width:760px){.films{grid-template-columns:minmax(0,1fr)}}
+.credit{font-size:12px;color:var(--gray);text-align:center;margin-top:10px}
+@media (prefers-reduced-motion:reduce){.rig{transition:none}.hot::after{animation:none}.clip:hover{transform:none}}
+footer{padding:40px 0;color:var(--gray);font-size:13px;text-align:center}
+</style>
+</head>
+<body>
+<div class="pv-bar">PREVIEW for review — not linked from the site, not indexed. Real screens from the demo agency; no real families or staff appear.</div>
+
+<div class="hero">
+  <div class="wrap">
+    <header><img src="/kiddietrac-logo-white.png" alt="KiddieTrac" onerror="this.src='/kiddietrac-logo.png'"><nav><a href="#tour" style="color:#fff">Tour</a><a href="#clips" style="color:#fff">Clips</a><a href="#life" style="color:#fff">In the room</a></nav></header>
+    <h1>See KiddieTrac <em>in action</em></h1>
+    <p>The real product, not a mock-up: the office dashboard and the parent app, side by side. Move your mouse to look around.</p>
+    <div class="stage" id="stage">
+      <div class="rig" id="rig">
+        <div class="laptop"><div class="lid"><div class="scr" id="lapScr">
+          <img class="on" src="/demo-assets/tour-overview.jpg" alt="KiddieTrac agency overview dashboard">
+          <img src="/demo-assets/tour-day.jpg" alt="Daily overview of a provider" loading="lazy">
+          <img src="/demo-assets/tour-ratios.jpg" alt="Real-time room ratios" loading="lazy">
+          <div class="glare"></div></div></div><div class="base"></div></div>
+        <div class="phone"><div class="body"><div class="scr" id="phScr"><div class="notch"></div>
+          <img class="on" src="/demo-assets/tour-p-home.jpg" alt="Parent app home screen">
+          <img src="/demo-assets/tour-p-today.jpg" alt="Parent app: the child's day" loading="lazy">
+          <img src="/demo-assets/tour-p-messages.jpg" alt="Parent app: messages" loading="lazy">
+          <div class="glare"></div></div></div></div>
+      </div>
+    </div>
+    <div class="shots" id="shots">
+      <button class="on" data-i="0">Overview + parent home</button><button data-i="1">Today + the child's day</button><button data-i="2">Ratios + messages</button>
+    </div>
+  </div>
+</div>
+
+<section id="tour">
+  <div class="wrap">
+    <div class="center"><span class="eyebrow">Interactive tour</span></div>
+    <h2 class="sec">Take the two-minute tour</h2>
+    <p class="lead">Click through the screens your team and your families use every day. Use the arrows, or your keyboard.</p>
+    <div class="tabs" id="tabs"><button class="on" data-set="centre">For your centre</button><button data-set="parent">For parents</button></div>
+    <div class="tour" id="tourBox">
+      <div class="frame" id="frame"><div class="chrome"><i></i><i></i><i></i><span>app.kiddietrac.com</span></div><div class="view"><img id="tourImg" src="/demo-assets/tour-overview.jpg" alt=""><div class="hot" id="hot"></div></div></div>
+      <div class="card" aria-live="polite">
+        <div class="dots" id="dots"></div>
+        <div class="n" id="tn">STEP 1 OF 6</div>
+        <h3 id="tt"></h3>
+        <p id="tp"></p>
+        <div class="nav"><button class="btn sec" id="prev">← Back</button><button class="btn pri" id="next">Next →</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="clips" style="background:#fff">
+  <div class="wrap">
+    <div class="center"><span class="eyebrow">Product clips</span></div>
+    <h2 class="sec">Watch it work</h2>
+    <p class="lead">Short, silent clips recorded from the real app. Click any clip to watch it full size.</p>
+    <div class="clips">
+      <div class="clip" data-src="/demo-assets/clip-day.mp4"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-day.jpg" data-src="/demo-assets/clip-day.mp4"></video></div><div class="t"><b>Today at a glance</b><span>Attendance, meals, naps and who's on the floor, for any provider on any day.</span></div></div>
+      <div class="clip" data-src="/demo-assets/clip-ratios.mp4"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-ratios.jpg" data-src="/demo-assets/clip-ratios.mp4"></video></div><div class="t"><b>Ratios, live</b><span>Every room against Ontario's staff-to-child ratios, all day.</span></div></div>
+      <div class="clip ph" data-src="/demo-assets/clip-parent.mp4"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-parent.jpg" data-src="/demo-assets/clip-parent.mp4"></video></div><div class="t"><b>The parent app</b><span>The child's day, messages with the room and simple payments.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="life">
+  <div class="wrap">
+    <div class="center"><span class="eyebrow">In the room</span></div>
+    <h2 class="sec">Less paperwork. More of this.</h2>
+    <p class="lead">Lifestyle footage for section backgrounds: hands and materials rather than faces.</p>
+    <div class="film"><video muted playsinline loop preload="none" poster="/media/hero-play-poster.jpg" data-src="/media/hero-play.mp4"></video><div class="txt"><h3>Built for the people in the room</h3><p>Check-in, daily reports and billing handled in seconds, so educators spend the day with the children.</p></div></div>
+    <div class="films">
+      <div class="film"><video muted playsinline loop preload="none" poster="/demo-assets/life-blocks.jpg" data-src="/demo-assets/life-blocks.mp4"></video><div class="txt"><h3>Every moment, logged in a tap</h3><p>Activities, meals and naps land on the parent's Today screen instantly.</p></div></div>
+      <div class="film"><video muted playsinline loop preload="none" poster="/demo-assets/life-paint.jpg" data-src="/demo-assets/life-paint.mp4"></video><div class="txt"><h3>Share the art, not the admin</h3><p>Photos and observations linked to your learning framework.</p></div></div>
+    </div>
+    <div class="credit">Footage: Pexels (free licence) — Gustavo Fring and others. Product screens: KiddieTrac demo agency.</div>
+  </div>
+</section>
+
+<div class="lb" id="lb"><button aria-label="Close">×</button><video controls muted playsinline></video></div>
+<footer>KiddieTrac · preview page · 2026</footer>
+
+<script>
+(function () {
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* 1. 3D devices: tilt toward the pointer, ease back; screens cycle together. */
+  var rig = document.getElementById('rig'), stage = document.getElementById('stage');
+  var tx = 0, ty = 0, cx = 0, cy = 0;
+  if (!reduce) {
+    stage.addEventListener('mousemove', function (e) { var r = stage.getBoundingClientRect(); tx = ((e.clientX - r.left) / r.width - .5) * 16; ty = ((e.clientY - r.top) / r.height - .5) * -10; });
+    stage.addEventListener('mouseleave', function () { tx = 0; ty = 0; });
+    window.addEventListener('scroll', function () { var r = stage.getBoundingClientRect(); ty = Math.max(-8, Math.min(8, (r.top / innerHeight - .3) * 14)); }, { passive: true });
+    (function loop() { cx += (tx - cx) * .08; cy += (ty - cy) * .08; rig.style.transform = 'rotateX(' + (6 + cy).toFixed(2) + 'deg) rotateY(' + (-10 + cx).toFixed(2) + 'deg)'; requestAnimationFrame(loop); })();
+  } else { rig.style.transform = 'rotateX(6deg) rotateY(-10deg)'; }
+  var lap = document.querySelectorAll('#lapScr img'), ph = document.querySelectorAll('#phScr img'), sb = document.querySelectorAll('#shots button'), cur = 0, timer;
+  function show(i) { cur = i; [lap, ph].forEach(function (set) { set.forEach(function (im, k) { im.classList.toggle('on', k === i); }); }); sb.forEach(function (b, k) { b.classList.toggle('on', k === i); }); }
+  function auto() { clearInterval(timer); if (!reduce) timer = setInterval(function () { show((cur + 1) % 3); }, 4200); }
+  sb.forEach(function (b) { b.addEventListener('click', function () { show(+b.getAttribute('data-i')); auto(); }); });
+  auto();
+
+  /* 2. Tour. Hotspots are fractions of the screen, measured on the real page when it was captured. */
+  var SETS = {
+    centre: [
+      { img: 'overview', t: 'Your whole agency at a glance', p: 'Enrolment, staff on the floor, receivables and ratio alerts for every centre, updated live.', h: [.175, .305, .815, .345] },
+      { img: 'day', t: 'Today, in one screen', p: 'Who came in, meals, naps and activities logged, and how children were checked in, for any provider on any day.', h: [.19, .44, .78, .23] },
+      { img: 'ratios', t: 'Ratios, always in view', p: "Every room's children and staff against Ontario's ratios, so you know before a room goes over.", h: [.66, .54, .1, .42] },
+      { img: 'log', t: 'Log a moment in two taps', p: "Diapers, naps, meals, photos and more. Each entry lands on the parent's Today screen straight away.", h: [.19, .27, .78, .19] },
+      { img: 'arrival', t: "Know who hasn't arrived", p: "Safe Arrival lists every expected child who isn't in yet, with the guardian's number, so you can call right away.", h: [.19, .47, .78, .14] },
+      { img: 'billing', t: 'Billing that keeps itself up to date', p: 'Invoices, payments and outstanding balances across every family, with CWELCC reductions applied.', h: [.19, .235, .78, .13] },
+    ],
+    parent: [
+      { img: 'p-home', t: 'A home screen for their child', p: 'Status, balance, photos and tasks at a glance, and everything else one tap away.', h: [.03, .42, .94, .45] },
+      { img: 'p-today', t: 'The whole day, as it happened', p: "Arrival, meals and naps, the child's educator, and a written story of the day.", h: [.069, .59, .862, .09] },
+      { img: 'p-messages', t: 'A direct line to the room', p: 'Families message the room team, and educators and the director see and reply.', h: [.031, .267, .938, .091] },
+      { img: 'p-billing', t: 'Paying is simple', p: 'Card, bank account or Interac, with the subsidy shown and only their portion to pay.', h: [.031, .163, .938, .33] },
+    ],
+  };
+  var set = 'centre', step = 0;
+  var img = document.getElementById('tourImg'), hot = document.getElementById('hot'), box = document.getElementById('tourBox');
+  var tn = document.getElementById('tn'), tt = document.getElementById('tt'), tp = document.getElementById('tp'), dots = document.getElementById('dots');
+  var prev = document.getElementById('prev'), next = document.getElementById('next');
+  function paint() {
+    var s = SETS[set][step], n = SETS[set].length;
+    box.classList.toggle('m', set === 'parent');
+    img.src = '/demo-assets/tour-' + s.img + '.jpg'; img.alt = s.t;
+    hot.style.left = (s.h[0] * 100) + '%'; hot.style.top = (s.h[1] * 100) + '%'; hot.style.width = (s.h[2] * 100) + '%'; hot.style.height = (s.h[3] * 100) + '%';
+    tn.textContent = 'STEP ' + (step + 1) + ' OF ' + n; tt.textContent = s.t; tp.textContent = s.p;
+    dots.innerHTML = SETS[set].map(function (_, k) { return '<b class="' + (k === step ? 'on' : '') + '" data-k="' + k + '" title="Step ' + (k + 1) + '"></b>'; }).join('');
+    prev.disabled = step === 0; next.textContent = step === n - 1 ? (set === 'centre' ? 'See the parent app →' : 'Book a demo →') : 'Next →';
+  }
+  dots.addEventListener('click', function (e) { var b = e.target.closest('[data-k]'); if (b) { step = +b.getAttribute('data-k'); paint(); } });
+  prev.addEventListener('click', function () { if (step > 0) { step--; paint(); } });
+  next.addEventListener('click', function () {
+    if (step < SETS[set].length - 1) { step++; paint(); return; }
+    if (set === 'centre') { pick('parent'); return; }
+    location.href = 'https://www.kiddietrac.com/contact';
+  });
+  function pick(s) { set = s; step = 0; document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-set') === s); }); paint(); }
+  document.querySelectorAll('#tabs button').forEach(function (b) { b.addEventListener('click', function () { pick(b.getAttribute('data-set')); }); });
+  document.addEventListener('keydown', function (e) {
+    var r = document.getElementById('tour').getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) return;
+    if (e.key === 'ArrowRight') next.click(); else if (e.key === 'ArrowLeft') prev.click();
+  });
+  Object.keys(SETS).forEach(function (k) { SETS[k].forEach(function (s) { var i = new Image(); i.src = '/demo-assets/tour-' + s.img + '.jpg'; }); });
+  paint();
+
+  /* 3 + 4. Clips and footage play only while on screen; reduced motion keeps the poster. */
+  var vids = document.querySelectorAll('video[data-src]');
+  if ('IntersectionObserver' in window && !reduce) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        var v = e.target;
+        if (e.isIntersecting) { if (!v.src) v.src = v.getAttribute('data-src'); var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+        else v.pause();
+      });
+    }, { threshold: .35 });
+    vids.forEach(function (v) { io.observe(v); });
+  }
+  var lb = document.getElementById('lb'), lbv = lb.querySelector('video');
+  document.querySelectorAll('.clip').forEach(function (c) {
+    c.addEventListener('click', function () { lbv.src = c.getAttribute('data-src'); lb.classList.add('on'); var p = lbv.play(); if (p && p.catch) p.catch(function () {}); });
+  });
+  function close() { lb.classList.remove('on'); lbv.pause(); lbv.removeAttribute('src'); }
+  lb.addEventListener('click', function (e) { if (e.target === lb || e.target.tagName === 'BUTTON') close(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+})();
+</script>
+</body>
+</html>
