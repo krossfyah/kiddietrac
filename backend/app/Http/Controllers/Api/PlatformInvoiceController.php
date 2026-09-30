@@ -220,15 +220,65 @@ class PlatformInvoiceController extends Controller
         $billable = $raiser->billable($plan);
 
         if (! $request->boolean('commit')) {
+            /* Who is being billed, in enough detail to check before raising (2026-09-29):
+               where the invoice would be emailed and whether the Bill To block is complete. */
+            $ids = array_column($plan, 'agency_id');
+            $info = DB::table('agencies')->whereIn('id', $ids)->get(['id', 'legal_name', 'contact_email', 'address_line1', 'city', 'province', 'billing_status', 'tax_registration'])->keyBy('id');
+            $withInfo = fn ($p) => $p + [
+                'legal_name' => $info[$p['agency_id']]->legal_name ?? null,
+                'contact_email' => $info[$p['agency_id']]->contact_email ?? null,
+                'address' => trim(implode(', ', array_filter([$info[$p['agency_id']]->address_line1 ?? null, $info[$p['agency_id']]->city ?? null, $info[$p['agency_id']]->province ?? null]))),
+                'billing_status' => $info[$p['agency_id']]->billing_status ?? null,
+                'interval_label' => \App\Support\PlatformBilling::intervalLabel($p['interval']),
+                'next_after' => $p['next_invoice_at'] ? \App\Support\PlatformBilling::advance($p['next_invoice_at'], $p['interval']) : null,
+                'due_at' => now()->addDays(14)->toDateString(),
+            ];
+
             return response()->json([
                 'preview' => true,
                 'today' => now()->toDateString(),
-                'would_raise' => $billable,
+                'would_raise' => array_map($withInfo, $billable),
                 'skipped' => array_values(array_filter($plan, fn ($p) => $p['skip_reason'] !== null)),
             ]);
         }
 
-        $result = $raiser->commit($billable, optional($request->user())->id);
+        /* From the review popup: only the ticked agencies, with any edits. Without `items`
+           (older clients, scripts) everything due is raised as planned, as before. */
+        $edits = [];
+        if ($request->has('items')) {
+            $data = $request->validate([
+                'items' => ['required', 'array', 'min:1'],
+                'items.*.agency_id' => ['required', 'integer'],
+                'items.*.subtotal_cents' => ['required', 'integer', 'min:0', 'max:100000000'],
+                'items.*.tax_rate_bps' => ['required', 'integer', 'min:0', 'max:10000'],
+                'items.*.tax_label' => ['nullable', 'string', 'max:40'],
+                'items.*.due_at' => ['required', 'date'],
+                'items.*.notes' => ['nullable', 'string', 'max:1000'],
+                'items.*.save_to_plan' => ['sometimes', 'boolean'],
+            ]);
+            foreach ($data['items'] as $it) {
+                if ((int) $it['tax_rate_bps'] > 0 && trim((string) ($it['tax_label'] ?? '')) === '') {
+                    return response()->json(['message' => 'A tax rate needs a name for the invoice (HST, GST, VAT).'], 422);
+                }
+                $edits[(int) $it['agency_id']] = $it;
+            }
+            $billable = array_values(array_filter($billable, fn ($p) => isset($edits[$p['agency_id']])));
+            if (! $billable) {
+                return response()->json(['message' => 'None of those agencies is due any more. Refresh and try again.'], 409);
+            }
+        }
+
+        $result = $raiser->commit($billable, optional($request->user())->id, 14, $edits);
+
+        // "Use this price from now on": the edit also becomes the agency's plan.
+        foreach ($edits as $agencyId => $it) {
+            if (! empty($it['save_to_plan'])) {
+                DB::table('agencies')->where('id', $agencyId)->update([
+                    'plan_amount_cents' => (int) $it['subtotal_cents'], 'tax_rate_bps' => (int) $it['tax_rate_bps'],
+                    'tax_label' => $it['tax_label'] ?? null, 'updated_at' => now(),
+                ]);
+            }
+        }
 
         return response()->json([
             'preview' => false,

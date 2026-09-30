@@ -18,7 +18,8 @@ final class PlatformBilling
     /** Currencies we can actually invoice in. */
     public const CURRENCIES = ['CAD', 'USD'];
 
-    public const INTERVALS = ['monthly', 'quarterly', 'annual'];
+    /* weekly/biweekly added 2026-09-29 (Anthony: "could be weekly, biweekly, monthly, yearly"). */
+    public const INTERVALS = ['weekly', 'biweekly', 'monthly', 'quarterly', 'annual'];
 
     /**
      * Tax on a subtotal, in cents.
@@ -81,6 +82,12 @@ final class PlatformBilling
      */
     public static function monthlyCents(int $amountCents, ?string $interval): int
     {
+        // Sub-monthly plans: 52 or 26 invoices a year, spread over 12 months.
+        $perYear = match (self::normaliseInterval($interval)) { 'weekly' => 52, 'biweekly' => 26, default => 0 };
+        if ($perYear) {
+            return intdiv($amountCents * $perYear + 6, 12);
+        }
+
         $months = match (self::normaliseInterval($interval)) {
             'quarterly' => 3,
             'annual' => 12,
@@ -99,6 +106,8 @@ final class PlatformBilling
            plain addMonths lands on 3 March from 31 January. NoOverflow clamps to the last
            day of the shorter month, which is what a billing anchor means. */
         return match ($interval) {
+            'weekly' => $d->addDays(7)->toDateString(),
+            'biweekly' => $d->addDays(14)->toDateString(),
             'quarterly' => $d->addMonthsNoOverflow(3)->toDateString(),
             'annual' => $d->addYearsNoOverflow(1)->toDateString(),
             default => $d->addMonthNoOverflow()->toDateString(),
@@ -124,6 +133,8 @@ final class PlatformBilling
     /** "Monthly" / "Quarterly" / "Annual" — for invoice lines and the UI. */
     public static function intervalLabel(?string $i): string
     {
-        return ucfirst(self::normaliseInterval($i));
+        $i = self::normaliseInterval($i);
+
+        return $i === 'biweekly' ? 'Every 2 weeks' : ucfirst($i);
     }
 }

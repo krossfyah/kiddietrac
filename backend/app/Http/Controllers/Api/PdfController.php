@@ -38,14 +38,32 @@ final class PdfController extends Controller
 
         // v22p98: families have no agency_id — resolve the agency via the centre.
         $agency = DB::table('agencies')->where('id', DB::table('centres')->where('id', $family->centre_id)->value('agency_id'))->first();
-        $payments = DB::table('payments')
-            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
-            ->where('invoices.family_id', $familyId)
-            ->whereBetween('payments.paid_at', [$start, $end])
-            // no deleted_at on payments
-            ->select('payments.paid_at', 'payments.amount', 'invoices.invoice_number')
-            ->orderBy('payments.paid_at')
-            ->get();
+        /* SPLIT BILLING (2026-09-29): each payer claims what THEY paid, so a split family
+           gets one receipt per payer. A parent always gets their own; staff may ask for a
+           payer with ?guardian_id=, or the whole family without it. Failed and refunded
+           payments were counted before -- a receipt must only show money that stayed paid. */
+        $guardianId = (int) $request->query('guardian_id', 0);
+        $asGuardian = \App\Support\BillingSplit::guardianFor((int) $request->user()->id, $familyId);
+        $isStaff = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+            ->whereIn('role', ['platform_admin', 'agency_admin', 'centre_director', 'educator'])->exists();
+        if ($asGuardian && ! $isStaff) { $guardianId = $asGuardian; }
+        $payer = null;
+        if ($guardianId && \App\Support\BillingSplit::isSplit($familyId)) {
+            abort_unless(DB::table('guardians')->where('id', $guardianId)->where('family_id', $familyId)->exists(), 404);
+            $payer = collect(\App\Support\BillingSplit::payers($familyId))->firstWhere('guardian_id', $guardianId)
+                ?? ['name' => (string) DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')->where('g.id', $guardianId)->value(DB::raw("TRIM(CONCAT(u.first_name,' ',u.last_name))"))];
+            $payments = collect(\App\Support\BillingSplit::paidByGuardian($familyId, $guardianId, $start->toDateTimeString(), $end->toDateTimeString()))
+                ->map(fn ($r) => (object) $r);
+        } else {
+            $payments = DB::table('payments')
+                ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
+                ->where('invoices.family_id', $familyId)
+                ->whereBetween('payments.paid_at', [$start, $end])
+                ->whereNotIn('payments.status', ['failed', 'refunded', 'void'])
+                ->select('payments.paid_at', 'payments.amount', 'invoices.invoice_number')
+                ->orderBy('payments.paid_at')
+                ->get();
+        }
 
         $total = (float) $payments->sum('amount');
         $children = DB::table('children')
@@ -61,9 +79,11 @@ final class PdfController extends Controller
             'payments' => $payments,
             'total' => $total,
             'children' => $children,
+            'payerName' => $payer['name'] ?? null,
         ])->render();
 
-        return $this->renderPdf($html, sprintf('T4A-%s-%d.pdf', $this->slug((string) $family->family_name), $year));
+        return $this->renderPdf($html, sprintf('Childcare-Receipt-%s%s-%d.pdf', $this->slug((string) $family->family_name),
+            $payer ? '-' . $this->slug((string) $payer['name']) : '', $year));
     }
 
     /**

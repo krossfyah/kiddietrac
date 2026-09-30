@@ -105,14 +105,33 @@ final class PlatformInvoiceRaiser
      *
      * @return array{raised: array<int, string>, failed: array<int, string>}
      */
-    public function commit(array $billable, ?int $userId = null, int $dueDays = 14): array
+    public function commit(array $billable, ?int $userId = null, int $dueDays = 14, array $edits = []): array
     {
+        /* Edits from the review popup (2026-09-29), keyed by agency id: subtotal_cents,
+           tax_rate_bps, tax_label, due_at, notes. Tax and total are recomputed here, never
+           taken from the browser. The period and schedule are not editable: the period is
+           what the (agency_id, period_start) key guards against double billing. */
+        foreach ($billable as $k => $p) {
+            $e = $edits[$p['agency_id']] ?? null;
+            if (! $e) continue;
+            if (isset($e['subtotal_cents'])) $p['subtotal_cents'] = (int) $e['subtotal_cents'];
+            if (isset($e['tax_rate_bps'])) $p['tax_rate_bps'] = (int) $e['tax_rate_bps'];
+            if (array_key_exists('tax_label', $e)) $p['tax_label'] = $e['tax_label'];
+            $p['tax_cents'] = PlatformBilling::taxCents($p['subtotal_cents'], $p['tax_rate_bps']);
+            $p['amount_cents'] = PlatformBilling::totalCents($p['subtotal_cents'], $p['tax_rate_bps']);
+            $p['due_at'] = $e['due_at'] ?? null;
+            $p['notes'] = $e['notes'] ?? null;
+            $billable[$k] = $p;
+        }
+
         $raised = [];
         $failed = [];
 
         foreach ($billable as $p) {
+            /* A weekly or two-weekly plan bills more than once a month, so its number
+               carries the day; monthly and longer keep the KT-YYYYMM-agency form. */
             $number = sprintf('KT-%s-%04d',
-                Carbon::parse($p['period_start'])->format('Ym'), $p['agency_id']);
+                Carbon::parse($p['period_start'])->format(in_array($p['interval'], ['weekly', 'biweekly'], true) ? 'Ymd' : 'Ym'), $p['agency_id']);
 
             try {
                 DB::transaction(function () use ($p, $number, $userId, $dueDays) {
@@ -132,7 +151,8 @@ final class PlatformInvoiceRaiser
                         'amount_paid_cents' => 0,
                         'currency' => $p['currency'],
                         'status' => 'draft',
-                        'due_at' => Carbon::now()->addDays($dueDays)->toDateString(),
+                        'due_at' => ! empty($p['due_at']) ? Carbon::parse($p['due_at'])->toDateString() : Carbon::now()->addDays($dueDays)->toDateString(),
+                        'notes' => $p['notes'] ?? null,
                         'created_by_id' => $userId,
                         'created_at' => now(),
                         'updated_at' => now(),

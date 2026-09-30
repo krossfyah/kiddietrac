@@ -6430,6 +6430,47 @@
       pane.appendChild(fwrap('Street address', iAddr));
       var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province', iProv)); g2.appendChild(fwrap('Postal code', iPost)); pane.appendChild(g2);
       pane.appendChild(fwrap('Billing split', iBill));
+      /* WHO PAYS WHAT (split billing, 2026-09-29). The select only said "split"; nothing
+         said between whom or in what proportion, and nothing billed that way. The panel
+         saves on its own endpoint with the percentages, which must total 100%. */
+      var splitBox = Dom.el('div', { style: 'border:1px solid #BFDBFE;background:#F8FBFF;border-radius:10px;padding:10px 12px;margin:-4px 0 12px;' });
+      pane.appendChild(splitBox);
+      function paintSplit() {
+        var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+        var mode = iBill.value;
+        if (mode === 'single') { splitBox.style.display = 'none'; return; }
+        splitBox.style.display = '';
+        var gs = (DATA.guardians || []);
+        if (gs.length < 2) { splitBox.innerHTML = '<div style="font-size:13px;color:#92400E;">Add a second guardian (Guardians tab) to split the bill between them.</div>'; return; }
+        var even = Math.floor(10000 / gs.length) / 100;
+        // Stored shares default to 100 each on an unsplit family; start from an even split then.
+        var stored = gs.reduce(function (t, g) { return t + (Number(g.billing_share_pct) || 0); }, 0);
+        var useStored = Math.abs(stored - 100) < 0.01;
+        splitBox.innerHTML = '<div style="font-size:12px;font-weight:800;color:#1E40AF;margin-bottom:6px;">Who pays, and what share</div>'
+          + gs.map(function (g, ix) {
+            var pct = mode === 'split_50_50' ? (ix < 2 ? 50 : 0) : (useStored ? (Number(g.billing_share_pct) || 0) : (ix === gs.length - 1 ? Math.round((100 - even * (gs.length - 1)) * 100) / 100 : even));
+            var nm = [g.first_name, g.last_name].filter(Boolean).join(' ') || g.email || ('Guardian ' + (ix + 1));
+            return '<div style="display:flex;gap:10px;align-items:center;padding:3px 0;"><span style="flex:1;font-size:13.5px;">' + esc(nm) + (g.relationship ? ' <span style="color:#94A3B8;font-size:12px;">' + esc(g.relationship) + '</span>' : '') + '</span>'
+              + '<input type="number" min="0" max="100" step="0.01" data-gid="' + g.id + '" value="' + pct + '" style="width:80px;padding:6px 8px;border:1px solid #CBD5E1;border-radius:7px;"' + (mode === 'split_50_50' ? ' disabled' : '') + '> %</div>';
+          }).join('')
+          + '<div style="display:flex;gap:10px;align-items:center;margin-top:6px;"><span data-sum style="font-size:12.5px;color:#475569;flex:1;"></span>'
+          + '<button type="button" data-savesplit style="padding:7px 14px;background:#1F6080;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save split</button></div>'
+          + '<div style="font-size:11.5px;color:#64748B;margin-top:4px;">Applies to invoices issued from now on; each payer sees and pays their share and gets their own tax receipt.</div>';
+        var sumEl = splitBox.querySelector('[data-sum]');
+        function sum() { var t = 0; splitBox.querySelectorAll('[data-gid]').forEach(function (i) { t += Number(i.value) || 0; }); sumEl.textContent = 'Total: ' + (Math.round(t * 100) / 100) + '%'; sumEl.style.color = Math.abs(t - 100) < 0.01 ? '#166534' : '#B91C1C'; }
+        splitBox.querySelectorAll('[data-gid]').forEach(function (i) { i.addEventListener('input', sum); });
+        sum();
+        splitBox.querySelector('[data-savesplit]').addEventListener('click', async function () {
+          var shares = []; splitBox.querySelectorAll('[data-gid]').forEach(function (i) { shares.push({ guardian_id: parseInt(i.getAttribute('data-gid'), 10), pct: Number(i.value) || 0 }); });
+          try {
+            var r = await Api.put('/admin/families/' + f.id + '/billing-split', { mode: iBill.value, shares: shares });
+            (r.guardians || []).forEach(function (ng) { (DATA.guardians || []).forEach(function (og) { if (og.id === ng.id) { og.billing_share_pct = ng.billing_share_pct; og.can_receive_billing = ng.can_receive_billing; } }); });
+            setMsg('✓ Billing split saved', true);
+          } catch (e) { setMsg(e.message || 'Could not save the split'); }
+        });
+      }
+      iBill.addEventListener('change', paintSplit);
+      paintSplit();
       pane.appendChild(fwrap('Internal notes', iNotes));
       var save = Dom.el('button', { style: 'padding:9px 18px;background:#1F6080;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;' }, 'Save family');
       save.addEventListener('click', async function () {
@@ -6437,6 +6478,8 @@
         save.disabled = true; setMsg('Saving…', true);
         try {
           await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, billing_split: iBill.value, notes: iNotes.value.trim() || null });
+          // Going back to one payer also resets the shares (the primary carries 100%).
+          if (iBill.value === 'single') { try { await Api.put('/admin/families/' + f.id + '/billing-split', { mode: 'single' }); } catch (e2) {} }
           setMsg('✓ Family saved', true); refreshList();
         } catch (e) { setMsg((e.message || 'Save failed') + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '')); }
         save.disabled = false;

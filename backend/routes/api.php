@@ -995,6 +995,22 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            use. */
         Route::get   ('/admin/payroll/payout-methods',               [\App\Http\Controllers\Api\StaffPayoutMethodController::class, 'index'])->middleware('role:agency_admin,centre_director,platform_admin');
         Route::get   ('/admin/payroll/payout-methods/{user}/reveal', [\App\Http\Controllers\Api\StaffPayoutMethodController::class, 'reveal'])->where('user', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+        // Split family billing (2026-09-29)
+        Route::get ('/admin/families/{id}/billing-split', [\App\Http\Controllers\Api\BillingSplitController::class, 'show'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::put ('/admin/families/{id}/billing-split', [\App\Http\Controllers\Api\BillingSplitController::class, 'update'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+        // Grant tracking & reconciliation (2026-09-29)
+        // Batch payment run (2026-09-29): agency admins only.
+        Route::get ('/admin/payment-runs/preview', [\App\Http\Controllers\Api\PaymentRunController::class, 'preview'])->middleware('role:agency_admin,platform_admin');
+        Route::get ('/admin/payment-runs', [\App\Http\Controllers\Api\PaymentRunController::class, 'history'])->middleware('role:agency_admin,platform_admin');
+        Route::post('/admin/payment-runs', [\App\Http\Controllers\Api\PaymentRunController::class, 'run'])->middleware('role:agency_admin,platform_admin');
+        Route::get ('/admin/payment-runs/{id}', [\App\Http\Controllers\Api\PaymentRunController::class, 'show'])->where('id', '[0-9]+')->middleware('role:agency_admin,platform_admin');
+        Route::get ('/admin/grants', [\App\Http\Controllers\Api\GrantController::class, 'index'])->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::post('/admin/grants', [\App\Http\Controllers\Api\GrantController::class, 'save'])->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::get ('/admin/grants/{id}', [\App\Http\Controllers\Api\GrantController::class, 'show'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::post('/admin/grants/{id}', [\App\Http\Controllers\Api\GrantController::class, 'save'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::post('/admin/grants/{id}/transactions', [\App\Http\Controllers\Api\GrantController::class, 'addTransaction'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::delete('/admin/grants/{id}/transactions/{txnId}', [\App\Http\Controllers\Api\GrantController::class, 'deleteTransaction'])->where(['id' => '[0-9]+', 'txnId' => '[0-9]+'])->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::get ('/admin/grants/{id}/export.csv', [\App\Http\Controllers\Api\GrantController::class, 'csv'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
 
         Route::get   ('/provider/shifts/me',        [\App\Http\Controllers\Api\EducatorSelfController::class, 'myShifts']);
         Route::get   ('/provider/children',          [\App\Http\Controllers\Api\EducatorSelfController::class, 'children']);

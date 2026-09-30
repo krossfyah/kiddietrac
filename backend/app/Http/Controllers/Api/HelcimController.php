@@ -186,6 +186,7 @@ class HelcimController extends Controller
                     . ($paid['cardNumber'] ?? '') . ' approval ' . ($paid['approvalCode'] ?? '')),
                 'created_at' => now(),
                 'updated_at' => now(),
+                'payer_guardian_id' => \App\Support\BillingSplit::guardianFor((int) auth()->id(), (int) $sess->family_id),
             ]);
 
             DB::table('helcim_checkouts')->where('id', $sess->id)->update([

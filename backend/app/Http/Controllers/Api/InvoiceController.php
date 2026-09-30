@@ -54,6 +54,14 @@ final class InvoiceController extends Controller
         }
 
         $invoices = $q->get();
+        /* Split billing (2026-09-29): a parent who pays a share sees their share. */
+        $myGuardian = \App\Support\BillingSplit::guardianFor((int) $request->user()->id, (int) $child->family_id);
+        if ($myGuardian) {
+            foreach ($invoices as $inv) {
+                $mine = \App\Support\BillingSplit::shareFor($inv, $myGuardian);
+                if ($mine) { $inv->my_share = $mine; }
+            }
+        }
 
         // Merge integrated billing (e.g. iLearn) from external_invoices so the parent
         // sees their real invoices, not just KiddieTrac-native ones.
@@ -98,7 +106,8 @@ final class InvoiceController extends Controller
             })->all();
         }
 
-        $native = $invoices->map(fn ($i) => $this->formatInvoice($i))->all();
+        // my_share (split billing) survives formatting, so the parent sees their share.
+        $native = $invoices->map(function ($i) { $f = $this->formatInvoice($i); if (isset($i->my_share)) { $f['my_share'] = $i->my_share; } return $f; })->all();
         $all = array_merge($native, $extFormatted);
         usort($all, fn ($a, $b) => strcmp((string) ($b['issue_date'] ?? ''), (string) ($a['issue_date'] ?? '')));
         $all = array_slice($all, 0, $limit);
@@ -1200,6 +1209,8 @@ final class InvoiceController extends Controller
             'refunds' => $refunds,
             'guardians' => $guardians,
             'children' => $children,
+            // Split billing (2026-09-29): each payer's share, paid and balance; null when single.
+            'split' => \App\Support\BillingSplit::shares(DB::table('invoices')->where('id', $withHistory->id ?? $invoiceId)->first()),
         ]);
     }
 
@@ -2535,7 +2546,12 @@ final class InvoiceController extends Controller
                surcharge is a charge, and adding one because a rate happens to be
                configured would bill families nobody decided to bill. */
             'add_surcharge' => ['nullable', 'boolean'],
+            // Split billing (2026-09-29): which payer handed this over.
+            'payer_guardian_id' => ['nullable', 'integer'],
         ]);
+        if (! empty($data['payer_guardian_id'])) {
+            abort_unless(DB::table('guardians')->where('id', $data['payer_guardian_id'])->where('family_id', $invoice->family_id)->exists(), 422, 'That payer is not a guardian of this family.');
+        }
 
         /* Added BEFORE the payment is recorded, so the payment clears an invoice that
            already includes the fee. The other order leaves the invoice briefly paid and
@@ -2584,6 +2600,7 @@ final class InvoiceController extends Controller
                 'notes' => $data['notes'] ?? null,
                 'recorded_by_id' => $request->user()->id,
                 'status' => 'succeeded',
+                'payer_guardian_id' => $data['payer_guardian_id'] ?? null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

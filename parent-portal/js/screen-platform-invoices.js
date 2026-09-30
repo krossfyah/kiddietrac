@@ -96,13 +96,142 @@
 
      An agency with no next invoice date is deliberately NOT on recurring billing. That is
      how a customer is parked without throwing away their pricing. */
+  var INTERVAL_LABEL = { weekly: 'Weekly', biweekly: 'Every 2 weeks', monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Yearly' };
+
+  /* AUTOMATIC RAISING (2026-09-29). The nightly platform:billing-run (06:00) raises every
+     agency whose next invoice date has arrived, as drafts, then moves the date on by the
+     agency's cadence. The switch was only on the Billing settings screen, so from here it
+     looked as if nothing was automated. Auto-EMAIL stays on Billing settings: sending to a
+     customer is a separate, deliberate choice and is never turned on from here. */
+  function autoRow(box) {
+    if (!box) { return; }
+    api('/platform/billing-automation').then(function (a) {
+      box.innerHTML = '<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">'
+        + '<input type="checkbox" data-auto' + (a.auto_raise ? ' checked' : '') + ' style="margin-top:3px;">'
+        + '<span><strong style="color:#0F172A;">Raise invoices automatically</strong><br>'
+        + 'Every morning at 6:00, each agency whose next invoice date has arrived gets a draft invoice, and its next date moves on by its cadence (weekly, every 2 weeks, monthly, quarterly or yearly). '
+        + (a.auto_email ? 'Drafts are also emailed (set on Billing settings).' : 'Nothing is emailed: you review and send the drafts.') + '</span></label>';
+      var cb = box.querySelector('[data-auto]');
+      cb.addEventListener('change', function () {
+        cb.disabled = true;
+        api('/platform/billing-automation', 'PUT', { auto_raise: cb.checked, auto_email: !!a.auto_email && cb.checked })
+          .then(function (r) { a.auto_raise = r.auto_raise; a.auto_email = r.auto_email; cb.disabled = false; if (KT.toast) { KT.toast('✓', 'Saved', cb.checked ? 'Invoices will be raised automatically.' : 'Automatic raising is off.', '#16A34A'); } })
+          .catch(function (e) { cb.checked = !cb.checked; cb.disabled = false; window.alert(e.message); });
+      });
+    }).catch(function () { box.textContent = 'Could not load the automation setting.'; });
+  }
+
+  /* REVIEW BEFORE RAISING (2026-09-29). Replaces a window.confirm that listed names and
+     totals: each agency due is shown with where the invoice goes and the period it covers,
+     and the price, tax, due date and a note can be changed (optionally saved as the
+     agency's plan) or the agency unticked before anything is created. The server
+     recomputes tax and totals; it only takes the inputs. */
+  function reviewRaise(p, main) {
+    var will = p.would_raise || [], skip = p.skipped || [];
+    function taxOf(sub, bps) { return (sub <= 0 || bps <= 0) ? 0 : Math.floor((sub * bps + 5000) / 10000); }
+    function cents(v) { var n = Number(String(v).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? NaN : Math.round(n * 100); }
+    function dt(d) { if (!d) { return '—'; } var q = String(d).slice(0, 10).split('-'); return new Date(Date.UTC(+q[0], +q[1] - 1, +q[2], 12)).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); }
+    var F = 'height:30px;padding:0 8px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;box-sizing:border-box;';
+    var L = 'display:block;font-size:11.5px;color:#475569;font-weight:600;margin-bottom:3px;';
+
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;z-index:2147483000;padding:16px;';
+    var h = '<div role="dialog" aria-modal="true" style="background:#fff;border-radius:14px;width:100%;max-width:760px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;">'
+      + '<div style="padding:16px 20px 10px;border-bottom:1px solid #E5E7EB;"><div style="font-size:17px;font-weight:700;color:#0F172A;">'
+      + (will.length ? 'Review ' + will.length + ' invoice' + (will.length === 1 ? '' : 's') + ' due' : 'Nothing is due') + '</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + (will.length ? 'Check each agency, change anything that needs it, untick any to hold back. They are created as drafts: nothing is emailed.' : 'No agency has an invoice date that has arrived.') + '</div></div>'
+      + '<div style="overflow:auto;padding:12px 20px;flex:1;">';
+
+    will.forEach(function (x, ix) {
+      var cur = x.currency || 'CAD';
+      var noAddr = !x.address, noMail = !x.contact_email;
+      h += '<div data-row="' + ix + '" style="border:1px solid #E2E8F0;border-radius:10px;padding:12px 14px;margin-bottom:10px;">'
+        + '<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;"><input type="checkbox" data-inc checked style="margin-top:3px;">'
+        + '<span style="flex:1;min-width:0;"><strong style="font-size:14.5px;color:#0F172A;">' + esc(x.agency_name) + '</strong>'
+        + (x.legal_name && x.legal_name !== x.agency_name ? ' <span style="color:#64748B;font-size:12px;">(' + esc(x.legal_name) + ')</span>' : '')
+        + ' <span style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:9px;padding:0 7px;font-size:11px;font-weight:700;">' + esc(x.interval_label || INTERVAL_LABEL[x.interval] || x.interval) + '</span>'
+        + '<div style="font-size:12.5px;color:#475569;margin-top:3px;line-height:1.5;">Period ' + dt(x.period_start) + ' – ' + dt(x.period_end)
+        + (x.next_after ? ' · next invoice ' + dt(x.next_after) : '')
+        + '<br>Bill to: ' + (noMail ? '<span style="color:#B45309;">no billing email</span>' : esc(x.contact_email))
+        + ' · ' + (noAddr ? '<span style="color:#B45309;">no address on file (Billing plans → Business…)</span>' : esc(x.address)) + '</div></span></label>'
+        + '<div data-fields style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:10px;">'
+        + '<label><span style="' + L + '">Price before tax (' + esc(cur) + ')</span><input data-f="sub" value="' + ((Number(x.subtotal_cents) || 0) / 100).toFixed(2) + '" style="width:100%;' + F + '"></label>'
+        + '<label><span style="' + L + '">Tax %</span><input data-f="bps" value="' + ((Number(x.tax_rate_bps) || 0) / 100).toFixed(2) + '" style="width:100%;' + F + '"></label>'
+        + '<label><span style="' + L + '">Tax name</span><input data-f="label" value="' + esc(x.tax_label || '') + '" placeholder="HST" style="width:100%;' + F + '"></label>'
+        + '<label><span style="' + L + '">Due date</span><input data-f="due" type="date" value="' + esc(x.due_at || '') + '" style="width:100%;' + F + '"></label>'
+        + '<label style="grid-column:1/-1;"><span style="' + L + '">Note on the invoice (optional)</span><input data-f="notes" maxlength="1000" placeholder="e.g. Includes 2 extra centres from 15 Sep" style="width:100%;' + F + '"></label>'
+        + '</div>'
+        + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">'
+        + '<label style="font-size:12.5px;color:#475569;display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" data-f="save"> Use this price and tax for future invoices</label>'
+        + '<span style="flex:1"></span><span style="font-size:13px;color:#475569;">Total <strong data-total style="color:#0F172A;font-size:14px;"></strong></span></div>'
+        + '</div>';
+    });
+
+    if (skip.length) {
+      h += '<details style="margin-top:4px;"><summary style="cursor:pointer;font-size:13px;color:#475569;font-weight:600;">Not due (' + skip.length + ')</summary>'
+        + '<div style="font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.7;">' + skip.map(function (x) { return esc(x.agency_name) + ': ' + esc(x.skip_reason); }).join('<br>') + '</div></details>';
+    }
+    h += '</div><div style="padding:12px 20px;border-top:1px solid #E5E7EB;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
+      + '<span data-sum style="font-size:13px;color:#475569;flex:1;"></span>'
+      + '<button class="kt-btn kt-btn-secondary" data-x>' + (will.length ? 'Cancel' : 'Close') + '</button>'
+      + (will.length ? '<button class="kt-btn" data-go>Raise invoices</button>' : '') + '</div></div>';
+    ov.innerHTML = h;
+    document.body.appendChild(ov);
+
+    var go = ov.querySelector('[data-go]'), sumEl = ov.querySelector('[data-sum]');
+    function read(row) {
+      var f = function (k) { return row.querySelector('[data-f="' + k + '"]'); };
+      return { sub: cents(f('sub').value), bps: Math.round(Number(String(f('bps').value).replace(/[^0-9.]/g, '')) * 100), label: f('label').value.trim(), due: f('due').value, notes: f('notes').value.trim(), save: f('save').checked };
+    }
+    function paint() {
+      var n = 0, byCur = {};
+      ov.querySelectorAll('[data-row]').forEach(function (row) {
+        var x = will[+row.getAttribute('data-row')], v = read(row), on = row.querySelector('[data-inc]').checked;
+        var ok = !isNaN(v.sub) && v.sub >= 0 && !isNaN(v.bps);
+        var t = ok ? v.sub + taxOf(v.sub, v.bps) : NaN;
+        row.querySelector('[data-total]').textContent = ok ? money(t, x.currency) : 'check the amount';
+        row.style.opacity = on ? '1' : '.5';
+        row.querySelector('[data-fields]').style.pointerEvents = on ? '' : 'none';
+        if (on && ok) { n++; byCur[x.currency || 'CAD'] = (byCur[x.currency || 'CAD'] || 0) + t; }
+      });
+      if (sumEl) { sumEl.textContent = n ? n + ' to raise · ' + Object.keys(byCur).map(function (c) { return money(byCur[c], c); }).join(' + ') : 'None selected'; }
+      if (go) { go.disabled = !n; go.textContent = n ? 'Raise ' + n + ' invoice' + (n === 1 ? '' : 's') : 'Raise invoices'; }
+    }
+    ov.addEventListener('input', paint);
+    ov.addEventListener('change', paint);
+    paint();
+    ov.querySelector('[data-x]').onclick = function () { ov.remove(); };
+
+    if (go) {
+      go.onclick = function () {
+        var items = [], bad = null;
+        ov.querySelectorAll('[data-row]').forEach(function (row) {
+          if (!row.querySelector('[data-inc]').checked) { return; }
+          var x = will[+row.getAttribute('data-row')], v = read(row);
+          if (isNaN(v.sub) || v.sub < 0) { bad = bad || x.agency_name + ': the price is not a valid amount.'; }
+          else if (isNaN(v.bps) || v.bps < 0 || v.bps > 10000) { bad = bad || x.agency_name + ': the tax rate must be between 0 and 100%.'; }
+          else if (v.bps > 0 && !v.label) { bad = bad || x.agency_name + ': give the tax a name (HST, GST, VAT).'; }
+          else if (!v.due) { bad = bad || x.agency_name + ': pick a due date.'; }
+          items.push({ agency_id: x.agency_id, subtotal_cents: v.sub, tax_rate_bps: v.bps, tax_label: v.label || null, due_at: v.due, notes: v.notes || null, save_to_plan: v.save });
+        });
+        if (bad) { window.alert(bad); return; }
+        go.disabled = true; go.textContent = 'Raising…';
+        api('/platform/invoices/raise', 'POST', { commit: true, items: items }).then(function (r) {
+          ov.remove();
+          if (KT.toast) { KT.toast('✓', 'Invoices raised', (r.count || 0) + ' draft' + (r.count === 1 ? '' : 's') + ' created' + ((r.already_billed || []).length ? ', ' + r.already_billed.length + ' already billed' : ''), '#16A34A'); }
+          render(main);
+        }).catch(function (e) { go.disabled = false; paint(); window.alert(e.message || 'Could not raise the invoices'); });
+      };
+    }
+  }
+
   function planEditor(host) {
     host.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">Loading plans…</div>';
 
     api('/platform/billing-plans').then(function (data) {
       var rows = data.agencies || [];
       var currencies = data.currencies || ['CAD', 'USD'];
-      var intervals = data.intervals || ['monthly', 'quarterly', 'annual'];
+      var intervals = data.intervals || ['weekly', 'biweekly', 'monthly', 'quarterly', 'annual'];
       var INP = 'height:30px;padding:0 8px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;';
 
       var h = '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;'
@@ -139,7 +268,7 @@
           + '<td style="padding:8px 10px;"><select data-f="interval" style="' + INP + '">'
           + intervals.map(function (i) {
               return '<option value="' + esc(i) + '"' + (i === a.billing_interval ? ' selected' : '') + '>'
-                + esc(i.charAt(0).toUpperCase() + i.slice(1)) + '</option>';
+                + esc(INTERVAL_LABEL[i] || (i.charAt(0).toUpperCase() + i.slice(1))) + '</option>';
             }).join('')
           + '</select></td>'
           + '<td style="padding:8px 10px;white-space:nowrap;">'
@@ -183,8 +312,11 @@
           + '</div></td></tr>';
       });
 
-      h += '</tbody></table></div></div>';
+      h += '</tbody></table></div>'
+        + '<div id="kt-auto" style="margin-top:12px;padding:10px 12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;color:#475569;">Loading automation\u2026</div>'
+        + '</div>';
       host.innerHTML = h;
+      autoRow(host.querySelector('#kt-auto'));
 
       /* Label above input. The placeholder carries an EXAMPLE, never a default —
          a greyed-out address that looks filled in is how a placeholder ends up
@@ -479,32 +611,8 @@
           /* Preview first. This creates financial records, so it does not happen on
              one click — the confirm names exactly who would be billed. */
           api('/platform/invoices/raise', 'POST', { commit: false }).then(function (p) {
-            var will = p.would_raise || [];
-            var skip = p.skipped || [];
-            var reasons = function (list) {
-              return list.map(function (x) {
-                return '  - ' + x.agency_name + ' : ' + x.skip_reason;
-              }).join('\n');
-            };
-
-            if (!will.length) {
-              window.alert('Nothing to raise for this month.'
-                + (skip.length ? '\n\nSkipped:\n' + reasons(skip) : ''));
-              raiseBtn.disabled = false;
-              return;
-            }
-
-            var lines = will.map(function (x) {
-              return '  - ' + x.agency_name + '  ' + money(x.amount_cents, x.currency);
-            }).join('\n');
-            var msg = 'Raise ' + will.length + ' invoice(s) as DRAFT?\n\n' + lines
-              + (skip.length ? '\n\nSkipped ' + skip.length + ':\n' + reasons(skip) : '')
-              + '\n\nNothing is emailed - they are created as drafts.';
-
-            if (!window.confirm(msg)) { raiseBtn.disabled = false; return; }
-
-            return api('/platform/invoices/raise', 'POST', { commit: true })
-              .then(function () { render(main); });
+            raiseBtn.disabled = false;
+            reviewRaise(p, main);
           }).catch(function (err) {
             raiseBtn.disabled = false;
             if (KT.toast) { KT.toast('!', 'Could not raise invoices', err.message, '#DC2626'); }

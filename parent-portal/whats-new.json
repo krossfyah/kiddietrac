@@ -4,6 +4,49 @@
   {
    "type": "new",
    "date": "2026-09-29",
+   "icon": "💳",
+   "title": "Payment run",
+   "body": "Finance → Payment run: see every auto-pay family with an open balance, untick anyone to hold back, and charge their saved cards in one go. Each run, including the nightly one, is kept with its results, and families with no card on file are listed so nobody is assumed paid.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "✂️",
+   "title": "Split family billing",
+   "body": "Families → Edit → Billing split: set what share each guardian pays. Each parent sees and pays their own share, payments can be recorded against the parent who paid, and each gets their own childcare expense receipt for taxes.",
+   "roles": [
+    "agency_admin",
+    "centre_director",
+    "guardian"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "🏛️",
+   "title": "Grant tracking",
+   "body": "Finance → Grants: record operating, wage-enhancement and other funding, what was received and spent, and see whether spending is on pace before the report is due. Exports to CSV.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
+   "icon": "🧾",
+   "title": "Childcare expense receipts",
+   "body": "Billing now has a Childcare expense receipts card: download what you paid this year or last year for your income tax return.",
+   "roles": [
+    "guardian"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-09-29",
    "icon": "🎤",
    "title": "Speak your observations",
    "body": "On a new observation, press Speak it and talk instead of typing: the words appear in the box, in the language the portal is set to, for you to check before saving. In the phone app, use the microphone on your keyboard.",

@@ -307,6 +307,7 @@
         { label: 'Finance', items: [
           { hash: 'late-events',      label: 'Late pick-ups',    icon: '⏰' },
           { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
+          { hash: 'payment-run',      label: 'Payment run',      icon: '💳' },
           { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
           { hash: 'payment-plans',    label: 'Payment schedules', icon: '📅' },
           { hash: 'refunds',          label: 'Refunds',          icon: '↩' },
@@ -315,6 +316,7 @@
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
           { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
           { hash: 'donations',        label: 'Donations',        icon: '💝' },
+          { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Administration', items: [
@@ -493,6 +495,7 @@
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
           { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
+          { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
           { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
@@ -1034,6 +1037,8 @@
     'tuition-increases': 'Plan and communicate a fee increase.',
     'sibling-discounts': 'Discounts for second and subsequent children.',
     'donations': 'Fundraising campaigns, gifts and donation receipts.',
+    'grants': 'Operating and wage-enhancement funding: awarded, received, spent and reported.',
+    'payment-run': 'Charge every auto-pay family\'s open invoices on their saved card, with a preview and results.',
     'compliance-evidence': 'SOC 2 readiness: policies, the control matrix and live evidence exports.',
     'vacation-holds': 'Places held while a family is away.',
     'expenses': 'Suppliers, purchase orders and bills.',

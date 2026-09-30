@@ -161,34 +161,11 @@ final class StripeParentPayController extends Controller
             $pi = $event->data->object;
             $invoiceId = (int) ($pi->metadata->invoice_id ?? 0);
             if ($invoiceId) {
+                // Was where('stripe_pi_id') -- a column that does not exist, so the check threw
+                // and no webhook payment was ever written. AutopayRunner::record dedupes on
+                // stripe_payment_id (the run may already have recorded this charge).
                 $amount = ((int) $pi->amount_received) / 100;
-                $exists = DB::table('payments')->where('stripe_pi_id', $pi->id)->exists();
-                if (!$exists) {
-                    DB::table('payments')->insert([
-                        'invoice_id'   => $invoiceId,
-                        'amount'       => $amount,
-                        // 'stripe' was never a member of payments.method — the insert
-                        // would have failed on the enum even with the right column names.
-                        'method'       => 'stripe_card',
-                        'paid_at'      => now(),
-                        // Column is stripe_payment_id. As stripe_pi_id it threw, so a
-                        // charge Stripe had already taken was never written down.
-                        'stripe_payment_id' => $pi->id,
-                        'status'       => 'succeeded',
-                        'family_id'    => $invoice->family_id ?? null,
-                        'created_at'   => now(),
-                        'updated_at'   => now(),
-                    ]);
-                    $inv = DB::table('invoices')->where('id', $invoiceId)->first();
-                    if ($inv) {
-                        $newBal = max(0, ((float) $inv->balance_due) - $amount);
-                        DB::table('invoices')->where('id', $invoiceId)->update([
-                            'balance_due' => $newBal,
-                            'status'      => $newBal <= 0.01 ? 'paid' : $inv->status,
-                            'updated_at'  => now(),
-                        ]);
-                    }
-                }
+                \App\Support\AutopayRunner::record($invoiceId, isset($pi->metadata->family_id) ? (int) $pi->metadata->family_id : null, (string) $pi->id, $amount);
             }
         }
         return response()->json(['ok' => true]);

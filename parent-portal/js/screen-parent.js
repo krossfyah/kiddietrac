@@ -1957,10 +1957,12 @@
 
     try {
       const data = await Api.get(`/parent/children/${child.id}/invoices`);
+      ktMyShare(data.invoices);
       Dom.clear(container);
 
       // Above the list: the thing you came here to do.
       try { await ktZumSection(container, data.invoices || []); } catch (e) { /* never block the invoices */ }
+      try { ktReceiptsCard(container, child); } catch (e) { /* optional */ }
 
       (data.invoices || []).forEach(inv => {
         const _payable = (inv.balance_due || 0) > 0 && inv.status !== 'paid';
@@ -2443,6 +2445,7 @@
     cont.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-500);padding:20px;font-size:13px;' }, 'Loading…'));
     try {
       const data = await cget(`/parent/children/${child.id}/invoices`);
+      ktMyShare(data.invoices);
       Dom.clear(cont);
       try { await ktZumSection(cont, data.invoices || []); } catch (e) { /* never block the invoices */ }
       (data.invoices || []).forEach(inv => {
@@ -2491,6 +2494,51 @@
   }
 
   // Full-screen invoice detail + pay. Covers the bottom bar (z above it).
+  /* SPLIT BILLING (2026-09-29). When the family splits the bill, a parent owes THEIR
+     share: every view below reads balance_due, so for a split invoice it becomes this
+     parent's own balance, and the family figure is kept alongside for the detail note. */
+  function ktMyShare(invoices) {
+    (invoices || []).forEach(function (inv) {
+      var s = inv && inv.my_share;
+      if (!s || inv._shareApplied) { return; }
+      inv._shareApplied = true;
+      inv.family_balance_due = inv.balance_due;
+      inv.family_total = inv.total;
+      inv.balance_due = Number(s.balance) || 0;
+    });
+    return invoices;
+  }
+
+  /* CHILDCARE EXPENSE RECEIPTS (2026-09-29). The annual receipt existed on the server
+     (PdfController::t4a) and nothing in the portal linked to it. A parent in a split
+     family gets their own receipt (the server decides whose). */
+  function ktReceiptsCard(container, child) {
+    var famId = child && (child.family_id || (child.family && child.family.id));
+    if (!famId) { return; }
+    var y = new Date().getFullYear();
+    var card = Dom.el('div', { style: 'background:#fff;border:1px solid var(--ink-100,#E2E8F0);border-radius:14px;padding:12px 14px;margin:0 0 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;' });
+    card.appendChild(Dom.el('div', { style: 'flex:1;min-width:180px;' }, [
+      Dom.el('div', { style: 'font-weight:800;color:var(--ink-900);font-size:14px;' }, '🧾 Childcare expense receipts'),
+      Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);' }, 'For your income tax return: what you paid each year.'),
+    ]));
+    [y, y - 1].forEach(function (yr) {
+      var b = Dom.el('button', { type: 'button', style: 'border:1px solid #CBD5E1;background:#fff;border-radius:9px;padding:7px 12px;font-weight:700;font-size:13px;cursor:pointer;' }, String(yr));
+      b.addEventListener('click', async function () {
+        b.disabled = true;
+        try {
+          var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+          var res = await fetch(((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1') + '/families/' + famId + '/t4a/' + yr, { headers: { Authorization: 'Bearer ' + tok } });
+          if (!res.ok) { throw new Error('Could not get the receipt (' + res.status + ')'); }
+          var a = document.createElement('a'); a.href = URL.createObjectURL(await res.blob()); a.download = 'Childcare-Receipt-' + yr + '.pdf';
+          document.body.appendChild(a); a.click(); a.remove();
+        } catch (e) { if (KT.toast) { KT.toast('⚠️', 'Receipt', e.message || 'Could not download', '#B91C1C'); } }
+        b.disabled = false;
+      });
+      card.appendChild(b);
+    });
+    container.appendChild(card);
+  }
+
   function openInvoiceDetail(inv, child) {
     const appMain = document.getElementById('appMain');
     if (!appMain) return;
@@ -2532,6 +2580,12 @@
 
     const body = Dom.el('div', { style: 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;' });
     tw.appendChild(body);
+    if (inv.my_share) {
+      const s = inv.my_share, m = function (v) { return '$' + Number(v || 0).toFixed(2); };
+      body.appendChild(Dom.el('div', { style: 'background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:13.5px;line-height:1.5;' },
+        'Your family splits this bill. Your share is ' + s.pct + '%: ' + m(s.share) + ' of ' + m(inv.family_total != null ? inv.family_total : inv.total)
+        + '. You have paid ' + m(s.paid) + ' and owe ' + m(s.balance) + '.'));
+    }
 
     const money = (n) => '$' + (Number(n) || 0).toFixed(2);
     const sc = inv.status === 'paid' ? 'var(--brand-green)' : (inv.status === 'overdue' ? '#c0392b' : 'var(--ink-500)');

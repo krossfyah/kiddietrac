@@ -1,5 +1,5 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>T4A Tax Receipt {{ $year }}</title>
+<html><head><meta charset="utf-8"><title>Childcare Expense Receipt {{ $year }}</title>
 <style>
   body { font-family: 'DejaVu Sans', sans-serif; color: #1F2937; font-size: 11pt; }
   .header { border-bottom: 2px solid #1F6080; padding-bottom: 10px; margin-bottom: 20px; }
@@ -16,12 +16,13 @@
 </style></head>
 <body>
   <div class="header">
-    <h1>Tax Receipt — {{ $year }}</h1>
+    <h1>Childcare Expense Receipt — {{ $year }}</h1>
     <div class="agency-name">{{ $agency->name ?? 'KiddieTrac' }}</div>
   </div>
 
   <div class="meta">
-    <strong>Issued to:</strong> {{ $family->family_name }}<br>
+    <strong>Issued to:</strong> {{ !empty($payerName) ? $payerName . ' (' . $family->family_name . ')' : $family->family_name }}<br>
+    @if (!empty($payerName))<strong>Share:</strong> the payments made by {{ $payerName }} under the family's split billing<br>@endif
     <strong>Period:</strong> January 1 to December 31, {{ $year }}<br>
     @if (!empty($children))
       <strong>For:</strong> {{ implode(', ', $children) }}<br>

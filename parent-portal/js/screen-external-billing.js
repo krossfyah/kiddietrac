@@ -199,6 +199,8 @@
       + '<div style="display:flex;justify-content:space-between;background:#FFF7ED;border:1px solid #FED7AA;'
       + 'border-radius:10px;padding:10px 13px;margin-bottom:16px;font-size:13px;color:#7C2D12;">'
       + '<span>Outstanding</span><strong>' + money(balance, cur) + '</strong></div>'
+      // Split billing (2026-09-29): filled in below when the family splits the bill.
+      + '<div id="rp-payer-wrap" hidden></div>'
 
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
       + '<label style="' + lab + '">Amount being settled'
@@ -244,6 +246,25 @@
        allowed; the point is that nobody records one by accident. */
     var amtEl = m.querySelector('#rp-amt');
     var msgEl = m.querySelector('#rp-msg');
+    /* WHO PAID (split billing). The payment counts toward that payer's share; left on
+       "Not specified" it is shared across payers by their percentage. */
+    var payerWrap = m.querySelector('#rp-payer-wrap'), payerSel = null;
+    if (kind === 'kt') {
+      Api.get('/director/invoices/' + inv.id).then(function (d) {
+        var sp = d && d.split;
+        if (!sp || !sp.length) { return; }
+        payerWrap.hidden = false;
+        payerWrap.innerHTML = '<label style="' + lab + '">Paid by'
+          + '<select id="rp-payer" style="' + fld + '"><option value="">Not specified (shared by percentage)</option>'
+          + sp.map(function (s) { return '<option value="' + s.guardian_id + '" data-bal="' + s.balance + '">' + esc(s.name) + ' — ' + s.pct + '% · owes ' + money(s.balance, cur) + '</option>'; }).join('')
+          + '</select></label>';
+        payerSel = payerWrap.querySelector('#rp-payer');
+        payerSel.addEventListener('change', function () {
+          var o = payerSel.options[payerSel.selectedIndex];
+          if (o && o.getAttribute('data-bal')) { amtEl.value = Number(o.getAttribute('data-bal')).toFixed(2); amtEl.dispatchEvent(new Event('input')); }
+        });
+      }).catch(function () {});
+    }
     var reflect = function () {
       var a = parseFloat(amtEl.value);
       if (isNaN(a) || a <= 0) { msgEl.textContent = ''; return; }
@@ -319,6 +340,7 @@
           notes: (m.querySelector('#rp-note').value || '').trim() || null,
           add_surcharge: !surWrap.hidden && surBox.checked,
         };
+        if (payerSel && payerSel.value) { payload.payer_guardian_id = parseInt(payerSel.value, 10); }
         var r = await Api.post(kind === 'kt'
           ? '/director/invoices/' + inv.id + '/payments'
           : '/agency/external-invoices/' + inv.id + '/payments', payload);
@@ -401,6 +423,22 @@
       m.innerHTML = '<div style="padding:28px;color:#DC2626;font-size:14px;">'
         + esc((e && e.message) || 'Could not load that invoice.') + '</div>';
       return;
+    }
+
+    /* SPLIT BILLING (2026-09-29): each payer's share of this invoice, what they have
+       paid (their own payments + their percentage of unattributed ones) and what is left. */
+    function splitTable() {
+      var sp = (data && data.split) || null;
+      if (!sp || !sp.length) { return ''; }
+      var c = ((data && data.invoice) || {}).currency || 'CAD';
+      return '<div style="margin-top:10px;border:1px solid #BFDBFE;background:#EFF6FF;border-radius:10px;padding:8px 10px;">'
+        + '<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1E40AF;margin-bottom:4px;">Split between payers</div>'
+        + sp.map(function (s) {
+          return '<div style="display:flex;gap:8px;align-items:baseline;font-size:12.5px;padding:3px 0;color:#1E293B;">'
+            + '<strong style="flex:1;min-width:0">' + esc(s.name) + ' <span style="color:#64748B;font-weight:600">' + s.pct + '%</span></strong>'
+            + '<span>share ' + money(s.share, c) + '</span><span style="color:#166534">paid ' + money(s.paid, c) + '</span>'
+            + '<span style="font-weight:800;color:' + (s.balance > 0.005 ? '#B45309' : '#166534') + '">owes ' + money(s.balance, c) + '</span></div>';
+        }).join('') + '</div>';
     }
 
     function paint() {
@@ -505,6 +543,7 @@
             : '')
         + (famAddress(fam) ? '<div style="font-size:12px;color:#64748B;">' + esc(famAddress(fam)) + '</div>' : '')
         + '<div style="margin-top:8px;">' + people + '</div>'
+        + splitTable()
         + '<div style="font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#64748B;margin-top:12px;">'
         + (kids.length === 1 ? 'Child' : 'Children (' + kids.length + ')') + '</div>'
         + kidCards
