@@ -29,6 +29,9 @@ import json
 import os
 import re
 import sys
+import urllib.request
+
+import ssr_i18n
 
 BASE = 'https://www.kiddietrac.com'
 LANGS = ['en', 'fr', 'es', 'hi']
@@ -192,6 +195,70 @@ def article(p, lang, posts):
             + '</div></section></div>')
 
 
+def load_dict(root, lang):
+    """The same dictionary the page's translator loads: /i18n/<lang>.json + the portal's /extra."""
+    d = json.load(open(os.path.join(root, 'i18n', lang + '.json'), encoding='utf-8'))
+    try:
+        r = urllib.request.urlopen('https://api.kiddietrac.com/api/v1/marketing-site/i18n/%s/extra' % lang, timeout=20)
+        extra = json.loads(r.read().decode('utf-8')) or {}
+        d.update(extra)
+    except Exception as e:  # the built dictionary alone is still a full translation
+        print('  (no /extra for %s: %s)' % (lang, e))
+    return d
+
+
+def inner_span(doc, el_id):
+    tree = ssr_i18n.Tree(doc)
+    stack = list(tree.root.kids)
+    while stack:
+        e = stack.pop()
+        if isinstance(e, ssr_i18n.El):
+            if e.attrs.get('id') == el_id:
+                return e.end, e.cstart
+            stack.extend(e.kids)
+    raise AssertionError('no #' + el_id)
+
+
+def lang_base(doc, lang, posts, d):
+    """The whole page in one language: blog cards in that language, then every sentence the
+    page's translator would translate, translated on the server."""
+    if lang != 'en':
+        a, b = inner_span(doc, 'blogGrid')
+        doc = doc[:a] + ''.join(card(p, lang) for p in posts) + doc[b:]
+        doc = one(doc, 'id="blogGrid"', 'id="blogGrid" translate="no"')
+        doc, st = ssr_i18n.translate_doc(doc, d)
+        print('  %s: %d/%d sentences, %d labels, %d attributes, %d options translated' % (
+            lang, st['units_tr'], st['units'], st['loose_tr'], st['attrs'], st['options']))
+    # Tells the page's scripts which language the words are already in.
+    return doc.replace('<head>', '<head>\n<script>window.KT_SSR_LANG="%s";</script>' % lang, 1)
+
+
+NOT_FOUND = ('<div class="page active" id="page-notfound"><div class="hero-band"><div class="container">'
+             '<div class="section-label" style="color:var(--green-lt)">404</div>'
+             '<h1 class="section-title" style="color:white">We couldn’t find that page</h1>'
+             '<p class="section-sub" style="color:rgba(255,255,255,.82);margin:0 auto">The link may be out of date, or the address may have a typo.</p>'
+             '</div></div><section class="section"><div class="container" style="text-align:center;max-width:720px">'
+             '<p style="font-size:17px;margin-bottom:22px">Here are the places most people are looking for:</p>'
+             '<div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:26px">'
+             + ''.join('<a class="btn-secondary" href="%s" onclick="showPage(\'%s\');return false;">%s</a>' % (h, pid, t) for h, pid, t in [
+                 ('/', 'home', 'Home'), ('/solutions', 'solutions', 'Features'), ('/pricing', 'pricing', 'Pricing'),
+                 ('/blog', 'blog', 'Blog'), ('/contact', 'contact', 'Book a demo'), ('/support', 'support', 'Get support')])
+             + '</div><p style="color:#64748B">Already a customer? <a href="https://app.kiddietrac.com/">Sign in to KiddieTrac</a>.</p>'
+             '</div></section></div>')
+
+
+def not_found_page(doc):
+    d = re.sub(r'<title>[^<]*</title>', '<title>Page not found | KiddieTrac</title>', doc, count=1)
+    d = set_attr(d, r'<meta name="description" content="([^"]*)"', 'The page you were looking for is not on the KiddieTrac website.')
+    d = set_attr(d, r'<meta name="robots" content="([^"]*)"', 'noindex,follow')
+    d = re.sub(r'<link rel="canonical" href="[^"]*">\s*', '', d, count=1)
+    d = re.sub(r'<!--KT-ALT-->.*?<!--/KT-ALT-->', '', d, count=1, flags=re.S)
+    d = re.sub(r'<script type="application/ld\+json">(?:(?!</script>).)*"FAQPage"(?:(?!</script>).)*</script>\s*', '', d, count=1, flags=re.S)
+    d = one(d, '<div class="page active" id="page-home">', NOT_FOUND + '<div class="page" id="page-home">')
+    # The router would otherwise take an unknown address to the home page.
+    return d.replace('<head>', '<head>\n<script>window.KT_NOT_FOUND=location.pathname;</script>', 1)
+
+
 def main():
     src, root = sys.argv[1], sys.argv[2]
     dry = '--dry' in sys.argv
@@ -248,7 +315,15 @@ def main():
             put('blog/body/%s.%s.html' % (slug, l), b)
 
     sitemap = []
+    slim_doc = doc
     for lang in LANGS:
+        doc = lang_base(slim_doc, lang, posts, None if lang == 'en' else load_dict(root, lang))
+        if lang == 'en':
+            nf = not_found_page(doc)
+            put('p/404.html', nf)
+            # The host's own config sends every 404 to /404.shtml (the .htaccess ErrorDocument
+            # is not honoured), so that file IS the not-found page.
+            put('404.shtml', nf)
         mt = meta_en if lang == 'en' else meta_i18n[lang]
         home_t = UI[lang]['Home']
         for pid in page_ids:

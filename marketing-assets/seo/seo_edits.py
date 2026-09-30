@@ -52,6 +52,10 @@ def seo(out):
     head_js = (
         '<script>/* SEO addresses (seo_edits.py): /fr /es /hi carry the language. */(function(){'
         'var m=/^\\/(fr|es|hi)(?=\\/|$)/.exec(location.pathname);'
+        # A saved choice of French/Spanish/Hindi opens that language's page directly, before
+        # anything paints (English pages only: window.KT_SSR_LANG is set by seo_pages.py).
+        'if(!m&&window.KT_SSR_LANG==="en"){try{var st=localStorage.getItem("kt_lang");'
+        'if(st==="fr"||st==="es"||st==="hi"){location.replace("/"+st+(location.pathname==="/"?"":location.pathname)+location.search+location.hash);}}catch(e){}}'
         'window.KT_PATH_LANG=m?m[1]:"";window.KT_LP=m?"/"+m[1]:"";'
         'window.__ktInitialPath=m?(location.pathname.slice(m[0].length)||"/"):location.pathname;'
         'function rest(){return location.pathname.replace(/^\\/(fr|es|hi)(?=\\/|$)/,"")||"/";}'
@@ -90,6 +94,10 @@ def seo(out):
          "window.ktApplyMeta=function(i){ applyMeta(i); }; function applyCanon(id){ var r=(id&&id!=='home')?('/'+id):'/'; if(window.ktSetAlt){ window.ktSetAlt(r); return; } var u='https://www.kiddietrac.com'+r; if(canEl)canEl.setAttribute('href',u); if(ogu)ogu.setAttribute('content',u); }"),
         ("var path=(id&&id!=='home')?('/'+id):'/';\n        if(location.pathname!==path || location.hash){ history.pushState({ktid:id},'',path); }",
          "var path=(id&&id!=='home')?('/'+id):'/'; var LP=window.KT_LP||''; var full=path==='/'?(LP||'/'):LP+path;\n        if(location.pathname!==full || location.hash){ history.pushState({ktid:id},'',full); }"),
+        ("var id=pageIdFor(seg)||'home';",
+         "var id=pageIdFor(seg)||((window.KT_NOT_FOUND&&window.KT_NOT_FOUND===location.pathname)?'notfound':'home');"),
+        ("window.ktRoute=function(){",
+         "window.ktRoute=function(){ if(window.KT_NOT_FOUND && window.KT_NOT_FOUND===location.pathname){ return; }"),
         ("var seg=(location.pathname||'/').replace(/^\\/+|\\/+$/g,'');",
          "var seg=(location.pathname||'/').replace(/^\\/(fr|es|hi)(?=\\/|$)/,'').replace(/^\\/+|\\/+$/g,'');", 2),
     ])
@@ -99,11 +107,42 @@ def seo(out):
         ("try { localStorage.setItem('kt_lang', l); } catch (e) {}",
          "try { localStorage.setItem('kt_lang', l); } catch (e) {}\n    try { if (window.ktLangUrl) window.ktLangUrl(l); } catch (e) {}"),
         ("var want = null;\n    try { want = localStorage.getItem('kt_lang'); } catch (e) {}",
-         "var want = window.KT_PATH_LANG || null;\n    if (!want) { try { want = localStorage.getItem('kt_lang'); } catch (e) {} }"),
+         "if (window.KT_SSR_LANG && window.KT_SSR_LANG !== 'en') { ssrStart(window.KT_SSR_LANG); return; }\n"
+         "    var want = window.KT_PATH_LANG || null;\n    if (!want) { try { want = localStorage.getItem('kt_lang'); } catch (e) {} }"),
+        # Server-translated page (seo_pages.py + ssr_i18n.py): the words are already in the
+        # page. Load the dictionary only for text other scripts write later; nothing to report.
+        ("function report(k, en) {\n    if (lang === 'en' ||",
+         "function report(k, en) {\n    if (window.KT_SSR_LANG && window.KT_SSR_LANG !== 'en') return;\n    if (lang === 'en' ||"),
+        # Each language is its own page now: switching opens that page (a translated page has
+        # no English originals to switch back to in place).
+        ("l = (l === 'fr' || l === 'es' || l === 'hi') ? l : 'en';   // Hindi added 2026-09-29",
+         "l = (l === 'fr' || l === 'es' || l === 'hi') ? l : 'en';   // Hindi added 2026-09-29\n"
+         "    if (window.KT_SSR_LANG && l !== window.KT_SSR_LANG) {\n"
+         "      try { localStorage.setItem('kt_lang', l); } catch (e) {}\n"
+         "      var r = location.pathname.replace(/^\\/(fr|es|hi)(?=\\/|$)/, '') || '/', lp = l === 'en' ? '' : '/' + l;\n"
+         "      location.assign((r === '/' ? (lp || '/') : lp + r) + location.search + location.hash);\n"
+         "      return Promise.resolve();\n"
+         "    }"),
+        ("  function start() {",
+         "  function ssrStart(l) {\n"
+         "    lang = l;\n"
+         "    try { currentLang = l; } catch (e) {}\n"
+         "    document.querySelectorAll('.lang-btn').forEach(function (b) { b.classList.toggle('active', b.textContent.trim().toLowerCase() === l); });\n"
+         "    return load(l).then(function (d) {\n"
+         "      if (lang !== l) return;\n"
+         "      dict = d; byText = indexText(d);\n"
+         "      quiet(function () { walk(document.body); });\n"
+         "      hooks();\n"
+         "      try { document.dispatchEvent(new CustomEvent('kt:lang', { detail: l })); } catch (e) {}\n"
+         "    }).catch(function () {});\n"
+         "  }\n"
+         "  function start() {"),
     ])
 
     # 4. Blog: addresses keep the prefix; reuse a server-rendered article; bodies on demand.
     out = _in_script(out, 'THE BLOG HAD NO ARTICLES', [
+        ("function L() { try { return (window.ktI18n && window.ktI18n.lang()) || 'en'; } catch (e) { return 'en'; } }",
+         "function L() { try { var l = window.ktI18n && window.ktI18n.lang(); if ((!l || l === 'en') && window.KT_SSR_LANG) return window.KT_SSR_LANG; return l || 'en'; } catch (e) { return 'en'; } }"),
         ("'<a class=\"blog-more\" href=\"/blog/' + esc(p.slug)",
          "'<a class=\"blog-more\" href=\"' + (window.KT_LP || '') + '/blog/' + esc(p.slug)"),
         ("<a class=\"kt-post-back\" href=\"/blog\">",
