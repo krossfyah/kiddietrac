@@ -271,9 +271,17 @@ final class MarketingSiteController extends Controller
             'agency'     => 'nullable|string|max:160',
             'interest'   => 'nullable|string|max:80',
             'message'    => 'nullable|string|max:5000',
+            // Qualifying questions (2026-09-29, after ChildCarePro's form)
+            'centres'    => 'nullable|string|max:20',
+            'capacity'   => 'nullable|string|max:20',
+            'priorities' => 'nullable|array|max:8',
+            'priorities.*' => 'string|max:60',
         ]);
         $email = strtolower(trim($data['email']));
         $name = trim($data['first_name'] . ' ' . ($data['last_name'] ?? ''));
+        $centres = trim((string) ($data['centres'] ?? ''));
+        $capacity = trim((string) ($data['capacity'] ?? ''));
+        $priorities = array_values(array_filter(array_map('trim', (array) ($data['priorities'] ?? []))));
         $agency = trim((string) ($data['agency'] ?? ''));
         $interest = trim((string) ($data['interest'] ?? ''));
         $message = trim((string) ($data['message'] ?? ''));
@@ -288,19 +296,24 @@ final class MarketingSiteController extends Controller
                     'name' => $name, 'company' => $agency ?: null, 'email' => $email, 'phone' => $data['phone'] ?? null,
                     'source' => 'marketing-site', 'stage' => 'new', 'status' => 'open', 'last_activity_at' => now(),
                     'notes' => 'Contact form' . ($interest ? ' — ' . $interest : '') . '.',
+                    'num_locations' => is_numeric($centres) ? (int) $centres : null,
+                    'num_children' => is_numeric($capacity) ? (int) $capacity : null,
                 ]);
             } else {
                 $lead->update(['last_activity_at' => now()]);
             }
             \App\Models\SalesActivity::create(['lead_id' => $lead->id, 'type' => 'note', 'done' => false,
-                'body' => 'Contact form' . ($interest ? ' (' . $interest . ')' : '') . ":\n" . ($message ?: '(no message)')]);
+                'body' => 'Contact form' . ($interest ? ' (' . $interest . ')' : '') . ":\n" . ($message ?: '(no message)')
+                    . ($centres || $capacity ? "\nCentres: " . ($centres ?: '?') . ' · Capacity: ' . ($capacity ?: '?') : '')
+                    . ($priorities ? "\nTop priorities: " . implode(', ', $priorities) : '')]);
             $leadId = $lead->id;
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('Contact form lead failed', ['email' => $email, 'error' => $e->getMessage()]);
         }
 
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-        $rows = ['Name' => $name, 'Email' => $email, 'Phone' => $data['phone'] ?? '', 'Agency' => $agency, 'Interested in' => $interest];
+        $rows = ['Name' => $name, 'Email' => $email, 'Phone' => $data['phone'] ?? '', 'Agency' => $agency, 'Interested in' => $interest,
+            'Centres' => $centres, 'Licensed capacity' => $capacity, 'Top priorities' => implode(', ', $priorities)];
         $t = '';
         foreach ($rows as $k => $v) {
             $t .= '<tr><td style="padding:5px 14px 5px 0;color:#64748b;font-size:13px">' . $e($k) . '</td><td style="padding:5px 0;font-size:14px;font-weight:600">' . $e($v ?: '—') . '</td></tr>';

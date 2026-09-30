@@ -63,7 +63,8 @@ final class SupportTicketController extends Controller
             ->leftJoin('users as assigned', 'assigned.id', '=', 't.assigned_user_id')
             ->orderByDesc('t.created_at')
             ->select('t.*',
-                DB::raw("CONCAT(raised.first_name,' ',raised.last_name) as raised_by_name"),
+                // A website ticket has no account behind it (2026-09-29): show who wrote in.
+                DB::raw("COALESCE(CONCAT(raised.first_name,' ',raised.last_name), CONCAT(t.requester_name,' <',t.requester_email,'> · website')) as raised_by_name"),
                 DB::raw("CONCAT(assigned.first_name,' ',assigned.last_name) as assigned_name"));
         if ($isStaff) {
             // SECURITY (v22p96): resolve the active agency securely (honours the

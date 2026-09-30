@@ -510,6 +510,9 @@ Route::post('/marketing-site/i18n/missing', [\App\Http\Controllers\Api\Marketing
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/marketing-site/subscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'subscribeNewsletter'])->middleware('throttle:5,10,mknews');
 Route::post('/marketing-site/contact', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitContact'])->middleware('throttle:5,10,mkcontact');
+// Website support tickets + toll-free voicemail (2026-09-29)
+Route::post('/marketing-site/support', [\App\Http\Controllers\Api\WebsiteSupportController::class, 'submitTicket'])->middleware('throttle:5,10,mksupport');
+Route::post('/voice/voicemail/{token}', [\App\Http\Controllers\Api\WebsiteSupportController::class, 'voicemail'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:60,1,voicemail');
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1');
 
 // PUBLIC — Zum Rails settlement callbacks. No auth: Zum calls this, not a user. Guarded
