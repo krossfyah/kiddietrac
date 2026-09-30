@@ -1,0 +1,20 @@
+{
+  "voice": "Azure.en-CA-ClaraNeural",
+  "day": [
+    "This is today, at a glance.",
+    "See who's arrived, who's gone home, and every meal, nap and activity your team has logged, for any centre, on any day.",
+    "Scroll down to see which children are still in, and which staff are on the floor right now."
+  ],
+  "ratios": [
+    "KiddieTrac tracks your staff-to-child ratios live, room by room.",
+    "Every room shows its children, its staff, and how many educators Ontario's rules require.",
+    "So you know before a room goes out of ratio, not after."
+  ],
+  "parent": [
+    "Here's what parents see.",
+    "Their child's status, balance and photos, on one home screen.",
+    "Tap Today for the whole day as it happened: meals, naps, and a story from the educator.",
+    "Message the room team directly.",
+    "And pay by card, bank account or Interac, with the subsidy already taken off."
+  ]
+}

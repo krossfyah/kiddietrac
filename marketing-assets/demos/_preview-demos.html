@@ -98,6 +98,13 @@ section{padding:70px 0}
 .lb video{max-width:min(1100px,96vw);max-height:86vh;border-radius:14px;background:#000}
 .lb button{position:absolute;top:18px;right:22px;background:#fff;border:0;border-radius:99px;width:40px;height:40px;font-size:22px;cursor:pointer}
 @media (max-width:900px){.clips{grid-template-columns:minmax(0,1fr)}}
+/* Captions over the silent preview, and the play-with-sound button. */
+.clip .cap{position:absolute;left:8%;right:8%;bottom:10px;text-align:center;pointer-events:none;z-index:2}
+.clip .cap span{display:inline;background:rgba(10,20,40,.78);color:#fff;font-weight:800;font-size:12.5px;line-height:1.7;padding:2px 8px;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.clip .cap:empty{display:none}
+.clip .snd{position:absolute;top:10px;right:10px;z-index:3;border:0;border-radius:99px;background:rgba(10,31,68,.85);color:#fff;font:800 12.5px Nunito,sans-serif;padding:7px 12px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.clip .snd:hover{background:var(--teal-d)}
+.lb video::cue{background:rgba(10,20,40,.8);color:#fff;font-family:Nunito,sans-serif;font-weight:700}
 
 /* ── 4. footage ── */
 .film{position:relative;border-radius:24px;overflow:hidden;min-height:340px;display:flex;align-items:flex-end;margin-bottom:22px}
@@ -164,12 +171,13 @@ footer{padding:40px 0;color:var(--gray);font-size:13px;text-align:center}
   <div class="wrap">
     <div class="center"><span class="eyebrow">Product clips</span></div>
     <h2 class="sec">Watch it work</h2>
-    <p class="lead">Short, silent clips recorded from the real app. Click any clip to watch it full size.</p>
+    <p class="lead">Short narrated clips recorded from the real app. They play silently with captions as you scroll; press "Play with sound" to watch with narration.</p>
     <div class="clips">
-      <div class="clip" data-src="/demo-assets/clip-day.mp4"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-day.jpg" data-src="/demo-assets/clip-day.mp4"></video></div><div class="t"><b>Today at a glance</b><span>Attendance, meals, naps and who's on the floor, for any provider on any day.</span></div></div>
-      <div class="clip" data-src="/demo-assets/clip-ratios.mp4"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-ratios.jpg" data-src="/demo-assets/clip-ratios.mp4"></video></div><div class="t"><b>Ratios, live</b><span>Every room against Ontario's staff-to-child ratios, all day.</span></div></div>
-      <div class="clip ph" data-src="/demo-assets/clip-parent.mp4"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-parent.jpg" data-src="/demo-assets/clip-parent.mp4"></video></div><div class="t"><b>The parent app</b><span>The child's day, messages with the room and simple payments.</span></div></div>
+      <div class="clip" data-src="/demo-assets/clip-day.mp4" data-vtt="/demo-assets/clip-day.en.vtt"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-day.jpg" data-src="/demo-assets/clip-day.mp4"><track kind="captions" srclang="en" label="English" src="/demo-assets/clip-day.en.vtt"></video><button class="snd" type="button">🔊 Play with sound</button><div class="cap"></div></div><div class="t"><b>Today at a glance</b><span>Attendance, meals, naps and who's on the floor, for any provider on any day.</span></div></div>
+      <div class="clip" data-src="/demo-assets/clip-ratios.mp4" data-vtt="/demo-assets/clip-ratios.en.vtt"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-ratios.jpg" data-src="/demo-assets/clip-ratios.mp4"><track kind="captions" srclang="en" label="English" src="/demo-assets/clip-ratios.en.vtt"></video><button class="snd" type="button">🔊 Play with sound</button><div class="cap"></div></div><div class="t"><b>Ratios, live</b><span>Every room against Ontario's staff-to-child ratios, all day.</span></div></div>
+      <div class="clip ph" data-src="/demo-assets/clip-parent.mp4" data-vtt="/demo-assets/clip-parent.en.vtt"><div class="v"><video muted playsinline loop preload="none" poster="/demo-assets/clip-parent.jpg" data-src="/demo-assets/clip-parent.mp4"><track kind="captions" srclang="en" label="English" src="/demo-assets/clip-parent.en.vtt"></video><button class="snd" type="button">🔊 Play with sound</button><div class="cap"></div></div><div class="t"><b>The parent app</b><span>The child's day, messages with the room and simple payments.</span></div></div>
     </div>
+    <div class="credit">Narration: KiddieTrac (natural AI voice). Music: "Upbeat Acoustic" by The_Mountain, Pixabay Content License.</div>
   </div>
 </section>
 
@@ -187,7 +195,7 @@ footer{padding:40px 0;color:var(--gray);font-size:13px;text-align:center}
   </div>
 </section>
 
-<div class="lb" id="lb"><button aria-label="Close">×</button><video controls muted playsinline></video></div>
+<div class="lb" id="lb"><button aria-label="Close">×</button><video controls playsinline crossorigin="anonymous"></video></div>
 <footer>KiddieTrac · preview page · 2026</footer>
 
 <script>
@@ -268,11 +276,36 @@ footer{padding:40px 0;color:var(--gray);font-size:13px;text-align:center}
     }, { threshold: .35 });
     vids.forEach(function (v) { io.observe(v); });
   }
-  var lb = document.getElementById('lb'), lbv = lb.querySelector('video');
-  document.querySelectorAll('.clip').forEach(function (c) {
-    c.addEventListener('click', function () { lbv.src = c.getAttribute('data-src'); lb.classList.add('on'); var p = lbv.play(); if (p && p.catch) p.catch(function () {}); });
+  /* Captions over the silent previews: the track is read, our overlay shows the current line. */
+  document.querySelectorAll('.clip video').forEach(function (v) {
+    var cap = v.parentNode.querySelector('.cap');
+    function wire() {
+      var t = v.textTracks && v.textTracks[0];
+      if (!t) return;
+      t.mode = 'hidden';
+      t.addEventListener('cuechange', function () {
+        var c = t.activeCues && t.activeCues[0];
+        cap.innerHTML = c ? '<span>' + String(c.text).replace(/[&<>]/g, function (x) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[x]; }) + '</span>' : '';
+      });
+    }
+    wire();
   });
-  function close() { lb.classList.remove('on'); lbv.pause(); lbv.removeAttribute('src'); }
+
+  /* Full size, from the start, with sound, controls and captions (sound is allowed after a click). */
+  var lb = document.getElementById('lb'), lbv = lb.querySelector('video');
+  function openClip(c) {
+    lbv.innerHTML = '';
+    var tr = document.createElement('track');
+    tr.kind = 'captions'; tr.srclang = 'en'; tr.label = 'English'; tr.src = c.getAttribute('data-vtt'); tr.default = true;
+    lbv.appendChild(tr);
+    lbv.src = c.getAttribute('data-src'); lbv.muted = false; lbv.currentTime = 0;
+    lb.classList.add('on');
+    var p = lbv.play(); if (p && p.catch) p.catch(function () {});
+  }
+  document.querySelectorAll('.clip').forEach(function (c) {
+    c.addEventListener('click', function () { openClip(c); });
+  });
+  function close() { lb.classList.remove('on'); lbv.pause(); lbv.removeAttribute('src'); lbv.innerHTML = ''; }
   lb.addEventListener('click', function (e) { if (e.target === lb || e.target.tagName === 'BUTTON') close(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
 })();

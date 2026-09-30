@@ -1,0 +1,66 @@
+{
+ "day": [
+  {
+   "start": 0.8,
+   "end": 3.54,
+   "text": "This is today, at a glance."
+  },
+  {
+   "start": 3.99,
+   "end": 11.96,
+   "text": "See who's arrived, who's gone home, and every meal, nap and activity your team has logged, for any centre, on any day."
+  },
+  {
+   "start": 12.41,
+   "end": 17.98,
+   "text": "Scroll down to see which children are still in, and which staff are on the floor right now."
+  }
+ ],
+ "day_total": 18.98,
+ "ratios": [
+  {
+   "start": 0.8,
+   "end": 5.62,
+   "text": "KiddieTrac tracks your staff-to-child ratios live, room by room."
+  },
+  {
+   "start": 6.07,
+   "end": 12.5,
+   "text": "Every room shows its children, its staff, and how many educators Ontario's rules require."
+  },
+  {
+   "start": 12.95,
+   "end": 17.29,
+   "text": "So you know before a room goes out of ratio, not after."
+  }
+ ],
+ "ratios_total": 18.29,
+ "parent": [
+  {
+   "start": 0.8,
+   "end": 3.15,
+   "text": "Here's what parents see."
+  },
+  {
+   "start": 3.6,
+   "end": 8.18,
+   "text": "Their child's status, balance and photos, on one home screen."
+  },
+  {
+   "start": 8.63,
+   "end": 14.53,
+   "text": "Tap Today for the whole day as it happened: meals, naps, and a story from the educator."
+  },
+  {
+   "start": 14.98,
+   "end": 17.86,
+   "text": "Message the room team directly."
+  },
+  {
+   "start": 18.31,
+   "end": 23.76,
+   "text": "And pay by card, bank account or Interac, with the subsidy already taken off."
+  }
+ ],
+ "parent_total": 24.76
+}
