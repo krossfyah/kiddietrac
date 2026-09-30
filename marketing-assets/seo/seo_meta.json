@@ -1,89 +1,386 @@
 {
   "en": {
-    "parentportal": {"t": "Parent Portal & App — Daily Reports, Photos, Billing | KiddieTrac", "d": "The KiddieTrac parent app: daily reports, photos, messages, invoices and online payments in one place, in English, French, Spanish or Hindi."}
+    "parentportal": {
+      "t": "Parent Portal & App — Daily Reports, Photos, Billing | KiddieTrac",
+      "d": "The KiddieTrac parent app: daily reports, photos, messages, invoices and online payments in one place, in English, French, Spanish or Hindi."
+    }
   },
   "fr": {
-    "home": {"t": "KiddieTrac — Plateforme de garde d’enfants intelligente | N° 1 en Amérique du Nord", "d": "KiddieTrac est la plateforme de gestion de garde d’enfants n° 1 en Amérique du Nord : facturation TAGJEP (CWELCC), présences, communication avec les parents et applications à votre marque. Essai gratuit de 14 jours, sans carte de crédit."},
-    "solutions": {"t": "Fonctionnalités — Facturation, présences et TAGJEP | KiddieTrac", "d": "Découvrez KiddieTrac : automatisation des subventions TAGJEP (CWELCC), facturation intelligente, présences par code QR, application pour les parents et image de marque — une seule plateforme canadienne."},
-    "pricing": {"t": "Tarifs — Des forfaits qui grandissent avec vous | KiddieTrac", "d": "Des tarifs KiddieTrac simples et transparents, sans frais cachés ni frais d’installation. Intégration et migration gratuites avec chaque forfait, annulation en tout temps. Essai gratuit de 14 jours."},
-    "whitelabel": {"t": "Application de garde d’enfants à votre marque | KiddieTrac", "d": "Lancez une application pour les parents entièrement à votre image, avec votre propre domaine et des rapports à votre marque, en aussi peu que 14 jours — offert avec chaque forfait."},
-    "vscompetitor": {"t": "KiddieTrac comparé aux anciens logiciels de garde d’enfants", "d": "Pourquoi les agences de garde d’enfants d’Amérique du Nord passent à KiddieTrac : automatisation TAGJEP native, vraie facturation en CAD/USD, marque blanche et soutien humain au Canada."},
-    "support": {"t": "Soutien à la clientèle | KiddieTrac", "d": "Soutien KiddieTrac : ouvrez une demande, appelez le 1-855-400-9996 (lun.–ven., 9 h à 17 h HE) ou écrivez à info@kiddietrac.com. Réponse en un jour ouvrable."},
-    "webinars": {"t": "Webinaires pour les équipes de garde d’enfants | KiddieTrac", "d": "Webinaires gratuits en direct pour les propriétaires, directions et éducatrices : TAGJEP, facturation, arrivée sécuritaire, familles et planification. Inscrivez-vous pour être invité."},
-    "internet-safety": {"t": "Sécurité en ligne pour les familles et les services de garde | KiddieTrac", "d": "Comment KiddieTrac protège les renseignements des services de garde, et des conseils simples pour les parents et les éducatrices : mots de passe, hameçonnage, partage de photos et signalement."},
-    "blog": {"t": "Blogue sur la gestion des services de garde | KiddieTrac", "d": "Des guides pratiques pour les exploitants : TAGJEP et conformité, facturation, gestion d’un centre, relations avec les familles, développement de l’enfant et croissance."},
-    "testimonials": {"t": "Témoignages clients — plus de 150 agences | KiddieTrac", "d": "Des résultats concrets de professionnels de la garde d’enfants en Amérique du Nord — note de 4,9/5 par plus de 150 agences qui gèrent facturation, présences et TAGJEP avec KiddieTrac."},
-    "security": {"t": "Sécurité et confiance — LPRPDE et chiffrement | KiddieTrac", "d": "Comment KiddieTrac protège vos données : chiffrement AES-256, hébergement en Amérique du Nord, conformité à la LPRPDE, sauvegardes quotidiennes, authentification à deux facteurs et accès par rôle."},
-    "global": {"t": "Présence internationale | KiddieTrac", "d": "KiddieTrac soutient des agences de garde d’enfants au Canada et aux États-Unis, avec facturation en CAD/USD, prise en charge des subventions provinciales et conformité locale."},
-    "about": {"t": "À propos de KiddieTrac — conçu par des pros de la garde d’enfants", "d": "KiddieTrac a été créé par des professionnels de la garde d’enfants qui connaissaient les limites des vieux outils. Notre mission : simplifier l’administration partout en Amérique du Nord."},
-    "careers": {"t": "Carrières — Joignez-vous à l’équipe KiddieTrac", "d": "Aidez-nous à bâtir la plateforme que les agences de garde d’enfants adorent. Découvrez nos postes ouverts et la vie chez KiddieTrac."},
-    "changelog": {"t": "Nouveautés — Mises à jour du produit | KiddieTrac", "d": "Les dernières fonctionnalités et améliorations de KiddieTrac : résumés quotidiens par IA, synchronisation QuickBooks, facturation multidevise et plus encore."},
-    "ilearn": {"t": "Devenez fournisseur de services de garde en milieu familial | KiddieTrac", "d": "iLearn vous guide dans le processus d’agrément des services de garde en milieu familial en Ontario, et KiddieTrac simplifie la gestion de votre nouvelle entreprise."},
-    "contact": {"t": "Joindre KiddieTrac — essai gratuit ou démonstration", "d": "Communiquez avec KiddieTrac. Commencez un essai gratuit de 14 jours, réservez une démonstration ou renseignez-vous sur la migration de votre agence — sans carte de crédit."},
-    "checklist": {"t": "Liste de vérification TAGJEP gratuite (2026) | KiddieTrac", "d": "Téléchargez une liste de vérification TAGJEP (CWELCC) gratuite et imprimable de 18 points pour les exploitants de l’Ontario : calcul des subventions, dossiers, échéances et préparation aux audits."},
-    "home-daycare": {"t": "Logiciel pour garderie en milieu familial — facturation, présences et TAGJEP | KiddieTrac", "d": "KiddieTrac aide les fournisseurs en milieu familial à gérer les présences, la facturation automatique, les rapports quotidiens et le TAGJEP sans effort. Fini les tableurs du dimanche soir."},
-    "centre": {"t": "Logiciel pour centre de garde — groupes, ratios et facturation | KiddieTrac", "d": "Gérez votre centre agréé sur un seul tableau de bord en direct : groupes et ratios, horaires du personnel, listes d’attente, facturation et automatisation TAGJEP."},
-    "multi-site": {"t": "Gestion de plusieurs sites de garde — une seule connexion | KiddieTrac", "d": "Gérez tous vos emplacements depuis un seul tableau de bord : facturation consolidée, rapports entre sites, suivi TAGJEP à l’échelle du réseau et votre propre marque."},
-    "shop": {"t": "Boutique — vêtements et articles KiddieTrac", "d": "T-shirts, chandails à capuchon, vestes, casquettes, tasses, stylos et plus encore à l’image de KiddieTrac pour votre équipe, vos familles et vos événements. Demandez une soumission."},
-    "vulnerability-reporting": {"t": "Signalement de vulnérabilités | KiddieTrac", "d": "Comment signaler une vulnérabilité de sécurité dans KiddieTrac : quoi inclure, ce qui est couvert et comment nous collaborons avec les chercheurs en sécurité."},
-    "accessibility": {"t": "Politique d’accessibilité | KiddieTrac", "d": "Comment KiddieTrac élimine les obstacles pour les personnes en situation de handicap : engagements LAPHO, formats accessibles, mesures d’adaptation et comment nous faire part de vos commentaires."},
-    "dei-policy": {"t": "Politique de diversité, d’équité et d’inclusion | KiddieTrac", "d": "L’engagement de KiddieTrac envers la diversité, l’équité et l’inclusion dans nos embauches, notre façon de travailler et le produit que nous créons pour les familles."},
-    "parentportal": {"t": "Portail et application pour les parents — rapports, photos, facturation | KiddieTrac", "d": "L’application KiddieTrac pour les parents : rapports quotidiens, photos, messages, factures et paiements en ligne au même endroit, en français, anglais, espagnol ou hindi."}
+    "home": {
+      "t": "KiddieTrac — Plateforme de garde d’enfants intelligente | N° 1 en Amérique du Nord",
+      "d": "KiddieTrac est la plateforme de gestion de garde d’enfants n° 1 en Amérique du Nord : facturation TAGJEP (CWELCC), présences, communication avec les parents et applications à votre marque. Essai gratuit de 14 jours, sans carte de crédit."
+    },
+    "solutions": {
+      "t": "Fonctionnalités — Facturation, présences et TAGJEP | KiddieTrac",
+      "d": "Découvrez KiddieTrac : automatisation des subventions TAGJEP (CWELCC), facturation intelligente, présences par code QR, application pour les parents et image de marque — une seule plateforme canadienne."
+    },
+    "pricing": {
+      "t": "Tarifs — Des forfaits qui grandissent avec vous | KiddieTrac",
+      "d": "Des tarifs KiddieTrac simples et transparents, sans frais cachés ni frais d’installation. Intégration et migration gratuites avec chaque forfait, annulation en tout temps. Essai gratuit de 14 jours."
+    },
+    "whitelabel": {
+      "t": "Application de garde d’enfants à votre marque | KiddieTrac",
+      "d": "Lancez une application pour les parents entièrement à votre image, avec votre propre domaine et des rapports à votre marque, en aussi peu que 14 jours — offert avec chaque forfait."
+    },
+    "vscompetitor": {
+      "t": "KiddieTrac comparé aux anciens logiciels de garde d’enfants",
+      "d": "Pourquoi les agences de garde d’enfants d’Amérique du Nord passent à KiddieTrac : automatisation TAGJEP native, vraie facturation en CAD/USD, marque blanche et soutien humain au Canada."
+    },
+    "support": {
+      "t": "Soutien à la clientèle | KiddieTrac",
+      "d": "Soutien KiddieTrac : ouvrez une demande, appelez le 1-855-400-9996 (lun.–ven., 9 h à 17 h HE) ou écrivez à info@kiddietrac.com. Réponse en un jour ouvrable."
+    },
+    "webinars": {
+      "t": "Webinaires pour les équipes de garde d’enfants | KiddieTrac",
+      "d": "Webinaires gratuits en direct pour les propriétaires, directions et éducatrices : TAGJEP, facturation, arrivée sécuritaire, familles et planification. Inscrivez-vous pour être invité."
+    },
+    "internet-safety": {
+      "t": "Sécurité en ligne pour les familles et les services de garde | KiddieTrac",
+      "d": "Comment KiddieTrac protège les renseignements des services de garde, et des conseils simples pour les parents et les éducatrices : mots de passe, hameçonnage, partage de photos et signalement."
+    },
+    "blog": {
+      "t": "Blogue sur la gestion des services de garde | KiddieTrac",
+      "d": "Des guides pratiques pour les exploitants : TAGJEP et conformité, facturation, gestion d’un centre, relations avec les familles, développement de l’enfant et croissance."
+    },
+    "testimonials": {
+      "t": "Témoignages clients — plus de 150 agences | KiddieTrac",
+      "d": "Des résultats concrets de professionnels de la garde d’enfants en Amérique du Nord — note de 4,9/5 par plus de 150 agences qui gèrent facturation, présences et TAGJEP avec KiddieTrac."
+    },
+    "security": {
+      "t": "Sécurité et confiance — LPRPDE et chiffrement | KiddieTrac",
+      "d": "Comment KiddieTrac protège vos données : chiffrement AES-256, hébergement en Amérique du Nord, conformité à la LPRPDE, sauvegardes quotidiennes, authentification à deux facteurs et accès par rôle."
+    },
+    "global": {
+      "t": "Présence internationale | KiddieTrac",
+      "d": "KiddieTrac soutient des agences de garde d’enfants au Canada et aux États-Unis, avec facturation en CAD/USD, prise en charge des subventions provinciales et conformité locale."
+    },
+    "about": {
+      "t": "À propos de KiddieTrac — conçu par des pros de la garde d’enfants",
+      "d": "KiddieTrac a été créé par des professionnels de la garde d’enfants qui connaissaient les limites des vieux outils. Notre mission : simplifier l’administration partout en Amérique du Nord."
+    },
+    "careers": {
+      "t": "Carrières — Joignez-vous à l’équipe KiddieTrac",
+      "d": "Aidez-nous à bâtir la plateforme que les agences de garde d’enfants adorent. Découvrez nos postes ouverts et la vie chez KiddieTrac."
+    },
+    "changelog": {
+      "t": "Nouveautés — Mises à jour du produit | KiddieTrac",
+      "d": "Les dernières fonctionnalités et améliorations de KiddieTrac : résumés quotidiens par IA, synchronisation QuickBooks, facturation multidevise et plus encore."
+    },
+    "ilearn": {
+      "t": "Devenez fournisseur de services de garde en milieu familial | KiddieTrac",
+      "d": "iLearn vous guide dans le processus d’agrément des services de garde en milieu familial en Ontario, et KiddieTrac simplifie la gestion de votre nouvelle entreprise."
+    },
+    "contact": {
+      "t": "Joindre KiddieTrac — essai gratuit ou démonstration",
+      "d": "Communiquez avec KiddieTrac. Commencez un essai gratuit de 14 jours, réservez une démonstration ou renseignez-vous sur la migration de votre agence — sans carte de crédit."
+    },
+    "checklist": {
+      "t": "Liste de vérification TAGJEP gratuite (2026) | KiddieTrac",
+      "d": "Téléchargez une liste de vérification TAGJEP (CWELCC) gratuite et imprimable de 18 points pour les exploitants de l’Ontario : calcul des subventions, dossiers, échéances et préparation aux audits."
+    },
+    "home-daycare": {
+      "t": "Logiciel pour garderie en milieu familial — facturation, présences et TAGJEP | KiddieTrac",
+      "d": "KiddieTrac aide les fournisseurs en milieu familial à gérer les présences, la facturation automatique, les rapports quotidiens et le TAGJEP sans effort. Fini les tableurs du dimanche soir."
+    },
+    "centre": {
+      "t": "Logiciel pour centre de garde — groupes, ratios et facturation | KiddieTrac",
+      "d": "Gérez votre centre agréé sur un seul tableau de bord en direct : groupes et ratios, horaires du personnel, listes d’attente, facturation et automatisation TAGJEP."
+    },
+    "multi-site": {
+      "t": "Gestion de plusieurs sites de garde — une seule connexion | KiddieTrac",
+      "d": "Gérez tous vos emplacements depuis un seul tableau de bord : facturation consolidée, rapports entre sites, suivi TAGJEP à l’échelle du réseau et votre propre marque."
+    },
+    "shop": {
+      "t": "Boutique — vêtements et articles KiddieTrac",
+      "d": "T-shirts, chandails à capuchon, vestes, casquettes, tasses, stylos et plus encore à l’image de KiddieTrac pour votre équipe, vos familles et vos événements. Demandez une soumission."
+    },
+    "vulnerability-reporting": {
+      "t": "Signalement de vulnérabilités | KiddieTrac",
+      "d": "Comment signaler une vulnérabilité de sécurité dans KiddieTrac : quoi inclure, ce qui est couvert et comment nous collaborons avec les chercheurs en sécurité."
+    },
+    "accessibility": {
+      "t": "Politique d’accessibilité | KiddieTrac",
+      "d": "Comment KiddieTrac élimine les obstacles pour les personnes en situation de handicap : engagements LAPHO, formats accessibles, mesures d’adaptation et comment nous faire part de vos commentaires."
+    },
+    "dei-policy": {
+      "t": "Politique de diversité, d’équité et d’inclusion | KiddieTrac",
+      "d": "L’engagement de KiddieTrac envers la diversité, l’équité et l’inclusion dans nos embauches, notre façon de travailler et le produit que nous créons pour les familles."
+    },
+    "parentportal": {
+      "t": "Portail et application pour les parents — rapports, photos, facturation | KiddieTrac",
+      "d": "L’application KiddieTrac pour les parents : rapports quotidiens, photos, messages, factures et paiements en ligne au même endroit, en français, anglais, espagnol ou hindi."
+    },
+    "childcare-software-canada": {
+      "t": "Logiciel de gestion de services de garde pour le Canada | KiddieTrac",
+      "d": "Un logiciel de gestion conçu pour le Canada : présences, facturation en CAD avec les réductions de frais provinciales, app parents, ratios et conformité. Essai gratuit de 14 jours."
+    },
+    "cwelcc-billing-software": {
+      "t": "Logiciel de facturation CWELCC pour les services de garde de l’Ontario | KiddieTrac",
+      "d": "Appliquez la réduction CWELCC sur chaque facture, respectez le plafond de 22 $ par jour de l’Ontario et gardez les dossiers dont vos rapports ont besoin. Essai gratuit de 14 jours."
+    },
+    "daycare-software-ontario": {
+      "t": "Logiciel pour garderies et garde en milieu familial en Ontario | KiddieTrac",
+      "d": "Un logiciel conçu pour l’Ontario : ratios de la LGEPE, facturation CWELCC, Comment apprend-on? et dossiers prêts pour l’inspection, pour les garderies et les agences de garde en milieu familial."
+    },
+    "ratio-calculator": {
+      "t": "Calculateur de ratios pour les services de garde de l’Ontario (gratuit) | KiddieTrac",
+      "d": "Calculateur gratuit : le personnel et les groupes exigés par les ratios de l’Ontario pour les poupons, bambins, enfants d’âge préscolaire, maternelle et d’âge scolaire, et les limites de la garde en milieu familial."
+    },
+    "cwelcc-calculator": {
+      "t": "Calculateur des frais CWELCC pour l’Ontario (gratuit) | KiddieTrac",
+      "d": "Calculateur gratuit : ce que paient les familles sous le plafond CWELCC de 22 $ par jour, leur économie par rapport à vos frais complets et vos revenus mensuels de frais parentaux."
+    }
   },
   "es": {
-    "home": {"t": "KiddieTrac — Plataforma inteligente de cuidado infantil | N.º 1 en Norteamérica", "d": "KiddieTrac es la plataforma n.º 1 de gestión de cuidado infantil en Norteamérica: facturación CWELCC, asistencia, comunicación con las familias y apps con su marca. Prueba gratuita de 14 días, sin tarjeta de crédito."},
-    "solutions": {"t": "Funciones — Facturación, asistencia y CWELCC | KiddieTrac", "d": "Conozca KiddieTrac: automatización de subsidios CWELCC, facturación inteligente, asistencia con código QR, app para familias y marca propia — una sola plataforma canadiense."},
-    "pricing": {"t": "Precios — Planes que crecen con usted | KiddieTrac", "d": "Precios de KiddieTrac simples y transparentes, sin cargos ocultos ni costos de instalación. Incorporación y migración gratuitas en cada plan; cancele cuando quiera. Prueba gratuita de 14 días."},
-    "whitelabel": {"t": "App de cuidado infantil con su propia marca | KiddieTrac", "d": "Lance una app para familias totalmente con su marca, su propio dominio e informes personalizados en tan solo 14 días — marca blanca incluida en todos los planes."},
-    "vscompetitor": {"t": "KiddieTrac frente al software de cuidado infantil tradicional", "d": "Por qué las agencias de cuidado infantil de Norteamérica cambian a KiddieTrac: automatización CWELCC nativa, facturación real en CAD/USD, marca blanca y soporte humano en Canadá."},
-    "support": {"t": "Atención al cliente | KiddieTrac", "d": "Soporte de KiddieTrac: abra una solicitud, llame al 1-855-400-9996 (lun.–vie., 9 a. m. a 5 p. m. ET) o escriba a info@kiddietrac.com. Respondemos en un día hábil."},
-    "webinars": {"t": "Seminarios web para equipos de cuidado infantil | KiddieTrac", "d": "Seminarios web gratuitos en vivo para propietarios, directores y educadores sobre CWELCC, facturación, llegada segura, familias y planificación. Inscríbase para recibir la invitación."},
-    "internet-safety": {"t": "Seguridad en internet para familias y cuidado infantil | KiddieTrac", "d": "Cómo KiddieTrac protege la información del cuidado infantil y consejos sencillos para padres y educadores: contraseñas, phishing, fotos compartidas y cómo reportar."},
-    "blog": {"t": "Blog de gestión de cuidado infantil | KiddieTrac", "d": "Guías prácticas para operadores de cuidado infantil: CWELCC y cumplimiento, facturación, gestión de un centro, trabajo con las familias, desarrollo infantil y crecimiento."},
-    "testimonials": {"t": "Historias de clientes — más de 150 agencias | KiddieTrac", "d": "Resultados reales de profesionales del cuidado infantil en Norteamérica — calificación de 4,9/5 de más de 150 agencias que gestionan facturación, asistencia y CWELCC con KiddieTrac."},
-    "security": {"t": "Seguridad y confianza — PIPEDA y cifrado | KiddieTrac", "d": "Cómo KiddieTrac protege sus datos: cifrado AES-256, alojamiento en Norteamérica, alineación con PIPEDA, copias de seguridad diarias, 2FA y acceso por roles."},
-    "global": {"t": "Presencia global | KiddieTrac", "d": "KiddieTrac impulsa agencias de cuidado infantil en Canadá y EE. UU. con facturación en CAD/USD, soporte de subsidios provinciales y cumplimiento local."},
-    "about": {"t": "Sobre KiddieTrac — creado por profesionales del cuidado infantil", "d": "KiddieTrac fue creado por profesionales del cuidado infantil que vivieron los problemas de las herramientas anticuadas. Nuestra misión: simplificar la administración en toda Norteamérica."},
-    "careers": {"t": "Empleos — Únase al equipo de KiddieTrac", "d": "Ayude a construir la plataforma que encanta a las agencias de cuidado infantil. Explore los puestos disponibles y la vida en KiddieTrac."},
-    "changelog": {"t": "Novedades — Actualizaciones del producto | KiddieTrac", "d": "Las funciones y mejoras más recientes de KiddieTrac: resúmenes diarios con IA, sincronización con QuickBooks, facturación en varias monedas y más."},
-    "ilearn": {"t": "Conviértase en proveedor de cuidado infantil en el hogar | KiddieTrac", "d": "iLearn le guía en el proceso de licencia de cuidado infantil en el hogar en Ontario, y KiddieTrac facilita la gestión de su nuevo negocio."},
-    "contact": {"t": "Contacte a KiddieTrac — prueba gratuita o demostración", "d": "Póngase en contacto con KiddieTrac. Comience una prueba gratuita de 14 días, reserve una demostración o pregunte por la migración de su agencia — sin tarjeta de crédito."},
-    "checklist": {"t": "Lista de verificación CWELCC gratuita (2026) | KiddieTrac", "d": "Descargue una lista de verificación CWELCC gratuita e imprimible de 18 puntos para operadores de Ontario: cálculo de subsidios, registros, plazos de presentación y preparación para auditorías."},
-    "home-daycare": {"t": "Software para guarderías en el hogar — facturación, asistencia y CWELCC | KiddieTrac", "d": "KiddieTrac ayuda a los proveedores en el hogar con la asistencia, la facturación automática, los informes diarios y CWELCC sin esfuerzo. Sin hojas de cálculo ni trabajo el domingo por la noche."},
-    "centre": {"t": "Software para centros de cuidado infantil — salas, ratios y facturación | KiddieTrac", "d": "Gestione su centro con licencia desde un solo panel en vivo: salas y ratios, horarios del personal, listas de espera, facturación y automatización CWELCC."},
-    "multi-site": {"t": "Gestión de varias sedes de cuidado infantil — un solo acceso | KiddieTrac", "d": "Gestione todas sus sedes desde un solo panel: facturación consolidada, informes entre sedes, seguimiento de CWELCC en toda la red y su propia marca."},
-    "shop": {"t": "Tienda — ropa y artículos de KiddieTrac", "d": "Camisetas, sudaderas, chaquetas, gorras, tazas, bolígrafos y más con la marca KiddieTrac para su equipo, sus familias y sus eventos. Solicite una cotización."},
-    "vulnerability-reporting": {"t": "Reporte de vulnerabilidades | KiddieTrac", "d": "Cómo reportar una vulnerabilidad de seguridad en KiddieTrac: qué incluir, qué está dentro del alcance y cómo trabajamos con los investigadores de seguridad."},
-    "accessibility": {"t": "Política de accesibilidad | KiddieTrac", "d": "Cómo KiddieTrac elimina barreras para las personas con discapacidad: compromisos AODA, formatos accesibles, adaptaciones y cómo enviar sus comentarios."},
-    "dei-policy": {"t": "Política de diversidad, equidad e inclusión | KiddieTrac", "d": "El compromiso de KiddieTrac con la diversidad, la equidad y la inclusión en cómo contratamos, cómo trabajamos y el producto que creamos para las familias."},
-    "parentportal": {"t": "Portal y app para familias — informes, fotos y facturación | KiddieTrac", "d": "La app de KiddieTrac para familias: informes diarios, fotos, mensajes, facturas y pagos en línea en un solo lugar, en español, inglés, francés o hindi."}
+    "home": {
+      "t": "KiddieTrac — Plataforma inteligente de cuidado infantil | N.º 1 en Norteamérica",
+      "d": "KiddieTrac es la plataforma n.º 1 de gestión de cuidado infantil en Norteamérica: facturación CWELCC, asistencia, comunicación con las familias y apps con su marca. Prueba gratuita de 14 días, sin tarjeta de crédito."
+    },
+    "solutions": {
+      "t": "Funciones — Facturación, asistencia y CWELCC | KiddieTrac",
+      "d": "Conozca KiddieTrac: automatización de subsidios CWELCC, facturación inteligente, asistencia con código QR, app para familias y marca propia — una sola plataforma canadiense."
+    },
+    "pricing": {
+      "t": "Precios — Planes que crecen con usted | KiddieTrac",
+      "d": "Precios de KiddieTrac simples y transparentes, sin cargos ocultos ni costos de instalación. Incorporación y migración gratuitas en cada plan; cancele cuando quiera. Prueba gratuita de 14 días."
+    },
+    "whitelabel": {
+      "t": "App de cuidado infantil con su propia marca | KiddieTrac",
+      "d": "Lance una app para familias totalmente con su marca, su propio dominio e informes personalizados en tan solo 14 días — marca blanca incluida en todos los planes."
+    },
+    "vscompetitor": {
+      "t": "KiddieTrac frente al software de cuidado infantil tradicional",
+      "d": "Por qué las agencias de cuidado infantil de Norteamérica cambian a KiddieTrac: automatización CWELCC nativa, facturación real en CAD/USD, marca blanca y soporte humano en Canadá."
+    },
+    "support": {
+      "t": "Atención al cliente | KiddieTrac",
+      "d": "Soporte de KiddieTrac: abra una solicitud, llame al 1-855-400-9996 (lun.–vie., 9 a. m. a 5 p. m. ET) o escriba a info@kiddietrac.com. Respondemos en un día hábil."
+    },
+    "webinars": {
+      "t": "Seminarios web para equipos de cuidado infantil | KiddieTrac",
+      "d": "Seminarios web gratuitos en vivo para propietarios, directores y educadores sobre CWELCC, facturación, llegada segura, familias y planificación. Inscríbase para recibir la invitación."
+    },
+    "internet-safety": {
+      "t": "Seguridad en internet para familias y cuidado infantil | KiddieTrac",
+      "d": "Cómo KiddieTrac protege la información del cuidado infantil y consejos sencillos para padres y educadores: contraseñas, phishing, fotos compartidas y cómo reportar."
+    },
+    "blog": {
+      "t": "Blog de gestión de cuidado infantil | KiddieTrac",
+      "d": "Guías prácticas para operadores de cuidado infantil: CWELCC y cumplimiento, facturación, gestión de un centro, trabajo con las familias, desarrollo infantil y crecimiento."
+    },
+    "testimonials": {
+      "t": "Historias de clientes — más de 150 agencias | KiddieTrac",
+      "d": "Resultados reales de profesionales del cuidado infantil en Norteamérica — calificación de 4,9/5 de más de 150 agencias que gestionan facturación, asistencia y CWELCC con KiddieTrac."
+    },
+    "security": {
+      "t": "Seguridad y confianza — PIPEDA y cifrado | KiddieTrac",
+      "d": "Cómo KiddieTrac protege sus datos: cifrado AES-256, alojamiento en Norteamérica, alineación con PIPEDA, copias de seguridad diarias, 2FA y acceso por roles."
+    },
+    "global": {
+      "t": "Presencia global | KiddieTrac",
+      "d": "KiddieTrac impulsa agencias de cuidado infantil en Canadá y EE. UU. con facturación en CAD/USD, soporte de subsidios provinciales y cumplimiento local."
+    },
+    "about": {
+      "t": "Sobre KiddieTrac — creado por profesionales del cuidado infantil",
+      "d": "KiddieTrac fue creado por profesionales del cuidado infantil que vivieron los problemas de las herramientas anticuadas. Nuestra misión: simplificar la administración en toda Norteamérica."
+    },
+    "careers": {
+      "t": "Empleos — Únase al equipo de KiddieTrac",
+      "d": "Ayude a construir la plataforma que encanta a las agencias de cuidado infantil. Explore los puestos disponibles y la vida en KiddieTrac."
+    },
+    "changelog": {
+      "t": "Novedades — Actualizaciones del producto | KiddieTrac",
+      "d": "Las funciones y mejoras más recientes de KiddieTrac: resúmenes diarios con IA, sincronización con QuickBooks, facturación en varias monedas y más."
+    },
+    "ilearn": {
+      "t": "Conviértase en proveedor de cuidado infantil en el hogar | KiddieTrac",
+      "d": "iLearn le guía en el proceso de licencia de cuidado infantil en el hogar en Ontario, y KiddieTrac facilita la gestión de su nuevo negocio."
+    },
+    "contact": {
+      "t": "Contacte a KiddieTrac — prueba gratuita o demostración",
+      "d": "Póngase en contacto con KiddieTrac. Comience una prueba gratuita de 14 días, reserve una demostración o pregunte por la migración de su agencia — sin tarjeta de crédito."
+    },
+    "checklist": {
+      "t": "Lista de verificación CWELCC gratuita (2026) | KiddieTrac",
+      "d": "Descargue una lista de verificación CWELCC gratuita e imprimible de 18 puntos para operadores de Ontario: cálculo de subsidios, registros, plazos de presentación y preparación para auditorías."
+    },
+    "home-daycare": {
+      "t": "Software para guarderías en el hogar — facturación, asistencia y CWELCC | KiddieTrac",
+      "d": "KiddieTrac ayuda a los proveedores en el hogar con la asistencia, la facturación automática, los informes diarios y CWELCC sin esfuerzo. Sin hojas de cálculo ni trabajo el domingo por la noche."
+    },
+    "centre": {
+      "t": "Software para centros de cuidado infantil — salas, ratios y facturación | KiddieTrac",
+      "d": "Gestione su centro con licencia desde un solo panel en vivo: salas y ratios, horarios del personal, listas de espera, facturación y automatización CWELCC."
+    },
+    "multi-site": {
+      "t": "Gestión de varias sedes de cuidado infantil — un solo acceso | KiddieTrac",
+      "d": "Gestione todas sus sedes desde un solo panel: facturación consolidada, informes entre sedes, seguimiento de CWELCC en toda la red y su propia marca."
+    },
+    "shop": {
+      "t": "Tienda — ropa y artículos de KiddieTrac",
+      "d": "Camisetas, sudaderas, chaquetas, gorras, tazas, bolígrafos y más con la marca KiddieTrac para su equipo, sus familias y sus eventos. Solicite una cotización."
+    },
+    "vulnerability-reporting": {
+      "t": "Reporte de vulnerabilidades | KiddieTrac",
+      "d": "Cómo reportar una vulnerabilidad de seguridad en KiddieTrac: qué incluir, qué está dentro del alcance y cómo trabajamos con los investigadores de seguridad."
+    },
+    "accessibility": {
+      "t": "Política de accesibilidad | KiddieTrac",
+      "d": "Cómo KiddieTrac elimina barreras para las personas con discapacidad: compromisos AODA, formatos accesibles, adaptaciones y cómo enviar sus comentarios."
+    },
+    "dei-policy": {
+      "t": "Política de diversidad, equidad e inclusión | KiddieTrac",
+      "d": "El compromiso de KiddieTrac con la diversidad, la equidad y la inclusión en cómo contratamos, cómo trabajamos y el producto que creamos para las familias."
+    },
+    "parentportal": {
+      "t": "Portal y app para familias — informes, fotos y facturación | KiddieTrac",
+      "d": "La app de KiddieTrac para familias: informes diarios, fotos, mensajes, facturas y pagos en línea en un solo lugar, en español, inglés, francés o hindi."
+    },
+    "childcare-software-canada": {
+      "t": "Software de gestión de cuidado infantil para Canadá | KiddieTrac",
+      "d": "Software de gestión creado para Canadá: asistencia, facturación en CAD con las reducciones de tarifas provinciales, app para padres, proporciones y cumplimiento. Prueba gratuita de 14 días."
+    },
+    "cwelcc-billing-software": {
+      "t": "Software de facturación CWELCC para el cuidado infantil en Ontario | KiddieTrac",
+      "d": "Aplique la reducción de CWELCC en cada factura, respete el tope de $22 al día de Ontario y conserve los registros que necesitan sus informes. Prueba gratuita de 14 días."
+    },
+    "daycare-software-ontario": {
+      "t": "Software para guarderías y cuidado infantil en el hogar en Ontario | KiddieTrac",
+      "d": "Software creado para Ontario: proporciones de la CCEYA, facturación CWELCC, How Does Learning Happen? y registros listos para la inspección, para centros y agencias de cuidado en el hogar."
+    },
+    "ratio-calculator": {
+      "t": "Calculadora de proporciones de cuidado infantil de Ontario (gratis) | KiddieTrac",
+      "d": "Calculadora gratuita: cuánto personal y cuántos grupos exigen las proporciones de Ontario para bebés, niños pequeños, preescolar, kínder y edad escolar, y los límites del cuidado en el hogar."
+    },
+    "cwelcc-calculator": {
+      "t": "Calculadora de tarifas CWELCC para Ontario (gratis) | KiddieTrac",
+      "d": "Calculadora gratuita: lo que pagan las familias con el tope de CWELCC de $22 al día, su ahorro frente a su tarifa completa y sus ingresos mensuales por tarifas de los padres."
+    }
   },
   "hi": {
-    "home": {"t": "KiddieTrac — स्मार्ट चाइल्डकेयर प्लेटफ़ॉर्म | उत्तरी अमेरिका में नंबर 1", "d": "KiddieTrac उत्तरी अमेरिका का नंबर 1 चाइल्डकेयर प्रबंधन प्लेटफ़ॉर्म है: CWELCC बिलिंग, उपस्थिति, अभिभावकों से संवाद और आपके ब्रांड वाले ऐप। 14 दिन का मुफ़्त ट्रायल, क्रेडिट कार्ड की ज़रूरत नहीं।"},
-    "solutions": {"t": "सुविधाएँ — बिलिंग, उपस्थिति और CWELCC | KiddieTrac", "d": "KiddieTrac की सुविधाएँ देखें: CWELCC सब्सिडी ऑटोमेशन, स्मार्ट बिलिंग, QR उपस्थिति, अभिभावक ऐप और अपना ब्रांड — एक कनाडाई चाइल्डकेयर प्लेटफ़ॉर्म।"},
-    "pricing": {"t": "कीमतें — आपके साथ बढ़ने वाले प्लान | KiddieTrac", "d": "KiddieTrac की सरल और पारदर्शी कीमतें, कोई छिपा शुल्क या सेटअप लागत नहीं। हर प्लान में मुफ़्त ऑनबोर्डिंग और माइग्रेशन, कभी भी रद्द करें। 14 दिन का मुफ़्त ट्रायल।"},
-    "whitelabel": {"t": "आपके ब्रांड वाला चाइल्डकेयर ऐप | KiddieTrac", "d": "सिर्फ़ 14 दिनों में अपने ब्रांड वाला अभिभावक ऐप, अपना डोमेन और ब्रांडेड रिपोर्ट लॉन्च करें — व्हाइट लेबल हर प्लान में शामिल।"},
-    "vscompetitor": {"t": "KiddieTrac बनाम पुराने चाइल्डकेयर सॉफ़्टवेयर", "d": "उत्तरी अमेरिका की चाइल्डकेयर एजेंसियाँ KiddieTrac क्यों चुनती हैं: मूल CWELCC ऑटोमेशन, असली CAD/USD बिलिंग, व्हाइट लेबल और कनाडा में मानवीय सहायता।"},
-    "support": {"t": "ग्राहक सहायता | KiddieTrac", "d": "KiddieTrac सहायता: टिकट खोलें, 1-855-400-9996 पर कॉल करें (सोम–शुक्र, सुबह 9 से शाम 5 बजे ET) या info@kiddietrac.com पर ईमेल करें। हम एक कार्यदिवस में जवाब देते हैं।"},
-    "webinars": {"t": "चाइल्डकेयर टीमों के लिए वेबिनार | KiddieTrac", "d": "चाइल्डकेयर मालिकों, निदेशकों और शिक्षकों के लिए मुफ़्त लाइव वेबिनार: CWELCC, बिलिंग, सेफ़ अराइवल, परिवार और योजना। पहले सत्रों का निमंत्रण पाने के लिए साइन अप करें।"},
-    "internet-safety": {"t": "परिवारों और चाइल्डकेयर के लिए इंटरनेट सुरक्षा | KiddieTrac", "d": "KiddieTrac चाइल्डकेयर जानकारी को कैसे सुरक्षित रखता है, और अभिभावकों व शिक्षकों के लिए आसान सुझाव: पासवर्ड, फ़िशिंग, फ़ोटो साझा करना और रिपोर्ट करना।"},
-    "blog": {"t": "चाइल्डकेयर प्रबंधन ब्लॉग | KiddieTrac", "d": "चाइल्डकेयर संचालकों के लिए व्यावहारिक गाइड: CWELCC और अनुपालन, बिलिंग, सेंटर चलाना, परिवारों के साथ काम, बाल विकास और अपना कार्यक्रम बढ़ाना।"},
-    "testimonials": {"t": "ग्राहकों की कहानियाँ — 150+ एजेंसियाँ | KiddieTrac", "d": "उत्तरी अमेरिका के चाइल्डकेयर पेशेवरों के वास्तविक परिणाम — KiddieTrac पर बिलिंग, उपस्थिति और CWELCC चलाने वाली 150+ एजेंसियों द्वारा 4.9/5 रेटिंग।"},
-    "security": {"t": "सुरक्षा और भरोसा — PIPEDA और एन्क्रिप्शन | KiddieTrac", "d": "KiddieTrac आपके डेटा की रक्षा कैसे करता है: AES-256 एन्क्रिप्शन, उत्तरी अमेरिका में होस्टिंग, PIPEDA अनुरूपता, दैनिक बैकअप, 2FA और भूमिका-आधारित पहुँच।"},
-    "global": {"t": "वैश्विक उपस्थिति | KiddieTrac", "d": "KiddieTrac कनाडा और अमेरिका की चाइल्डकेयर एजेंसियों को CAD/USD बिलिंग, प्रांतीय सब्सिडी सहायता और स्थानीय अनुपालन के साथ सक्षम बनाता है।"},
-    "about": {"t": "KiddieTrac के बारे में — चाइल्डकेयर विशेषज्ञों द्वारा निर्मित", "d": "KiddieTrac उन चाइल्डकेयर पेशेवरों ने बनाया जिन्होंने पुराने टूल्स की परेशानी झेली। हमारा मिशन: पूरे उत्तरी अमेरिका में चाइल्डकेयर प्रशासन को आसान बनाना।"},
-    "careers": {"t": "करियर — KiddieTrac टीम से जुड़ें", "d": "वह प्लेटफ़ॉर्म बनाने में मदद करें जिसे चाइल्डकेयर एजेंसियाँ पसंद करती हैं। खुले पद और KiddieTrac में काम के बारे में जानें।"},
-    "changelog": {"t": "नया क्या है — प्रोडक्ट अपडेट | KiddieTrac", "d": "KiddieTrac की नवीनतम सुविधाएँ और सुधार: AI दैनिक सारांश, QuickBooks सिंक, बहु-मुद्रा बिलिंग और बहुत कुछ।"},
-    "ilearn": {"t": "होम चाइल्ड केयर प्रदाता बनें | KiddieTrac", "d": "iLearn ओंटारियो की होम चाइल्ड केयर लाइसेंसिंग प्रक्रिया में आपका मार्गदर्शन करता है, और KiddieTrac आपके नए व्यवसाय का प्रबंधन आसान बनाता है।"},
-    "contact": {"t": "KiddieTrac से संपर्क करें — मुफ़्त ट्रायल या डेमो", "d": "KiddieTrac से संपर्क करें। 14 दिन का मुफ़्त ट्रायल शुरू करें, डेमो बुक करें या अपनी एजेंसी के माइग्रेशन के बारे में पूछें — क्रेडिट कार्ड की ज़रूरत नहीं।"},
-    "checklist": {"t": "मुफ़्त CWELCC अनुपालन चेकलिस्ट (2026) | KiddieTrac", "d": "ओंटारियो के चाइल्डकेयर संचालकों के लिए 18-बिंदु वाली मुफ़्त, प्रिंट करने योग्य CWELCC चेकलिस्ट डाउनलोड करें: सब्सिडी गणना, रिकॉर्ड, जमा करने की समय-सीमा और ऑडिट की तैयारी।"},
-    "home-daycare": {"t": "होम डेकेयर सॉफ़्टवेयर — बिलिंग, उपस्थिति और CWELCC | KiddieTrac", "d": "KiddieTrac होम चाइल्ड केयर प्रदाताओं को उपस्थिति, स्वचालित इनवॉइस, दैनिक रिपोर्ट और CWELCC आसानी से चलाने में मदद करता है। न स्प्रेडशीट, न रविवार रात का काम।"},
-    "centre": {"t": "चाइल्ड केयर सेंटर सॉफ़्टवेयर — कमरे, अनुपात और बिलिंग | KiddieTrac", "d": "अपना लाइसेंस प्राप्त सेंटर एक लाइव डैशबोर्ड से चलाएँ: कमरे और अनुपात प्रबंधन, स्टाफ़ शेड्यूल, प्रतीक्षा सूची, बिलिंग और CWELCC ऑटोमेशन।"},
-    "multi-site": {"t": "कई स्थानों का चाइल्डकेयर प्रबंधन — एक लॉगिन | KiddieTrac", "d": "हर स्थान को एक डैशबोर्ड से चलाएँ: समेकित बिलिंग, सभी स्थानों की रिपोर्ट, पूरे नेटवर्क में CWELCC ट्रैकिंग और आपका अपना ब्रांड।"},
-    "shop": {"t": "शॉप — KiddieTrac कपड़े और सामान", "d": "आपकी टीम, परिवारों और आयोजनों के लिए KiddieTrac ब्रांड वाली टी-शर्ट, हूडी, जैकेट, टोपी, मग, पेन और बहुत कुछ। कोटेशन माँगें।"},
-    "vulnerability-reporting": {"t": "सुरक्षा कमज़ोरी की रिपोर्ट | KiddieTrac", "d": "KiddieTrac में सुरक्षा कमज़ोरी की रिपोर्ट कैसे करें: क्या शामिल करें, क्या दायरे में है और हम सुरक्षा शोधकर्ताओं के साथ कैसे काम करते हैं।"},
-    "accessibility": {"t": "सुलभता नीति | KiddieTrac", "d": "KiddieTrac विकलांग व्यक्तियों के लिए बाधाएँ कैसे दूर करता है: AODA प्रतिबद्धताएँ, सुलभ प्रारूप, सुविधाएँ और प्रतिक्रिया देने का तरीका।"},
-    "dei-policy": {"t": "विविधता, समानता और समावेशन नीति | KiddieTrac", "d": "हम कैसे नियुक्ति करते हैं, कैसे काम करते हैं और परिवारों के लिए कौन-सा प्रोडक्ट बनाते हैं — इन सब में विविधता, समानता और समावेशन के प्रति KiddieTrac की प्रतिबद्धता।"},
-    "parentportal": {"t": "अभिभावक पोर्टल और ऐप — दैनिक रिपोर्ट, फ़ोटो, बिलिंग | KiddieTrac", "d": "KiddieTrac अभिभावक ऐप: दैनिक रिपोर्ट, फ़ोटो, संदेश, इनवॉइस और ऑनलाइन भुगतान एक ही जगह, हिंदी, अंग्रेज़ी, फ़्रेंच या स्पेनिश में।"}
+    "home": {
+      "t": "KiddieTrac — स्मार्ट चाइल्डकेयर प्लेटफ़ॉर्म | उत्तरी अमेरिका में नंबर 1",
+      "d": "KiddieTrac उत्तरी अमेरिका का नंबर 1 चाइल्डकेयर प्रबंधन प्लेटफ़ॉर्म है: CWELCC बिलिंग, उपस्थिति, अभिभावकों से संवाद और आपके ब्रांड वाले ऐप। 14 दिन का मुफ़्त ट्रायल, क्रेडिट कार्ड की ज़रूरत नहीं।"
+    },
+    "solutions": {
+      "t": "सुविधाएँ — बिलिंग, उपस्थिति और CWELCC | KiddieTrac",
+      "d": "KiddieTrac की सुविधाएँ देखें: CWELCC सब्सिडी ऑटोमेशन, स्मार्ट बिलिंग, QR उपस्थिति, अभिभावक ऐप और अपना ब्रांड — एक कनाडाई चाइल्डकेयर प्लेटफ़ॉर्म।"
+    },
+    "pricing": {
+      "t": "कीमतें — आपके साथ बढ़ने वाले प्लान | KiddieTrac",
+      "d": "KiddieTrac की सरल और पारदर्शी कीमतें, कोई छिपा शुल्क या सेटअप लागत नहीं। हर प्लान में मुफ़्त ऑनबोर्डिंग और माइग्रेशन, कभी भी रद्द करें। 14 दिन का मुफ़्त ट्रायल।"
+    },
+    "whitelabel": {
+      "t": "आपके ब्रांड वाला चाइल्डकेयर ऐप | KiddieTrac",
+      "d": "सिर्फ़ 14 दिनों में अपने ब्रांड वाला अभिभावक ऐप, अपना डोमेन और ब्रांडेड रिपोर्ट लॉन्च करें — व्हाइट लेबल हर प्लान में शामिल।"
+    },
+    "vscompetitor": {
+      "t": "KiddieTrac बनाम पुराने चाइल्डकेयर सॉफ़्टवेयर",
+      "d": "उत्तरी अमेरिका की चाइल्डकेयर एजेंसियाँ KiddieTrac क्यों चुनती हैं: मूल CWELCC ऑटोमेशन, असली CAD/USD बिलिंग, व्हाइट लेबल और कनाडा में मानवीय सहायता।"
+    },
+    "support": {
+      "t": "ग्राहक सहायता | KiddieTrac",
+      "d": "KiddieTrac सहायता: टिकट खोलें, 1-855-400-9996 पर कॉल करें (सोम–शुक्र, सुबह 9 से शाम 5 बजे ET) या info@kiddietrac.com पर ईमेल करें। हम एक कार्यदिवस में जवाब देते हैं।"
+    },
+    "webinars": {
+      "t": "चाइल्डकेयर टीमों के लिए वेबिनार | KiddieTrac",
+      "d": "चाइल्डकेयर मालिकों, निदेशकों और शिक्षकों के लिए मुफ़्त लाइव वेबिनार: CWELCC, बिलिंग, सेफ़ अराइवल, परिवार और योजना। पहले सत्रों का निमंत्रण पाने के लिए साइन अप करें।"
+    },
+    "internet-safety": {
+      "t": "परिवारों और चाइल्डकेयर के लिए इंटरनेट सुरक्षा | KiddieTrac",
+      "d": "KiddieTrac चाइल्डकेयर जानकारी को कैसे सुरक्षित रखता है, और अभिभावकों व शिक्षकों के लिए आसान सुझाव: पासवर्ड, फ़िशिंग, फ़ोटो साझा करना और रिपोर्ट करना।"
+    },
+    "blog": {
+      "t": "चाइल्डकेयर प्रबंधन ब्लॉग | KiddieTrac",
+      "d": "चाइल्डकेयर संचालकों के लिए व्यावहारिक गाइड: CWELCC और अनुपालन, बिलिंग, सेंटर चलाना, परिवारों के साथ काम, बाल विकास और अपना कार्यक्रम बढ़ाना।"
+    },
+    "testimonials": {
+      "t": "ग्राहकों की कहानियाँ — 150+ एजेंसियाँ | KiddieTrac",
+      "d": "उत्तरी अमेरिका के चाइल्डकेयर पेशेवरों के वास्तविक परिणाम — KiddieTrac पर बिलिंग, उपस्थिति और CWELCC चलाने वाली 150+ एजेंसियों द्वारा 4.9/5 रेटिंग।"
+    },
+    "security": {
+      "t": "सुरक्षा और भरोसा — PIPEDA और एन्क्रिप्शन | KiddieTrac",
+      "d": "KiddieTrac आपके डेटा की रक्षा कैसे करता है: AES-256 एन्क्रिप्शन, उत्तरी अमेरिका में होस्टिंग, PIPEDA अनुरूपता, दैनिक बैकअप, 2FA और भूमिका-आधारित पहुँच।"
+    },
+    "global": {
+      "t": "वैश्विक उपस्थिति | KiddieTrac",
+      "d": "KiddieTrac कनाडा और अमेरिका की चाइल्डकेयर एजेंसियों को CAD/USD बिलिंग, प्रांतीय सब्सिडी सहायता और स्थानीय अनुपालन के साथ सक्षम बनाता है।"
+    },
+    "about": {
+      "t": "KiddieTrac के बारे में — चाइल्डकेयर विशेषज्ञों द्वारा निर्मित",
+      "d": "KiddieTrac उन चाइल्डकेयर पेशेवरों ने बनाया जिन्होंने पुराने टूल्स की परेशानी झेली। हमारा मिशन: पूरे उत्तरी अमेरिका में चाइल्डकेयर प्रशासन को आसान बनाना।"
+    },
+    "careers": {
+      "t": "करियर — KiddieTrac टीम से जुड़ें",
+      "d": "वह प्लेटफ़ॉर्म बनाने में मदद करें जिसे चाइल्डकेयर एजेंसियाँ पसंद करती हैं। खुले पद और KiddieTrac में काम के बारे में जानें।"
+    },
+    "changelog": {
+      "t": "नया क्या है — प्रोडक्ट अपडेट | KiddieTrac",
+      "d": "KiddieTrac की नवीनतम सुविधाएँ और सुधार: AI दैनिक सारांश, QuickBooks सिंक, बहु-मुद्रा बिलिंग और बहुत कुछ।"
+    },
+    "ilearn": {
+      "t": "होम चाइल्ड केयर प्रदाता बनें | KiddieTrac",
+      "d": "iLearn ओंटारियो की होम चाइल्ड केयर लाइसेंसिंग प्रक्रिया में आपका मार्गदर्शन करता है, और KiddieTrac आपके नए व्यवसाय का प्रबंधन आसान बनाता है।"
+    },
+    "contact": {
+      "t": "KiddieTrac से संपर्क करें — मुफ़्त ट्रायल या डेमो",
+      "d": "KiddieTrac से संपर्क करें। 14 दिन का मुफ़्त ट्रायल शुरू करें, डेमो बुक करें या अपनी एजेंसी के माइग्रेशन के बारे में पूछें — क्रेडिट कार्ड की ज़रूरत नहीं।"
+    },
+    "checklist": {
+      "t": "मुफ़्त CWELCC अनुपालन चेकलिस्ट (2026) | KiddieTrac",
+      "d": "ओंटारियो के चाइल्डकेयर संचालकों के लिए 18-बिंदु वाली मुफ़्त, प्रिंट करने योग्य CWELCC चेकलिस्ट डाउनलोड करें: सब्सिडी गणना, रिकॉर्ड, जमा करने की समय-सीमा और ऑडिट की तैयारी।"
+    },
+    "home-daycare": {
+      "t": "होम डेकेयर सॉफ़्टवेयर — बिलिंग, उपस्थिति और CWELCC | KiddieTrac",
+      "d": "KiddieTrac होम चाइल्ड केयर प्रदाताओं को उपस्थिति, स्वचालित इनवॉइस, दैनिक रिपोर्ट और CWELCC आसानी से चलाने में मदद करता है। न स्प्रेडशीट, न रविवार रात का काम।"
+    },
+    "centre": {
+      "t": "चाइल्ड केयर सेंटर सॉफ़्टवेयर — कमरे, अनुपात और बिलिंग | KiddieTrac",
+      "d": "अपना लाइसेंस प्राप्त सेंटर एक लाइव डैशबोर्ड से चलाएँ: कमरे और अनुपात प्रबंधन, स्टाफ़ शेड्यूल, प्रतीक्षा सूची, बिलिंग और CWELCC ऑटोमेशन।"
+    },
+    "multi-site": {
+      "t": "कई स्थानों का चाइल्डकेयर प्रबंधन — एक लॉगिन | KiddieTrac",
+      "d": "हर स्थान को एक डैशबोर्ड से चलाएँ: समेकित बिलिंग, सभी स्थानों की रिपोर्ट, पूरे नेटवर्क में CWELCC ट्रैकिंग और आपका अपना ब्रांड।"
+    },
+    "shop": {
+      "t": "शॉप — KiddieTrac कपड़े और सामान",
+      "d": "आपकी टीम, परिवारों और आयोजनों के लिए KiddieTrac ब्रांड वाली टी-शर्ट, हूडी, जैकेट, टोपी, मग, पेन और बहुत कुछ। कोटेशन माँगें।"
+    },
+    "vulnerability-reporting": {
+      "t": "सुरक्षा कमज़ोरी की रिपोर्ट | KiddieTrac",
+      "d": "KiddieTrac में सुरक्षा कमज़ोरी की रिपोर्ट कैसे करें: क्या शामिल करें, क्या दायरे में है और हम सुरक्षा शोधकर्ताओं के साथ कैसे काम करते हैं।"
+    },
+    "accessibility": {
+      "t": "सुलभता नीति | KiddieTrac",
+      "d": "KiddieTrac विकलांग व्यक्तियों के लिए बाधाएँ कैसे दूर करता है: AODA प्रतिबद्धताएँ, सुलभ प्रारूप, सुविधाएँ और प्रतिक्रिया देने का तरीका।"
+    },
+    "dei-policy": {
+      "t": "विविधता, समानता और समावेशन नीति | KiddieTrac",
+      "d": "हम कैसे नियुक्ति करते हैं, कैसे काम करते हैं और परिवारों के लिए कौन-सा प्रोडक्ट बनाते हैं — इन सब में विविधता, समानता और समावेशन के प्रति KiddieTrac की प्रतिबद्धता।"
+    },
+    "parentportal": {
+      "t": "अभिभावक पोर्टल और ऐप — दैनिक रिपोर्ट, फ़ोटो, बिलिंग | KiddieTrac",
+      "d": "KiddieTrac अभिभावक ऐप: दैनिक रिपोर्ट, फ़ोटो, संदेश, इनवॉइस और ऑनलाइन भुगतान एक ही जगह, हिंदी, अंग्रेज़ी, फ़्रेंच या स्पेनिश में।"
+    },
+    "childcare-software-canada": {
+      "t": "कनाडा के लिए चाइल्डकेयर प्रबंधन सॉफ़्टवेयर | KiddieTrac",
+      "d": "कनाडा के लिए बना चाइल्डकेयर सॉफ़्टवेयर: उपस्थिति, प्रांतीय फ़ीस छूट के साथ CAD में बिलिंग, पैरेंट ऐप, अनुपात और अनुपालन। 14 दिन का मुफ़्त ट्रायल।"
+    },
+    "cwelcc-billing-software": {
+      "t": "ओंटारियो चाइल्ड केयर के लिए CWELCC बिलिंग सॉफ़्टवेयर | KiddieTrac",
+      "d": "हर इनवॉइस पर CWELCC छूट लगाएँ, ओंटारियो की $22 प्रतिदिन की सीमा में रहें और अपनी रिपोर्ट के लिए ज़रूरी रिकॉर्ड रखें। 14 दिन का मुफ़्त ट्रायल।"
+    },
+    "daycare-software-ontario": {
+      "t": "ओंटारियो के सेंटरों और होम चाइल्ड केयर के लिए डेकेयर सॉफ़्टवेयर | KiddieTrac",
+      "d": "ओंटारियो के लिए बना सॉफ़्टवेयर: CCEYA अनुपात, CWELCC बिलिंग, How Does Learning Happen? और निरीक्षण के लिए तैयार रिकॉर्ड, सेंटरों और होम चाइल्ड केयर एजेंसियों के लिए।"
+    },
+    "ratio-calculator": {
+      "t": "ओंटारियो चाइल्ड केयर अनुपात कैलकुलेटर (मुफ़्त) | KiddieTrac",
+      "d": "मुफ़्त कैलकुलेटर: शिशु, टॉडलर, प्रीस्कूल, किंडरगार्टन और स्कूली उम्र के बच्चों के लिए ओंटारियो के अनुपात के अनुसार कितना स्टाफ़ और कितने समूह चाहिए, और होम चाइल्ड केयर की सीमाएँ।"
+    },
+    "cwelcc-calculator": {
+      "t": "ओंटारियो के लिए CWELCC फ़ीस कैलकुलेटर (मुफ़्त) | KiddieTrac",
+      "d": "मुफ़्त कैलकुलेटर: CWELCC की $22 प्रतिदिन की सीमा में परिवार कितना देते हैं, आपकी पूरी फ़ीस की तुलना में उनकी बचत, और आपकी मासिक पैरेंट-फ़ीस आय।"
+    }
   }
 }

@@ -1,0 +1,827 @@
+{
+ "|🧮 Ratio calculator": {
+  "fr": "🧮 Calculateur de ratios",
+  "es": "🧮 Calculadora de proporciones",
+  "hi": "🧮 अनुपात कैलकुलेटर"
+ },
+ "|💲 CWELCC fee calculator": {
+  "fr": "💲 Calculateur de frais CWELCC",
+  "es": "💲 Calculadora de tarifas CWELCC",
+  "hi": "💲 CWELCC शुल्क कैलकुलेटर"
+ },
+ "|For Canadian child care": {
+  "fr": "Pour la garde d’enfants au Canada",
+  "es": "Para el cuidado infantil en Canadá",
+  "hi": "कनाडा की चाइल्ड केयर के लिए"
+ },
+ "|Childcare management software built for Canada": {
+  "fr": "Logiciel de gestion de garde d’enfants conçu pour le Canada",
+  "es": "Software de gestión de cuidado infantil creado para Canadá",
+  "hi": "कनाडा के लिए बनाया गया चाइल्डकेयर मैनेजमेंट सॉफ़्टवेयर"
+ },
+ "|Attendance, billing, families and compliance in one place, in Canadian dollars, with your province’s fee reductions built into every invoice.": {
+  "fr": "Présences, facturation, familles et conformité au même endroit, en dollars canadiens, avec les réductions de frais de votre province intégrées à chaque facture.",
+  "es": "Asistencia, facturación, familias y cumplimiento normativo en un solo lugar, en dólares canadienses, con las reducciones de tarifas de su provincia incluidas en cada factura.",
+  "hi": "अटेंडेंस, बिलिंग, परिवार और कम्प्लायंस सब एक जगह, कैनेडियन डॉलर में, और हर इनवॉइस में आपके प्रांत की फ़ीस कटौती पहले से शामिल।"
+ },
+ "|Fee reductions on every invoice": {
+  "fr": "Réductions de frais sur chaque facture",
+  "es": "Reducciones de tarifas en cada factura",
+  "hi": "हर इनवॉइस पर फ़ीस में कटौती"
+ },
+ "|Record each child’s fee reduction or subsidy once, whether it is CWELCC in Ontario or your own province’s program, and every invoice shows the full fee, the reduction and what the family pays.": {
+  "fr": "Enregistrez une seule fois la réduction de frais ou la subvention de chaque enfant, qu’il s’agisse de la CWELCC en Ontario ou du programme de votre province, et chaque facture affiche les frais complets, la réduction et le montant payé par la famille.",
+  "es": "Registre la reducción de tarifa o el subsidio de cada niño una sola vez, ya sea CWELCC en Ontario o el programa de su propia provincia, y cada factura mostrará la tarifa completa, la reducción y lo que paga la familia.",
+  "hi": "हर बच्चे की फ़ीस कटौती या सब्सिडी एक बार दर्ज करें — चाहे वह ओंटारियो का CWELCC हो या आपके प्रांत की अपनी योजना — और हर इनवॉइस में पूरी फ़ीस, कटौती और परिवार को चुकानी राशि दिखेगी।"
+ },
+ "|Billing in CAD, and USD too": {
+  "fr": "Facturation en CAD, et en USD aussi",
+  "es": "Facturación en CAD, y también en USD",
+  "hi": "CAD में बिलिंग, और USD में भी"
+ },
+ "|Invoices, payment schedules, receipts and year-end childcare expense receipts in Canadian dollars, with USD for programs that also operate in the United States.": {
+  "fr": "Factures, échéanciers de paiement, reçus et reçus de fin d’année pour frais de garde, en dollars canadiens, avec le USD pour les programmes qui exercent aussi aux États-Unis.",
+  "es": "Facturas, calendarios de pago, recibos y recibos de fin de año por gastos de cuidado infantil en dólares canadienses, con USD para programas que también operan en Estados Unidos.",
+  "hi": "इनवॉइस, भुगतान शेड्यूल, रसीदें और साल के अंत की चाइल्डकेयर खर्च रसीदें कैनेडियन डॉलर में, और जो प्रोग्राम अमेरिका में भी चलते हैं उनके लिए USD में।"
+ },
+ "|Families in their own language": {
+  "fr": "Les familles dans leur propre langue",
+  "es": "Familias en su propio idioma",
+  "hi": "परिवारों के लिए उन्हीं की भाषा में"
+ },
+ "|The parent app shows daily reports, photos, messages and invoices, and parents can use it in English, French, Spanish or Hindi.": {
+  "fr": "L’app parents affiche les rapports quotidiens, les photos, les messages et les factures, et les parents peuvent l’utiliser en anglais, en français, en espagnol ou en hindi.",
+  "es": "La app para padres muestra informes diarios, fotos, mensajes y facturas, y los padres pueden usarla en inglés, francés, español o hindi.",
+  "hi": "पैरेंट ऐप में डेली रिपोर्ट, फ़ोटो, मैसेज और इनवॉइस दिखते हैं, और पेरेंट्स इसे अंग्रेज़ी, फ़्रेंच, स्पैनिश या हिंदी में इस्तेमाल कर सकते हैं।"
+ },
+ "|Everything a Canadian program runs on": {
+  "fr": "Tout ce dont un programme canadien a besoin pour fonctionner",
+  "es": "Todo lo que necesita un programa canadiense para funcionar",
+  "hi": "हर वह चीज़ जिस पर एक कैनेडियन प्रोग्राम चलता है"
+ },
+ "|Check-in and check-out, including parent QR check-in at the door": {
+  "fr": "Arrivées et départs, y compris l’arrivée par QR pour les parents à la porte",
+  "es": "Entrada y salida, incluido el registro con QR de los padres en la puerta",
+  "hi": "चेक-इन और चेक-आउट, जिसमें दरवाज़े पर पैरेंट QR चेक-इन भी शामिल है"
+ },
+ "|Safe Arrival alerts when a child has not arrived": {
+  "fr": "Alertes Safe Arrival lorsqu’un enfant n’est pas arrivé",
+  "es": "Alertas de Safe Arrival cuando un niño no ha llegado",
+  "hi": "जब कोई बच्चा नहीं पहुँचता तो Safe Arrival अलर्ट"
+ },
+ "|Live room counts against your staff-to-child ratios": {
+  "fr": "Comptes de salle en temps réel selon vos ratios personnel-enfants",
+  "es": "Conteo en vivo por sala según sus proporciones de personal por niño",
+  "hi": "आपके स्टाफ़-टू-चाइल्ड अनुपात के मुक़ाबले लाइव रूम काउंट"
+ },
+ "|Daily reports, photos and two-way messages with families": {
+  "fr": "Rapports quotidiens, photos et messages bidirectionnels avec les familles",
+  "es": "Informes diarios, fotos y mensajes bidireccionales con las familias",
+  "hi": "परिवारों के साथ डेली रिपोर्ट, फ़ोटो और दोतरफ़ा मैसेज"
+ },
+ "|Immunization records, incidents and inspection checklists": {
+  "fr": "Dossiers d’immunisation, incidents et listes de vérification d’inspection",
+  "es": "Registros de vacunación, incidentes y listas de verificación de inspección",
+  "hi": "इम्यूनाइज़ेशन रिकॉर्ड, घटनाएं और इंस्पेक्शन चेकलिस्ट"
+ },
+ "|Staff time clock, schedules and payroll documents": {
+  "fr": "Horodateur du personnel, horaires et documents de paie",
+  "es": "Reloj de asistencia del personal, horarios y documentos de nómina",
+  "hi": "स्टाफ़ टाइम क्लॉक, शेड्यूल और पेरोल दस्तावेज़"
+ },
+ "|Observations and report cards linked to your provincial learning framework": {
+  "fr": "Observations et bulletins liés au cadre d’apprentissage de votre province",
+  "es": "Observaciones y boletines vinculados al marco de aprendizaje de su provincia",
+  "hi": "आपके प्रांत के लर्निंग फ़्रेमवर्क से जुड़े ऑब्ज़र्वेशन और रिपोर्ट कार्ड"
+ },
+ "|Split billing for separated parents, each with their own receipts": {
+  "fr": "Facturation partagée pour les parents séparés, chacun avec ses propres reçus",
+  "es": "Facturación dividida para padres separados, cada uno con sus propios recibos",
+  "hi": "अलग रह रहे माता-पिता के लिए स्प्लिट बिलिंग, हर एक की अपनी रसीद के साथ"
+ },
+ "|Online forms and e-signatures for enrolment": {
+  "fr": "Formulaires en ligne et signatures électroniques pour l’inscription",
+  "es": "Formularios en línea y firmas electrónicas para la inscripción",
+  "hi": "एनरोलमेंट के लिए ऑनलाइन फ़ॉर्म और ई-साइनेचर"
+ },
+ "|QuickBooks sync for your bookkeeper": {
+  "fr": "Synchronisation QuickBooks pour votre comptable",
+  "es": "Sincronización con QuickBooks para su contador",
+  "hi": "आपके बुककीपर के लिए QuickBooks सिंक"
+ },
+ "|Province by province": {
+  "fr": "Province par province",
+  "es": "Provincia por provincia",
+  "hi": "प्रांत दर प्रांत"
+ },
+ "|KiddieTrac is used by licensed centres, home child care agencies and independent providers. The parts that differ between provinces are built in as settings, not workarounds:": {
+  "fr": "KiddieTrac est utilisé par des garderies agréées, des agences de garde en milieu familial et des fournisseurs indépendants. Les aspects qui diffèrent d’une province à l’autre sont intégrés comme des paramètres, et non comme des contournements :",
+  "es": "KiddieTrac lo utilizan centros con licencia, agencias de cuidado infantil en el hogar y proveedores independientes. Las diferencias entre provincias están integradas como configuraciones, no como soluciones improvisadas:",
+  "hi": "KiddieTrac का इस्तेमाल लाइसेंस प्राप्त सेंटर, होम चाइल्ड केयर एजेंसियाँ और स्वतंत्र प्रोवाइडर करते हैं। जो हिस्से प्रांत-दर-प्रांत अलग होते हैं, वे तोड़-जोड़ नहीं बल्कि सेटिंग्स के रूप में बने हैं:"
+ },
+ "b,i,i|Learning frameworks. Link observations and report cards to Ontario’s How Does Learning Happen? and ELECT, the British Columbia Early Learning Framework, Alberta’s Flight, Quebec’s Accueillir la petite enfance, or your own.": {
+  "fr": "{0}Cadres d’apprentissage.{/0} Liez les observations et les bulletins au cadre {1}Comment apprend-on?{/1} et à ELECT en Ontario, au Cadre d’apprentissage des jeunes enfants de la Colombie-Britannique, à Flight en Alberta, à {2}Accueillir la petite enfance{/2} au Québec, ou à votre propre cadre.",
+  "es": "{0}Marcos de aprendizaje.{/0} Vincule las observaciones y los boletines con {1}How Does Learning Happen?{/1} y ELECT de Ontario, el British Columbia Early Learning Framework, Flight de Alberta, {2}Accueillir la petite enfance{/2} de Quebec, o el suyo propio.",
+  "hi": "{0}लर्निंग फ़्रेमवर्क।{/0} ऑब्ज़र्वेशन और रिपोर्ट कार्ड को ओंटारियो के {1}How Does Learning Happen?{/1} और ELECT से, ब्रिटिश कोलंबिया के British Columbia Early Learning Framework से, अल्बर्टा के Flight से, और क्यूबेक के {2}Accueillir la petite enfance{/2} से जोड़ें, या अपने फ़्रेमवर्क से।"
+ },
+ "b,a|Fee reductions and subsidies. Set up your province’s reduced parent fee or a family’s subsidy per child, and invoices deduct it automatically. Ontario programs get CWELCC handled end to end: see CWELCC billing.": {
+  "fr": "{0}Réductions de frais et subventions.{/0} Configurez le tarif réduit de votre province ou la subvention d’une famille pour chaque enfant, et les factures la déduisent automatiquement. Les programmes ontariens bénéficient d’une gestion complète de la CWELCC : consultez {1}Facturation CWELCC{/1}.",
+  "es": "{0}Reducciones de tarifas y subsidios.{/0} Configure la tarifa reducida de su provincia o el subsidio de una familia por niño, y las facturas lo deducirán automáticamente. Los programas de Ontario tienen CWELCC gestionado de principio a fin: consulte {1}Facturación CWELCC{/1}.",
+  "hi": "{0}फ़ीस कटौती और सब्सिडी।{/0} अपने प्रांत की घटी हुई पैरेंट फ़ीस या किसी परिवार की प्रति-बच्चा सब्सिडी सेट करें, और इनवॉइस अपने आप उसे घटा देंगे। ओंटारियो के प्रोग्राम्स के लिए CWELCC शुरू से आख़िर तक संभाला जाता है: देखें {1}CWELCC बिलिंग{/1}।"
+ },
+ "b|Your data. KiddieTrac is hosted in North America with encryption, two-factor sign-in and a full audit log. If your organization needs data stored in Canada, talk to us before you sign up.": {
+  "fr": "{0}Vos données.{/0} KiddieTrac est hébergé en Amérique du Nord avec chiffrement, authentification à deux facteurs et un journal d’audit complet. Si votre organisation a besoin que les données soient stockées au Canada, contactez-nous avant de vous inscrire.",
+  "es": "{0}Sus datos.{/0} KiddieTrac está alojado en América del Norte con cifrado, inicio de sesión de dos factores y un registro de auditoría completo. Si su organización necesita que los datos se almacenen en Canadá, comuníquese con nosotros antes de registrarse.",
+  "hi": "{0}आपका डेटा।{/0} KiddieTrac उत्तरी अमेरिका में एन्क्रिप्शन, टू-फ़ैक्टर साइन-इन और पूरे ऑडिट लॉग के साथ होस्ट किया जाता है। अगर आपके संगठन को डेटा कनाडा में स्टोर करना ज़रूरी है, तो साइन अप करने से पहले हमसे बात करें।"
+ },
+ "|Questions we hear": {
+  "fr": "Questions fréquentes",
+  "es": "Preguntas frecuentes",
+  "hi": "अक्सर पूछे जाने वाले सवाल"
+ },
+ "|Can any province use KiddieTrac?": {
+  "fr": "N’importe quelle province peut-elle utiliser KiddieTrac?",
+  "es": "¿Puede usar KiddieTrac cualquier provincia?",
+  "hi": "क्या कोई भी प्रांत KiddieTrac इस्तेमाल कर सकता है?"
+ },
+ "|Yes. Centres, home child care agencies and independent providers anywhere in Canada use the same platform; provincial differences such as learning frameworks and fee reductions are settings.": {
+  "fr": "Oui. Les garderies, les agences de garde en milieu familial et les fournisseurs indépendants partout au Canada utilisent la même plateforme; les différences provinciales, comme les cadres d’apprentissage et les réductions de frais, sont des paramètres.",
+  "es": "Sí. Los centros, las agencias de cuidado infantil en el hogar y los proveedores independientes de cualquier parte de Canadá usan la misma plataforma; las diferencias provinciales, como los marcos de aprendizaje y las reducciones de tarifas, son configuraciones.",
+  "hi": "हाँ। कनाडा में कहीं भी सेंटर, होम चाइल्ड केयर एजेंसियाँ और स्वतंत्र प्रोवाइडर एक ही प्लेटफ़ॉर्म इस्तेमाल करते हैं; लर्निंग फ़्रेमवर्क और फ़ीस कटौती जैसे प्रांतीय अंतर सेटिंग्स के ज़रिए संभाले जाते हैं।"
+ },
+ "|Can we move from our current software?": {
+  "fr": "Pouvons-nous migrer depuis notre logiciel actuel?",
+  "es": "¿Podemos migrar desde nuestro software actual?",
+  "hi": "क्या हम अपने मौजूदा सॉफ़्टवेयर से शिफ्ट हो सकते हैं?"
+ },
+ "|Yes. We import children, families and staff from a spreadsheet or an export from your current system, and migration is free on every plan.": {
+  "fr": "Oui. Nous importons les enfants, les familles et le personnel à partir d’une feuille de calcul ou d’une exportation de votre système actuel, et la migration est gratuite avec tous les forfaits.",
+  "es": "Sí. Importamos niños, familias y personal desde una hoja de cálculo o una exportación de su sistema actual, y la migración es gratuita en todos los planes.",
+  "hi": "हाँ। हम बच्चों, परिवारों और स्टाफ़ को स्प्रेडशीट या आपके मौजूदा सिस्टम की एक्सपोर्ट फ़ाइल से इम्पोर्ट कर देते हैं, और माइग्रेशन हर प्लान में मुफ़्त है।"
+ },
+ "|Does it work for home child care agencies?": {
+  "fr": "Est-ce que ça fonctionne pour les agences de garde en milieu familial?",
+  "es": "¿Funciona para agencias de cuidado infantil en el hogar?",
+  "hi": "क्या यह होम चाइल्ड केयर एजेंसियों के लिए काम करता है?"
+ },
+ "|Yes. Agencies manage their providers, home visitors file their visit reports, and providers run attendance, billing and parent updates from their phone.": {
+  "fr": "Oui. Les agences gèrent leurs fournisseurs, les agents de visite remplissent leurs rapports de visite, et les fournisseurs gèrent les présences, la facturation et les mises à jour aux parents depuis leur téléphone.",
+  "es": "Sí. Las agencias administran a sus proveedores, los visitadores domiciliarios presentan sus informes de visita, y los proveedores gestionan la asistencia, la facturación y las actualizaciones para los padres desde su teléfono.",
+  "hi": "हाँ। एजेंसियाँ अपने प्रोवाइडर मैनेज करती हैं, होम विज़िटर अपनी विज़िट रिपोर्ट फ़ाइल करते हैं, और प्रोवाइडर अपने फ़ोन से अटेंडेंस, बिलिंग और पैरेंट अपडेट संभालते हैं।"
+ },
+ "|Is there a free trial?": {
+  "fr": "Y a-t-il un essai gratuit?",
+  "es": "¿Hay una prueba gratuita?",
+  "hi": "क्या मुफ़्त ट्रायल उपलब्ध है?"
+ },
+ "a|Yes, 14 days with no credit card. Book a demo and we will set it up with you.": {
+  "fr": "Oui, 14 jours, sans carte de crédit. {0}Réservez une démo{/0} et nous la mettrons en place avec vous.",
+  "es": "Sí, 14 días sin tarjeta de crédito. {0}Reserve una demostración{/0} y la configuraremos junto con usted.",
+  "hi": "हाँ, 14 दिन, क्रेडिट कार्ड की ज़रूरत नहीं। {0}डेमो बुक करें{/0} और हम आपके साथ मिलकर इसे सेट कर देंगे।"
+ },
+ "|Book a demo →": {
+  "fr": "Réserver une démo →",
+  "es": "Reservar una demostración →",
+  "hi": "डेमो बुक करें →"
+ },
+ "|See pricing": {
+  "fr": "Voir les tarifs",
+  "es": "Ver precios",
+  "hi": "प्राइसिंग देखें"
+ },
+ "|Free 14-day trial · No credit card required · Free migration": {
+  "fr": "Essai gratuit de 14 jours · Aucune carte de crédit requise · Migration gratuite",
+  "es": "Prueba gratuita de 14 días · Sin tarjeta de crédito · Migración gratuita",
+  "hi": "मुफ़्त 14-दिन ट्रायल · क्रेडिट कार्ड की ज़रूरत नहीं · मुफ़्त माइग्रेशन"
+ },
+ "|CWELCC for Ontario programs": {
+  "fr": "CWELCC pour les programmes ontariens",
+  "es": "CWELCC para programas de Ontario",
+  "hi": "ओंटारियो प्रोग्राम्स के लिए CWELCC"
+ },
+ "|CWELCC billing software for Ontario child care": {
+  "fr": "Logiciel de facturation CWELCC pour la garde d’enfants en Ontario",
+  "es": "Software de facturación CWELCC para el cuidado infantil en Ontario",
+  "hi": "ओंटारियो चाइल्ड केयर के लिए CWELCC बिलिंग सॉफ़्टवेयर"
+ },
+ "|Apply the fee reduction on every invoice, keep parent fees within Ontario’s $22-a-day cap, and keep the records your reporting is built from.": {
+  "fr": "Appliquez la réduction de frais sur chaque facture, respectez le plafond de 22 $ par jour de l’Ontario pour les frais parentaux, et conservez les dossiers sur lesquels s’appuient vos rapports.",
+  "es": "Aplique la reducción de tarifa en cada factura, mantenga las tarifas de los padres dentro del tope de $22 al día de Ontario, y conserve los registros con los que se elaboran sus informes.",
+  "hi": "हर इनवॉइस पर फ़ीस कटौती लागू करें, पैरेंट फ़ीस को ओंटारियो के $22-प्रतिदिन कैप के अंदर रखें, और वे रिकॉर्ड रखें जिन पर आपकी रिपोर्टिंग आधारित है।"
+ },
+ "A|Children working at tables in a bright classroom": {
+  "fr": "Des enfants travaillant à des tables dans une salle de classe lumineuse",
+  "es": "Niños trabajando en mesas en un aula luminosa",
+  "hi": "रोशनी से भरी क्लासरूम में मेज़ों पर काम करते बच्चे"
+ },
+ "|The reduction on every invoice": {
+  "fr": "La réduction sur chaque facture",
+  "es": "La reducción en cada factura",
+  "hi": "हर इनवॉइस पर कटौती"
+ },
+ "|Mark each child’s CWELCC eligibility once. Every invoice shows the full fee, the CWELCC reduction and what the family pays, so parents can see the saving.": {
+  "fr": "Indiquez une seule fois l’admissibilité CWELCC de chaque enfant. Chaque facture affiche les frais complets, la réduction CWELCC et le montant payé par la famille, afin que les parents voient l’économie réalisée.",
+  "es": "Marque la elegibilidad de CWELCC de cada niño una sola vez. Cada factura muestra la tarifa completa, la reducción de CWELCC y lo que paga la familia, para que los padres puedan ver el ahorro.",
+  "hi": "हर बच्चे की CWELCC पात्रता एक बार दर्ज करें। हर इनवॉइस में पूरी फ़ीस, CWELCC कटौती और परिवार को चुकानी राशि दिखेगी, ताकि पेरेंट्स अपनी बचत देख सकें।"
+ },
+ "|Records for your reporting": {
+  "fr": "Des dossiers pour vos rapports",
+  "es": "Registros para sus informes",
+  "hi": "आपकी रिपोर्टिंग के लिए रिकॉर्ड"
+ },
+ "|Enrolment, attendance and fees by child and by period, ready to export when your service system manager asks for them.": {
+  "fr": "Inscription, présences et frais par enfant et par période, prêts à exporter lorsque votre gestionnaire de services municipaux regroupés (GSMR) les demande.",
+  "es": "Inscripción, asistencia y tarifas por niño y por período, listos para exportar cuando su administrador del sistema de servicios (service system manager) los solicite.",
+  "hi": "बच्चे और अवधि के हिसाब से एनरोलमेंट, अटेंडेंस और फ़ीस, जब आपका सर्विस सिस्टम मैनेजर मांगे तो तुरंत एक्सपोर्ट के लिए तैयार।"
+ },
+ "|Receipts parents can use": {
+  "fr": "Des reçus que les parents peuvent utiliser",
+  "es": "Recibos que los padres pueden usar",
+  "hi": "पेरेंट्स के काम आने वाली रसीदें"
+ },
+ "|Families see every invoice and payment in the parent app, and each parent gets a year-end childcare expense receipt, even when the bill is split.": {
+  "fr": "Les familles voient chaque facture et chaque paiement dans l’app parents, et chaque parent reçoit un reçu de fin d’année pour frais de garde, même lorsque la facture est partagée.",
+  "es": "Las familias ven cada factura y pago en la app para padres, y cada padre recibe un recibo de fin de año por gastos de cuidado infantil, incluso cuando la cuenta está dividida.",
+  "hi": "परिवार पैरेंट ऐप में हर इनवॉइस और भुगतान देख सकते हैं, और हर पेरेंट को साल के अंत की चाइल्डकेयर खर्च रसीद मिलती है, भले ही बिल स्प्लिट हो।"
+ },
+ "|How the $22-a-day cap works": {
+  "fr": "Comment fonctionne le plafond de 22 $ par jour",
+  "es": "Cómo funciona el tope de $22 al día",
+  "hi": "$22-प्रतिदिन कैप कैसे काम करता है"
+ },
+ "|Since January 1, 2025, parent fees for CWELCC-eligible children under six in participating Ontario programs have been capped at $22 a day. A program that was already charging less keeps the lower fee it charged on December 31, 2024.": {
+  "fr": "Depuis le 1er janvier 2025, les frais parentaux pour les enfants de moins de six ans admissibles à la CWELCC dans les programmes ontariens participants sont plafonnés à 22 $ par jour. Un programme qui facturait déjà moins conserve le tarif inférieur qu’il appliquait le 31 décembre 2024.",
+  "es": "Desde el 1 de enero de 2025, las tarifas de los padres para niños menores de seis años elegibles para CWELCC en programas participantes de Ontario tienen un tope de $22 al día. Un programa que ya cobraba menos mantiene la tarifa más baja que cobraba el 31 de diciembre de 2024.",
+  "hi": "1 जनवरी 2025 से, भाग लेने वाले ओंटारियो प्रोग्राम्स में छह साल से कम उम्र के CWELCC-पात्र बच्चों की पैरेंट फ़ीस $22 प्रतिदिन पर कैप कर दी गई है। जो प्रोग्राम पहले से कम फ़ीस ले रहा था, वह 31 दिसंबर 2024 को ली गई अपनी कम फ़ीस ही जारी रखेगा।"
+ },
+ "a,a|Try the numbers for your own program with the free CWELCC fee calculator, or read CWELCC explained for Ontario operators.": {
+  "fr": "Essayez les chiffres de votre propre programme avec le {0}calculateur de frais CWELCC{/0} gratuit, ou consultez {1}la CWELCC expliquée pour les exploitants ontariens{/1}.",
+  "es": "Pruebe los números de su propio programa con la {0}calculadora de tarifas CWELCC{/0} gratuita, o lea {1}CWELCC explicado para operadores de Ontario{/1}.",
+  "hi": "अपने प्रोग्राम के लिए मुफ़्त {0}CWELCC शुल्क कैलकुलेटर{/0} से आंकड़े आज़माएँ, या {1}ओंटारियो ऑपरेटर्स के लिए CWELCC समझाया गया{/1} पढ़ें।"
+ },
+ "|What KiddieTrac does for CWELCC programs": {
+  "fr": "Ce que KiddieTrac fait pour les programmes CWELCC",
+  "es": "Qué hace KiddieTrac por los programas CWELCC",
+  "hi": "KiddieTrac CWELCC प्रोग्राम्स के लिए क्या करता है"
+ },
+ "|Eligibility per child, with the reduction applied automatically": {
+  "fr": "Admissibilité par enfant, avec réduction appliquée automatiquement",
+  "es": "Elegibilidad por niño, con la reducción aplicada automáticamente",
+  "hi": "प्रति बच्चा पात्रता, कटौती अपने आप लागू"
+ },
+ "|Invoices that show full fee, reduction and parent fee": {
+  "fr": "Des factures qui affichent les frais complets, la réduction et les frais parentaux",
+  "es": "Facturas que muestran la tarifa completa, la reducción y la tarifa de los padres",
+  "hi": "पूरी फ़ीस, कटौती और पैरेंट फ़ीस दिखाने वाले इनवॉइस"
+ },
+ "|Families under and over six billed correctly side by side": {
+  "fr": "Les familles avec des enfants de moins et de plus de six ans facturées correctement, côte à côte",
+  "es": "Familias con niños menores y mayores de seis años facturadas correctamente, una junto a la otra",
+  "hi": "छह साल से कम और ज़्यादा उम्र के परिवारों की सही बिलिंग साथ-साथ"
+ },
+ "|Provincial and municipal fee subsidies recorded per child": {
+  "fr": "Subventions de frais provinciales et municipales enregistrées par enfant",
+  "es": "Subsidios de tarifas provinciales y municipales registrados por niño",
+  "hi": "प्रांतीय और नगरपालिका फ़ीस सब्सिडी प्रति बच्चा दर्ज"
+ },
+ "|Attendance and enrolment exports for your reporting": {
+  "fr": "Exportations des présences et des inscriptions pour vos rapports",
+  "es": "Exportaciones de asistencia e inscripción para sus informes",
+  "hi": "आपकी रिपोर्टिंग के लिए अटेंडेंस और एनरोलमेंट एक्सपोर्ट"
+ },
+ "|Split family billing, each parent paying their share": {
+  "fr": "Facturation familiale partagée, chaque parent payant sa part",
+  "es": "Facturación familiar dividida, cada padre paga su parte",
+  "hi": "स्प्लिट फ़ैमिली बिलिंग, हर पेरेंट अपना हिस्सा चुकाए"
+ },
+ "|Year-end childcare expense receipts for every parent": {
+  "fr": "Reçus de fin d’année pour frais de garde pour chaque parent",
+  "es": "Recibos de fin de año por gastos de cuidado infantil para cada padre",
+  "hi": "हर पेरेंट के लिए साल के अंत की चाइल्डकेयर खर्च रसीद"
+ },
+ "|A free printable CWELCC compliance checklist": {
+  "fr": "Une liste de vérification de conformité CWELCC gratuite et imprimable",
+  "es": "Una lista de verificación de cumplimiento de CWELCC gratuita para imprimir",
+  "hi": "एक मुफ़्त प्रिंट करने योग्य CWELCC कम्प्लायंस चेकलिस्ट"
+ },
+ "|What is CWELCC?": {
+  "fr": "Qu’est-ce que la CWELCC?",
+  "es": "¿Qué es CWELCC?",
+  "hi": "CWELCC क्या है?"
+ },
+ "|The Canada-Wide Early Learning and Child Care system: federal and provincial funding that lowers parent fees for children under six in participating licensed programs.": {
+  "fr": "Le système pancanadien d’apprentissage et de garde des jeunes enfants : un financement fédéral et provincial qui réduit les frais parentaux pour les enfants de moins de six ans dans les programmes agréés participants.",
+  "es": "El sistema de Aprendizaje Temprano y Cuidado Infantil Pancanadiense (CWELCC): financiamiento federal y provincial que reduce las tarifas de los padres para niños menores de seis años en programas con licencia participantes.",
+  "hi": "कनाडा-वाइड अर्ली लर्निंग एंड चाइल्ड केयर सिस्टम: संघीय और प्रांतीय फंडिंग जो भाग लेने वाले लाइसेंस प्राप्त प्रोग्राम्स में छह साल से कम उम्र के बच्चों की पैरेंट फ़ीस घटाती है।"
+ },
+ "|Does KiddieTrac submit our CWELCC claims?": {
+  "fr": "KiddieTrac soumet-il nos demandes CWELCC?",
+  "es": "¿KiddieTrac presenta nuestras reclamaciones de CWELCC?",
+  "hi": "क्या KiddieTrac हमारे CWELCC क्लेम जमा करता है?"
+ },
+ "|No. KiddieTrac keeps the enrolment, attendance and fee records your reports are built from and exports them; you submit through your service system manager’s own process.": {
+  "fr": "Non. KiddieTrac conserve les dossiers d’inscription, de présence et de frais sur lesquels s’appuient vos rapports et les exporte; vous soumettez ensuite vos demandes selon le processus de votre GSMR.",
+  "es": "No. KiddieTrac conserva los registros de inscripción, asistencia y tarifas con los que se elaboran sus informes, y los exporta; usted los presenta a través del proceso de su administrador de servicios.",
+  "hi": "नहीं। KiddieTrac वे एनरोलमेंट, अटेंडेंस और फ़ीस रिकॉर्ड रखता है जिन पर आपकी रिपोर्ट्स आधारित हैं और उन्हें एक्सपोर्ट करता है; आप उन्हें अपने सर्विस सिस्टम मैनेजर की अपनी प्रक्रिया से जमा करते हैं।"
+ },
+ "|Do we need a separate system for families not in CWELCC?": {
+  "fr": "Avons-nous besoin d’un système distinct pour les familles non couvertes par la CWELCC?",
+  "es": "¿Necesitamos un sistema aparte para las familias que no están en CWELCC?",
+  "hi": "क्या CWELCC में न आने वाले परिवारों के लिए अलग सिस्टम चाहिए?"
+ },
+ "|No. Children over six and programs or families outside CWELCC are billed in the same place, at their own rates.": {
+  "fr": "Non. Les enfants de plus de six ans et les programmes ou familles hors CWELCC sont facturés au même endroit, à leurs propres tarifs.",
+  "es": "No. Los niños mayores de seis años y los programas o familias fuera de CWELCC se facturan en el mismo lugar, a sus propias tarifas.",
+  "hi": "नहीं। छह साल से ऊपर के बच्चे और CWELCC से बाहर के प्रोग्राम या परिवार उसी जगह, अपनी ही दरों पर बिल किए जाते हैं।"
+ },
+ "|Where can I check the rules?": {
+  "fr": "Où puis-je vérifier les règles?",
+  "es": "¿Dónde puedo consultar las normas?",
+  "hi": "मैं नियम कहाँ देख सकता/सकती हूँ?"
+ },
+ "a|Your service system manager (your municipality or district services board) sets your funding and reporting. Ontario’s own summary is at ontario.ca.": {
+  "fr": "Votre gestionnaire de services municipaux regroupés (GSMR) — votre municipalité ou votre conseil des services de district — établit votre financement et vos exigences de déclaration. Le résumé officiel de l’Ontario se trouve sur {0}ontario.ca{/0}.",
+  "es": "Su administrador de servicios (su municipalidad o junta de servicios distritales) establece su financiamiento y sus informes. El resumen oficial de Ontario está en {0}ontario.ca{/0}.",
+  "hi": "आपका सर्विस सिस्टम मैनेजर (आपकी नगरपालिका या डिस्ट्रिक्ट सर्विसेज़ बोर्ड) आपकी फंडिंग और रिपोर्टिंग तय करता है। ओंटारियो का अपना सारांश {0}ontario.ca{/0} पर उपलब्ध है।"
+ },
+ "a|Get the free CWELCC compliance checklist →": {
+  "fr": "{0}Obtenez la liste de vérification de conformité CWELCC gratuite →{/0}",
+  "es": "{0}Obtenga la lista de verificación de cumplimiento de CWELCC gratuita →{/0}",
+  "hi": "{0}मुफ़्त CWELCC कम्प्लायंस चेकलिस्ट पाएं →{/0}"
+ },
+ "|For Ontario child care": {
+  "fr": "Pour la garde d’enfants en Ontario",
+  "es": "Para el cuidado infantil en Ontario",
+  "hi": "ओंटारियो की चाइल्ड केयर के लिए"
+ },
+ "|Daycare software for Ontario centres and home child care agencies": {
+  "fr": "Logiciel de garderie pour les centres et les agences de garde en milieu familial de l’Ontario",
+  "es": "Software de guardería para centros de Ontario y agencias de cuidado infantil en el hogar",
+  "hi": "ओंटारियो के सेंटर और होम चाइल्ड केयर एजेंसियों के लिए डेकेयर सॉफ़्टवेयर"
+ },
+ "|Built around how Ontario child care works: Child Care and Early Years Act ratios, CWELCC fees, How Does Learning Happen? and the records a licensing visit asks for.": {
+  "fr": "Conçu autour du fonctionnement de la garde d’enfants en Ontario : les ratios de la Loi de 2014 sur la garde d’enfants et la petite enfance, les frais CWELCC, Comment apprend-on? et les dossiers exigés lors d’une visite d’agrément.",
+  "es": "Diseñado según cómo funciona el cuidado infantil en Ontario: las proporciones de la Child Care and Early Years Act, las tarifas CWELCC, How Does Learning Happen? y los registros que solicita una visita de inspección de licencia.",
+  "hi": "यह ओंटारियो की चाइल्ड केयर कैसे काम करती है, उसी के अनुसार बना है: Child Care and Early Years Act के अनुपात, CWELCC फ़ीस, How Does Learning Happen? और वे रिकॉर्ड जो एक लाइसेंसिंग विज़िट मांगती है।"
+ },
+ "A|A child building with wooden blocks": {
+  "fr": "Un enfant qui construit avec des blocs de bois",
+  "es": "Un niño construyendo con bloques de madera",
+  "hi": "लकड़ी के ब्लॉक से खेलता एक बच्चा"
+ },
+ "|Ratios you can see": {
+  "fr": "Des ratios que vous pouvez voir",
+  "es": "Proporciones que puede ver",
+  "hi": "अनुपात जो आप देख सकें"
+ },
+ "a|Live counts in every room against Ontario’s staff-to-child ratios, so you know before a room goes over. Check a room with the free ratio calculator.": {
+  "fr": "Des comptes en temps réel dans chaque salle selon les ratios personnel-enfants de l’Ontario, pour savoir avant qu’une salle ne dépasse la limite. Vérifiez une salle avec le {0}calculateur de ratios{/0} gratuit.",
+  "es": "Conteos en vivo en cada sala según las proporciones de personal por niño de Ontario, para que sepa antes de que una sala se exceda. Verifique una sala con la {0}calculadora de proporciones{/0} gratuita.",
+  "hi": "हर रूम में ओंटारियो के स्टाफ़-टू-चाइल्ड अनुपात के मुक़ाबले लाइव काउंट, ताकि रूम के ओवर होने से पहले आपको पता चल जाए। मुफ़्त {0}अनुपात कैलकुलेटर{/0} से किसी रूम को जांचें।"
+ },
+ "|Records ready for licensing": {
+  "fr": "Des dossiers prêts pour l’agrément",
+  "es": "Registros listos para la inspección de licencia",
+  "hi": "लाइसेंसिंग के लिए तैयार रिकॉर्ड"
+ },
+ "|Attendance, immunizations, incidents, staff records and an inspection checklist, kept in one place instead of binders.": {
+  "fr": "Présences, immunisations, incidents, dossiers du personnel et liste de vérification d’inspection, regroupés en un seul endroit au lieu de cartables.",
+  "es": "Asistencia, vacunación, incidentes, registros del personal y una lista de verificación de inspección, todo en un solo lugar en lugar de carpetas.",
+  "hi": "अटेंडेंस, इम्यूनाइज़ेशन, घटनाएं, स्टाफ़ रिकॉर्ड और एक इंस्पेक्शन चेकलिस्ट, बाइंडरों की बजाय एक ही जगह रखे गए।"
+ },
+ "|How Does Learning Happen? built in": {
+  "fr": "Comment apprend-on? intégré",
+  "es": "How Does Learning Happen? integrado",
+  "hi": "How Does Learning Happen? पहले से शामिल"
+ },
+ "|Link observations and report cards to belonging, well-being, engagement and expression, and see which areas each child has had least of.": {
+  "fr": "Liez les observations et les bulletins aux dimensions appartenance, bien-être, engagement et expression, et voyez quelles dimensions chaque enfant a le moins explorées.",
+  "es": "Vincule las observaciones y los boletines con pertenencia, bienestar, compromiso y expresión, y vea en qué áreas cada niño ha tenido menos presencia.",
+  "hi": "ऑब्ज़र्वेशन और रिपोर्ट कार्ड को बिलॉन्गिंग, वेल-बीइंग, एंगेजमेंट और एक्सप्रेशन से जोड़ें, और देखें किस क्षेत्र में हर बच्चे को सबसे कम अवसर मिला है।"
+ },
+ "|For centres, agencies and home providers": {
+  "fr": "Pour les garderies, les agences et les fournisseurs en milieu familial",
+  "es": "Para centros, agencias y proveedores en el hogar",
+  "hi": "सेंटर, एजेंसियों और होम प्रोवाइडर के लिए"
+ },
+ "|CWELCC reductions applied on every invoice": {
+  "fr": "Réductions CWELCC appliquées sur chaque facture",
+  "es": "Reducciones de CWELCC aplicadas en cada factura",
+  "hi": "हर इनवॉइस पर लागू CWELCC कटौती"
+ },
+ "|Parent QR check-in and Safe Arrival alerts": {
+  "fr": "Arrivée par QR pour les parents et alertes Safe Arrival",
+  "es": "Registro con QR para padres y alertas de Safe Arrival",
+  "hi": "पैरेंट QR चेक-इन और Safe Arrival अलर्ट"
+ },
+ "|Room placement, waitlists and transitions": {
+  "fr": "Placement en salle, listes d’attente et transitions",
+  "es": "Ubicación en salas, listas de espera y transiciones",
+  "hi": "रूम प्लेसमेंट, वेटलिस्ट और ट्रांज़िशन"
+ },
+ "|Home visitor reports and Ontario home child care inspection forms": {
+  "fr": "Rapports des agents de visite et formulaires d’inspection de la garde en milieu familial de l’Ontario",
+  "es": "Informes de visitadores domiciliarios y formularios de inspección de cuidado infantil en el hogar de Ontario",
+  "hi": "होम विज़िटर रिपोर्ट और ओंटारियो होम चाइल्ड केयर इंस्पेक्शन फ़ॉर्म"
+ },
+ "|Daily reports, photos and messages for families, in English or French": {
+  "fr": "Rapports quotidiens, photos et messages pour les familles, en anglais ou en français",
+  "es": "Informes diarios, fotos y mensajes para las familias, en inglés o francés",
+  "hi": "परिवारों के लिए डेली रिपोर्ट, फ़ोटो और मैसेज, अंग्रेज़ी या फ़्रेंच में"
+ },
+ "|Online enrolment forms with e-signatures": {
+  "fr": "Formulaires d’inscription en ligne avec signatures électroniques",
+  "es": "Formularios de inscripción en línea con firmas electrónicas",
+  "hi": "ई-साइनेचर के साथ ऑनलाइन एनरोलमेंट फ़ॉर्म"
+ },
+ "|Holiday and closure calendars across every location": {
+  "fr": "Calendriers de congés et de fermetures pour tous les emplacements",
+  "es": "Calendarios de feriados y cierres en todas las ubicaciones",
+  "hi": "हर लोकेशन के लिए हॉलिडे और क्लोज़र कैलेंडर"
+ },
+ "|One platform from one home to many centres": {
+  "fr": "Une seule plateforme, d’un foyer à plusieurs garderies",
+  "es": "Una sola plataforma, desde un hogar hasta muchos centros",
+  "hi": "एक घर से लेकर कई सेंटर तक, एक ही प्लेटफ़ॉर्म"
+ },
+ "a,a,a|A home child care agency manages its providers and home visitors; a provider runs attendance, billing and parent updates from a phone; a multi-site operator sees every centre from one login. See home daycare software, centre software and multi-site management.": {
+  "fr": "Une agence de garde en milieu familial gère ses fournisseurs et ses agents de visite; un fournisseur gère les présences, la facturation et les mises à jour aux parents depuis un téléphone; un exploitant multi-sites voit toutes ses garderies à partir d’une seule connexion. Voir {0}le logiciel de garde en milieu familial{/0}, {1}le logiciel pour garderies{/1} et {2}la gestion multi-sites{/2}.",
+  "es": "Una agencia de cuidado infantil en el hogar administra a sus proveedores y visitadores domiciliarios; un proveedor gestiona la asistencia, la facturación y las actualizaciones para los padres desde un teléfono; un operador multisitio ve cada centro desde un solo inicio de sesión. Consulte {0}software para guarderías en el hogar{/0}, {1}software para centros{/1} y {2}gestión multisitio{/2}.",
+  "hi": "एक होम चाइल्ड केयर एजेंसी अपने प्रोवाइडर और होम विज़िटर मैनेज करती है; एक प्रोवाइडर फ़ोन से अटेंडेंस, बिलिंग और पैरेंट अपडेट संभालता है; एक मल्टी-साइट ऑपरेटर हर सेंटर को एक ही लॉगिन से देखता है। देखें {0}होम डेकेयर सॉफ़्टवेयर{/0}, {1}सेंटर सॉफ़्टवेयर{/1} और {2}मल्टी-साइट मैनेजमेंट{/2}।"
+ },
+ "|Does KiddieTrac know Ontario’s ratios?": {
+  "fr": "KiddieTrac connaît-il les ratios de l’Ontario?",
+  "es": "¿KiddieTrac conoce las proporciones de Ontario?",
+  "hi": "क्या KiddieTrac को ओंटारियो के अनुपात पता हैं?"
+ },
+ "|Yes. Rooms show live counts against the Child Care and Early Years Act ratios for infant, toddler, preschool, kindergarten and school-age groups.": {
+  "fr": "Oui. Les salles affichent des comptes en temps réel selon les ratios de la Loi de 2014 sur la garde d’enfants et la petite enfance pour les groupes nourrissons, bambins, préscolaire, maternelle et âge scolaire.",
+  "es": "Sí. Las salas muestran conteos en vivo según las proporciones de la Child Care and Early Years Act para los grupos de bebés, caminadores, preescolar, kínder y edad escolar.",
+  "hi": "हाँ। रूम्स में इन्फैंट, टॉडलर, प्रीस्कूल, किंडरगार्टन और स्कूल-एज ग्रुप्स के लिए Child Care and Early Years Act के अनुपातों के मुक़ाबले लाइव काउंट दिखते हैं।"
+ },
+ "|Is it available in French?": {
+  "fr": "Est-ce disponible en français?",
+  "es": "¿Está disponible en francés?",
+  "hi": "क्या यह फ़्रेंच में उपलब्ध है?"
+ },
+ "|Yes. Families can use the parent app in French, and this website is available in French too.": {
+  "fr": "Oui. Les familles peuvent utiliser l’app parents en français, et ce site Web est aussi offert en français.",
+  "es": "Sí. Las familias pueden usar la app para padres en francés, y este sitio web también está disponible en francés.",
+  "hi": "हाँ। परिवार पैरेंट ऐप को फ़्रेंच में इस्तेमाल कर सकते हैं, और यह वेबसाइट भी फ़्रेंच में उपलब्ध है।"
+ },
+ "|Can a home child care agency use it?": {
+  "fr": "Une agence de garde en milieu familial peut-elle l’utiliser?",
+  "es": "¿Puede usarlo una agencia de cuidado infantil en el hogar?",
+  "hi": "क्या कोई होम चाइल्ड केयर एजेंसी इसे इस्तेमाल कर सकती है?"
+ },
+ "|Yes. Agencies, home visitors and providers each have their own view, including home-visit reports and Ontario’s home child care inspection forms.": {
+  "fr": "Oui. Les agences, les agents de visite et les fournisseurs ont chacun leur propre vue, y compris les rapports de visite à domicile et les formulaires d’inspection de la garde en milieu familial de l’Ontario.",
+  "es": "Sí. Las agencias, los visitadores domiciliarios y los proveedores tienen cada uno su propia vista, incluidos los informes de visitas domiciliarias y los formularios de inspección de cuidado infantil en el hogar de Ontario.",
+  "hi": "हाँ। एजेंसियों, होम विज़िटर और प्रोवाइडर — हर एक के पास अपना अलग व्यू है, जिसमें होम-विज़िट रिपोर्ट और ओंटारियो के होम चाइल्ड केयर इंस्पेक्शन फ़ॉर्म भी शामिल हैं।"
+ },
+ "|Where is our data stored?": {
+  "fr": "Où nos données sont-elles stockées?",
+  "es": "¿Dónde se almacenan nuestros datos?",
+  "hi": "हमारा डेटा कहाँ स्टोर होता है?"
+ },
+ "|KiddieTrac is hosted in North America with encryption, two-factor sign-in and a full audit log. If you need data stored in Canada, talk to us before you sign up.": {
+  "fr": "KiddieTrac est hébergé en Amérique du Nord avec chiffrement, authentification à deux facteurs et un journal d’audit complet. Si vous avez besoin que vos données soient stockées au Canada, contactez-nous avant de vous inscrire.",
+  "es": "KiddieTrac está alojado en América del Norte con cifrado, inicio de sesión de dos factores y un registro de auditoría completo. Si necesita que los datos se almacenen en Canadá, comuníquese con nosotros antes de registrarse.",
+  "hi": "KiddieTrac उत्तरी अमेरिका में एन्क्रिप्शन, टू-फ़ैक्टर साइन-इन और पूरे ऑडिट लॉग के साथ होस्ट किया जाता है। अगर आपको डेटा कनाडा में स्टोर करना है, तो साइन अप करने से पहले हमसे बात करें।"
+ },
+ "|Free tool": {
+  "fr": "Outil gratuit",
+  "es": "Herramienta gratuita",
+  "hi": "मुफ़्त टूल"
+ },
+ "|Ontario child care ratio calculator": {
+  "fr": "Calculateur de ratios pour la garde d’enfants en Ontario",
+  "es": "Calculadora de proporciones de cuidado infantil de Ontario",
+  "hi": "ओंटारियो चाइल्ड केयर अनुपात कैलकुलेटर"
+ },
+ "|Enter how many children you have in each age group and see how many staff and groups Ontario’s ratios require, for centres and for licensed home child care.": {
+  "fr": "Entrez le nombre d’enfants que vous avez dans chaque groupe d’âge et voyez combien de personnel et de groupes les ratios de l’Ontario exigent, pour les garderies et pour la garde en milieu familial agréée.",
+  "es": "Ingrese cuántos niños tiene en cada grupo de edad y vea cuánto personal y cuántos grupos requieren las proporciones de Ontario, tanto para centros como para cuidado infantil en el hogar con licencia.",
+  "hi": "हर उम्र समूह में आपके पास कितने बच्चे हैं, यह दर्ज करें और देखें कि ओंटारियो के अनुपातों के हिसाब से सेंटर और लाइसेंस प्राप्त होम चाइल्ड केयर के लिए कितने स्टाफ़ और ग्रुप चाहिए।"
+ },
+ "|Licensed child care centre": {
+  "fr": "Garderie agréée",
+  "es": "Centro de cuidado infantil con licencia",
+  "hi": "लाइसेंस प्राप्त चाइल्ड केयर सेंटर"
+ },
+ "|Staff needed for each age group, with children split into the fewest groups the maximum group size allows.": {
+  "fr": "Personnel requis pour chaque groupe d’âge, les enfants étant répartis dans le plus petit nombre de groupes permis par la taille maximale du groupe.",
+  "es": "Personal necesario para cada grupo de edad, con los niños divididos en la menor cantidad de grupos que permite el tamaño máximo de grupo.",
+  "hi": "हर उम्र समूह के लिए ज़रूरी स्टाफ़, जिसमें बच्चों को अधिकतम ग्रुप साइज़ के हिसाब से सबसे कम ग्रुपों में बांटा गया है।"
+ },
+ "|Age group": {
+  "fr": "Groupe d’âge",
+  "es": "Grupo de edad",
+  "hi": "उम्र समूह"
+ },
+ "|Max group": {
+  "fr": "Groupe max.",
+  "es": "Grupo máximo",
+  "hi": "अधिकतम ग्रुप"
+ },
+ "|Children": {
+  "fr": "Enfants",
+  "es": "Niños",
+  "hi": "बच्चे"
+ },
+ "|Groups": {
+  "fr": "Groupes",
+  "es": "Grupos",
+  "hi": "ग्रुप"
+ },
+ "|Staff needed": {
+  "fr": "Personnel requis",
+  "es": "Personal necesario",
+  "hi": "ज़रूरी स्टाफ़"
+ },
+ "|Infant": {
+  "fr": "Nourrisson",
+  "es": "Bebé",
+  "hi": "इन्फैंट"
+ },
+ "|under 18 months": {
+  "fr": "moins de 18 mois",
+  "es": "menos de 18 meses",
+  "hi": "18 महीने से कम"
+ },
+ "|3 to 10": {
+  "fr": "3 pour 10",
+  "es": "3 por cada 10",
+  "hi": "10 बच्चों पर 3"
+ },
+ "A|Number of children": {
+  "fr": "Nombre d’enfants",
+  "es": "Número de niños",
+  "hi": "बच्चों की संख्या"
+ },
+ "|Toddler": {
+  "fr": "Bambin",
+  "es": "Caminador",
+  "hi": "टॉडलर"
+ },
+ "|18 to 30 months": {
+  "fr": "18 à 30 mois",
+  "es": "18 a 30 meses",
+  "hi": "18 से 30 महीने"
+ },
+ "|1 to 5": {
+  "fr": "1 pour 5",
+  "es": "1 por cada 5",
+  "hi": "5 बच्चों पर 1"
+ },
+ "|Preschool": {
+  "fr": "Préscolaire",
+  "es": "Preescolar",
+  "hi": "प्रीस्कूल"
+ },
+ "|30 months to 6 years": {
+  "fr": "30 mois à 6 ans",
+  "es": "30 meses a 6 años",
+  "hi": "30 महीने से 6 साल"
+ },
+ "|1 to 8": {
+  "fr": "1 pour 8",
+  "es": "1 por cada 8",
+  "hi": "8 बच्चों पर 1"
+ },
+ "|Kindergarten": {
+  "fr": "Maternelle",
+  "es": "Kínder",
+  "hi": "किंडरगार्टन"
+ },
+ "|44 months to 7 years": {
+  "fr": "44 mois à 7 ans",
+  "es": "44 meses a 7 años",
+  "hi": "44 महीने से 7 साल"
+ },
+ "|1 to 13": {
+  "fr": "1 pour 13",
+  "es": "1 por cada 13",
+  "hi": "13 बच्चों पर 1"
+ },
+ "|Primary/junior school age": {
+  "fr": "Âge scolaire primaire/junior",
+  "es": "Edad escolar primaria/júnior",
+  "hi": "प्राइमरी/जूनियर स्कूल एज"
+ },
+ "|68 months to 13 years": {
+  "fr": "68 mois à 13 ans",
+  "es": "68 meses a 13 años",
+  "hi": "68 महीने से 13 साल"
+ },
+ "|1 to 15": {
+  "fr": "1 pour 15",
+  "es": "1 por cada 15",
+  "hi": "15 बच्चों पर 1"
+ },
+ "|Junior school age": {
+  "fr": "Âge scolaire junior",
+  "es": "Edad escolar júnior",
+  "hi": "जूनियर स्कूल एज"
+ },
+ "|9 to 13 years": {
+  "fr": "9 à 13 ans",
+  "es": "9 a 13 años",
+  "hi": "9 से 13 साल"
+ },
+ "|1 to 20": {
+  "fr": "1 pour 20",
+  "es": "1 por cada 20",
+  "hi": "20 बच्चों पर 1"
+ },
+ "|Licensed home child care": {
+  "fr": "Garde en milieu familial agréée",
+  "es": "Cuidado infantil en el hogar con licencia",
+  "hi": "लाइसेंस प्राप्त होम चाइल्ड केयर"
+ },
+ "|At most 6 children under 13, of whom at most 3 are under 2. The provider’s own children under 4 count.": {
+  "fr": "Au plus 6 enfants de moins de 13 ans, dont au plus 3 de moins de 2 ans. Les propres enfants du fournisseur âgés de moins de 4 ans comptent.",
+  "es": "Como máximo 6 niños menores de 13 años, de los cuales como máximo 3 son menores de 2. Los propios hijos del proveedor menores de 4 años cuentan.",
+  "hi": "13 साल से कम उम्र के अधिकतम 6 बच्चे, जिनमें से अधिकतम 3, 2 साल से कम उम्र के हो सकते हैं। प्रोवाइडर के अपने 4 साल से कम उम्र के बच्चे भी गिने जाते हैं।"
+ },
+ "T|Children under 2": {
+  "fr": "Enfants de moins de 2 ans",
+  "es": "Niños menores de 2 años",
+  "hi": "2 साल से कम उम्र के बच्चे"
+ },
+ "T|Children 2 to 12": {
+  "fr": "Enfants de 2 à 12 ans",
+  "es": "Niños de 2 a 12 años",
+  "hi": "2 से 12 साल के बच्चे"
+ },
+ "T|Provider’s own children under 4": {
+  "fr": "Propres enfants du fournisseur de moins de 4 ans",
+  "es": "Propios hijos del proveedor menores de 4 años",
+  "hi": "प्रोवाइडर के अपने 4 साल से कम उम्र के बच्चे"
+ },
+ "|Within the limits.": {
+  "fr": "Dans les limites.",
+  "es": "Dentro de los límites.",
+  "hi": "सीमा के भीतर।"
+ },
+ "|Over the limit of 6 children under 13.": {
+  "fr": "Au-delà de la limite de 6 enfants de moins de 13 ans.",
+  "es": "Por encima del límite de 6 niños menores de 13 años.",
+  "hi": "13 साल से कम उम्र के 6 बच्चों की सीमा से ज़्यादा।"
+ },
+ "|Over the limit of 3 children under 2.": {
+  "fr": "Au-delà de la limite de 3 enfants de moins de 2 ans.",
+  "es": "Por encima del límite de 3 niños menores de 2 años.",
+  "hi": "2 साल से कम उम्र के 3 बच्चों की सीमा से ज़्यादा।"
+ },
+ "|Where these numbers come from": {
+  "fr": "D’où viennent ces chiffres",
+  "es": "De dónde provienen estos números",
+  "hi": "ये आंकड़े कहाँ से आए हैं"
+ },
+ "a|Ratios, group sizes and home child care limits are from Ontario Regulation 137/15 under the Child Care and Early Years Act, 2014, as summarized at ontario.ca (checked September 30, 2026).": {
+  "fr": "Les ratios, la taille des groupes et les limites pour la garde en milieu familial proviennent du Règlement de l’Ontario 137/15 pris en application de la Loi de 2014 sur la garde d’enfants et la petite enfance, tel que résumé sur {0}ontario.ca{/0} (vérifié le 30 septembre 2026).",
+  "es": "Las proporciones, los tamaños de grupo y los límites de cuidado infantil en el hogar provienen del Ontario Regulation 137/15 de la Child Care and Early Years Act, 2014, según el resumen en {0}ontario.ca{/0} (verificado el 30 de septiembre de 2026).",
+  "hi": "अनुपात, ग्रुप साइज़ और होम चाइल्ड केयर की सीमाएं Child Care and Early Years Act, 2014 के तहत Ontario Regulation 137/15 से ली गई हैं, जैसा {0}ontario.ca{/0} पर बताया गया है (30 सितंबर 2026 को जांचा गया)।"
+ },
+ "|Mixed-age groups, reduced ratios at certain times of day and your licence’s own conditions have rules of their own. This calculator is a planning aid, not a licensing decision: check with your program advisor.": {
+  "fr": "Les groupes d’âges mixtes, les ratios réduits à certains moments de la journée et les conditions propres à votre permis ont leurs propres règles. Ce calculateur est un outil de planification, pas une décision d’agrément : vérifiez auprès de votre conseiller de programme.",
+  "es": "Los grupos de edades mixtas, las proporciones reducidas en ciertos momentos del día y las condiciones propias de su licencia tienen sus propias reglas. Esta calculadora es una ayuda de planificación, no una decisión de licencia: consulte con su asesor de programa.",
+  "hi": "मिश्रित उम्र के ग्रुप, दिन के कुछ समय पर घटे हुए अनुपात, और आपके लाइसेंस की अपनी शर्तों के अपने नियम होते हैं। यह कैलकुलेटर सिर्फ़ योजना बनाने में मदद के लिए है, लाइसेंसिंग का फ़ैसला नहीं: अपने प्रोग्राम एडवाइज़र से सलाह लें।"
+ },
+ "a|In KiddieTrac, every room shows its live count against these ratios all day. See how it works for Ontario programs.": {
+  "fr": "Dans KiddieTrac, chaque salle affiche son compte en temps réel selon ces ratios toute la journée. {0}Voyez comment ça fonctionne pour les programmes ontariens{/0}.",
+  "es": "En KiddieTrac, cada sala muestra su conteo en vivo según estas proporciones durante todo el día. {0}Vea cómo funciona para programas de Ontario{/0}.",
+  "hi": "KiddieTrac में, हर रूम पूरे दिन इन अनुपातों के मुक़ाबले अपना लाइव काउंट दिखाता है। {0}देखें यह ओंटारियो प्रोग्राम्स के लिए कैसे काम करता है{/0}।"
+ },
+ "|CWELCC fee calculator for Ontario": {
+  "fr": "Calculateur de frais CWELCC pour l’Ontario",
+  "es": "Calculadora de tarifas CWELCC para Ontario",
+  "hi": "ओंटारियो के लिए CWELCC शुल्क कैलकुलेटर"
+ },
+ "|See what families pay under Ontario’s $22-a-day cap, what they save against your full fee, and your monthly parent-fee revenue.": {
+  "fr": "Découvrez ce que les familles paient sous le plafond de 22 $ par jour de l’Ontario, ce qu’elles économisent par rapport à vos frais complets, et vos revenus mensuels de frais parentaux.",
+  "es": "Vea lo que pagan las familias bajo el tope de $22 al día de Ontario, lo que ahorran frente a su tarifa completa, y sus ingresos mensuales por tarifas de los padres.",
+  "hi": "देखें ओंटारियो के $22-प्रतिदिन कैप के तहत परिवार कितना चुकाते हैं, आपकी पूरी फ़ीस के मुक़ाबले वे कितना बचाते हैं, और आपका मासिक पैरेंट-फ़ीस रेवेन्यू कितना है।"
+ },
+ "T|Daily parent fee you charged on December 31, 2024 ($)": {
+  "fr": "Frais parental quotidien que vous facturiez le 31 décembre 2024 ($)",
+  "es": "Tarifa diaria para padres que cobraba el 31 de diciembre de 2024 ($)",
+  "hi": "31 दिसंबर 2024 को आपने जो डेली पैरेंट फ़ीस ली थी ($)"
+ },
+ "T|Your full daily fee without CWELCC ($, optional)": {
+  "fr": "Votre frais quotidien complet sans la CWELCC ($, facultatif)",
+  "es": "Su tarifa diaria completa sin CWELCC ($, opcional)",
+  "hi": "CWELCC के बिना आपकी पूरी डेली फ़ीस ($, वैकल्पिक)"
+ },
+ "T|Days of care per month": {
+  "fr": "Jours de garde par mois",
+  "es": "Días de cuidado por mes",
+  "hi": "महीने में केयर के दिन"
+ },
+ "T|Eligible children (for revenue)": {
+  "fr": "Enfants admissibles (pour les revenus)",
+  "es": "Niños elegibles (para ingresos)",
+  "hi": "पात्र बच्चे (रेवेन्यू के लिए)"
+ },
+ "T|Daily cap ($)": {
+  "fr": "Plafond quotidien ($)",
+  "es": "Tope diario ($)",
+  "hi": "डेली कैप ($)"
+ },
+ "|Parent fee per day": {
+  "fr": "Frais parental par jour",
+  "es": "Tarifa de los padres por día",
+  "hi": "प्रतिदिन पैरेंट फ़ीस"
+ },
+ "|Per month, per child": {
+  "fr": "Par mois, par enfant",
+  "es": "Por mes, por niño",
+  "hi": "प्रति माह, प्रति बच्चा"
+ },
+ "|Per year, per child": {
+  "fr": "Par année, par enfant",
+  "es": "Por año, por niño",
+  "hi": "प्रति वर्ष, प्रति बच्चा"
+ },
+ "|Family saving per month": {
+  "fr": "Économie familiale par mois",
+  "es": "Ahorro familiar por mes",
+  "hi": "परिवार की मासिक बचत"
+ },
+ "|against your full fee": {
+  "fr": "par rapport à vos frais complets",
+  "es": "frente a su tarifa completa",
+  "hi": "आपकी पूरी फ़ीस के मुक़ाबले"
+ },
+ "|Parent-fee revenue per month": {
+  "fr": "Revenus de frais parentaux par mois",
+  "es": "Ingresos por tarifas de los padres por mes",
+  "hi": "मासिक पैरेंट-फ़ीस रेवेन्यू"
+ },
+ "|all eligible children": {
+  "fr": "tous les enfants admissibles",
+  "es": "todos los niños elegibles",
+  "hi": "सभी पात्र बच्चे"
+ },
+ "|Gap to your full fee per month": {
+  "fr": "Écart par rapport à vos frais complets par mois",
+  "es": "Diferencia con su tarifa completa por mes",
+  "hi": "आपकी पूरी फ़ीस से मासिक अंतर"
+ },
+ "|covered under your CWELCC funding agreement": {
+  "fr": "couvert par votre entente de financement CWELCC",
+  "es": "cubierto bajo su acuerdo de financiamiento CWELCC",
+  "hi": "आपके CWELCC फंडिंग एग्रीमेंट के तहत कवर"
+ },
+ "|How this is worked out": {
+  "fr": "Comment ce calcul est établi",
+  "es": "Cómo se calcula esto",
+  "hi": "यह कैसे निकाला जाता है"
+ },
+ "|Since January 1, 2025, parent fees for CWELCC-eligible children under six in participating Ontario programs have been capped at $22 a day. A program that was already charging less keeps the fee it charged on December 31, 2024. So the parent fee is the lower of your December 31, 2024 fee and the cap.": {
+  "fr": "Depuis le 1er janvier 2025, les frais parentaux pour les enfants de moins de six ans admissibles à la CWELCC dans les programmes ontariens participants sont plafonnés à 22 $ par jour. Un programme qui facturait déjà moins conserve le tarif qu’il appliquait le 31 décembre 2024. Le frais parental correspond donc au moindre de votre tarif du 31 décembre 2024 et du plafond.",
+  "es": "Desde el 1 de enero de 2025, las tarifas de los padres para niños menores de seis años elegibles para CWELCC en programas participantes de Ontario tienen un tope de $22 al día. Un programa que ya cobraba menos mantiene la tarifa que cobraba el 31 de diciembre de 2024. Por lo tanto, la tarifa de los padres es la más baja entre su tarifa del 31 de diciembre de 2024 y el tope.",
+  "hi": "1 जनवरी 2025 से, भाग लेने वाले ओंटारियो प्रोग्राम्स में छह साल से कम उम्र के CWELCC-पात्र बच्चों की पैरेंट फ़ीस $22 प्रतिदिन पर कैप कर दी गई है। जो प्रोग्राम पहले से कम फ़ीस ले रहा था, वह 31 दिसंबर 2024 को ली गई फ़ीस ही जारी रखेगा। इसलिए पैरेंट फ़ीस आपकी 31 दिसंबर 2024 की फ़ीस और कैप, इन दोनों में जो भी कम हो, वही होगी।"
+ },
+ "|The gap to your full fee is shown for planning only: your actual funding is set by your service system manager under your CWELCC agreement. If the cap changes, change the cap above.": {
+  "fr": "L’écart par rapport à vos frais complets est présenté à titre indicatif seulement : votre financement réel est établi par votre GSMR dans le cadre de votre entente CWELCC. Si le plafond change, modifiez le plafond ci-dessus.",
+  "es": "La diferencia con su tarifa completa se muestra solo para fines de planificación: su financiamiento real lo establece su administrador de servicios bajo su acuerdo CWELCC. Si el tope cambia, modifique el tope arriba.",
+  "hi": "पूरी फ़ीस से अंतर सिर्फ़ योजना बनाने के लिए दिखाया गया है: आपकी असल फंडिंग आपके CWELCC एग्रीमेंट के तहत आपके सर्विस सिस्टम मैनेजर द्वारा तय की जाती है। अगर कैप बदलता है, तो ऊपर दिया गया कैप बदल दें।"
+ },
+ "a|KiddieTrac applies the reduction on every invoice automatically. See CWELCC billing.": {
+  "fr": "KiddieTrac applique la réduction automatiquement sur chaque facture. {0}Voir la facturation CWELCC{/0}.",
+  "es": "KiddieTrac aplica la reducción en cada factura automáticamente. {0}Consulte Facturación CWELCC{/0}.",
+  "hi": "KiddieTrac हर इनवॉइस पर कटौती अपने आप लागू कर देता है। {0}देखें CWELCC बिलिंग{/0}।"
+ },
+ "a|Ratio calculator": {
+  "fr": "{0}Calculateur de ratios{/0}",
+  "es": "{0}Calculadora de proporciones{/0}",
+  "hi": "{0}अनुपात कैलकुलेटर{/0}"
+ },
+ "a|CWELCC fee calculator": {
+  "fr": "{0}Calculateur de frais CWELCC{/0}",
+  "es": "{0}Calculadora de tarifas CWELCC{/0}",
+  "hi": "{0}CWELCC शुल्क कैलकुलेटर{/0}"
+ },
+ "a|Childcare software for Canada": {
+  "fr": "{0}Logiciel de garde d’enfants pour le Canada{/0}",
+  "es": "{0}Software de cuidado infantil para Canadá{/0}",
+  "hi": "{0}कनाडा के लिए चाइल्डकेयर सॉफ़्टवेयर{/0}"
+ },
+ "a|CWELCC billing software": {
+  "fr": "{0}Logiciel de facturation CWELCC{/0}",
+  "es": "{0}Software de facturación CWELCC{/0}",
+  "hi": "{0}CWELCC बिलिंग सॉफ़्टवेयर{/0}"
+ },
+ "a|Daycare software for Ontario": {
+  "fr": "{0}Logiciel de garderie pour l’Ontario{/0}",
+  "es": "{0}Software de guardería para Ontario{/0}",
+  "hi": "{0}ओंटारियो के लिए डेकेयर सॉफ़्टवेयर{/0}"
+ },
+ "b|Total": {
+  "fr": "{0}Total{/0}",
+  "es": "{0}Total{/0}",
+  "hi": "{0}कुल{/0}"
+ }
+}

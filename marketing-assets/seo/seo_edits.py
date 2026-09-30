@@ -69,7 +69,7 @@ def seo(out):
         'window.KT_LP=lp;window.KT_PATH_LANG=lp?l:"";var np=r==="/"?(lp||"/"):lp+r;'
         'try{history.replaceState(history.state,"",np+location.search+location.hash);}catch(e){}window.ktSetAlt(r);'
         # The title follows the language too (the blog re-titles an open article on kt:lang).
-        'try{var sg=r.replace(/^\/+|\/+$/g,"");if(window.ktApplyMeta)window.ktApplyMeta(sg&&document.getElementById("page-"+sg)?sg:(/^blog\//.test(sg)?"blog":"home"));}catch(e){}};'
+        r'try{var sg=r.replace(/^\/+|\/+$/g,"");if(window.ktApplyMeta)window.ktApplyMeta(sg&&document.getElementById("page-"+sg)?sg:(/^blog\//.test(sg)?"blog":"home"));}catch(e){}};'
         # Back/forward into an entry made in another language: the address decides. Registered
         # before the router's own popstate, so it sees the updated prefix.
         'window.addEventListener("popstate",function(){var m=/^\\/(fr|es|hi)(?=\\/|$)/.exec(location.pathname);'

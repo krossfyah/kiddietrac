@@ -516,3 +516,14 @@ _apply_seo_chain = apply
 def apply(out):
     base = _apply_seo_chain(out)
     return _gaev.analytics(base) if _os.environ.get('K6_GAEV', '1') != '0' else base
+
+
+# -- Buyer-search landing pages + free calculators (growth_edits.py); K6_GROWTH=0 builds without --
+import growth_edits as _growth
+
+_apply_gaev_chain = apply
+
+
+def apply(out):
+    base = _apply_gaev_chain(out)
+    return _growth.growth(base) if _os.environ.get('K6_GROWTH', '1') != '0' else base
