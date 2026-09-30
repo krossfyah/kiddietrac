@@ -434,7 +434,9 @@
   var activeTab = 'open';
 
   function render(main) {
-    main.innerHTML = '<div style="padding:22px;color:#64748B;">Loading invoices…</div>';
+    if (!main.querySelector('[data-pinv-root]')) {
+      main.innerHTML = '<div style="padding:22px;color:#64748B;">Loading invoices…</div>';
+    }
 
     api('/platform/invoices').then(function (data) {
       var allRows = data.invoices || [];
@@ -586,7 +588,7 @@
       /* ONE write and ONE wiring pass, whether or not there are rows. The tab bar and the
          header buttons live above the table, so they must be wired even when it is empty —
          otherwise voiding the last open invoice leaves a screen nothing can click out of. */
-      main.innerHTML = html;
+      main.innerHTML = html + '<span data-pinv-root data-kt-self-live hidden></span>';
 
       main.querySelectorAll('#kt-tabs button[data-tab]').forEach(function (b) {
         b.addEventListener('click', function () {

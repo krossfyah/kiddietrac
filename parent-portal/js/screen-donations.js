@@ -99,7 +99,7 @@
   async function render(main) {
     Api = KT.Api;
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = CSS + '<div style="padding:14px 24px;max-width:1300px;">'
+    main.innerHTML = CSS + '<div data-kt-self-live style="padding:14px 24px;max-width:1300px;">'
       + '<div class="kt-page-hero"><h2>💝 Donations &amp; fundraising</h2><p>Run campaigns with a shareable giving page, record gifts, and issue receipts.</p></div>'
       + '<div class="dn-tabs"><button data-tab="gifts">Gifts</button><button data-tab="campaigns">Campaigns</button><button data-tab="settings">Receipts &amp; settings</button></div>'
       + '<div id="dn-body">Loading…</div></div>';

@@ -33,11 +33,14 @@
       + (hint ? '<div style="font-size:11.5px;color:#64748B;margin-top:2px">' + esc(hint) + '</div>' : '') + '</div>';
   }
 
-  async function render(main) {
+  async function render(main, quiet) {
+    var _keep = quiet ? main.querySelector('#ce-body') : null;
+    if (!_keep) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:1200px;">'
+    main.innerHTML = '<div data-kt-self-live style="padding:14px 24px;max-width:1200px;">'
       + '<div class="kt-page-hero"><h2>🛡️ Compliance evidence</h2><p>SOC 2 readiness: the policies an auditor reads, and live evidence that the controls run. '
       + 'The SOC 2 report itself is issued by an independent CPA firm.</p></div><div id="ce-body">Loading…</div></div>';
+    }
     var body = main.querySelector('#ce-body'), s;
     try { s = await KT.Api.get('/platform/compliance-evidence'); }
     catch (e) { body.innerHTML = '<div class="kt-card" style="color:#B91C1C">Could not load: ' + esc(e.message || e) + '</div>'; return; }
@@ -90,7 +93,7 @@
       if (!body.querySelector('#ce-conf').checked) { toast('Tick the box to confirm you reviewed every account.', 'error'); return; }
       try {
         await KT.Api.post('/platform/compliance-evidence/access-reviews', { findings: f, actions_taken: body.querySelector('#ce-act').value.trim() || null, confirm: true });
-        toast('Access review signed off', 'success'); render(main);
+        toast('Access review signed off', 'success'); render(main, true);
       } catch (e) { toast(e.message || 'Could not save', 'error'); }
     };
   }

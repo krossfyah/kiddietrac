@@ -33,7 +33,7 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = CSS + '<div style="padding:14px 24px;max-width:1100px;"><div class="kt-page-hero"><h2>📞 Phone & voicemail</h2>'
+    main.innerHTML = CSS + '<div data-kt-self-live style="padding:14px 24px;max-width:1100px;"><div class="kt-page-hero"><h2>📞 Phone & voicemail</h2>'
       + '<p>What callers hear on the toll-free line, and the voicemails they leave.</p></div>'
       + '<div id="pv-set">Loading…</div><div id="pv-vm"></div></div>';
     await Promise.all([settings(main), voicemails(main)]);
@@ -49,7 +49,7 @@
       return '<optgroup label="' + esc(g) + '">' + groups[g].map(function (v) { return '<option value="' + esc(v.id) + '"' + (v.id === (s.voice || '') ? ' selected' : '') + '>' + esc(v.label) + '</option>'; }).join('') + '</optgroup>';
     }).join('');
     box.innerHTML = '<div class="pv-card"><h3>Greeting</h3><div class="pv-sub">Callers to <strong>' + esc(d.number) + '</strong> hear this, then leave a message that is emailed to ' + esc(d.inbox) + '.'
-      + (d.published_at ? ' Last published ' + esc(when(d.published_at)) + (d.published_by ? ' by ' + esc(d.published_by) : '') + '.' : '') + '</div>'
+      + ' <span data-published>' + (d.published_at ? 'Last published ' + esc(when(d.published_at)) + (d.published_by ? ' by ' + esc(d.published_by) : '') + '.' : '') + '</span></div>'
       + '<div class="pv-f">'
       + '<div><label>Voice</label><select data-k="voice">' + opts + '</select></div>'
       + '<div><label>Longest message</label><select data-k="max_length">' + [60, 120, 180, 240, 300].map(function (n) { return '<option value="' + n + '"' + (Number(s.max_length) === n ? ' selected' : '') + '>' + (n / 60) + ' minute' + (n === 60 ? '' : 's') + '</option>'; }).join('') + '</select></div>'
@@ -64,7 +64,16 @@
       box.querySelectorAll('[data-k]').forEach(function (el) { v[el.getAttribute('data-k')] = el.value; });
       v.max_length = parseInt(v.max_length, 10);
       b.disabled = true; b.textContent = 'Publishing…';
-      try { await KT.Api.put('/platform/phone', v); toast('Greeting published. Call ' + d.number + ' to hear it.', 'success'); await settings(main); }
+      try {
+        var r = await KT.Api.put('/platform/phone', v);
+        /* In place: the form already shows what was saved, so rebuilding it only
+           flashes and throws away the cursor and scroll position. */
+        var meta = box.querySelector('[data-published]');
+        if (meta && r && r.published_at) { meta.textContent = 'Last published ' + when(r.published_at) + (r.published_by ? ' by ' + r.published_by : '') + '.'; }
+        b.textContent = '✓ Published';
+        toast('Greeting published. Call ' + d.number + ' to hear it.', 'success');
+        setTimeout(function () { b.disabled = false; b.textContent = 'Save and publish'; }, 1800);
+      }
       catch (e) { toast(e.message || 'Could not publish', 'error'); b.disabled = false; b.textContent = 'Save and publish'; }
     });
   }

@@ -40,7 +40,7 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = css + '<div style="padding:14px 24px;max-width:1100px;">'
+    main.innerHTML = css + '<div data-kt-self-live style="padding:14px 24px;max-width:1100px;">'
       + '<div class="kt-page-hero"><h2>🧭 Learning framework</h2>'
       + '<p>The framework your agency plans and reports against. It sets the areas observations link to, the sections of report cards, and the gaps report.</p></div>'
       + '<div id="lf-body">Loading…</div></div>';

@@ -33,7 +33,7 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = CSS + '<div style="padding:14px 24px;max-width:1100px;"><div class="kt-page-hero"><h2>💳 Payment run</h2>'
+    main.innerHTML = CSS + '<div data-kt-self-live style="padding:14px 24px;max-width:1100px;"><div class="kt-page-hero"><h2>💳 Payment run</h2>'
       + '<p>Charge every auto-pay family\'s open invoices on their saved card in one go. Check the list, untick anyone to hold back, then run it. Auto-pay also runs by itself every night at 3:00.</p></div>'
       + '<div id="pr-prev">Loading…</div><div id="pr-hist"></div></div>';
     await Promise.all([preview(main), history(main)]);

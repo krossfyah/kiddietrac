@@ -64,7 +64,7 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = CSS + '<div style="padding:14px 24px;max-width:1200px;"><div class="kt-page-hero"><h2>🏛️ Grants</h2>'
+    main.innerHTML = CSS + '<div data-kt-self-live style="padding:14px 24px;max-width:1200px;"><div class="kt-page-hero"><h2>🏛️ Grants</h2>'
       + '<p>Track operating, wage-enhancement and other funding: what was awarded, received and spent, and whether spending is keeping pace before the report is due.</p></div><div id="gr-body">Loading…</div></div>';
     await list(main);
   }
@@ -106,13 +106,14 @@
       ['reporting_due', 'reference', 'funder', 'notes'].forEach(function (k) { if (v[k] === '') { v[k] = null; } });
       var r = await KT.Api.post('/admin/grants' + (g.id ? '/' + g.id : ''), v);
       toast('Grant saved', 'success');
-      if (g.id) { detail(main, g.id); } else { detail(main, r.id); }
+      if (g.id) { detail(main, g.id, true); } else { detail(main, r.id); }
     });
   }
 
-  async function detail(main, id) {
+  async function detail(main, id, quiet) {
     var body = main.querySelector('#gr-body'), d;
-    body.innerHTML = 'Loading…';
+    // "Loading…" only when opening a grant; a refresh after a save swaps in one frame.
+    if (!quiet) { body.innerHTML = 'Loading…'; }
     try { d = await KT.Api.get('/admin/grants/' + id); } catch (e) { body.innerHTML = '<div class="kt-card" style="color:#B91C1C">' + esc(e.message || e) + '</div>'; return; }
     var g = d.grant, r = g.reconciliation, p = PACE[r.pace] || PACE.on_track, cats = d.categories || {};
     var paceNote = { underspending: 'Spending is behind the calendar. Unspent funds may have to be returned at the end of the period.', ahead: 'Spending is ahead of the calendar; check the award will cover the rest of the period.', overspent: 'Spending is more than the award.', on_track: 'Spending is keeping pace with the period.' }[r.pace];
@@ -150,7 +151,7 @@
       b.onclick = async function () {
         if (!(await KT.confirm({ title: 'Remove this transaction?', description: 'The grant totals will be recalculated. This is recorded in the audit log.', okLabel: 'Remove' }))) { return; }
         try { await KT.Api.delete('/admin/grants/' + g.id + '/transactions/' + b.getAttribute('data-del')); } catch (e) { toast(e.message || 'Could not remove', 'error'); }
-        detail(main, g.id);
+        detail(main, g.id, true);
       };
     });
   }
@@ -170,7 +171,7 @@
       if (!v.category) { delete v.category; }
       await KT.Api.post('/admin/grants/' + g.id + '/transactions', v);
       toast('Saved', 'success');
-      detail(main, g.id);
+      detail(main, g.id, true);
     });
   }
 
