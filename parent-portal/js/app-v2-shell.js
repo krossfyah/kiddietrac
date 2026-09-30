@@ -1694,11 +1694,35 @@
       var r = main.getBoundingClientRect();
       if (!r || r.width < 2 || r.height < 2) { return null; }
       var snap = main.cloneNode(true);
-      snap.id = 'kt-refresh-snap';
+      /* THE COVER KEEPS THE NAME #appMain (2026-09-29).
+
+         Anthony's APK video: after signing in, the launcher showed its round icons, then
+         for half a second big gradient CARDS, then the round icons again. The cards were
+         this clone. It used to be renamed kt-refresh-snap, and 730 rules across the
+         stylesheets are written against #appMain - the launcher's round-icon look among
+         them (kt-mobile-app.css strips each tile's card background under #appMain). The
+         clone lost every one of them and fell back to the base card styling, so the
+         "picture of the screen" was a picture of a different screen.
+
+         Nearly all of those rules are bare #appMain or keyed on html/body classes, which a
+         clone appended to <body> still matches, so keeping the id makes the clone render
+         as the screen does. It is appended AFTER the live #appMain, so getElementById and
+         querySelector still return the live node. It is found by data-kt-refresh-snap.
+         Its geometry is inline !important, because #appMain rules set padding and
+         position with !important and would otherwise move it. */
+      snap.id = 'appMain';
+      snap.setAttribute('data-kt-refresh-snap', '1');
+      snap.setAttribute('aria-hidden', 'true');
+      try { snap.inert = true; } catch (e) {}
       snap.removeAttribute('data-kt-pretty');
-      snap.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;'
-        + 'width:' + r.width + 'px;height:' + r.height + 'px;overflow:hidden;'
-        + 'pointer-events:none;z-index:300;background:' + (getComputedStyle(main).backgroundColor || '#fff') + ';';
+      var _bg = getComputedStyle(main).backgroundColor || '#fff';
+      snap.style.cssText = '';
+      [['position', 'fixed'], ['left', r.left + 'px'], ['top', r.top + 'px'], ['right', 'auto'], ['bottom', 'auto'],
+       ['width', r.width + 'px'], ['height', r.height + 'px'], ['max-width', 'none'], ['max-height', 'none'],
+       ['margin', '0'], ['transform', 'none'], ['overflow', 'hidden'], ['pointer-events', 'none'],
+       ['z-index', '300'], ['visibility', 'visible'], ['opacity', '1'], ['background', _bg]].forEach(function (p) {
+        snap.style.setProperty(p[0], p[1], 'important');
+      });
       document.body.appendChild(snap);
       window.__ktSnapGen = (gen == null ? null : gen);
       /* AND HIDE WHAT IS UNDERNEATH IT (2026-09-17).
@@ -1743,7 +1767,7 @@
     } catch (e) {}
     try { if (window.__ktSnapKill) { clearTimeout(window.__ktSnapKill); window.__ktSnapKill = null; } } catch (e) {}
     try {
-      var old = document.getElementById('kt-refresh-snap');
+      var old = document.querySelector('[data-kt-refresh-snap]');
       if (old && old.parentNode) { old.parentNode.removeChild(old); }
       window.__ktSnapGen = null;
       /* A GRACE ON THE WAY OUT. A screen that finishes painting on the same frame the
@@ -2383,6 +2407,15 @@
        agency_admin shell above. (2026-09-10) */
     const _isPlatformAdmin = !!(user && Array.isArray(user.roles)
       && user.roles.indexOf('platform_admin') !== -1);
+    /* NO TOKEN IS A SIGN-OUT IN PROGRESS, NOT AN ACCOUNT WITHOUT A ROLE (2026-09-29).
+       The idle timeout clears the session and then navigates to the login page. A
+       refresh that landed in between (resuming the app is exactly when both fire) saw
+       no user, so no role, and painted "This account has no access yet" to someone
+       whose only problem was being signed out. Paint nothing; the navigation is coming. */
+    if (!role && !_isPlatformAdmin && !Auth.token()) {
+      __ktDropSnapshot();
+      return;
+    }
     if (!role && !_isPlatformAdmin) {
       Dom.clear(main);
       main.appendChild(emptyState(

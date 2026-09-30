@@ -246,7 +246,18 @@
   // logged-out and the app bounced to login). Validate the token first so a
   // dead vault falls back to password instead of looping.
   function commitUnlock(onDash, ov) {
-    var go = function () { if (onDash) location.reload(); else location.replace('/dashboard.html'); };
+    var go = function () {
+      if (onDash) { location.reload(); return; }
+      /* Back to the screen the idle sign-out interrupted (session-timeout.js), if it was
+         within the hour. Only a hash, validated, and used once. (2026-09-29) */
+      var dest = '/dashboard.html';
+      try {
+        var rt = JSON.parse(localStorage.getItem('kt_resume_to') || 'null');
+        localStorage.removeItem('kt_resume_to');
+        if (rt && /^#[A-Za-z0-9_\-\/?=&.]{1,120}$/.test(rt.hash || '') && (Date.now() - (rt.at || 0)) < 3600000) { dest += rt.hash; }
+      } catch (e) {}
+      location.replace(dest);
+    };
     var t = tok();
     if (!t) { go(); return; }
     var settled = false;

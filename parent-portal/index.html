@@ -42,6 +42,11 @@
        not flip when you rotate, and an APK WebView reporting an inflated innerWidth on a
        phone is still correctly a phone. -->
   <script>try{var C=window.Capacitor;var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.platform&&C.platform!=='web')||(C.Plugins&&C.Plugins.KtBio)));var d=document.documentElement;function ktPhone(){try{var s=window.screen||{},e=(s.width&&s.height)?Math.min(s.width,s.height):(s.width||0);var w=window.innerWidth||0;if(e)return e<=600||(w>0&&w<=768);return w>0?w<=768:true;}catch(x){return true;}}function ktSync(){d.classList.toggle('kt-app',nat);d.classList.toggle('kt-native',nat&&ktPhone());}ktSync();window.__KT_NATIVE=nat;window.__KT_PHONE=ktPhone();window.addEventListener('resize',ktSync);window.addEventListener('orientationchange',ktSync);}catch(e){}</script>
+  <!-- FINGERPRINT LOCK FROM THE FIRST FRAME, here too (2026-09-29): after an idle sign-out the app lands
+       on this page, which showed the login form before kt-biometric.js (deferred, last) put the lock up.
+       Same conditions as the dashboard's cover; kt-biometric drops it when the lock is up or not needed. -->
+  <style>html.kt-bio-pending::before{content:'';position:fixed;inset:0;z-index:2147481999;background:radial-gradient(120% 55% at 50% 0%,rgba(19,183,204,.18) 0%,rgba(19,183,204,0) 55%),linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);}</style>
+  <script>try{(function(){var L=localStorage,S=sessionStorage,d=document.documentElement;if(L.getItem('kt_biometric_enabled')!=='1'||!L.getItem('kt_bio_token'))return;if(S.getItem('kt_token')||S.getItem('kt_bio_session')==='1')return;if(L.getItem('kt_signed_out')==='1')return;if(Date.now()-(parseInt(L.getItem('kt_bio_unlocked_at')||'0',10)||0)<20000)return;if(!(window.__KT_NATIVE||window.__KT_PHONE))return;d.classList.add('kt-bio-pending');setTimeout(function(){d.classList.remove('kt-bio-pending');},20000);})();}catch(e){}</script>
   <!-- Bold navy mobile/APK login (layered over the redesign above). -->
   <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260921ios">
 </head>
@@ -512,7 +517,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
   <script src="/js/nav-additions-v15.js" defer></script>
   <script src="/js/kt-social-login.js?v=20260721icons"></script>
   <script src="/js/kt-pin.js?v=20260809navy" defer></script>
-  <script src="/js/kt-biometric.js?v=20260809navy" defer></script>
+  <script src="/js/kt-biometric.js?v=202609300330" defer></script>
   <script src="/js/kt-passkeys.js?v=20260928pk5" defer></script>
   <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
   <!-- Freeze watchdog on the sign-in page too: a lock-up before anybody is signed in

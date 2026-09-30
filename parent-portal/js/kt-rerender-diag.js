@@ -142,7 +142,7 @@
      stale content; if it ends before the writes do, they watched it assemble. */
   var coverUp = 0;
   setInterval(function () {
-    var on = !!d.getElementById('kt-refresh-snap');
+    var on = !!d.querySelector('[data-kt-refresh-snap]');
     if (on && !coverUp) { coverUp = now(); add('cover ON', ''); }
     else if (!on && coverUp) { add('cover OFF', 'held ' + (now() - coverUp) + 'ms'); coverUp = 0; }
   }, 60);

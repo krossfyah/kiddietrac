@@ -204,6 +204,25 @@
 
   function forceLogout(reason) {
     hideWarningModal();
+    /* COVER FIRST, THEN CLEAR (2026-09-29).
+       Anthony's APK video: back into the app, the old screen, then "This account has no
+       access yet", then the fingerprint lock. Clearing the session under a live page
+       lets anything that renders in the next few hundred ms (a resume refresh, a poll)
+       paint a signed-out view. The navy cover is the same one the dashboard puts up at
+       parse time for the lock (html.kt-bio-pending), so the next thing seen is the lock
+       or the login page, with nothing in between. */
+    var _p = window.location.pathname || '';
+    var _leaving = !(_p.endsWith('index.html') || _p === '/' || _p === '');
+    // Only when a navigation follows: on the login page itself nothing would lift it.
+    if (_leaving) { try { document.documentElement.classList.add('kt-bio-pending'); } catch (e) {} }
+    window.__ktSigningOut = true;
+    /* Where they were, so a fingerprint unlock can take them back there rather than to
+       the home screen. Only the hash, only for an hour, only read by the unlock. */
+    try {
+      if (window.location.hash && window.location.hash.length > 1) {
+        localStorage.setItem('kt_resume_to', JSON.stringify({ hash: window.location.hash, at: Date.now() }));
+      }
+    } catch (e) {}
     try {
       sessionStorage.removeItem('kt_token');
       sessionStorage.removeItem('kt_user');
@@ -279,6 +298,18 @@
     }
     bindActivity();
     setInterval(tick, getConfig().checkIntervalMs);
+    /* CHECK ON THE WAY BACK IN (2026-09-29). The clock only ran every 30 seconds, so an
+       app resumed after a long idle showed its old screen, refreshed it, and only then
+       discovered the session had expired. Resuming is the moment to decide, before
+       anything repaints. The native web view reliably reports appStateChange; browsers
+       report visibilitychange and pageshow. */
+    var onBack = function () { try { tick(); } catch (e) {} };
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { onBack(); } });
+    window.addEventListener('pageshow', onBack);
+    try {
+      var App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+      if (App && App.addListener) { App.addListener('appStateChange', function (st) { if (st && st.isActive) { onBack(); } }); }
+    } catch (e) {}
     // Run once immediately to surface stale absolute-timeout cases at load.
     tick();
   }
