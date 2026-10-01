@@ -89,12 +89,16 @@ class SafeArrivalCommand extends Command
                 // 2. No answer: alert the room and the centre, once.
                 if (! $c->escalated_at && $c->parents_notified_at
                     && $now->greaterThanOrEqualTo(Carbon::parse($c->parents_notified_at)->addMinutes($cfg['escalate_after_minutes']))) {
-                    $n = $this->alertStaff($agencyId, $row, $tz, $dry, (int) $c->parents_notified);
+                    [$n, $unreached] = $this->alertStaff($agencyId, $row, $tz, $dry, (int) $c->parents_notified);
                     if (! $dry) {
-                        DB::table('safe_arrival_checks')->where('id', $c->id)
-                            ->update(['status' => 'escalated', 'escalated_at' => now(), 'staff_alerted' => $n, 'updated_at' => now()]);
+                        $upd = ['status' => 'escalated', 'escalated_at' => now(), 'staff_alerted' => $n, 'updated_at' => now()];
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('safe_arrival_checks', 'staff_unreached')) {
+                            $upd['staff_unreached'] = $unreached ? mb_substr(implode(', ', $unreached), 0, 500) : null;
+                        }
+                        DB::table('safe_arrival_checks')->where('id', $c->id)->update($upd);
                     }
-                    $this->line(($dry ? '[dry] ' : '') . "escalated {$row['name']} to {$n} staff");
+                    $this->line(($dry ? '[dry] ' : '') . "escalated {$row['name']} to {$n} staff"
+                        . ($unreached ? ' (no phone alert reached: ' . implode(', ', $unreached) . ')' : ''));
                 }
             }
         }
@@ -144,7 +148,11 @@ class SafeArrivalCommand extends Command
         return $n;
     }
 
-    private function alertStaff(int $agencyId, array $row, string $tz, bool $dry, int $parentsAsked): int
+    /**
+     * @return array{0:int,1:string[]} how many staff were alerted, and the names of those
+     *         no phone notification reached
+     */
+    private function alertStaff(int $agencyId, array $row, string $tz, bool $dry, int $parentsAsked): array
     {
         // The people standing in that room, and whoever runs the centre.
         $ids = DB::table('educator_rooms as er')->join('users as u', 'u.id', '=', 'er.user_id')
@@ -167,21 +175,56 @@ class SafeArrivalCommand extends Command
             . ($parentsAsked > 0 ? "The parents were asked and haven't answered. Please call them."
                                   : "No message could be sent to the parents. Please call them.");
         if ($dry) {
-            return count($ids);
+            return [count($ids), []];
         }
+        /* A missing child cannot wait for someone to open the app. On 2026-10-01 the alert
+           for Addison reached neither educator whose phone token had expired, and nothing
+           said so. Anyone the push does not reach gets the same alert by email, and their
+           names go on the check so the Safe Arrival screen shows who was not reached. */
+        $unreached = [];
         foreach ($ids as $uid) {
+            $res = [];
             try {
                 \App\Support\Notify::write([
                     'user_id' => $uid, 'type' => 'safe_arrival', 'title' => $title, 'body' => $body,
                     'data' => json_encode(['link' => '#safe-arrival', 'child_id' => $row['child_id']]), 'created_at' => now(),
                 ]);
-                app(FcmService::class)->sendToUser($uid, $title, $body, '#safe-arrival');
+                $res = app(FcmService::class)->sendToUser($uid, $title, $body, '#safe-arrival');
             } catch (\Throwable $e) {
                 Log::warning('Safe Arrival staff alert failed', ['child' => $row['child_id'], 'user' => $uid, 'error' => $e->getMessage()]);
             }
+            if ((int) ($res['sent'] ?? 0) > 0) {
+                continue;
+            }
+            $u = DB::table('users')->where('id', $uid)->first(['first_name', 'last_name', 'email']);
+            if (! $u) {
+                continue;
+            }
+            $unreached[] = trim($u->first_name . ' ' . $u->last_name);
+            if ($u->email) {
+                try {
+                    $this->staffEmail($agencyId, (string) $u->email, trim($u->first_name . ' ' . $u->last_name), $title, $body);
+                } catch (\Throwable $e) {
+                    Log::warning('Safe Arrival staff email failed', ['child' => $row['child_id'], 'user' => $uid, 'error' => $e->getMessage()]);
+                }
+            }
         }
 
-        return count($ids);
+        return [count($ids), $unreached];
+    }
+
+    private function staffEmail(int $agencyId, string $to, string $toName, string $title, string $body): void
+    {
+        $html = EmailTemplate::wrap($agencyId,
+            '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($body) . '</p>'
+            . '<p style="margin:14px 0 0;font-size:13.5px;color:#475569;line-height:1.6;">You are getting this by email because '
+            . 'the alert could not reach your phone. Open KiddieTrac and allow notifications so the next one does.</p>',
+            ['eyebrow' => 'SAFE ARRIVAL', 'title' => $title, 'subtitle' => 'Attendance', 'preheader' => $body]);
+        dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title) {
+                $m->to($to, $toName ?: null)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($title);
+            });
+        })->onQueue('mail');
     }
 
     private function email(int $agencyId, string $to, string $toName, string $title, string $body): void

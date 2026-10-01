@@ -94,7 +94,7 @@ Route::prefix('v1')->group(function () {
             'path'   => 'required|string|max:200',
             'method' => 'nullable|string|max:10',
             'kind'   => 'nullable|string|max:40',
-            'ms'     => 'nullable|integer|min:0|max:600000',
+            'ms'     => 'nullable|integer|min:0|max:86400000',
         ]);
 
         $userId = null;

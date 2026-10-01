@@ -420,8 +420,15 @@ final class DailyEventController extends Controller
             ]);
         }
 
-        // 3. Generate digest if we have an Anthropic key
-        if (!$this->ai->isConfigured()) {
+        /* 3. Generate digest if we have an Anthropic key — and the AI did not just fail.
+
+           A failure is not stored (only a success is cached below), so every visit to the
+           day story called the AI again: one parent opening child 53's story on
+           2026-09-30 made ten calls in an hour, each a 400 for an exhausted credit balance
+           and each a log ERROR. After a failure the AI is left alone for 30 minutes and
+           the templated story is served straight away. */
+        $aiResting = \Illuminate\Support\Facades\Cache::has('ai-digest:resting');
+        if (!$this->ai->isConfigured() || $aiResting) {
             return response()->json([
                 'body' => $this->buildFallbackDigest($childId, $date),
                 'generated_at' => now()->toIso8601String(),
@@ -454,6 +461,7 @@ final class DailyEventController extends Controller
                 'date' => $date,
                 'error' => $e->getMessage(),
             ]);
+            try { \Illuminate\Support\Facades\Cache::put('ai-digest:resting', 1, now()->addMinutes(30)); } catch (Throwable $ignored) {}
 
             // Graceful degradation — return a templated fallback
             return response()->json([

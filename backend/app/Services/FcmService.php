@@ -278,6 +278,26 @@ class FcmService
 
         $result = $this->sendToTokens($tokens, $title, $body, $data, $urgent);
 
+        /* Every handset refused it. That is the moment a stale token is found — FCM 404s,
+           the row is pruned above — and it used to end the send: the Safe Arrival alert
+           for Addison on 2026-10-01 reached neither educator whose app token had expired.
+           Their browser subscription, if they have one, is still a way to reach them. */
+        $viaWeb = 0;
+        if (($result['sent'] ?? 0) === 0 && $webFallback) {
+            try {
+                $viaWeb = app(\App\Services\WebPushService::class)->sendToUser($userId, [
+                    'title' => $title,
+                    'body'  => $body,
+                    'icon'  => '/icon-192.png',
+                    'url'   => '/dashboard.html' . ($link ?: ''),
+                ]);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Web-push fallback failed', [
+                    'user' => $userId, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         \App\Support\PushAudit::record('fcm', [$userId], $title, $body,
             (($result['sent'] ?? 0) > 0 ? 'sent' : 'failed'), [
                 'link' => $link ?: null,
@@ -285,7 +305,12 @@ class FcmService
                 'devices' => count($tokens),
                 'sent' => $result['sent'] ?? 0,
                 'failed' => $result['failed'] ?? 0,
+                'via_web' => $viaWeb ?: null,
             ]);
+
+        if ($viaWeb > 0) {
+            return ['sent' => $viaWeb, 'failed' => $result['failed'] ?? 0, 'via' => 'web'];
+        }
 
         return $result;
     }

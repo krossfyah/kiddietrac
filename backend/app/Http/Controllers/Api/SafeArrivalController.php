@@ -56,6 +56,7 @@ class SafeArrivalController extends Controller
                 'absent' => $r['absent'],
                 'parents_notified' => $c ? $fmt($c->parents_notified_at) : null,
                 'escalated' => $c ? $fmt($c->escalated_at) : null,
+                'staff_unreached' => $c ? ($c->staff_unreached ?? null) : null,
                 'resolution' => $c ? $c->resolution : null,
                 'note' => $c ? $c->note : null,
                 'resolved' => $c ? $fmt($c->resolved_at) : null,

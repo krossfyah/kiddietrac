@@ -22,7 +22,7 @@ use Throwable;
  *
  * THE SIGN-IN PATH IS NOT A SHORTCUT PAST THE FRONT DOOR. Everything login() does after a
  * correct password, this does too — the account-status check, AccountStatus::markClaimed,
- * last_login stamping, device-type refresh, the device_tokens row, the same audit payload
+ * last_login stamping, device-type refresh, the same audit payload
  * and the same must_change_password flag. A second way in that skipped half of them would
  * be a way to launder around them.
  *
@@ -333,15 +333,7 @@ class PasskeyController extends Controller
             'updated_at' => now(),
         ]);
 
-        DB::table('device_tokens')->updateOrInsert(
-            ['user_id' => $user->id, 'device_name' => $data['device_name']],
-            [
-                'platform' => $data['device_platform'],
-                'token' => Str::random(80),
-                'last_active_at' => now(),
-                'created_at' => now(),
-            ]
-        );
+        // No device_tokens row: see AuthController::login (2026-10-01).
 
         $activeRoles = DB::table('role_assignments')->where('user_id', $user->id)
             ->where('active', 1)->pluck('role')->unique()->values()->all();

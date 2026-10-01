@@ -3043,13 +3043,16 @@
     }).then(function (fresh) {
       if (!fresh || !fresh.photo_url) { return null; }
       try {
-        [window.sessionStorage, window.localStorage].forEach(function (store) {
-          var raw = store.getItem('kt_user');
+        /* kt_bio_user too: the biometric unlock copies it back into kt_user, so leaving it
+           stale put the expired link back on every unlock (audit 2026-10-01: eleven 403s
+           in two days, every one somebody's OWN avatar). */
+        [['kt_user', window.sessionStorage], ['kt_user', window.localStorage], ['kt_bio_user', window.localStorage]].forEach(function (p) {
+          var raw = p[1].getItem(p[0]);
           if (!raw) { return; }
           var u = JSON.parse(raw);
           if (!u || typeof u !== 'object') { return; }
           u.photo_url = fresh.photo_url;
-          store.setItem('kt_user', JSON.stringify(u));
+          p[1].setItem(p[0], JSON.stringify(u));
         });
       } catch (e) {}
       return fresh.photo_url;
@@ -3059,6 +3062,34 @@
     });
     return _photoRefresh;
   };
+
+  /* Refresh BEFORE the link dies, not after it 403s. The stored avatar link is signed and
+     expires after 12-18 hours; an app that is only ever resumed keeps drawing it past
+     that, the image fails, and only then is a new one fetched. On boot and on every
+     resume, a link within 30 minutes of expiry is swapped for a fresh one, and any
+     <img> already showing the old one is pointed at the new. */
+  (function keepOwnPhotoFresh() {
+    function stored() {
+      try { return (JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}).photo_url || ''; }
+      catch (e) { return ''; }
+    }
+    function check() {
+      var old = stored();
+      var m = /[?&]expires=(\d+)/.exec(old);
+      if (!m || Number(m[1]) * 1000 - Date.now() > 30 * 60000) { return; }
+      window.KT.refreshUserPhoto().then(function (fresh) {
+        if (!fresh || fresh === old) { return; }
+        var host = ((window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
+        var abs = function (u) { return /^https?:\/\//i.test(u) ? u : host + u; };
+        var from = abs(old), to = abs(fresh);
+        Array.prototype.forEach.call(document.images, function (img) {
+          if (img.src === from) { img.src = to; }
+        });
+      });
+    }
+    setTimeout(check, 1500);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { check(); } });
+  })();
 
   // Export
   window.KT.Shell = {

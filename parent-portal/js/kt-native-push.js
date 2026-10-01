@@ -127,11 +127,66 @@
     })();
   })();
 
+  /* THE PHONE THAT STOPPED HEARING FROM US (audit 2026-10-01).
+
+     A Safe Arrival alert failed to two educators' phones: FCM had expired their tokens
+     (404 → pruned), and nothing ever registered a new one. Two reasons:
+
+       1. The 'registration' listener was added AFTER `await PN.register()`. Capacitor
+          fires that event as soon as FCM answers, which on a warm device is before the
+          await returns — so the token went to nobody and /push/device was never called.
+       2. Registration only ran on a fresh page load. The app mostly RESUMES, so a token
+          that rotated (app update, data cleared, FCM housekeeping) stayed unknown to the
+          server until the user happened to swipe the app away.
+
+     Now the listeners exist before register(), the token is remembered, and it is posted
+     again whenever the signed-in account changes or a resume finds it stale. */
+  var LAST_POST = 'kt_push_posted';           // "<user id>|<fcm token>|<ms>"
+  var REPOST_MS = 6 * 3600 * 1000;
+  var fcmToken = null;
+  var inited = false;
+
+  function userId() {
+    try { return String(JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}').id || ''); }
+    catch (e) { return ''; }
+  }
+
+  function postDevice(force) {
+    var tok = token();
+    if (!tok || !fcmToken) return;
+    var key = userId() + '|' + fcmToken;
+    try {
+      var prev = localStorage.getItem(LAST_POST) || '';
+      var cut = prev.lastIndexOf('|');
+      if (!force && cut > 0 && prev.slice(0, cut) === key && Date.now() - Number(prev.slice(cut + 1)) < REPOST_MS) return;
+    } catch (e) {}
+    fetch(apiBase() + '/push/device', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({ platform: platform(), token: fcmToken }),
+    }).then(function (r) {
+      if (r && r.ok) { try { localStorage.setItem(LAST_POST, key + '|' + Date.now()); } catch (e) {} }
+    }).catch(function () {});
+  }
+
   async function init() {
     var Cap = window.Capacitor;
     if (!Cap || typeof Cap.isNativePlatform !== 'function' || !Cap.isNativePlatform()) return; // native only
     var PN = (Cap.Plugins && Cap.Plugins.PushNotifications) || window.PushNotifications;
     if (!PN) return; // plugin not in this build yet — no-op
+    if (inited) return;
+    inited = true;
+
+    // BEFORE register(): the event can fire before the await returns.
+    PN.addListener('registration', function (t) {
+      if (!t || !t.value) return;
+      var changed = t.value !== fcmToken;
+      fcmToken = t.value;
+      postDevice(changed);
+    });
+    PN.addListener('registrationError', function (err) {
+      if (window.console) console.warn('push registration failed', err);
+    });
 
     try {
       if (platform() === 'android' && PN.createChannel) {
@@ -154,15 +209,6 @@
       var perm = await PN.requestPermissions();
       if (perm && perm.receive !== 'granted') return;
       await PN.register();
-
-      PN.addListener('registration', function (t) {
-        var tok = token(); if (!tok || !t || !t.value) return;
-        fetch(apiBase() + '/push/device', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + tok },
-          body: JSON.stringify({ platform: platform(), token: t.value }),
-        }).catch(function () {});
-      });
 
       // FOREGROUND: when the app is open, Android delivers the push to the app
       // instead of showing it in the bar — so post a local system notification
@@ -218,5 +264,37 @@
     if (token()) { init(); return; }
     if (tries++ > 20) return;
     setTimeout(waitAuth, 1500);
+  })();
+
+  /* On every resume: start if boot gave up waiting for a sign-in, otherwise ask FCM for
+     the current token again. register() is idempotent — it re-emits 'registration' with
+     the live token, and postDevice() only calls the server when the token or the account
+     changed, or the last post is older than six hours. */
+  function onResume() {
+    if (!token()) return;
+    if (!inited) { init(); return; }
+    try {
+      var Cap = window.Capacitor;
+      var PN = Cap && ((Cap.Plugins && Cap.Plugins.PushNotifications) || window.PushNotifications);
+      if (PN && PN.checkPermissions) {
+        PN.checkPermissions().then(function (p) {
+          if (p && p.receive === 'granted') { PN.register().catch(function () {}); }
+        }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) onResume(); });
+  (function wireAppState() {
+    var n = 0;
+    (function attempt() {
+      try {
+        var App = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
+        if (App && App.addListener) {
+          App.addListener('appStateChange', function (s) { if (s && s.isActive) onResume(); });
+          return;
+        }
+      } catch (e) {}
+      if (n++ < 40) setTimeout(attempt, 250);
+    })();
   })();
 })();

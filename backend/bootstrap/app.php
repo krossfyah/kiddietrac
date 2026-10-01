@@ -89,6 +89,38 @@ return Application::configure(basePath: dirname(__DIR__))
             fn ($request, $e) => $request->is('api/*') || $request->expectsJson()
         );
 
+        /* A URL id that is not a number is a 404, not a server error (2026-10-01).
+
+           Most routes take {id}/{child}/{invoice} with no numeric constraint, and the
+           controllers declare them `int`. So /provider/children/null (the educator "Me"
+           screen with no child picked) and /parent/invoices/ext-227/document (an iLearn
+           invoice sent to the native route) reached the method, PHP refused the string,
+           and the user got a 500 — which also filed a support ticket. Only a TypeError
+           raised by the ROUTER handing a URL segment to a controller counts; a TypeError
+           anywhere else is a real bug and still a 500. Logged, because the client that
+           built the URL is the thing to fix. */
+        $exceptions->map(\TypeError::class, function (\TypeError $e) {
+            $m = $e->getMessage();
+            if (preg_match('/^App\\\\Http\\\\Controllers\\\\[\\w\\\\]+::\\w+\\(\\): Argument #\\d+ \\(\\$\\w+\\) must be of type \\??int, string given, called in .*Illuminate\\/Routing\\/ControllerDispatcher\\.php/', $m)) {
+                // map() runs for both report and render: log the exception once.
+                static $logged = [];
+                if (! isset($logged[spl_object_id($e)])) {
+                    $logged[spl_object_id($e)] = true;
+                    try {
+                        \Illuminate\Support\Facades\Log::warning('Non-numeric id in URL answered 404', [
+                            'path' => request()->path(), 'user_id' => optional(request()->user())->id,
+                            'error' => strtok($m, ','),
+                        ]);
+                    } catch (\Throwable $ignored) {
+                    }
+                }
+
+                return new \Symfony\Component\HttpKernel\Exception\NotFoundHttpException('Not found.', $e);
+            }
+
+            return $e;
+        });
+
         /* An unhandled server error becomes a support ticket, the way a CLIENT crash
            already did via POST /diag/crash.
 

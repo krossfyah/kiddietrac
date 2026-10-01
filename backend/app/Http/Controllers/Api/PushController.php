@@ -62,10 +62,19 @@ final class PushController extends Controller
             $tokenJson = substr($tokenJson, 0, 500);
         }
 
-        $existing = DB::table('device_tokens')->where('token', $tokenJson)->first();
+        /* One row per browser: the ENDPOINT identifies the subscription, the keys can be
+           re-issued. Matching on the whole JSON let a re-keyed subscription add a second
+           row for the same browser. */
+        $prefix = '{"endpoint":' . json_encode($endpoint);
+        $existing = DB::table('device_tokens')->where('platform', 'web')
+            ->where(function ($q) use ($tokenJson, $prefix) {
+                $q->where('token', $tokenJson)
+                  ->orWhere('token', 'like', addcslashes($prefix, '\\%_') . '%');
+            })->orderByDesc('id')->first();
         if ($existing) {
             DB::table('device_tokens')->where('id', $existing->id)->update([
                 'user_id' => $user->id,
+                'token' => $tokenJson,
                 'last_active_at' => now(),
             ]);
             return response()->json(['success' => true, 'token_id' => $existing->id, 'updated' => true]);

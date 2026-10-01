@@ -317,6 +317,18 @@
     _reportFailure(path, method, status, ms, kind) {
       try {
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+        /* A request that never got an answer WHILE THE APP WAS IN THE BACKGROUND is the
+           phone suspending it, not a fault. The audit on 2026-10-01 found 10 of these in
+           two days (2.5 to 10+ minutes long, every one a background poll), filed as
+           errors; four were even refused by the error endpoint for being over 10 minutes.
+           Only status 0 is skipped — a 5xx that arrived is real whenever it arrived. */
+        if (!status) {
+          const startedAt = Date.now() - (ms || 0);
+          if ((typeof document !== 'undefined' && document.hidden)
+              || (Api._hiddenAt && Api._hiddenAt >= startedAt)) {
+            return;
+          }
+        }
         const key = (path || '') + '|' + status;
         Api._seen = Api._seen || {};
         const now = Date.now();
@@ -338,7 +350,7 @@
             path: String(path || '').slice(0, 200),
             method: method || 'GET',
             kind: kind || null,
-            ms: ms || 0,
+            ms: Math.min(ms || 0, 600000),
           }),
           keepalive: true,
         }).catch(() => {});
@@ -533,6 +545,13 @@
       }
     } catch (_) { /* silent */ }
   }
+
+  // When the page last went to the background — see _reportFailure.
+  try {
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { Api._hiddenAt = Date.now(); }
+    });
+  } catch (_) {}
 
   // Export
   window.KT = { Auth, Api, ApiError, Fmt, Dom, bootstrapPage, API_BASE };

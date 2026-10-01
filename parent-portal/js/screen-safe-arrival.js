@@ -92,7 +92,9 @@
             + '<div style="font-size:12.5px;color:#475569;margin-top:3px;">' + esc(r.room_name) + (d.centres && d.centres.length > 1 ? ' · ' + esc(r.centre_name) : '')
             + ' · expected ' + esc(r.expected) + (r.expected_is_default ? ' (default)' : '')
             + (r.parents_notified ? ' · parents asked ' + esc(r.parents_notified) : '')
-            + (r.escalated ? ' · staff alerted ' + esc(r.escalated) : '') + '</div></div>'
+            + (r.escalated ? ' · staff alerted ' + esc(r.escalated) : '') + '</div>'
+            + (r.staff_unreached ? '<div style="font-size:12.5px;color:#991B1B;font-weight:700;margin-top:4px;">⚠️ No phone alert reached: ' + esc(r.staff_unreached) + ' (emailed instead)</div>' : '')
+            + '</div>'
             + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
             + '<button type="button" data-sa-act="absent" data-child="' + r.child_id + '" data-kt-iconized="1" style="height:32px;padding:0 12px;border-radius:8px;border:0;background:#5B21B6;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;">Record absence</button>'
             + '<button type="button" data-sa-act="parent_contacted" data-child="' + r.child_id + '" data-kt-iconized="1" style="height:32px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:800;font-size:12.5px;cursor:pointer;">Parent contacted</button>'

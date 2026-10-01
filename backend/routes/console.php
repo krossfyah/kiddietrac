@@ -42,6 +42,11 @@ Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
 Schedule::command('tokens:prune --days=30')
     ->dailyAt('03:15')->timezone('America/Toronto')->withoutOverlapping();
 
+/* Browser push registrations that can no longer be reached: not a subscription, idle
+   60 days, or beyond the 10 most recent per person. See PruneWebPushTokens. */
+Schedule::command('push:prune-web --days=60 --keep=10')
+    ->dailyAt('03:20')->timezone('America/Toronto')->withoutOverlapping();
+
 /* A SIGNED FORM THAT NEVER REACHED THE FAMILY'S RECORD.
 
    Filing happens at signature time and is best-effort on purpose - a filing problem must

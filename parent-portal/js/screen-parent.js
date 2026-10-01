@@ -2539,7 +2539,35 @@
     container.appendChild(card);
   }
 
+  /* AN iLEARN INVOICE IS NOT A KIDDIETRAC INVOICE (2026-10-01).
+
+     /parent/children/{id}/invoices merges the family's integrated-billing invoices into
+     the list with an id of "ext-<n>". Tapping one opened THIS sheet, which asked
+     /parent/invoices/ext-227/document for the document — a route for native invoices
+     that wants a number — and the server answered with a 500 (Marthiena, 2026-10-01).
+     Its Pay button would have started a card payment for a native invoice that does not
+     exist. The external invoice has its own sheet, document route and payment path. */
+  async function openMergedExternalInvoice(inv) {
+    const extId = Number(String(inv.id).replace(/^ext-/, ''));
+    let rec = {
+      id: extId, number: inv.invoice_number, status: inv.status,
+      total: inv.total, balance_due: inv.balance_due,
+      amount_paid: Math.max(0, (Number(inv.total) || 0) - (Number(inv.balance_due) || 0)),
+      due_at: inv.due_date, issued_at: inv.issue_date,
+      has_document: !!inv.has_document, source_label: inv.source,
+    };
+    let opts = {};
+    try {
+      const d = await Api.get('/parent/external-invoices?page=1&per_page=20&search=' + encodeURIComponent(inv.invoice_number || ''));
+      const hit = d && (d.invoices || []).find(function (x) { return Number(x.id) === extId; });
+      if (hit) { rec = hit; }
+      opts = { stripeEnabled: !!(d && d.meta && d.meta.stripe_enabled), onPay: startExternalPayment };
+    } catch (e) { /* the row we already have is enough to show it */ }
+    openExternalInvoice(rec, rec.source_label || inv.source || 'Your provider', opts);
+  }
+
   function openInvoiceDetail(inv, child) {
+    if (inv && (inv.external || /^ext-/.test(String(inv.id)))) { openMergedExternalInvoice(inv); return; }
     const appMain = document.getElementById('appMain');
     if (!appMain) return;
     const tw = Dom.el('div', { class: 'kt-invoice-sheet', style: 'position:fixed;inset:0;z-index:9600;background:var(--ink-50,#F4F7FA);display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });

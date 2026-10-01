@@ -324,15 +324,11 @@ final class AuthController extends Controller
         // signal (ios/android from the app); for the web we sniff the User-Agent.
         $this->refreshDeviceType($user, (string) ($data['device_platform'] ?? 'unknown'), (string) $request->userAgent());
 
-        DB::table('device_tokens')->updateOrInsert(
-            ['user_id' => $user->id, 'device_name' => $data['device_name']],
-            [
-                'platform' => $data['device_platform'],
-                'token' => Str::random(80),
-                'last_active_at' => now(),
-                'created_at' => now(),
-            ]
-        );
+        /* No device_tokens row here any more (2026-10-01). Login used to write one with a
+           random 80-character "token": it was never a push address, WebPushService threw
+           it away, and it made people look registered for notifications when they were
+           not (31 such rows, two of them the only "device" of staff who were missing
+           alerts). Push addresses are written by /push/device and /push/subscribe only. */
 
         /* WHAT THE LOGIN ROW HAS TO SAY.
 

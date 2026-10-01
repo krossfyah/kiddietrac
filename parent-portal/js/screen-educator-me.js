@@ -291,6 +291,17 @@
   async function renderChildRecordScreen(main) {
     var childId = null;
     try { childId = new URLSearchParams((location.hash.split('?')[1] || '')).get('id'); } catch (e) {}
+    /* Coming BACK here can arrive without the ?id= (2026-09-30: Natasha opened child 123,
+       went to Settings, came back, and the screen asked the server for child "null" —
+       a 500). Remember the last child opened in this tab and use it when the hash lost
+       it; with neither, go back to the list rather than ask for nobody. */
+    if (/^\d+$/.test(String(childId || ''))) {
+      try { sessionStorage.setItem('kt_child_record_id', childId); } catch (e) {}
+    } else {
+      childId = null;
+      try { childId = sessionStorage.getItem('kt_child_record_id'); } catch (e) {}
+      if (!/^\d+$/.test(String(childId || ''))) { location.hash = '#children'; return; }
+    }
     var ov = document.createElement('div');
     ov.setAttribute('data-kt-no-autohero', '1');   // we render our own compact header below
     ov.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin:2px 0 12px;">'
