@@ -370,27 +370,8 @@
           ...(isPlatformAdmin_v22p34
             ? [{ hash: 'backups', label: 'Backups', icon: '🗄️' }, { hash: 'compliance-evidence', label: 'Compliance evidence', icon: '🛡️' }]
             : []),
-          /* Two-factor lives in the personal profile for EVERY role now — this entry
-             used to be the exception, kept because agency admins and centre directors
-             had no profile screen. They do as of 2026-09-01 (screen-settings registers
-             them), so the account settings and the agency settings are no longer mixed
-             together in one menu.
-
-             This item points at that profile, and says "security" out loud: the thing
-             people come here looking for is two-factor, and a bare "My profile" gives
-             them no reason to think it is inside. */
-          /* ONE PROFILE, AND IT IS THE USER RECORD (2026-09-16).
-
-             "My profile & security" was a second, separate account screen sitting beside
-             User management, which already holds a tabbed record for every person in the
-             agency — including this one. Two places to look at the same person is how
-             they drifted apart: one knew about two-factor and how somebody is paid, the
-             other knew their roles, rooms and shifts.
-
-             For an agency admin this now opens THEIR OWN row in User management, which
-             is the same dialog they open for anybody else. Anthony, 2026-09-16: migrate
-             it into user management and remove the section. */
-          { hash: 'my-profile',         label: 'My profile',           icon: '👤' },
+          /* No "My profile" here (2026-10-01, Anthony): your name in the top bar opens
+             it, so Settings holds agency settings only. #my-profile still routes. */
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -503,25 +484,8 @@
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
-          /* Two-factor lives in the personal profile for EVERY role now — this entry
-             used to be the exception, kept because agency admins and centre directors
-             had no profile screen. They do as of 2026-09-01 (screen-settings registers
-             them), so the account settings and the agency settings are no longer mixed
-             together in one menu.
-
-             This item points at that profile, and says "security" out loud: the thing
-             people come here looking for is two-factor, and a bare "My profile" gives
-             them no reason to think it is inside. */
-          /* THE SAME NAME AND THE SAME PANES, at a different address.
-
-             A centre director has no User management screen — it is registered for
-             agency admins only — so there is nowhere in it to send them. They get the
-             same profile, under the same label, rendered by the same component; the
-             Payroll pane is literally shared with the record an admin opens.
-
-             Giving directors their own row in User management would be a privilege
-             change rather than a layout one, so it is not made here. */
-          { hash: 'my-profile',         label: 'My profile',           icon: '👤' },
+          /* No "My profile" here either: a director's name in the top bar opens
+             #my-profile (kt-topbar openProfile). */
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
 
 

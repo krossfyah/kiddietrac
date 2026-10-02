@@ -370,8 +370,18 @@
     // Show the user's own account record (view + edit their details/roles) rather
     // than re-running the full onboarding wizard. Falls back to the profile editor
     // if the account view isn't available (e.g. non-admin roles).
-    if (window.KT && typeof KT.openMyAccount === 'function') { KT.openMyAccount(); return; }
-    location.hash = '#onboarding';
+    /* THE ONLY WAY IN NOW (2026-10-01). "My profile" was taken out of the Settings menu —
+       your name up here is where your profile lives. KT.openMyAccount is the User
+       management dialog, and screen-admin.js loads for every role, so a centre director
+       got it too: Manage dialog on themselves, with Files, Pay and Centres all refused
+       (403). Only agency/platform admins have that record; anyone else gets their own
+       profile screen, which is what the menu item used to open for them. */
+    var u = {};
+    try { u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}; } catch (e) {}
+    var roles = [].concat(u.roles || [], u.primary_role || []);
+    var admin = roles.indexOf('agency_admin') !== -1 || roles.indexOf('platform_admin') !== -1 || !!u.is_platform_admin;
+    if (admin && window.KT && typeof KT.openMyAccount === 'function') { KT.openMyAccount(); return; }
+    location.hash = roles.indexOf('centre_director') !== -1 ? '#my-profile' : '#settings';
   }
   function openHome() { location.hash = '#dashboard'; }
   function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
