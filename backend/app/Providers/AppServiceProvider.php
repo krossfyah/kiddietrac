@@ -24,6 +24,63 @@ class AppServiceProvider extends ServiceProvider
             \App\Models\PersonalAccessToken::class
         );
 
+        /* A PARENT'S BROWSER SESSION ENDS ON THE SERVER TOO (2026-10-01).
+
+           The 30-minute idle / 12-hour limit lived only in the page. A browser that was
+           closed and reopened restored the saved sign-in with fresh clocks, so a parent
+           (Farjana, user 54) used one sign-in from 9 Sep to 1 Oct without ever being
+           asked again, and nothing on the server would have stopped it before 30 days.
+           Anthony's call: parents get 30 min idle / 12 h, enforced; staff unchanged.
+
+           Parent-only accounts, browser sessions only. The Android app's fingerprint /
+           PIN unlock reuses its saved token, so ending it here would break the unlock;
+           the app still times out on the device (session-timeout.js). last_used_at is
+           refreshed by the page's own polling while it is open, so "idle" here means
+           the page was closed — the page judges idleness by the person, not by polls.
+           Checked BEFORE Sanctum stamps last_used_at for this request. */
+        \Laravel\Sanctum\Sanctum::authenticateAccessTokensUsing(function ($token, bool $isValid) {
+            if (! $isValid) {
+                return false;
+            }
+            try {
+                if (str_contains((string) $token->name, '; wv)')) {
+                    return true;                                    // the Android app
+                }
+                $uid = (int) $token->tokenable_id;
+                $parentOnly = \Illuminate\Support\Facades\Cache::remember('kt-parent-only:' . $uid, 300, function () use ($uid) {
+                    $roles = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+                        ->pluck('role')->unique()->values()->all();
+
+                    return $roles === ['guardian'];
+                });
+                if (! $parentOnly) {
+                    return true;
+                }
+                $reason = null;
+                if ($token->created_at && $token->created_at->lt(now()->subHours(12))) {
+                    $reason = 'absolute';
+                } elseif (($token->last_used_at ?? $token->created_at) && ($token->last_used_at ?? $token->created_at)->lt(now()->subMinutes(30))) {
+                    $reason = 'idle';
+                }
+                if ($reason === null) {
+                    return true;
+                }
+                $token->delete();
+                \App\Support\Audit::write([
+                    'user_id' => $uid,
+                    'agency_id' => DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->value('agency_id'),
+                    'action' => 'session.expired',
+                    'payload' => json_encode(['reason' => $reason, 'signed_in' => (string) $token->created_at,
+                        'last_used' => (string) $token->last_used_at, 'device' => mb_substr((string) $token->name, 0, 100)]),
+                    'user_agent' => mb_substr((string) request()->userAgent(), 0, 255),
+                ]);
+
+                return false;
+            } catch (\Throwable $e) {
+                return true;                                        // never lock anyone out on an error here
+            }
+        });
+
         // ── Outbound mail routing (superadmin-managed, DB-configured) ──────────
         // Register the Microsoft Graph transport and apply platform_settings, so a
         // superadmin can switch KiddieTrac between sendmail and Microsoft Graph from

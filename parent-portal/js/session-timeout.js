@@ -68,6 +68,55 @@
     return out;
   }
 
+  /* A PARENT'S CLOCKS SURVIVE A RELAUNCH (2026-10-01).
+
+     Both clocks lived in sessionStorage, which a new tab or a reopened browser starts
+     empty — while Auth.rememberSession() restores the sign-in itself from localStorage.
+     So every reopen came back signed in with a brand-new 30 minutes and 12 hours, and a
+     parent used one sign-in for three weeks. For a parent-only account the clocks are
+     now kept in localStorage beside the saved sign-in, so reopening is judged against
+     the real last activity and the real sign-in time. Staff are deliberately unchanged
+     (Anthony, 2026-10-01). */
+  var P_ACT = 'kt_p_last_activity', P_LOGIN = 'kt_p_login_at', P_ID = 'kt_p_token_id';
+  /* Which sign-in the saved clocks belong to: the token's id (the number before "|"),
+     which is not the secret part. Clocks saved for another sign-in are ignored, so a
+     passkey or social sign-in — which never calls stampLogin — cannot inherit the last
+     session's clock and be signed straight out. */
+  function tokenId() {
+    try {
+      var t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '';
+      var i = t.indexOf('|');
+      return i > 0 ? t.slice(0, i) : '';
+    } catch (e) { return ''; }
+  }
+  function isParentOnly() {
+    var r = roleSet();
+    if (!r.length) { return false; }
+    for (var i = 0; i < r.length; i++) { if (r[i] !== 'guardian') { return false; } }
+    return true;
+  }
+  function persisted(key) {
+    try {
+      var id = tokenId();
+      if (!id || localStorage.getItem(P_ID) !== id) { return 0; }
+      var n = parseInt(localStorage.getItem(key) || '', 10);
+      return n > 0 ? n : 0;
+    } catch (e) { return 0; }
+  }
+  function persist(key, v) {
+    try {
+      if (!isParentOnly()) { return; }
+      var id = tokenId();
+      if (!id) { return; }
+      if (localStorage.getItem(P_ID) !== id) {
+        // A different sign-in: start its pair cleanly.
+        localStorage.setItem(P_ID, id);
+        localStorage.removeItem(P_ACT); localStorage.removeItem(P_LOGIN);
+      }
+      localStorage.setItem(key, String(v));
+    } catch (e) {}
+  }
+
   function isFloorStaff() {
     var r = roleSet();
     return r.indexOf('educator') !== -1 || r.indexOf('home_visitor') !== -1;
@@ -110,7 +159,9 @@
   var lastMouseMove = 0;
 
   function touchActivity() {
-    try { sessionStorage.setItem('kt_last_activity', String(Date.now())); } catch (e) {}
+    var now = Date.now();
+    try { sessionStorage.setItem('kt_last_activity', String(now)); } catch (e) {}
+    persist(P_ACT, now);
     hideWarningModal();
   }
 
@@ -186,24 +237,49 @@
   function lastActivity() {
     var raw = sessionStorage.getItem('kt_last_activity');
     var n = raw ? parseInt(raw, 10) : 0;
-    if (!n) { n = Date.now(); sessionStorage.setItem('kt_last_activity', String(n)); }
+    // A reopened browser: a parent's real last activity, not "now".
+    if (!n && isParentOnly()) { n = persisted(P_ACT); if (n) { sessionStorage.setItem('kt_last_activity', String(n)); } }
+    if (!n) { n = Date.now(); sessionStorage.setItem('kt_last_activity', String(n)); persist(P_ACT, n); }
     return n;
   }
 
   function loginAt() {
     var raw = sessionStorage.getItem('kt_login_at');
     var n = raw ? parseInt(raw, 10) : 0;
+    if (!n && isParentOnly()) { n = persisted(P_LOGIN); if (n) { sessionStorage.setItem('kt_login_at', String(n)); } }
     if (!n) {
       // No stamp from login screen — set now so the absolute window starts from
       // this load. Existing sessions before this code shipped get a fresh clock.
       n = Date.now();
       sessionStorage.setItem('kt_login_at', String(n));
+      persist(P_LOGIN, n);
     }
     return n;
   }
 
+  /* End a parent's browser session on the SERVER too, and say why — the audit log reads
+     "post:api/v1/auth/logout" with the reason in its input. Not when a fingerprint/PIN
+     lock is enrolled: that vault holds this same token, and revoking it would break the
+     unlock that is meant to let them straight back in. */
+  function revokeOnServer(reason) {
+    try {
+      if (!isParentOnly()) { return; }
+      if (localStorage.getItem('kt_biometric_enabled') === '1' || localStorage.getItem('kt_pin_enabled') === '1') { return; }
+      var t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      if (!t) { return; }
+      var base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      fetch(base + '/auth/logout', {
+        method: 'POST', keepalive: true,
+        headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'timeout_' + (reason || 'idle') }),
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function forceLogout(reason) {
     hideWarningModal();
+    if (reason === 'idle' || reason === 'absolute') { revokeOnServer(reason); }
+    try { localStorage.removeItem(P_ACT); localStorage.removeItem(P_LOGIN); localStorage.removeItem(P_ID); } catch (e) {}
     /* COVER FIRST, THEN CLEAR (2026-09-29).
        Anthony's APK video: back into the app, the old screen, then "This account has no
        access yet", then the fingerprint lock. Clearing the session under a live page
@@ -260,8 +336,17 @@
     window.location.href = '/index.html' + qs;
   }
 
+  // Make sure a parent's saved pair exists for THIS sign-in (sign-in time first: a new
+  // token id resets the pair, then activity joins it).
+  function syncPersisted() {
+    if (!isParentOnly()) { return; }
+    if (!persisted(P_LOGIN)) { persist(P_LOGIN, loginAt()); }
+    if (!persisted(P_ACT)) { persist(P_ACT, lastActivity()); }
+  }
+
   function tick() {
     if (!hasToken()) return;
+    try { syncPersisted(); } catch (e) {}
     var cfg = getConfig();
     var now = Date.now();
     var idleFor = now - lastActivity();
@@ -322,6 +407,8 @@
       try {
         sessionStorage.setItem('kt_login_at', String(now));
         sessionStorage.setItem('kt_last_activity', String(now));
+        // A fresh sign-in starts a fresh saved pair (tied to its token id on first use).
+        localStorage.removeItem(P_ID); localStorage.removeItem(P_LOGIN); localStorage.removeItem(P_ACT);
       } catch (e) {}
     },
     forceLogout: forceLogout,
