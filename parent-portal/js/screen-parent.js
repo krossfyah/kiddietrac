@@ -315,8 +315,22 @@
 
   // Tap a photo to see it full-size, with a Download button. Registered as an overlay so
   // the ← Back / Android back closes it first.
-  function openPhotoLightbox(url, caption) {
+  /* With `list` (the gallery the photo came from) and `index`, ‹ › and swipe step
+     through every photo and video in it (2026-10-01). */
+  function galleryItems(photos) {
+    return (photos || []).map(function (p) {
+      return { url: p.url, type: p.media_type === 'video' ? 'video' : 'image', caption: p.caption || '',
+               meta: p.date_display || '', poster: p.thumbnail_url || undefined };
+    });
+  }
+  function openPhotoLightbox(url, caption, list, index) {
     if (!url) return;
+    if (window.KT && KT.mediaViewer) {
+      KT.mediaViewer.open(list && list.length ? list : [{ url: url, caption: caption }], list ? index : 0, {
+        download: function (it, b) { downloadPhoto(it.url, it.caption, b); },
+      });
+      return;
+    }
     var ov = document.createElement('div');
     ov.className = 'kt-photo-lightbox';
     ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;display:flex;flex-direction:column;'
@@ -975,7 +989,8 @@
       gallery.setAttribute('data-kt-list', '1');
       gallery.setAttribute('data-kt-no-controls', '1');
       gallery.setAttribute('data-kt-no-kebab', '1');
-      data.photos.forEach(p => {
+      const seq = galleryItems(data.photos);
+      data.photos.forEach((p, pi) => {
         const card = Dom.el('div', { class: 'card', style: 'padding: 0; overflow: hidden;' });
         if (p.media_type === 'video') {
           card.appendChild(Dom.el('video', {
@@ -987,7 +1002,7 @@
           // quality. thumbnail_url used to BE the full-size path, so a grid of
           // tiles pulled megabytes each — one phone photo is ~5 MB against ~30 KB.
           const img = Dom.el('img', { src: p.thumbnail_url || p.url, alt: p.caption || 'Photo', loading: 'lazy', decoding: 'async', style: 'width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; background: var(--ink-100); cursor: zoom-in;' });
-          img.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
+          img.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption, seq, pi); });
           card.appendChild(img);
         }
         const body = Dom.el('div', { style: 'padding: 12px;' });
@@ -2407,7 +2422,8 @@
         return;
       }
       markMediaSeen(child.id);
-      data.photos.forEach(p => {
+      const seq = galleryItems(data.photos);
+      data.photos.forEach((p, pi) => {
         const c = Dom.el('div', { style: 'border-radius:14px;overflow:hidden;' + card() });
         // Educators can share short video clips as well as photos — a first
         // wobble across the room doesn't survive as a still.
@@ -2420,7 +2436,7 @@
           // Mobile tile — same thumbnail rule (the parent SPA renders mobile and
           // desktop through different functions, so both need it).
           const mimg = Dom.el('img', { src: p.thumbnail_url || p.url, alt: p.caption || 'Photo', loading: 'lazy', decoding: 'async', style: 'width:100%;aspect-ratio:1;object-fit:cover;display:block;background:var(--ink-100);cursor:zoom-in;' });
-          mimg.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption); });
+          mimg.addEventListener('click', function () { openPhotoLightbox(p.url, p.caption, seq, pi); });
           c.appendChild(mimg);
         }
         if (p.caption || p.date_display) {
@@ -3012,8 +3028,16 @@
                 const au = Dom.el('audio', { controls: '', preload: 'metadata', src: absUrl(a.url), style: 'margin-top:6px;width:210px;max-width:100%;height:40px;display:block;' });
                 b.appendChild(au);
               } else {
-                const img = Dom.el('img', { src: absUrl(a.url), alt: 'Photo', loading: 'lazy', style: 'max-width:210px;width:100%;border-radius:10px;margin-top:6px;display:block;cursor:pointer;' });
-                img.addEventListener('click', () => window.open(absUrl(a.url), '_blank'));
+                const img = Dom.el('img', { src: absUrl(a.url), alt: 'Photo', loading: 'lazy', 'data-kt-thread-photo': '1', style: 'max-width:210px;width:100%;border-radius:10px;margin-top:6px;display:block;cursor:pointer;' });
+                /* In the app, not a new tab — the APK's WebView opens no tab, so this did
+                   nothing on a phone. Every photo in the conversation is one sequence. */
+                img.addEventListener('click', () => {
+                  if (window.KT && KT.mediaViewer) {
+                    KT.mediaViewer.fromElements(body, 'img[data-kt-thread-photo]', img, {
+                      download: function (it, btn) { downloadPhoto(it.url, '', btn); },
+                    });
+                  } else { window.open(absUrl(a.url), '_blank'); }
+                });
                 b.appendChild(img);
               }
             });

@@ -350,7 +350,7 @@
         ${photos.map(p => `<div class="kt-card" style="padding:0;overflow:hidden;">
           ${(p.media_type === 'video')
             ? `<video src="${esc(p.url)}" controls preload="metadata" playsinline style="width:100%;height:220px;object-fit:cover;display:block;background:#0F172A;"></video>`
-            : `<img src="${esc(p.url)}" loading="lazy" style="width:100%;height:220px;object-fit:cover;display:block;background:#F1F5F9;">`}
+            : `<img src="${esc(p.url)}" loading="lazy" data-pf-media="1" data-kt-media-caption="${esc(p.caption || '')}" style="width:100%;height:220px;object-fit:cover;display:block;background:#F1F5F9;cursor:zoom-in;">`}
           <div style="padding:14px 18px;">
             <div style="font-size:12.5px;color:#475569;">${fmtDate(p.taken_at)} · ${esc(p.uploader_name || '')}</div>
             <div style="font-size:13.5px;color:#0F172A;margin-top:6px;">${esc(p.caption || '')}</div>
@@ -359,6 +359,14 @@
       </div>
     </div>`;
     document.getElementById('pf-upload').onclick = () => openPhotoUpload();
+    // Tap a photo to see it full size; ‹ › and swipe step through the feed (2026-10-01).
+    if (main.getAttribute('data-pf-viewer') !== '1') {
+      main.setAttribute('data-pf-viewer', '1');
+      main.addEventListener('click', (e) => {
+        const img = e.target && e.target.closest ? e.target.closest('img[data-pf-media]') : null;
+        if (img && window.KT && KT.mediaViewer) { KT.mediaViewer.fromElements(main, 'img[data-pf-media]', img); }
+      });
+    }
   }
   function openPhotoUpload() {
     const m = document.createElement('div');

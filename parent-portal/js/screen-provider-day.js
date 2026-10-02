@@ -588,6 +588,7 @@
             + ' data-pd-media="' + esc(p.url) + '"'
             + (isVid ? ' data-pd-vid="1"' : '')
             + ' data-pd-cap="' + esc(p.caption || '') + '"'
+            + ' data-pd-time="' + esc(p.time || '') + '"'
             + ' style="display:block;position:relative;border-radius:10px;overflow:hidden;padding-top:100%;background:#EEF2F6 center/cover no-repeat;background-image:url(' + esc(p.thumb || p.url) + ');text-decoration:none;cursor:zoom-in;" title="' + esc((p.caption || '') + ' · ' + (p.time || '')) + '">'
             + (isVid ? '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.6);">▶</span>' : '')
             + '<span style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.55));color:#fff;font-size:9.5px;padding:10px 5px 3px;">' + esc(p.time || '') + '</span></a>';
@@ -755,6 +756,20 @@
         var a = e.target && e.target.closest ? e.target.closest('[data-pd-media]') : null;
         if (!a) { return; }
         e.preventDefault();
+        /* The whole day, not just the tile: ‹ › and swipe step through every photo and
+           video captured, starting at the one tapped (Anthony, 2026-10-01). */
+        if (window.KT && KT.mediaViewer) {
+          var tiles = Array.prototype.slice.call(body.querySelectorAll('[data-pd-media]'));
+          KT.mediaViewer.open(tiles.map(function (t) {
+            return {
+              url: t.getAttribute('data-pd-media'),
+              type: t.getAttribute('data-pd-vid') === '1' ? 'video' : 'image',
+              caption: t.getAttribute('data-pd-cap') || '',
+              meta: t.getAttribute('data-pd-time') || '',
+            };
+          }), tiles.indexOf(a));
+          return;
+        }
         openMedia(a.getAttribute('data-pd-media'), a.getAttribute('data-pd-cap'),
                   a.getAttribute('data-pd-vid') === '1');
       });

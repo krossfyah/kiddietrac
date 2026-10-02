@@ -1498,7 +1498,7 @@
               return atts.map(function (a) {
                 var url = absPhotoUrl(a.url);
                 if (/^image\//.test(a.mime || '')) {
-                  return '<div style="margin-top:6px;"><img src="' + escapeHtml(url) + '" alt="' + escapeHtml(a.name || 'Photo') + '" style="max-width:100%;border-radius:9px;display:block;cursor:zoom-in;"></div>';
+                  return '<div style="margin-top:6px;"><img data-kt-media-group="chat" src="' + escapeHtml(url) + '" alt="' + escapeHtml(a.name || 'Photo') + '" style="max-width:100%;border-radius:9px;display:block;cursor:zoom-in;"></div>';
                 }
                 if (/^audio\//.test(a.mime || '')) {
                   return '<div style="margin-top:6px;"><audio controls preload="none" src="' + escapeHtml(url) + '" style="width:210px;max-width:100%;"></audio></div>';
@@ -2561,7 +2561,7 @@
       }
       if (isImage) {
         // Image attachment — render inline as a click-to-zoom thumbnail
-        return `<div style="margin:6px 0;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:block;"><img src="${escapeHtml(url)}" alt="${escapeHtml(a.name || 'image')}" style="max-width:100%;max-height:280px;border-radius:10px;display:block;background:rgba(0,0,0,.04);"></a></div>`;
+        return `<div style="margin:6px 0;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:block;"><img data-kt-media-group="chat" src="${escapeHtml(url)}" alt="${escapeHtml(a.name || 'image')}" style="max-width:100%;max-height:280px;border-radius:10px;display:block;background:rgba(0,0,0,.04);"></a></div>`;
       }
       // Non-image fallback (future: pdf, etc.)
       return `<div style="margin:6px 0;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:${mine ? '#0E7C90' : '#1F6080'};text-decoration:underline;font-size:13px;">📎 ${escapeHtml(a.name || 'attachment')}</a></div>`;

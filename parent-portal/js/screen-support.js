@@ -180,7 +180,12 @@
           var attRow = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-top:9px;' });
           atts.forEach(function (a) {
             var im = el('img', { src: absUrl(a.url), title: a.name || 'screenshot', style: 'width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #E2E8F0;cursor:pointer;' });
-            im.addEventListener('click', function () { window.open(absUrl(a.url), '_blank'); });
+            // In-app viewer, with ‹ › across this ticket's screenshots (a new tab opens
+            // nothing in the Android app).
+            im.addEventListener('click', function () {
+              if (window.KT && KT.mediaViewer) { KT.mediaViewer.fromElements(attRow, 'img', im); }
+              else { window.open(absUrl(a.url), '_blank'); }
+            });
             attRow.appendChild(im);
           });
           row.appendChild(attRow);
