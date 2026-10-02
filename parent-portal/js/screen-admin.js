@@ -8625,6 +8625,9 @@
   // Exposed so the agency overview can open the centre edit modal IN PLACE
   // (no teleport to the Administration › Centres tab). Pass an onSaved refresh.
   window.KT.showCentreModal = showCentreModal;
+  // A family's record (with its ✏️ Edit family) from anywhere — All contacts uses it
+  // for parent rows, whose phone and address live on the family.
+  window.KT.openFamilyRecord = function (familyId) { if (familyId) { showFamilyDetail(familyId, false); } };
   // Clicking your own name in the top bar opens your account record (view + edit
   // details/roles) instead of re-running the onboarding wizard. Self-edit is
   // allowed by the backend even for a platform-level superadmin.

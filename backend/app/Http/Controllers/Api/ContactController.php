@@ -173,7 +173,7 @@ final class ContactController extends Controller
                 ->whereIn('f.centre_id', $centreIds)
                 ->whereNull('u.deleted_at')
                 ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone',
-                       'f.primary_phone', 'f.family_name', 'f.centre_id',
+                       'f.primary_phone', 'f.family_name', 'f.centre_id', 'f.id as family_id',
                        // A household address lives on the family, not the person.
                        'f.address_line1', 'f.address_line2', 'f.city', 'f.province', 'f.postal_code']);
 
@@ -189,7 +189,7 @@ final class ContactController extends Controller
                     'city' => $r->city, 'province' => $r->province, 'postal_code' => $r->postal_code,
                     'notes' => null, 'tags' => [],
                     'centre_id' => $r->centre_id, 'is_emergency' => false, 'card_image_url' => null,
-                    'source' => 'parent', 'editable' => false,
+                    'source' => 'parent', 'editable' => false, 'family_id' => (int) $r->family_id,
                 ]);
             }
 

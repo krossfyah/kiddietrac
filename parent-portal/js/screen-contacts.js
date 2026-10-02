@@ -54,6 +54,15 @@
       : v;
   }
 
+  // Agency / platform admins can open a staff or family record; a centre director cannot.
+  function canOpenRecords() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {};
+      var roles = [].concat(u.roles || [], u.primary_role || []);
+      return !!u.is_platform_admin || roles.indexOf('agency_admin') !== -1 || roles.indexOf('platform_admin') !== -1;
+    } catch (e) { return false; }
+  }
+
   function chip(text, bg, fg) {
     return '<span style="display:inline-block;background:' + bg + ';color:' + fg
       + ';font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;margin:1px 5px 1px 0;white-space:nowrap;">'
@@ -187,8 +196,17 @@
           ? '<button type="button" class="ct-edit" data-id="' + r.id + '">✏️ Edit contact</button>'
             + (r.card_image_url ? '<button type="button" class="ct-card" data-url="' + esc(r.card_image_url) + '">🪪 Business card</button>' : '')
             + '<button type="button" class="ct-del" data-id="' + r.id + '" data-name="' + who + '">🗑 Delete contact</button>'
-          : '<span style="font-size:11px;color:' + C.faint + ';white-space:nowrap;">from their '
-            + (r.source === 'staff' ? 'staff record' : 'family record') + '</span>')
+          /* Staff and parent rows are edited where they live (2026-10-01: "how does one
+             edit a record — there is no kebab?"). The kebab opens the real record, so
+             there is still one copy of the number. Admins only: both dialogs read
+             /admin/* endpoints a centre director is refused, so a director keeps the
+             note saying where the details come from. */
+          : (canOpenRecords() && r.source === 'staff' && r.user_id
+            ? '<button type="button" class="ct-user" data-user="' + r.user_id + '">✏️ Edit staff record</button>'
+            : canOpenRecords() && r.source === 'parent' && r.family_id
+              ? '<button type="button" class="ct-family" data-family="' + r.family_id + '">✏️ Edit family record</button>'
+              : '<span style="font-size:11px;color:' + C.faint + ';white-space:nowrap;">from their '
+                + (r.source === 'staff' ? 'staff record' : 'family record') + '</span>'))
         + '</td></tr>';
     }).join('') || '<tr><td colspan="8" style="' + td + 'text-align:center;color:' + C.faint + ';padding:40px;">'
       + (state.search || state.category || state.emergency || state.centre
@@ -241,8 +259,20 @@
         openEditor(container, (state.data.contacts || []).filter(function (c) { return +c.id === id; })[0] || null);
       });
     });
+    body.querySelectorAll('.ct-user').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (KT.openUserRecord) KT.openUserRecord(+b.getAttribute('data-user'));
+      });
+    });
+    body.querySelectorAll('.ct-family').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (KT.openFamilyRecord) KT.openFamilyRecord(+b.getAttribute('data-family'));
+      });
+    });
     body.querySelectorAll('.ct-card').forEach(function (b) {
       b.addEventListener('click', function () {
+        // In the app's viewer — a new tab opens nothing in the Android app.
+        if (KT.mediaViewer) { KT.mediaViewer.open([{ url: b.getAttribute('data-url'), caption: 'Business card' }], 0); return; }
         window.open(b.getAttribute('data-url'), '_blank', 'noopener');
       });
     });
