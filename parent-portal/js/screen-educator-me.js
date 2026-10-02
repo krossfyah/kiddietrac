@@ -165,7 +165,7 @@
         + '</div><button type="button" class="kt-retry" style="margin-top:12px;background:#1F6080;color:#fff;'
         + 'border:0;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;">Try again</button></div>';
       var rb = body.querySelector('.kt-retry');
-      if (rb) { rb.onclick = function () { render(container); }; }
+      if (rb) { rb.onclick = function () { renderMySchedule(main); }; }   // was render(container): neither exists here (ticket 109)
       return;
     }
     var shifts = (data && data.shifts) || [];
