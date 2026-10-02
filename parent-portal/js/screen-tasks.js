@@ -84,8 +84,10 @@
     var od = overdue(t);
     var meta = [];
     if (t.due_date) meta.push('<span style="' + (od ? 'color:#B91C1C;font-weight:800;' : '') + '">📅 Due ' + esc(fmtDate(t.due_date)) + (od ? ' · overdue' : '') + '</span>');
-    if (t.centre_name) meta.push('🏫 ' + esc(t.centre_name));
-    if (t.assigned_by_name) meta.push('From ' + esc(t.assigned_by_name));
+    // Each part its own element: bare text runs merge into ONE flex item, so the gap
+    // never applied and the card read "Sunny Meadows ChildcareFrom Dana Visitor".
+    if (t.centre_name) meta.push('<span>🏫 ' + esc(t.centre_name) + '</span>');
+    if (t.assigned_by_name) meta.push('<span>From ' + esc(t.assigned_by_name) + '</span>');
     return '<div class="kt-task-card" data-id="' + t.id + '" style="background:#fff;border:1px solid #E2E8F0;'
       + (od ? 'border-left:4px solid #DC2626;' : 'border-left:4px solid ' + (STATUS[t.status] ? STATUS[t.status].fg : '#94A3B8') + ';')
       + 'border-radius:14px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(15,23,42,.05);">'
