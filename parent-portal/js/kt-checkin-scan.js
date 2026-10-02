@@ -34,6 +34,13 @@
      (Anthony, 2026-08-26) */
   var scanDone = false;
   var lastResult = null;
+  /* "Who are you here for?" that is still waiting for an answer (2026-10-02).
+     scanDone is set the moment a code is submitted, BEFORE the server says it needs a
+     choice of children — so a repaint of #scan while the parent was choosing replaced
+     the choice with "All done", and nobody had been checked in. Found while recording
+     the parent check-in tutorial (two children, typed code). A repaint now puts the
+     same question back, with the same children ticked. */
+  var pendingSelect = null;
 
   function stopCamera() {
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
@@ -46,7 +53,7 @@
     if (h !== 'scan') {
       stopCamera();
       // Leaving the screen is the only thing that arms it again.
-      scanDone = false; lastResult = null; busy = false;
+      scanDone = false; lastResult = null; busy = false; pendingSelect = null;
     }
   });
 
@@ -74,6 +81,7 @@
     /* A re-render after a completed scan shows the RESULT again, never the camera. */
     if (scanDone) {
       main.innerHTML = '';
+      if (pendingSelect) { showSelect(pendingSelect.code, pendingSelect.children, pendingSelect.chosen); return; }
       showDone(main);
       return;
     }
@@ -225,8 +233,10 @@
 
   // More than one child on this account: ask WHICH to sign in/out (default all
   // selected) and let the parent commit them together in one tap.
-  function showSelect(code, children) {
+  function showSelect(code, children, keep) {
     var main = document.getElementById('appMain'); if (!main) return;
+    var chosen = keep || {};
+    pendingSelect = { code: code, children: children, chosen: chosen };
     main.innerHTML = '';
     var wrap = el('div', 'position:fixed;inset:0;z-index:9700;background:linear-gradient(160deg,#0E7C90,#0D1B2A);overflow-y:auto;color:#fff;');
     var sheet = el('div', 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 28px) 24px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 28px);box-sizing:border-box;');
@@ -235,9 +245,8 @@
     sheet.appendChild(el('div', 'font-size:13.5px;opacity:.85;margin-bottom:18px;max-width:320px;', 'Tap to include or leave out a child, then confirm — you can do them both at once.'));
 
     var card = el('div', 'background:rgba(255,255,255,.12);border-radius:18px;padding:8px 8px;max-width:340px;width:100%;');
-    var chosen = {};
     children.forEach(function (c) {
-      chosen[c.child_id] = true;   // default: everyone selected
+      if (!(c.child_id in chosen)) chosen[c.child_id] = true;   // default: everyone selected
       var row = el('button', 'display:flex;align-items:center;gap:12px;width:100%;background:none;border:none;color:#fff;padding:13px 12px;cursor:pointer;text-align:left;border-bottom:1px solid rgba(255,255,255,.14);');
       var box = el('span', 'flex:0 0 auto;width:24px;height:24px;border-radius:7px;border:2px solid rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;', '\u2713');
       var mid = el('div', 'flex:1;min-width:0;');
@@ -265,7 +274,7 @@
       var ids = children.map(function (c) { return c.child_id; }).filter(function (id) { return chosen[id]; });
       if (!ids.length) { confirm.textContent = 'Pick at least one child'; setTimeout(function () { confirm.textContent = 'Confirm'; }, 1600); return; }
       confirm.disabled = true; confirm.textContent = 'Saving…';
-      post(code, ids).then(function (res) { showResult((res && res.results) || [], null, null); })
+      post(code, ids).then(function (res) { pendingSelect = null; showResult((res && res.results) || [], null, null); })
         .catch(function (e) { confirm.disabled = false; confirm.textContent = 'Confirm'; alert((e && e.message) || 'Could not save — please try again.'); });
     });
     var cancel = el('button', 'background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5);border-radius:14px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;', 'Cancel');
