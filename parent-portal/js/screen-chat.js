@@ -2365,6 +2365,10 @@
           sender_id: msg.sender_id,
           sender_name: getUser().first_name || 'You',
           is_me: true,
+          /* Your own message, just sent: deletable now, not after a reopen. The poll
+             never redraws this bubble (lastThreadMsgId below), so without this the 🗑
+             only appeared once the thread was opened again. The server still decides. */
+          can_delete: true,
           created_at: msg.created_at,
         }));
         pinToBottom(bodyEl);   // a photo you just sent has no height yet either
