@@ -62,7 +62,7 @@ final class TrainingMail
         $name = trim($u->first_name . ' ' . $u->last_name);
         try {
             dispatch(function () use ($agencyId, $to, $name, $html, $subject) {
-                AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $name, $subject) {
+                AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $name, $subject, $agencyId) {
                     $m->to($to, $name ?: null)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($subject);
                     $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId);
                 });
