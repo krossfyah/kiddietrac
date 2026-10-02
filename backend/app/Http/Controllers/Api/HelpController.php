@@ -48,7 +48,18 @@ final class HelpController extends Controller
             return response()->json(['message' => 'Article not found'], 404);
         }
 
+        // Its tutorial video, when there is one this person may watch (see Training).
+        $article['training'] = TrainingController::videoForArticle(
+            (string) ($article['audience'] ?? ''), $slug, (int) $request->user()->id
+        );
+
         return response()->json(['article' => $article]);
+    }
+
+    /** The role Help serves this request — Training uses the same answer. */
+    public function roleFor(Request $request): string
+    {
+        return $this->resolveRole($request->user(), $request);
     }
 
     /**

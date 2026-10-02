@@ -52,6 +52,11 @@ Schedule::command('push:prune-web --days=60 --keep=10')
 Schedule::command('geoip:update')
     ->monthlyOn(3, '04:40')->timezone('America/Toronto')->withoutOverlapping();
 
+/* Training assigned with a due date: a reminder 2 days before, and once when overdue.
+   Morning, so it lands at the start of a working day. See TrainingRemind. */
+Schedule::command('training:remind')
+    ->dailyAt('08:30')->timezone('America/Toronto')->withoutOverlapping();
+
 /* A SIGNED FORM THAT NEVER REACHED THE FAMILY'S RECORD.
 
    Filing happens at signature time and is best-effort on purpose - a filing problem must

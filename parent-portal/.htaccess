@@ -92,3 +92,8 @@
     Header unset Expires
   </IfModule>
 </FilesMatch>
+
+# Training captions (2026-10-01): Chrome ignores a <track> whose file has no text/vtt type.
+<IfModule mod_mime.c>
+  AddType text/vtt .vtt
+</IfModule>

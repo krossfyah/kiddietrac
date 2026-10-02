@@ -76,3 +76,5 @@ error_log
 parent-portal/js/app.bundle.js
 backend/public/walk-maps/
 backend/storage/app/geoip/
+parent-portal/training-media/*.mp4
+parent-portal/training-media/*.jpg

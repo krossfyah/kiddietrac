@@ -885,6 +885,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/help/{slug}', [HelpController::class, 'show']);
         Route::post('/help/ask', [HelpController::class, 'ask'])->middleware('throttle:30,1');
 
+        // Training: a narrated tutorial per help article, gated exactly as the article is.
+        Route::get('/training', [\App\Http\Controllers\Api\TrainingController::class, 'index']);
+        Route::post('/training/{id}/progress', [\App\Http\Controllers\Api\TrainingController::class, 'progress'])->where('id', '[0-9]+');
+        Route::post('/training/{id}/publish', [\App\Http\Controllers\Api\TrainingController::class, 'publish'])->where('id', '[0-9]+');
+        // Assigning training to people (admins → their agency, directors → their centres; checked in the controller).
+        Route::get('/training/assignable', [\App\Http\Controllers\Api\TrainingController::class, 'assignable']);
+        Route::get('/training/assignments', [\App\Http\Controllers\Api\TrainingController::class, 'report']);
+        Route::post('/training/assignments', [\App\Http\Controllers\Api\TrainingController::class, 'assign']);
+        Route::delete('/training/assignments/{id}', [\App\Http\Controllers\Api\TrainingController::class, 'cancel'])->where('id', '[0-9]+');
+
         // v22p33 — Per-role dashboard widget data
         Route::get('/widgets/me', [\App\Http\Controllers\Api\WidgetsController::class, 'me']);
         Route::post('/me/account-deletion', [\App\Http\Controllers\Api\AccountController::class, 'requestDeletion']);

@@ -62,6 +62,9 @@
     const wrap = Dom.el('div', { class: 'kt-help-wrap' });
     main.appendChild(wrap);
 
+    // Guides | Training — Training lives inside Help & guides (2026-10-02).
+    try { if (window.KT && KT.Training && KT.Training.tabs) wrap.appendChild(KT.Training.tabs('guides')); } catch (e) {}
+
     // The shell renders the standard "Help & guides" banner; we only add the action
     // buttons in a row beneath it (previously they lived inside a second, screen-owned
     // banner). Styled solid so they stay visible on the light page.
@@ -556,6 +559,24 @@
 
       // Title
       content.appendChild(Dom.el('h1', { class: 'kt-help-article-title' }, article.title));
+
+      /* The narrated tutorial for this article, when there is one (Training, 2026-10-01).
+         Plays in the Training player; watching here counts towards Training progress. */
+      if (article.training && window.KT && KT.Training && KT.Training.play) {
+        const t = article.training;
+        const mins = Math.max(1, Math.round((t.duration_sec || 0) / 60));
+        const tut = Dom.el('button', {
+          type: 'button', class: 'kt-help-tutorial', 'data-kt-iconized': '1',
+          style: 'display:flex;align-items:center;gap:10px;width:100%;margin:4px 0 16px;padding:10px 14px;border:1px solid #BAE6FD;'
+            + 'border-radius:12px;background:linear-gradient(135deg,#F0F9FF,#ECFEFF);cursor:pointer;text-align:left;font:inherit;',
+        });
+        tut.innerHTML = '<span style="flex:0 0 auto;width:34px;height:34px;border-radius:50%;background:#0E7C90;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;">▶</span>'
+          + '<span style="flex:1;min-width:0;"><span style="display:block;font-weight:800;color:#0C4A5A;font-size:14px;">Watch the tutorial</span>'
+          + '<span style="display:block;color:#0E7490;font-size:12.5px;">' + mins + ' min · narrated walk-through'
+          + (t.completed ? ' · ✓ watched' : '') + (t.status === 'draft' ? ' · DRAFT (only you can see this)' : '') + '</span></span>';
+        tut.addEventListener('click', () => KT.Training.play(t));
+        content.appendChild(tut);
+      }
 
       // Markdown body (with ## headings → anchors for TOC)
       const wrapper = Dom.el('div', { class: 'kt-help-markdown' });
