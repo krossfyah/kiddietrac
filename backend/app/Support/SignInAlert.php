@@ -103,6 +103,19 @@ final class SignInAlert
 
     private static function email(?int $agencyId, object $user, string $device, string $where, string $ip, string $what): void
     {
+        $html = self::renderEmail($agencyId, $user, $device, $where, $ip, $what);
+        $to = (string) $user->email;
+        $name = trim($user->first_name . ' ' . $user->last_name);
+        dispatch(function () use ($agencyId, $to, $name, $html) {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $name) {
+                $m->to($to, $name ?: null)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject('New sign-in to your KiddieTrac account');
+            });
+        })->onQueue('mail');
+    }
+
+    /** The email itself — public so a sample can be sent exactly as users receive it. */
+    public static function renderEmail(?int $agencyId, object $user, string $device, string $where, string $ip, string $what): string
+    {
         $tz = AgencyTime::tz($agencyId);
         $when = Carbon::now()->timezone($tz)->format('l, F j \a\t g:i A') . ' (' . Carbon::now()->timezone($tz)->format('T') . ')';
         $first = trim((string) $user->first_name) ?: 'there';
@@ -124,13 +137,7 @@ final class SignInAlert
             ['eyebrow' => 'ACCOUNT SECURITY', 'title' => 'New sign-in to your account', 'subtitle' => 'Security',
              'preheader' => 'Signed in from a ' . $what . ': ' . $device . ', near ' . $where]);
 
-        $to = (string) $user->email;
-        $name = trim($user->first_name . ' ' . $user->last_name);
-        dispatch(function () use ($agencyId, $to, $name, $html) {
-            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $name) {
-                $m->to($to, $name ?: null)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject('New sign-in to your KiddieTrac account');
-            });
-        })->onQueue('mail');
+        return $html;
     }
 
     /** ["chrome|android", "Chrome on Android"] */
