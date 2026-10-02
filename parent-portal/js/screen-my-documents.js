@@ -55,8 +55,11 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+  /* A signed form is filed without a size (file_size is null), and "0 B" read as an
+     empty file. An unknown size now just isn't shown. */
   function kb(n) {
     n = Number(n) || 0;
+    if (n <= 0) { return null; }
     if (n < 1024) { return n + ' B'; }
     if (n < 1024 * 1024) { return Math.round(n / 1024) + ' KB'; }
     return (n / 1048576).toFixed(1) + ' MB';
@@ -109,9 +112,15 @@
     var was = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Opening…';
+    /* IN THE PORTAL'S PANEL, NOT A NEW TAB (2026-10-02). This was the last document
+       screen still doing createObjectURL + window.open, which in the phone app opens an
+       external browser with no session, the blank window Help says is fixed. KT.viewBlob
+       is the shared panel every other document screen uses; the tab stays only as a
+       fallback for a page that loaded without the viewer. */
+    var inPanel = !!(window.KT && KT.viewBlob);
     /* Opened before the await — a popup blocker rejects window.open() that is not
        a direct result of the click. */
-    var win = window.open('', '_blank');
+    var win = inPanel ? null : window.open('', '_blank');
     try {
       /* Two sources, two download routes, each with its own authorization check:
          /parent/documents is "a report about my child", /auth/me/documents is "a file on
@@ -124,7 +133,12 @@
         headers: { Authorization: 'Bearer ' + token() },
       });
       if (!r.ok) { throw new Error('HTTP ' + r.status); }
-      var u = URL.createObjectURL(await r.blob());
+      var blob = await r.blob();
+      if (inPanel) {
+        KT.viewBlob(blob, { title: doc.title || LABEL[doc.category] || 'Document', label: LABEL[doc.category] || 'Document' });
+        return;
+      }
+      var u = URL.createObjectURL(blob);
       if (win) { win.location = u; } else { window.open(u, '_blank'); }
       setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
     } catch (e) {
