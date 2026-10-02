@@ -336,6 +336,44 @@ final class ReportsController extends Controller
         }
     }
 
+    /**
+     * The centre a non-educator report may cover (2026-10-02).
+     *
+     * educatorScope() returns null for a centre_director, which every entry point read
+     * as "the whole agency". Visibility says otherwise — a centre director is
+     * CENTRE_SCOPED, like an educator — and the Help text says a director "sees
+     * everything for their centre". A Sunny Meadows director's enrolment roster listed
+     * all 43 children of the agency, Little Explorers and Maple Grove included, with
+     * dates of birth.
+     *
+     * Agency-wide callers (agency_admin, auditor, platform_admin) keep any centre or the
+     * whole agency. Everyone else: a centre of their own is honoured; with exactly one
+     * centre, that is the report; with several and none chosen, they are asked to pick,
+     * because cannedRows() filters on a single centre and "all of the agency" is not
+     * theirs. Fails closed — no centres means no report.
+     */
+    private function centreScopedCentre(Request $request, int $agencyId, ?int $centreId): ?int
+    {
+        $roles = \App\Support\UserRoles::names($request);
+        foreach (['platform_admin', 'agency_admin', 'auditor'] as $wide) {
+            if (in_array($wide, $roles, true)) {
+                return $centreId;
+            }
+        }
+        $mine = \App\Support\Visibility::centreIds($agencyId, $request->user());
+        if (! $mine) {
+            abort(403, 'No centre is assigned to you, so there is nothing to report on.');
+        }
+        if ($centreId) {
+            abort_unless(in_array($centreId, $mine, true), 403, 'That centre is not one of yours.');
+            return $centreId;
+        }
+        if (count($mine) === 1) {
+            return $mine[0];
+        }
+        abort(422, 'Choose one of your centres to run this report.');
+    }
+
     private static function cannedDefs(): array
     {
         return [
@@ -407,6 +445,12 @@ final class ReportsController extends Controller
 
         $centres = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')
             ->orderBy('name')->get(['id', 'name', 'logo_url', 'brand_color']);
+        // A centre director picks from their own centres only. See centreScopedCentre().
+        $wide = (bool) array_intersect(\App\Support\UserRoles::names($request), ['platform_admin', 'agency_admin', 'auditor']);
+        if (! $wide) {
+            $mine = \App\Support\Visibility::centreIds((int) $agencyId, $request->user());
+            $centres = $centres->filter(fn ($c) => in_array((int) $c->id, $mine, true))->values();
+        }
 
         $reports = [];
         foreach (self::cannedDefs() as $k => $d) {
@@ -446,6 +490,8 @@ final class ReportsController extends Controller
             if ($roomId && in_array($roomId, $scope['room_ids'], true)) {
                 $scope['room_ids'] = [$roomId];
             }
+        } else {
+            $centreId = $this->centreScopedCentre($request, $agencyId, $centreId);
         }
 
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
@@ -1396,6 +1442,8 @@ final class ReportsController extends Controller
             if ($roomId && in_array($roomId, $scope['room_ids'], true)) {
                 $scope['room_ids'] = [$roomId];
             }
+        } else {
+            $centreId = $this->centreScopedCentre($request, $agencyId, $centreId);
         }
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
             $request->query('status'), $request->query('balance'), $scope);
@@ -1436,6 +1484,8 @@ final class ReportsController extends Controller
             if ($roomId && in_array($roomId, $scope['room_ids'], true)) {
                 $scope['room_ids'] = [$roomId];
             }
+        } else {
+            $centreId = $this->centreScopedCentre($request, $agencyId, $centreId);
         }
         [$columns, $rows] = $this->cannedRows($type, $agencyId, $centreId, $from, $to,
             $request->query('status'), $request->query('balance'), $scope);
