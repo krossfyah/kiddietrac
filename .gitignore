@@ -75,3 +75,4 @@ error_log
 # Derived from the individual js/*.js files — do not commit the 3.6MB artifact.
 parent-portal/js/app.bundle.js
 backend/public/walk-maps/
+backend/storage/app/geoip/

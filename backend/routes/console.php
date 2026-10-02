@@ -47,6 +47,11 @@ Schedule::command('tokens:prune --days=30')
 Schedule::command('push:prune-web --days=60 --keep=10')
     ->dailyAt('03:20')->timezone('America/Toronto')->withoutOverlapping();
 
+/* The IP-location database behind the new-sign-in email (App\Support\GeoIp). DB-IP
+   publishes monthly; the 3rd leaves room for a late release. */
+Schedule::command('geoip:update')
+    ->monthlyOn(3, '04:40')->timezone('America/Toronto')->withoutOverlapping();
+
 /* A SIGNED FORM THAT NEVER REACHED THE FAMILY'S RECORD.
 
    Filing happens at signature time and is best-effort on purpose - a filing problem must

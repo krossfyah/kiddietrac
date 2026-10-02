@@ -141,6 +141,7 @@ final class SsoController extends Controller
         $userModel = \App\Models\User::find($user->id);
         \App\Support\AccountStatus::markClaimed((int) $user->id);
         $token = $userModel->createToken('sso-' . $provider)->plainTextToken;
+        \App\Support\SignInAlert::check((int) $user->id, $request, 'sso');
         DB::table('users')->where('id', $user->id)->update([
             'last_login_at' => now(),
             'last_login_ip' => $request->ip(),

@@ -345,6 +345,7 @@ final class AuthController extends Controller
         $activeRoles = DB::table('role_assignments')->where('user_id', $user->id)
             ->where('active', 1)->pluck('role')->unique()->values()->all();
 
+        \App\Support\SignInAlert::check((int) $user->id, $request, 'password');  // before the login row: see SignInAlert
         $this->audit($request, $user->id, 'login', 'user', $user->id, [
             'identifier' => $login,
             'account' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
@@ -504,6 +505,19 @@ final class AuthController extends Controller
             'updated_at' => now(),
         ]);
         \App\Services\PasswordPolicy::record($user->id, $newHash);
+
+        /* A NEW PASSWORD ENDS EVERY OTHER SESSION (2026-10-01). Other devices kept
+           working after a password change, so "change your password" — what the
+           new-sign-in email tells somebody who did not recognise a sign-in — did not
+           actually remove whoever was in. This device stays signed in; the rest go. */
+        try {
+            $current = $user->currentAccessToken();
+            if ($current && isset($current->id)) {           // never delete the one in use
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_type', get_class($user))->where('tokenable_id', $user->id)
+                    ->where('id', '!=', $current->id)->delete();
+            }
+        } catch (\Throwable $e) { /* the password is changed either way */ }
 
         /* The age the 90-day rotation is measured from. Stamped wherever a password is
            actually set, or the clock never starts and the policy is decorative. */
@@ -986,6 +1000,7 @@ final class AuthController extends Controller
 
         // Setting a password from the invite link IS accepting the invite.
         \App\Support\AccountStatus::markClaimed((int) $user->id);
+        \App\Support\SignInAlert::remember((int) $user->id, $request);
         $tokenObj = $user->createToken('set-password', ['*'], now()->addDays(30));
         DB::table('users')->where('id', $user->id)->update([
             'last_login_at' => now(), 'last_login_ip' => $request->ip(), 'updated_at' => now(),

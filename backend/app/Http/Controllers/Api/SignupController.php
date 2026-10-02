@@ -339,6 +339,7 @@ final class SignupController extends Controller
         // Auto-login: create a token so the parent lands on the dashboard.
         $user  = \App\Models\User::find($result['user_id']);
         $token = $user->createToken('signup-by-code')->plainTextToken;
+        \App\Support\SignInAlert::remember((int) $user->id, $request);
 
         return response()->json([
             'message'   => 'Welcome to Kiddietrac! Your child has been added to the waitlist.',

@@ -100,6 +100,7 @@ class SocialAuthController extends Controller
         DB::table('users')->where('id', $user->id)->update(['last_login_at' => now()]);
 
         $token = User::find($user->id)->createToken($provider . '-sso', ['*'], now()->addHours(12))->plainTextToken;
+        \App\Support\SignInAlert::check((int) $user->id, request(), 'social');
 
         // Hand the token to the SPA via the URL fragment (never sent to servers/logs).
         return redirect(self::FRONTEND . '/index.html#kt_social=' . urlencode($token));

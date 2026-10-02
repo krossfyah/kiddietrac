@@ -338,6 +338,7 @@ class PasskeyController extends Controller
         $activeRoles = DB::table('role_assignments')->where('user_id', $user->id)
             ->where('active', 1)->pluck('role')->unique()->values()->all();
 
+        \App\Support\SignInAlert::check((int) $user->id, $request, 'passkey');
         $this->audit((int) $user->id, 'login', [
             'method' => 'passkey',
             'passkey' => $cred->label,
