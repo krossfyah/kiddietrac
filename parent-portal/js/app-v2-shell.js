@@ -2759,7 +2759,7 @@
       if (!toFocus) { for (let j = 0; j < focusables.length; j++) { if (!focusables[j].classList.contains('modal-close')) { toFocus = focusables[j]; break; } } }
       try { (toFocus || modal).focus(); } catch (e) {}
 
-      return { close };
+      return { close, backdrop };
     },
 
     // v22p3.1: facade-level close so callers can do Shell.Modal.close() without
@@ -2771,8 +2771,24 @@
       try { document.documentElement.style.overflow = ''; } catch (e) {}
     },
 
+    /* A CONFIRM BELONGS TO THE SCREEN THAT ASKED IT (2026-10-02).
+
+       "Check Simran in?" stayed up after the phone's Back button took the educator to
+       the time clock, where "Yes, check in" would still have checked Simran in, from a
+       screen that says nothing about her. The backdrop stops taps reaching the nav, but
+       not Back. So a confirm now closes, as a Cancel, once the hash leaves the screen it
+       was opened on. Compared to the hash at open rather than closing on any hashchange,
+       because a screen that sets the hash and then confirms in the same tick gets that
+       hashchange afterwards, for the screen it is already on. Plain Modal.open is left
+       alone: forms are opened mid-navigation on purpose. */
     confirm({ title, message, confirmLabel = 'Confirm', destructive = false, onConfirm }) {
-      return this.open({
+      const openHash = location.hash;
+      const onNav = () => {
+        if (!h.backdrop.isConnected) { window.removeEventListener('hashchange', onNav); return; }
+        if (location.hash !== openHash) { window.removeEventListener('hashchange', onNav); h.close(); }
+      };
+      const h = this.open({
+        onClose: () => window.removeEventListener('hashchange', onNav),
         title,
         body: Dom.el('p', { style: 'font-size: 15px; line-height: 1.6;' }, message),
         actions: [
@@ -2785,6 +2801,8 @@
           },
         ],
       });
+      window.addEventListener('hashchange', onNav);
+      return h;
     },
   };
 
