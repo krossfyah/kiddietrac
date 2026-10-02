@@ -2,6 +2,11 @@
 <html lang="en-CA">
 <head>
   <meta charset="UTF-8">
+  <script>/* SPACE OUT THE READS (2026-10-01). A fresh page - every reload, every agency switch - fired its whole boot at once: 14-15 API requests open together, 39 in the first three seconds for an admin. The hosting account caps how many PHP requests run at the same moment, and past it the server answers 508 with no CORS header, which the browser reports as "the request never completed" (Anthony, 4s after switching agency). FIRST script on the page and at the fetch() level, because half the boot requests are plain fetch() calls and some start before app.js loads. Per page: at most 6 API reads on the wire, the rest wait their turn; badge counts and polls go last and not in the first 2.5s; writes never wait; a read that never answers hands its slot back after 15s. */
+  (function(){try{if(window.__ktReadLimiter||typeof window.fetch!=='function')return;window.__ktReadLimiter=true;var SLOTS=6,QUIET=2500,MAXMS=15000,API=/^https:\/\/api\.kiddietrac\.com\//,LOW=/unread-count|\/count(\?|$)|\/pulse(\?|$)|\/me\/markers(\?|$)/,L={open:0,hi:[],lo:[],timer:null};
+  function pump(){while(L.open<SLOTS){var n=L.hi.shift();if(!n){var w=QUIET-((window.performance&&performance.now())||QUIET);if(w>0&&L.lo.length){if(!L.timer)L.timer=setTimeout(function(){L.timer=null;pump();},w+10);break;}n=L.lo.shift();}if(!n)break;n();}}
+  function slot(u){return new Promise(function(res){(LOW.test(u)?L.lo:L.hi).push(function(){L.open++;var done=false,cap;function free(){if(!done){done=true;clearTimeout(cap);L.open--;pump();}}cap=setTimeout(free,MAXMS);res(free);});pump();});}
+  var base=window.fetch;window.fetch=function(input,init){var u='',m='GET';try{u=String((input&&input.url)||input);m=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase();}catch(e){}if(m!=='GET'||!API.test(u))return base.apply(this,arguments);var self=this,args=arguments;return slot(u).then(function(free){var p;try{p=base.apply(self,args);}catch(e){free();throw e;}p.then(free,free);return p;});};}catch(e){}})();</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <!-- Warm the API connection so the first boot call skips the TLS/DNS handshake. -->
   <link rel="preconnect" href="https://api.kiddietrac.com" crossorigin>
