@@ -1700,7 +1700,7 @@ final class ReportsController extends Controller
         $d = strtolower(trim((string) $dose));
         $d = preg_replace('/\(.*?\)/', '', $d);      // "(booster)" is a description, not an identity
         $d = str_replace(['doses', 'dose'], '', $d);
-        $d = preg_replace('/(\d+)\s*(st|nd|rd|th)/', '$1', $d);   // 4th -> 4
+        $d = preg_replace('/(\d+)\s*(st|nd|rd|th)\b/', '$1', $d);   // 4th -> 4
         $d = preg_replace('/[^a-z0-9]/', '', $d);
 
         return $v . '|' . $d;

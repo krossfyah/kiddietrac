@@ -267,7 +267,7 @@
       if (!/\b(?:save|submit|send|generate|upload|create|charge|refund|run|approve|deny|publish|sign|book|claim|add|delete|remove|sync|push|extract|tag)/.test(text)) return;
       // Skip cancel-style buttons
       if (/cancel|close|back|×/i.test(text)) return;
-      /* ATTENDANCE ACTIONS. "Sign in"/"Sign out" match sign in the list above, so this
+      /* ATTENDANCE ACTIONS. "Sign in"/"Sign out" match \bsign in the list above, so this
          pass disabled them and rewrote their innerHTML for up to 2.5s — and a button that
          is already disabled when clicked receives NOTHING (measured). A second tap inside
          that window was silently swallowed, which on a phone is exactly what a tap that
@@ -275,7 +275,7 @@
          confirmation, and the request happens only after the user confirms. Safe to
          exclude — this file is not loaded on the login page, so its own Sign in button is
          untouched. (Anthony, 2026-09-08) */
-      if (/(sign|check)\s*(in|out)/i.test(text)) return;
+      if (/\b(sign|check)\s*(in|out)\b/i.test(text)) return;
       // v22p87: do NOT spin buttons that merely OPEN a modal or toggle a panel.
       // They stay in the DOM with no async work to finish, so the spinner used
       // to run for the full 8s — the "circle keeps spinning" bug (e.g. Waitlist

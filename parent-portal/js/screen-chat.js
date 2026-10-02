@@ -1521,7 +1521,7 @@
            resolves for you — you switched agency, or it was deleted. That is not an
            error the person caused, and re-opening it every load is worse than not
            opening it. Forget it and close quietly. */
-        if (/(403|404)/.test(String(e && e.message))) {
+        if (/\b(403|404)\b/.test(String(e && e.message))) {
           if (KT.ChatDock && KT.ChatDock.forget) { KT.ChatDock.forget(); }
           closeThreadCleanup();
           if (threadDocked && KT.ChatDock && KT.ChatDock.hide) { KT.ChatDock.hide(); }
@@ -1950,7 +1950,7 @@
          restores it on every load, so without this the person meets the same red error
          each refresh for a conversation they cannot open anyway. Forget it and close
          quietly; it comes back when they switch back. */
-      if (/(403|404)/.test(String(e && e.message))) {
+      if (/\b(403|404)\b/.test(String(e && e.message))) {
         if (KT.ChatDock && KT.ChatDock.forget) { KT.ChatDock.forget(); }
         closeThreadCleanup();
         if (threadDocked && KT.ChatDock && KT.ChatDock.hide) { KT.ChatDock.hide(); }

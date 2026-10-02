@@ -2527,7 +2527,7 @@ final class AdminController extends Controller
         // and "Cpr Expiry". Restore the acronyms the childcare sector actually uses.
         $labelise = function ($k) {
             $label = ucwords(str_replace('_', ' ', (string) $k));
-            return preg_replace_callback('/(rece|cpr|dob|id|sin|ece)/i',
+            return preg_replace_callback('/\b(rece|cpr|dob|id|sin|ece)\b/i',
                 static fn ($m) => strtoupper($m[1]), $label);
         };
         $extras = [];

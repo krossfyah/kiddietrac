@@ -2171,7 +2171,7 @@
         if (!r.countersigned_at) {
           /* data-kt-inpage OR THE SHELL EATS THE CLICK.
  
-             app-v2-shell treats any control whose label matches /back/ as a back
+             app-v2-shell treats any control whose label matches /\bback\b/ as a back
              button, swallows the click and navigates history. "Send back to the signer"
              matches, so choosing it jumped to the previous screen and the dialog never
              opened. The attribute is the documented opt-out for an in-page action. */
@@ -2263,7 +2263,7 @@
         + '</div>'
         + '<div id="fm-rt-err" style="display:none;margin-top:12px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;border-radius:10px;padding:10px 12px;font-size:12.5px;"></div>'
         + '<div style="display:flex;gap:10px;margin-top:18px;">'
-          /* THIRD control in this one feature caught by the shell's /back/ rule -
+          /* THIRD control in this one feature caught by the shell's /\bback\b/ rule -
              the kebab entry, the counter-sign "Back to the form", and now the submit
              button itself, whose label is "Send it back". Any button in this codebase
              whose text contains the word "back" needs this attribute or the shell

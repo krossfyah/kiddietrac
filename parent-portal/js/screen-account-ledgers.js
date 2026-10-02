@@ -712,7 +712,7 @@
       + (inList ? '#fff' : '#334155') + ';border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">'
       /* NEVER the word "back" here, and never a bare arrow.
 
-         kt-icon-buttons.js rewrites any label matching /back/ to '⬅️', and
+         kt-icon-buttons.js rewrites any label matching /\bback\b/ to '⬅️', and
          app-v2-shell.js then treats BOTH the word and that glyph as a browser-back
          control — with a CAPTURE-phase listener that calls stopPropagation() before
          this screen's own handler ever runs. The label "‹ Back to the ledger" was
@@ -1424,7 +1424,7 @@
   function rowActions(e) {
     if (!e.doc_url) { return ''; }
 
-    /* "Invoice document", not "View document": kt-icon-buttons rewrites /view/
+    /* "Invoice document", not "View document": kt-icon-buttons rewrites /\bview\b/
        to 'ℹ️', and inside a kebab a button whose text became a bare glyph renders as a
        blank menu row. */
     return '<button type="button" class="al-doc" data-url="' + esc(e.doc_url)

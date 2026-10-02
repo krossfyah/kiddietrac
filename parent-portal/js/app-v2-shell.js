@@ -2992,7 +2992,7 @@
          their top bar (kt-parent-chrome moves it there), and the role belongs on it.
          Hiding it for everyone took it off those bars too. Still computed either way;
          the role map is worth keeping. */
-      var _pcRole = /role-(guardian|educator|home-visitor|sales-rep)/.test(document.body.className || '');
+      var _pcRole = /\brole-(guardian|educator|home-visitor|sales-rep)\b/.test(document.body.className || '');
       var _wide = !window.matchMedia || window.matchMedia('(min-width: 769px)').matches;
       navRole.style.display = (_wide && !_pcRole) ? 'none' : '';
     }
