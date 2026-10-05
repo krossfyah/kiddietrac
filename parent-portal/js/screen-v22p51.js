@@ -105,11 +105,13 @@
      and tells the people who were told about it. */
   async function withdrawTor(r) {
     var wasApproved = (r.status || '').toLowerCase() === 'approved';
-    var msg = wasApproved
-      ? 'Withdraw this approved time off?\n\nThe calendar goes back to normal and everyone who'
-        + ' was told will be notified that you will be working as usual.'
-      : 'Withdraw this request?';
-    if (!window.confirm(msg)) return;
+    if (!(await window.KT.confirm({
+      title: wasApproved ? 'Withdraw this approved time off?' : 'Withdraw this request?',
+      description: wasApproved
+        ? 'The calendar goes back to normal and everyone who was told will be notified that you will be working as usual.'
+        : 'The request is cancelled and nobody needs to review it.',
+      okLabel: 'Withdraw',
+    }))) return;
     try {
       await Api.post('/time-off/' + r.id + '/cancel', {});
       renderTimeOff(document.getElementById('appMain') || document.querySelector('main'));
@@ -2072,7 +2074,12 @@
         /* Prefilled, never assumed — the endpoint requires an address for the same
            reason: a default recipient means a lost field posts somebody's pay to an
            address nobody chose. */
-        const to = window.prompt('Email this payslip to:', b.getAttribute('data-email') || '');
+        const to = await window.KT.prompt({
+          title: 'Email this payslip',
+          description: 'It is sent to this address with the payslip attached.',
+          fields: [{ key: 'to', label: 'Email address', type: 'email', value: b.getAttribute('data-email') || '' }],
+          okLabel: 'Send payslip',
+        });
         if (!to) { return; }
         b.disabled = true;
         try {
@@ -2093,7 +2100,11 @@
            the question rather than assumed from context. */
         const net = Number(b.getAttribute('data-net') || 0);
         const who = b.getAttribute('data-who') || '';
-        if (!window.confirm(`Send $${net.toFixed(2)} by Interac${who ? ' to ' + who : ''}?\n\nThis moves real money.`)) { return; }
+        if (!(await window.KT.confirm({
+          title: `Send $${net.toFixed(2)} by Interac${who ? ' to ' + who : ''}?`,
+          description: 'This moves real money: it leaves the agency account straight away.',
+          okLabel: `Send $${net.toFixed(2)}`,
+        }))) { return; }
         const was = b.textContent;
         b.disabled = true; b.textContent = 'Sending…';
         try {

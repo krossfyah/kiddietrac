@@ -1362,7 +1362,7 @@
     });
   }
 
-  function invoiceAction(b) {
+  async function invoiceAction(b) {
     var act = b.getAttribute('data-inv-act');
     var kind = b.getAttribute('data-inv-kind');
     var id = b.getAttribute('data-inv-id');
@@ -1372,7 +1372,12 @@
     if (act === 'email') {
       /* Prefilled by nobody: the endpoint requires an address for the same reason this
          asks for one — a default recipient means a lost field emails a real family. */
-      var to = window.prompt('Email this invoice to:', '');
+      var to = await window.KT.prompt({
+        title: 'Email this invoice',
+        description: 'Enter the address to send it to. Nothing is filled in for you, so it never goes to the wrong family.',
+        fields: [{ key: 'to', label: 'Email address', type: 'email' }],
+        okLabel: 'Send invoice',
+      });
       if (!to) { return; }
       b.disabled = true;
       Api.post('/admin/invoices/' + kind + '/' + id + '/email', { to: to })

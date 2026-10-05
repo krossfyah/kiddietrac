@@ -88,7 +88,12 @@
     if (isStaff) document.getElementById('cf-new').onclick = () => openCreateSlotsModal();
     main.querySelectorAll('button[data-book]').forEach(b => b.onclick = async () => {
       const _kc = await Api.get('/parent/children'); const kids = _kc.children || _kc.data || [];
-      const cid = kids.length === 1 ? kids[0].id : +prompt('Child ID for this booking? ' + kids.map(c => c.id + ': ' + c.first_name).join(', '));
+      const cid = kids.length === 1 ? kids[0].id : +(await window.KT.prompt({
+        title: 'Which child is this booking for?',
+        description: 'Enter the number beside their name: ' + kids.map(c => c.id + ': ' + c.first_name).join(', '),
+        fields: [{ key: 'cid', label: 'Child number', type: 'number' }],
+        okLabel: 'Book',
+      }));
       if (!cid) return;
       await Api.post(`/conferences/slots/${b.dataset.book}/book`, { child_id: cid });
       renderConferences(main);
@@ -820,7 +825,12 @@
         catch (e) { alert(e.message || 'Could not approve.'); }
       };
       document.getElementById('rc-r-reject').onclick = async () => {
-        const note = prompt('What needs changing? The educator will see this note.'); if (note === null) return;
+        const note = await window.KT.prompt({
+          title: 'Send back to the educator',
+          description: 'What needs changing? The educator will see this note.',
+          fields: [{ key: 'note', label: 'Note', type: 'text' }],
+          okLabel: 'Send back',
+        }); if (note === null) return;
         try { await Api.post('/report-cards/' + cardId + '/reject', { note: note }); (window.KT && KT.toast) ? KT.toast('Sent back to the educator.', 'success') : alert('Sent back.'); renderReportCards(main); }
         catch (e) { alert(e.message || 'Could not send back.'); }
       };
@@ -887,7 +897,12 @@
     </div>`;
     document.getElementById('z-new').onclick = () => openZoneModal(cid);
     main.querySelectorAll('button[data-log]').forEach(b => b.onclick = async () => {
-      const child = prompt(`Child ID visiting ${b.dataset.name}?`);
+      const child = await window.KT.prompt({
+        title: `Log a visit to ${b.dataset.name}`,
+        description: 'Enter the ID of the child visiting this zone.',
+        fields: [{ key: 'child', label: 'Child ID', type: 'number' }],
+        okLabel: 'Log visit',
+      });
       if (!child) return;
       await Api.post('/zones/visit', { child_id: +child, zone_id: +b.dataset.log });
       renderZones(main);

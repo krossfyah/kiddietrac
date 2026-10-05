@@ -175,8 +175,8 @@
             rm.textContent = 'Remove';
             rm.style.cssText = 'padding:4px 9px;border-radius:7px;border:1px solid #FECACA;'
               + 'background:#fff;color:#B91C1C;font-size:11.5px;font-weight:700;cursor:pointer;';
-            rm.addEventListener('click', function () {
-              if (!window.confirm('Remove this entry? The removal is recorded in the audit log.')) { return; }
+            rm.addEventListener('click', async function () {
+              if (!(await window.KT.confirm({ title: 'Remove this entry?', description: 'The removal is recorded in the audit log.', okLabel: 'Remove' }))) { return; }
               rm.disabled = true;
               api('DELETE', '/director/attendance/' + e.id)
                 .then(function () { changed = true; loadDay(); })

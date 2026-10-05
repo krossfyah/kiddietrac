@@ -250,7 +250,12 @@
   }
 
   async function declineChild(container, childId, childName) {
-    const reason = prompt('Decline ' + childName + '? Optional reason for the audit log:');
+    const reason = await window.KT.prompt({
+      title: 'Decline ' + childName + '?',
+      description: 'They are taken off the waitlist. The reason is optional and is only kept in the audit log.',
+      fields: [{ key: 'reason', label: 'Reason (optional)', type: 'text' }],
+      okLabel: 'Decline',
+    });
     if (reason === null) return;
     try {
       await api('POST', '/director/waitlist/' + childId + '/decline', { reason: reason || '' });

@@ -706,7 +706,7 @@
         el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:11px' }, [n, pr, u]),
         field('Description', d),
         el('div', { style: 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end;align-items:center' }, [
-          p.id ? el('button', { title: 'Delete plan', style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:8px 11px;cursor:pointer;font-size:14px', onclick: async function () { if (!confirm('Delete plan?')) return; try { await Api.delete('/sales/products/' + p.id); reload(); } catch (er) {} } }, ['🗑 Delete']) : el('div', { style: 'flex:1' }),
+          p.id ? el('button', { title: 'Delete plan', style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:8px 11px;cursor:pointer;font-size:14px', onclick: async function () { if (!(await window.KT.confirm({ title: 'Delete this plan?', description: 'It is removed for good.', okLabel: 'Delete' }))) return; try { await Api.delete('/sales/products/' + p.id); reload(); } catch (er) {} } }, ['🗑 Delete']) : el('div', { style: 'flex:1' }),
           btn('Save', 'primary', async function (ev) { ev.target.disabled = true; try { var body = { name: n.value, description: d.value, price: pr.value || 0, unit: u.value, active: true }; if (p.id) await Api.patch('/sales/products/' + p.id, body); else await Api.post('/sales/products', body); toast('✅', 'Saved'); reload(); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; } }),
         ]),
       ], 'padding:15px 16px');
@@ -846,7 +846,7 @@
         listHost.appendChild(card([
           el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px' }, [
             el('div', { style: 'font-weight:800;font-size:15px' }, [(a.pinned ? '📌 ' : '') + a.title]),
-            (a.mine || salesAuthed()) ? el('button', { title: 'Delete', style: 'border:0;background:none;color:#94A3B8;cursor:pointer;font-size:15px;flex:0 0 auto', onclick: async function () { if (!confirm('Delete this announcement?')) return; try { await Api.delete('/sales/announcements/' + a.id); load(); } catch (e) { toast('⚠️', 'Failed', e.message || '', '#DC2626'); } } }, ['🗑']) : null,
+            (a.mine || salesAuthed()) ? el('button', { title: 'Delete', style: 'border:0;background:none;color:#94A3B8;cursor:pointer;font-size:15px;flex:0 0 auto', onclick: async function () { if (!(await window.KT.confirm({ title: 'Delete this announcement?', description: 'It is removed for everyone on the sales team.', okLabel: 'Delete' }))) return; try { await Api.delete('/sales/announcements/' + a.id); load(); } catch (e) { toast('⚠️', 'Failed', e.message || '', '#DC2626'); } } }, ['🗑']) : null,
           ]),
           el('div', { style: 'font-size:11.5px;color:#94A3B8;margin:3px 0 8px' }, [a.author + ' · ' + fmtTime(a.at)]),
           el('div', { style: 'font-size:14px;color:#334155;line-height:1.5;white-space:pre-wrap' }, [a.body]),

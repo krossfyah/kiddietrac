@@ -7637,8 +7637,13 @@
             type: 'button',
             style: 'padding: 6px 10px; background: white; color: #1F6080; border: 1px solid #1F6080; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;',
           }, '🔐 Set kiosk PIN');
-          pinBtn.addEventListener('click', function () {
-            const pin = window.prompt('Enter a 4-6 digit kiosk PIN for ' + g.first_name + ' ' + g.last_name + '.\n\nThis PIN lets them sign children in/out at the centre kiosk. Share it with the guardian out-of-band (e.g. text, in person).');
+          pinBtn.addEventListener('click', async function () {
+            const pin = await window.KT.prompt({
+              title: 'Set kiosk PIN for ' + g.first_name + ' ' + g.last_name,
+              description: 'A 4–6 digit PIN lets them sign children in and out at the centre kiosk. Share it with the guardian in person or by text.',
+              fields: [{ key: 'pin', label: 'PIN (4–6 digits)', type: 'text' }],
+              okLabel: 'Save PIN',
+            });
             if (pin == null) return; // cancelled
             if (!/^\d{4,6}$/.test(pin)) { alert('PIN must be 4–6 digits.'); return; }
             pinBtn.disabled = true;

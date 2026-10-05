@@ -1924,8 +1924,11 @@
             var rest = pay < due - 0.005
               ? ' This leaves $' + (due - pay).toFixed(2) + ' outstanding.'
               : '';
-            if (!window.confirm('Pay $' + pay.toFixed(2) + ' by '
-                + (LONG[m.key] || m.label || m.key) + '?' + rest)) { return; }
+            if (!(await window.KT.confirm({
+              title: 'Pay $' + pay.toFixed(2) + ' by ' + (LONG[m.key] || m.label || m.key) + '?',
+              description: 'This is sent to your bank immediately.' + rest,
+              okLabel: 'Pay $' + pay.toFixed(2),
+            }))) { return; }
             b.disabled = true;
             var was = b.textContent;
             b.textContent = 'Sending…';
