@@ -41,6 +41,9 @@ class ScheduledReportController extends Controller
             ->leftJoin('users as u', 'u.id', '=', 'rs.recipient_user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'rs.centre_id')
             ->where('rs.agency_id', $agencyId)
+            // A centre director: schedules for their own centres (2026-10-05).
+            ->when(($sc = \App\Support\CentreScope::ids($request, (int) $agencyId)) !== null,
+                fn ($q) => $q->whereIn('rs.centre_id', $sc ?: [0]))
             ->orderByDesc('rs.created_at')
             ->get([
                 'rs.*',
@@ -138,7 +141,7 @@ class ScheduledReportController extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         $row = DB::table('report_schedules')->where('id', $id)->where('agency_id', $agencyId)->first();
-        if (! $row) {
+        if (! $row || ! \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, (int) $agencyId), $row->centre_id)) {
             return response()->json(['message' => 'Not found'], 404);
         }
         // Allow a lightweight active-only toggle, or a full edit.
@@ -159,6 +162,10 @@ class ScheduledReportController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
+        $row = DB::table('report_schedules')->where('id', $id)->where('agency_id', $agencyId)->first();
+        if (! $row || ! \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, (int) $agencyId), $row->centre_id)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
         $deleted = DB::table('report_schedules')->where('id', $id)->where('agency_id', $agencyId)->delete();
         if (! $deleted) {
             return response()->json(['message' => 'Not found'], 404);
@@ -172,7 +179,7 @@ class ScheduledReportController extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         $row = DB::table('report_schedules')->where('id', $id)->where('agency_id', $agencyId)->first();
-        if (! $row) {
+        if (! $row || ! \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, (int) $agencyId), $row->centre_id)) {
             return response()->json(['message' => 'Not found'], 404);
         }
         $sent = \App\Console\Commands\SendScheduledReports::sendOne($row, true);
@@ -204,6 +211,16 @@ class ScheduledReportController extends Controller
         // Scope the centre + recipient user to the agency.
         if (! empty($v['centre_id']) && ! DB::table('centres')->where('id', $v['centre_id'])->where('agency_id', $agencyId)->exists()) {
             $v['centre_id'] = null;
+        }
+        /* The scheduler runs with no person attached (buildScheduledReport), so a
+           schedule's centre IS its scope. A centre director's schedule must name one of
+           their centres: the only one they have, or the one they chose (2026-10-05). */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope !== null) {
+            if (empty($v['centre_id']) && count($scope) === 1) {
+                $v['centre_id'] = $scope[0];
+            }
+            abort_unless(\App\Support\CentreScope::canWrite($scope, $v['centre_id'] ?? null), 422, 'Choose one of your centres.');
         }
         $v['active'] = $request->has('active') ? (bool) $request->boolean('active') : true;
 
