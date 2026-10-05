@@ -19,12 +19,22 @@ final class ExportsController extends Controller
 {
     public function __construct(private XlsxExportService $xlsx) {}
 
+    /* A CENTRE DIRECTOR EXPORTS THEIR OWN CENTRES (2026-10-05). Every export here was
+       bounded by agency only, and the route admits centre_director: a spreadsheet of
+       the whole agency's families, children, staff, hours or checks. null = agency-wide
+       caller (unchanged); otherwise their centres, failing closed. */
+    private function scope(Request $request, int $agencyId): ?array
+    {
+        return \App\Support\CentreScope::ids($request, $agencyId);
+    }
+
     public function users(Request $request): Response
     {
         $agencyId = $this->resolveAgencyId($request);
         $rows = DB::table('users as u')
             ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
             ->where('ra.agency_id', $agencyId)
+            ->when(($sc = $this->scope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('ra.centre_id', $sc ?: [0]))
             ->where('ra.active', 1)
             ->whereNull('u.deleted_at')
             ->select('u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone',
@@ -60,6 +70,7 @@ final class ExportsController extends Controller
         $rows = DB::table('families as f')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->when(($sc = $this->scope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('c.id', $sc ?: [0]))
             ->whereNull('f.deleted_at')
             ->leftJoin('children as ch', function ($j) { $j->on('ch.family_id', '=', 'f.id')->whereNull('ch.deleted_at'); })
             ->groupBy('f.id', 'f.family_name', 'f.primary_email', 'f.primary_phone', 'f.address_line1', 'f.city', 'f.province', 'c.name', 'f.autopay_enabled', 'f.cwelcc_enrolled')
@@ -106,9 +117,13 @@ final class ExportsController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $rows = DB::table('audit_logs as al')
             ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
-            ->whereExists(function ($q) use ($agencyId) {
+            ->whereExists(function ($q) use ($agencyId, $request) {
                 $q->select(DB::raw(1))->from('role_assignments as ra')
                   ->whereColumn('ra.user_id', 'al.user_id')->where('ra.agency_id', $agencyId);
+                // A director: entries by people posted to their centres.
+                if (($sc = $this->scope($request, $agencyId)) !== null) {
+                    $q->whereIn('ra.centre_id', $sc ?: [0]);
+                }
             })
             /* id, not just the timestamp. 241 of the 300 newest rows share their
                second, so ordering on created_at alone leaves 25 rows comparing equal
@@ -142,6 +157,7 @@ final class ExportsController extends Controller
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->when(($sc = $this->scope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('c.id', $sc ?: [0]))
             ->whereNull('ch.deleted_at')->whereNull('f.deleted_at')
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth',
                 'ch.enrollment_status', 'ch.enrolled_at', 'f.family_name', 'c.name as centre_name',
@@ -182,6 +198,7 @@ final class ExportsController extends Controller
             ->join('users as u', 'u.id', '=', 'tp.user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'tp.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->when(($sc = $this->scope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('c.id', $sc ?: [0]))
             ->whereNotNull('tp.punched_out_at')
             ->whereBetween('tp.punched_in_at', [$from, $to])
             ->select('tp.user_id',
@@ -216,6 +233,8 @@ final class ExportsController extends Controller
         $rows = DB::table('background_checks as bgc')
             ->join('users as u', 'u.id', '=', 'bgc.user_id')
             ->where('bgc.agency_id', $agencyId)
+            ->when(($sc = $this->scope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('bgc.user_id',
+                DB::table('role_assignments')->where('active', 1)->whereIn('centre_id', $sc ?: [0])->pluck('user_id')->all() ?: [0]))
             ->orderBy('bgc.expires_at')
             ->select(DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"),
                 'u.email', 'bgc.check_type', 'bgc.reference', 'bgc.issued_at', 'bgc.expires_at')
@@ -273,6 +292,12 @@ final class ExportsController extends Controller
         $responses = DB::table('custom_form_responses as r')
             ->leftJoin('users as u', 'u.id', '=', 'r.submitted_by_id')
             ->where('r.form_id', $formId)
+            // A director: responses from their centres' staff and families only.
+            ->when(($sc = $this->scope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('r.submitted_by_id', array_merge(
+                DB::table('role_assignments')->where('active', 1)->whereIn('centre_id', $sc ?: [0])->pluck('user_id')->all(),
+                DB::table('guardians')->join('families', 'families.id', '=', 'guardians.family_id')
+                    ->whereIn('families.centre_id', $sc ?: [0])->whereNotNull('guardians.user_id')->pluck('guardians.user_id')->all()
+            ) ?: [0]))
             ->orderByDesc('r.created_at')
             ->select('r.id', 'r.created_at', 'r.answers',
                 DB::raw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) as submitter"),
