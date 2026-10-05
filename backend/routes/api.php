@@ -619,6 +619,13 @@ Route::post('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::
 // Donations: public giving page (2026-09-29). Pledges are throttled per IP.
 Route::get('/public/give/{slug}', [\App\Http\Controllers\Api\DonationController::class, 'publicCampaign'])->where('slug', '[a-z0-9-]+')->middleware('throttle:60,1,give');
 Route::post('/public/give/{slug}', [\App\Http\Controllers\Api\DonationController::class, 'publicPledge'])->where('slug', '[a-z0-9-]+')->middleware('throttle:6,60,givepledge');
+// Event RSVPs: public pages (2026-10-05). Tokens only; each route has its own throttle prefix.
+Route::get ('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'publicEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpget');
+Route::post('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'submitEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsub');
+Route::get ('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'publicInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpgeti');
+Route::post('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'submitInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsubi');
+Route::get ('/public/rsvp/optout/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'optOutInfo'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpoi');
+Route::post('/public/rsvp/optout/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'optOut'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:20,10,rsvpout');
 Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, 'publicTourBook'])
     ->middleware('throttle:8,60');
 
@@ -2197,6 +2204,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'update']);
         Route::post('/admin/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'set']);
         Route::post('/admin/learning-framework', [\App\Http\Controllers\Api\LearningFrameworkController::class, 'update']);
+        // Event RSVPs (2026-10-05). The controller re-checks agency_admin OF the active agency.
+        Route::get   ('/admin/rsvp/templates', [\App\Http\Controllers\Api\RsvpController::class, 'templates']);
+        Route::post  ('/admin/rsvp/templates', [\App\Http\Controllers\Api\RsvpController::class, 'saveTemplate']);
+        Route::post  ('/admin/rsvp/templates/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'saveTemplate'])->where('id', '[0-9]+');
+        Route::delete('/admin/rsvp/templates/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'deleteTemplate'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/templates/{id}/copy', [\App\Http\Controllers\Api\RsvpController::class, 'copyTemplate'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/image', [\App\Http\Controllers\Api\RsvpController::class, 'uploadImage']);
+        Route::get   ('/admin/rsvp/contacts', [\App\Http\Controllers\Api\RsvpController::class, 'contacts']);
+        Route::get   ('/admin/rsvp/optouts', [\App\Http\Controllers\Api\RsvpController::class, 'optOuts']);
+        Route::delete('/admin/rsvp/optouts/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'removeOptOut'])->where('id', '[0-9]+');
+        Route::get   ('/admin/rsvp/events', [\App\Http\Controllers\Api\RsvpController::class, 'events']);
+        Route::post  ('/admin/rsvp/events', [\App\Http\Controllers\Api\RsvpController::class, 'saveEvent']);
+        Route::get   ('/admin/rsvp/events/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'event'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'saveEvent'])->where('id', '[0-9]+');
+        Route::delete('/admin/rsvp/events/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'deleteEvent'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/invites', [\App\Http\Controllers\Api\RsvpController::class, 'addInvites'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/send', [\App\Http\Controllers\Api\RsvpController::class, 'sendInvites'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/test', [\App\Http\Controllers\Api\RsvpController::class, 'testInvite'])->where('id', '[0-9]+')->middleware('throttle:10,1,rsvptest');
+        Route::get   ('/admin/rsvp/events/{id}/report', [\App\Http\Controllers\Api\RsvpController::class, 'report'])->where('id', '[0-9]+');
+        Route::get   ('/admin/rsvp/events/{id}/report.csv', [\App\Http\Controllers\Api\RsvpController::class, 'reportCsv'])->where('id', '[0-9]+');
+        Route::delete('/admin/rsvp/invites/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'removeInvite'])->where('id', '[0-9]+');
         // Donations & fundraising (2026-09-29)
         Route::get ('/admin/donations/settings', [\App\Http\Controllers\Api\DonationController::class, 'showSettings']);
         Route::post('/admin/donations/settings', [\App\Http\Controllers\Api\DonationController::class, 'saveSettings']);

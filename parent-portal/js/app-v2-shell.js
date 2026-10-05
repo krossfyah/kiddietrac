@@ -355,6 +355,7 @@
           { hash: 'videos',           label: 'Video feed',      icon: '🎬' },
           { hash: 'photo-tagging',    label: 'Photo AI tagging',icon: '🪄' },
           { hash: 'conferences',      label: 'Conferences',     icon: '🗣' },
+          { hash: 'rsvp',             label: 'Event RSVPs',     icon: '🎟️' },
           { hash: 'forms-manager',    label: 'Forms Manager',   icon: '🗂️' },
         ]},
         { label: 'Settings', items: [
@@ -1003,6 +1004,7 @@
     'tuition-increases': 'Plan and communicate a fee increase.',
     'sibling-discounts': 'Discounts for second and subsequent children.',
     'donations': 'Fundraising campaigns, gifts and donation receipts.',
+    'rsvp': 'Invite people to an event, collect RSVPs, and report who was sent, signed up and opted out.',
     'grants': 'Operating and wage-enhancement funding: awarded, received, spent and reported.',
     'payment-run': 'Charge every auto-pay family\'s open invoices on their saved card, with a preview and results.',
     'compliance-evidence': 'SOC 2 readiness: policies, the control matrix and live evidence exports.',

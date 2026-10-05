@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RSVP · KiddieTrac</title>
+  <meta name="description" content="Let us know you're coming.">
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#081C41">
+  <!-- Event RSVPs (2026-10-05). ?e=<event token> shareable link, ?i=<invite token> a personal
+       invite, ?o=<invite token> unsubscribe. Backend: RsvpController public* methods. -->
+  <style>
+    :root { --brand: #1F6080; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 680px; margin: 0 auto; padding: 24px 16px 60px; }
+    .head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .head img { max-height: 44px; max-width: 150px; border-radius: 8px; }
+    .head b { font-size: 15px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: 0 18px 40px -28px rgba(15, 23, 42, .35); }
+    .card .in { padding: 22px 24px 24px; }
+    .hero { display: block; width: 100%; height: auto; }
+    h1 { font-size: 25px; margin: 0 0 8px; line-height: 1.25; }
+    .meta { margin: 10px 0 4px; display: grid; gap: 6px; font-size: 14.5px; color: #334155; }
+    .meta div { display: flex; gap: 8px; align-items: flex-start; white-space: pre-line; }
+    .desc { font-size: 15px; color: #334155; line-height: 1.65; white-space: pre-line; margin: 12px 0 0; }
+    h2 { font-size: 16px; margin: 22px 0 10px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; color: #334155; }
+    label .req { color: #B91C1C; }
+    .help { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    input, select, textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; font-family: inherit; background: #fff; color: var(--ink); }
+    input[readonly] { background: #F8FAFC; color: #475569; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); }
+    input.bad, select.bad, textarea.bad { border-color: #DC2626; }
+    textarea { min-height: 90px; resize: vertical; }
+    .check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+    .check input { width: auto; }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .btn { display: block; width: 100%; margin-top: 18px; border: 0; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 800; color: #fff; background: var(--brand); cursor: pointer; font-family: inherit; }
+    .btn.ghost { background: #fff; color: var(--ink); border: 1.5px solid var(--line); }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .note { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+    .err { color: #B91C1C; font-weight: 700; font-size: 13.5px; min-height: 18px; margin-top: 10px; }
+    .banner { background: #F0F9FF; border: 1px solid #BAE6FD; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; color: #075985; margin-top: 14px; }
+    .done { text-align: center; }
+    .done .big { font-size: 50px; line-height: 1; margin-bottom: 8px; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; }
+    .foot a { color: var(--muted); }
+    @media (max-width: 560px) { h1 { font-size: 21px; } .card .in { padding: 18px; } }
+  </style>
+</head>
+<body>
+<main class="wrap" id="app"><div class="card"><div class="in">Loading…</div></div></main>
+<script>
+(function () {
+  'use strict';
+  var API = 'https://api.kiddietrac.com/api/v1';
+  var q = new URLSearchParams(location.search);
+  var clean = function (v) { return String(v || '').replace(/[^A-Za-z0-9]/g, ''); };
+  var mode = q.get('o') ? 'optout' : (q.get('i') ? 'invite' : 'event');
+  var token = clean(q.get('o') || q.get('i') || q.get('e'));
+  var app = document.getElementById('app');
+  var E = null;
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function card(inner, img) { return '<div class="card">' + (img || '') + '<div class="in">' + inner + '</div></div>'; }
+  function fail(msg) { app.innerHTML = card('<h1>Sorry</h1><p class="desc">' + esc(msg) + '</p>'); }
+  function foot() { return '<div class="foot">Powered by KiddieTrac · <a href="https://kiddietrac.com/privacy" target="_blank" rel="noopener">Privacy</a></div>'; }
+  function head(a) { return '<div class="head">' + (a && a.logo ? '<img src="' + esc(a.logo) + '" alt="">' : '') + '<b>' + esc(a ? a.name : '') + '</b></div>'; }
+  function brand(a) {
+    // The agency colour, but only when white text stays readable on it.
+    var hex = String((a && a.colour) || '').replace('#', '');
+    if (!/^[0-9a-f]{6}$/i.test(hex)) { return; }
+    var ch = [0, 2, 4].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+    if (0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] < 0.3) { document.documentElement.style.setProperty('--brand', '#' + hex); }
+  }
+  function getJson(url, opts) {
+    return fetch(url, opts).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
+  }
+  if (!token || token.length < 20) { return fail('This link is incomplete. Please check the link you were sent.'); }
+
+  if (mode === 'optout') {
+    getJson(API + '/public/rsvp/optout/' + token, { headers: { Accept: 'application/json' } }).then(function (res) {
+      if (!res.ok) { return fail(res.j.message || 'This link is not valid.'); }
+      var d = res.j; brand(d.agency);
+      document.title = 'Unsubscribe · ' + (d.agency.name || 'KiddieTrac');
+      if (d.opted_out) {
+        app.innerHTML = head(d.agency) + card('<div class="done"><div class="big">✅</div><h1>You’re unsubscribed</h1><p class="desc">' + esc(d.email) + ' will not receive event invitations from ' + esc(d.agency.name) + '.</p></div>') + foot();
+        return;
+      }
+      app.innerHTML = head(d.agency) + card('<h1>Unsubscribe from event invitations?</h1><p class="desc">' + esc(d.agency.name) + ' will stop sending event invitations to <strong>' + esc(d.email) + '</strong>.</p>'
+        + '<button class="btn" id="go" type="button">Unsubscribe</button><div class="err" id="err" role="alert"></div>') + foot();
+      // A button, not the link itself: mail scanners open links, and must not unsubscribe anyone.
+      document.getElementById('go').onclick = function () {
+        var b = this; b.disabled = true; b.textContent = 'Working…';
+        getJson(API + '/public/rsvp/optout/' + token, { method: 'POST', headers: { Accept: 'application/json' } }).then(function (r) {
+          if (!r.ok) { b.disabled = false; b.textContent = 'Unsubscribe'; document.getElementById('err').textContent = r.status === 429 ? 'Too many attempts. Please wait a few minutes.' : (r.j.message || 'Something went wrong.'); return; }
+          app.innerHTML = head(d.agency) + card('<div class="done"><div class="big">✅</div><h1>You’re unsubscribed</h1><p class="desc">You won’t receive further event invitations from ' + esc(d.agency.name) + '.</p></div>') + foot();
+        }).catch(function () { b.disabled = false; b.textContent = 'Unsubscribe'; document.getElementById('err').textContent = 'We could not reach the server. Please try again.'; });
+      };
+    }).catch(function () { fail('We could not load this page. Please try again in a moment.'); });
+    return;
+  }
+
+  getJson(API + '/public/rsvp/' + (mode === 'invite' ? 'invite/' : 'event/') + token, { headers: { Accept: 'application/json' } })
+    .then(function (res) { if (!res.ok) { return fail(res.j.message || 'This RSVP link is not available.'); } E = res.j; paint(); })
+    .catch(function () { fail('We could not load this page. Please try again in a moment.'); });
+
+  function intro() {
+    return '<h1>' + esc(E.title) + '</h1><div class="meta">'
+      + (E.when ? '<div><span>📅</span><span>' + esc(E.when) + '</span></div>' : '')
+      + (E.location ? '<div><span>📍</span><span>' + esc(E.location) + '</span></div>' : '') + '</div>'
+      + (E.description ? '<p class="desc">' + esc(E.description) + '</p>' : '');
+  }
+  function img() { return E.image_url ? '<img class="hero" src="' + esc(E.image_url) + '" alt="">' : ''; }
+
+  function input(f, val) {
+    var id = 'f_' + f.key, req = f.required ? ' required' : '';
+    var ph = f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '';
+    var lock = (f.key === 'email' && E.invite) ? ' readonly' : '';
+    var lab = '<label for="' + id + '">' + esc(f.label) + (f.required ? ' <span class="req">*</span>' : '') + '</label>';
+    var help = f.help ? '<div class="help">' + esc(f.help) + '</div>' : '';
+    if (f.type === 'checkbox') {
+      return '<div><label class="check"><input type="checkbox" id="' + id + '" data-key="' + esc(f.key) + '"' + (/^(yes|true|1)$/i.test(val) ? ' checked' : '') + '> ' + esc(f.label) + (f.required ? ' <span class="req">*</span>' : '') + '</label>' + help + '</div>';
+    }
+    if (f.type === 'textarea') {
+      return '<div>' + lab + '<textarea id="' + id + '" data-key="' + esc(f.key) + '" maxlength="4000"' + ph + req + '>' + esc(val) + '</textarea>' + help + '</div>';
+    }
+    if (f.type === 'select') {
+      return '<div>' + lab + '<select id="' + id + '" data-key="' + esc(f.key) + '"' + req + '><option value="">Choose…</option>'
+        + (f.options || []).map(function (o) { return '<option' + (o === val ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>' + help + '</div>';
+    }
+    var t = f.type === 'email' ? 'email' : (f.type === 'tel' ? 'tel' : 'text');
+    var ac = f.type === 'email' ? 'email' : (f.type === 'tel' ? 'tel' : (/name/.test(f.key) ? 'name' : (/address|street/.test(f.key) ? 'street-address' : (/town|city/.test(f.key) ? 'address-level2' : 'on'))));
+    return '<div>' + lab + '<input id="' + id + '" data-key="' + esc(f.key) + '" type="' + t + '" maxlength="500" autocomplete="' + ac + '" value="' + esc(val) + '"' + ph + req + lock + '>' + help + '</div>';
+  }
+
+  function paint() {
+    brand(E.agency);
+    document.title = E.title + ' · RSVP';
+    if (!E.open) { app.innerHTML = head(E.agency) + card(intro() + '<p class="banner">Registration for this event is closed.</p>', img()) + foot(); return; }
+    var inv = E.invite || null, prev = E.previous || {};
+    if (inv && inv.opted_out) { /* they can still register; say so plainly */ }
+    if (E.full && !E.previous) { app.innerHTML = head(E.agency) + card(intro() + '<p class="banner">Sorry — this event is full.</p>', img()) + foot(); return; }
+    var fields = (E.fields || []).map(function (f) {
+      var v = prev[f.key] != null ? prev[f.key] : (f.key === 'email' && inv ? inv.email : ((/^(full_)?name$/.test(f.key) && inv && inv.name) ? inv.name : (f.default || '')));
+      return input(f, v);
+    }).join('');
+    app.innerHTML = head(E.agency) + card(intro()
+      + (E.previous ? '<p class="banner">You’ve already registered — you can update your details below.</p>' : '')
+      + '<form id="f" novalidate><h2>' + (E.previous ? 'Update your RSVP' : 'RSVP') + '</h2><div class="grid">' + fields
+      + '<div class="hp" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div></div>'
+      + '<button class="btn" type="submit" id="go">' + (E.previous ? 'Update my RSVP' : 'Count me in') + '</button><div class="err" id="err" role="alert"></div>'
+      + '<p class="note">We’ll email you a copy of your registration.</p></form>', img()) + foot();
+    var f = document.getElementById('f');
+    f.onsubmit = function (e) {
+      e.preventDefault();
+      var err = document.getElementById('err'); err.textContent = '';
+      var answers = {}, firstBad = null;
+      f.querySelectorAll('.bad').forEach(function (x) { x.classList.remove('bad'); });
+      (E.fields || []).forEach(function (fd) {
+        var el = f.querySelector('[data-key="' + fd.key + '"]'); if (!el) { return; }
+        var v = el.type === 'checkbox' ? el.checked : el.value.trim();
+        answers[fd.key] = v;
+        var bad = fd.required && (el.type === 'checkbox' ? !v : v === '');
+        if (!bad && fd.type === 'email' && v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { bad = true; }
+        if (bad && !firstBad) { firstBad = { el: el, label: fd.label }; }
+        if (bad) { el.classList.add('bad'); }
+      });
+      if (firstBad) { err.textContent = 'Please complete “' + firstBad.label + '”.'; firstBad.el.focus(); return; }
+      var btn = document.getElementById('go'), label = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
+      getJson(API + '/public/rsvp/' + (mode === 'invite' ? 'invite/' : 'event/') + token, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ answers: answers, website: f.website.value }) })
+        .then(function (res) {
+          if (!res.ok) {
+            btn.disabled = false; btn.textContent = label;
+            var m = res.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.' : (res.j.message || 'Something went wrong. Please try again.');
+            if (res.j.errors) { Object.keys(res.j.errors).forEach(function (k) { var el = f.querySelector('[data-key="' + k + '"]'); if (el) { el.classList.add('bad'); } }); }
+            err.textContent = m; return;
+          }
+          var name = String(answers.full_name || answers.name || answers.first_name || '').split(' ')[0];
+          app.innerHTML = head(E.agency) + card('<div class="done"><div class="big">🎉</div><h1>' + (res.j.updated ? 'Your RSVP is updated' : 'You’re registered' + (name ? ', ' + esc(name) : '') + '!') + '</h1>'
+            + '<p class="desc">' + esc(res.j.message || ('Thank you for registering for ' + E.title + '.')) + '</p>'
+            + '<div class="meta" style="justify-content:center">' + (E.when ? '<div style="justify-content:center"><span>📅</span><span>' + esc(E.when) + '</span></div>' : '')
+            + (E.location ? '<div style="justify-content:center"><span>📍</span><span>' + esc(E.location) + '</span></div>' : '') + '</div>'
+            + '<p class="note">A copy is on its way to ' + esc(res.j.email) + '.</p></div>', img()) + foot();
+          window.scrollTo(0, 0);
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = label; err.textContent = 'We could not reach the server. Please try again.'; });
+    };
+  }
+})();
+</script>
+</body>
+</html>
