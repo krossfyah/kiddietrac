@@ -1666,7 +1666,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p42: presence (online users via personal_access_tokens.last_used_at)
         Route::get('/presence', [AdminController::class, 'presence']);
         // v22p47: compliance dashboard + agency-wide children list (+ CSV)
-        Route::get('/compliance', [AdminController::class, 'compliance']);
+        // GET /compliance -> moved to the director-capable admin group (2026-10-05)
         // Route::get('/children', -> moved to the director-capable admin group (2026-10-05)
         // v22p42: bulk invoice generation by centre (extends director endpoint with centre_id arg)
         Route::post('/invoices/generate-batch', [\App\Http\Controllers\Api\InvoiceController::class, 'generateBatchByCentre']);
@@ -1792,6 +1792,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/users', [AdminController::class, 'listUsers']);
         Route::get('/families', [AdminController::class, 'listFamilies']);
         Route::get('/children', [AdminController::class, 'listAgencyChildren']);
+        Route::get('/compliance', [AdminController::class, 'compliance']);
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
         // v22p47: audit trail — agency admins (whole agency) + directors (their centre)
         Route::get('/audit-logs', [AdminController::class, 'auditLogs']);

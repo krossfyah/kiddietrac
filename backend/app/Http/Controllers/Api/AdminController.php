@@ -1483,10 +1483,10 @@ final class AdminController extends Controller
      */
     public function compliance(Request $request): JsonResponse
     {
-        $agencyId = $this->getAgencyId($request);
+        // A centre director: their own centres' staff, MFA and capacity (2026-10-05).
+        [$agencyId, $centreIds, $wide] = $this->listScope($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
-        $centreIds = $this->getCentreIds($agencyId);
         $now = now();
         $soon = $now->copy()->addDays(30);
 
@@ -1494,7 +1494,8 @@ final class AdminController extends Controller
         $staffUserIds = DB::table('role_assignments')
             ->where('active', true)
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator'])
-            ->where(function ($q) use ($agencyId, $centreIds) {
+            ->where(function ($q) use ($agencyId, $centreIds, $wide) {
+                if (! $wide) { $q->whereIn('centre_id', $centreIds ?: [0]); return; }
                 $q->where('agency_id', $agencyId);
                 if (!empty($centreIds)) $q->orWhereIn('centre_id', $centreIds);
             })
@@ -1519,11 +1520,12 @@ final class AdminController extends Controller
 
         // MFA laggards — directors + agency admins without two_factor_secret
         $mfaLaggards = empty($staffUserIds) ? collect() : DB::table('users as u')
-            ->whereIn('u.id', function ($q) use ($agencyId, $centreIds) {
+            ->whereIn('u.id', function ($q) use ($agencyId, $centreIds, $wide) {
                 $q->select('user_id')->from('role_assignments')
                     ->whereIn('role', ['agency_admin', 'centre_director'])
                     ->where('active', true)
-                    ->where(function ($x) use ($agencyId, $centreIds) {
+                    ->where(function ($x) use ($agencyId, $centreIds, $wide) {
+                        if (! $wide) { $x->whereIn('centre_id', $centreIds ?: [0]); return; }
                         $x->where('agency_id', $agencyId);
                         if (!empty($centreIds)) $x->orWhereIn('centre_id', $centreIds);
                     });
