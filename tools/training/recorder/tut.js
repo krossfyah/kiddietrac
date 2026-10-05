@@ -20,12 +20,20 @@ const APP = 'https://app.kiddietrac.com';
 const SSH = ['-i', process.env.HOME + '/.ssh/kiddietrac_id', '-o', 'UserKnownHostsFile=' + process.env.HOME + '/.ssh/kiddietrac_known_hosts'];
 const HOST = 'k3l6yt3xmih3@p3plzcpnl505449.prod.phx3.secureserver.net';
 const VOICE = 'Azure.en-CA-ClaraNeural';
-const ACCOUNTS = { parent: 94, educator: 84, home_visitor: 232, director: 100 };  // director = Rebecca Bright, centre 18            // Test Agency demo accounts only
+const ACCOUNTS = { parent: 94, educator: 84, home_visitor: 232, director: 100, admin: 234 };  // director = Rebecca Bright, centre 18            // Test Agency demo accounts only
 const GAP = 0.55;                                         // seconds of quiet between sentences
 // This process's own debug-login name, so two batches never revoke each other's login.
 const RUN_TOKEN = 'claude-debug-' + process.pid;
 const OUT = path.join(__dirname, 'out');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const NARRATOR = 'Clara';                 // the voice (Azure en-CA-ClaraNeural) introduces herself by this name
+const VIEW = { phone: [390, 844], desktop: [1440, 900] };      // CSS viewport the page is filmed at
+const OUT_SIZE = { phone: [540, 1168], desktop: [1280, 800] };  // the finished video
+/* While a recording runs: when it started, and every field/option that was highlighted
+   (ring, type, choose, point, draw) with where it sat on screen — mix() zooms to them. */
+let REC = null;
+let ZOOM_HIT = null;
+const hit = (r) => { if (REC && r && r.w > 2 && r.h > 2) ZOOM_HIT = { t: (Date.now() - REC.t0) / 1000, x: r.x, y: r.y, w: r.w, h: r.h }; };
 
 function ssh(cmd) {
   return execFileSync('ssh', [...SSH, HOST, cmd], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
@@ -120,7 +128,7 @@ const TUT = '(' + function () {
         + 'border:3px solid #F59E0B;border-radius:12px;box-shadow:0 0 0 4px rgba(245,158,11,.25);z-index:2147483646;pointer-events:none;';
       document.documentElement.appendChild(d);
       setTimeout(function () { d.remove(); }, ms || 1800);
-      return true;
+      return { x: r.left, y: r.top, w: r.width, h: r.height };   // truthy; tut.js zooms to it
     },
     scroll: function (px, ms) {
       var cands = [document.getElementById('appMain'), document.scrollingElement].filter(Boolean);
@@ -163,7 +171,7 @@ async function openAs(b, account, device, token) {
       document.querySelectorAll('[inert]').forEach((e) => { if (!e.closest('#kt-agree,#kt-bio-ov,#kt-urgent,#kt-mfa-gate')) e.removeAttribute('inert'); });
     }, 300);
     try { localStorage.setItem('kt_tour_done', '1'); localStorage.setItem('kt_welcome_seen', '1'); localStorage.setItem('kt_push_nudge_until', String(Date.now() + 864e5)); sessionStorage.setItem('kt_install_dismissed', '1'); sessionStorage.setItem('kt_ios_install_dismissed', '1'); } catch (e) {}
-  }, QUIET_CSS + (account === 'director' ? '#kt-chat-dock{display:none!important}' : ''));  // the director's chat window would cover every screen (and real names)
+  }, QUIET_CSS + ((account === 'director' || account === 'admin') ? '#kt-chat-dock{display:none!important}' : ''));  // the director's chat window would cover every screen (and real names)
   if (device === 'phone') {
     await page.emulate({ viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
       userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36' });
@@ -196,15 +204,23 @@ async function browser() {
 
 /* ── one action ─────────────────────────────────────────────────── */
 async function act(page, a, device) {
+  ZOOM_HIT = null;
+  await actInner(page, a, device);
+  if (REC && ZOOM_HIT && !a.noZoom) REC.events.push({ ...ZOOM_HIT, end: (Date.now() - REC.t0) / 1000 });
+  ZOOM_HIT = null;
+}
+
+async function actInner(page, a, device) {
   if (a.wait) { await sleep(a.wait); return; }
   if (a.go) { await page.evaluate((h) => { location.hash = h; }, a.go); await sleep(a.settle || 2200); return; }
   if (a.scroll) { await page.evaluate((px, ms) => window.__tut.scroll(px, ms), a.scroll, a.ms || 1400); return; }
-  if (a.ring) { const ok = await page.evaluate((q, ms) => window.__tut.ring(q, ms), a.ring, a.ms || 1800); if (!ok) console.log('   ! ring not found:', a.ring); await sleep(a.ms || 1800); return; }
-  if (a.point) { const p = await page.evaluate((q) => window.__tut.point(q), a.point); if (!p) console.log('   ! point not found:', a.point); await sleep(900); return; }
+  if (a.ring) { const ok = await page.evaluate((q, ms) => window.__tut.ring(q, ms), a.ring, a.ms || 1800); if (!ok) console.log('   ! ring not found:', a.ring); else hit(ok); await sleep(a.ms || 1800); return; }
+  if (a.point) { const p = await page.evaluate((q) => window.__tut.point(q), a.point); if (!p) console.log('   ! point not found:', a.point); else hit({ x: p.x - p.w / 2, y: p.y - p.h / 2, w: p.w, h: p.h }); await sleep(900); return; }
   if (a.tap || a.type) {
     const q = a.tap || a.type[0];
     const p = await page.evaluate((q) => window.__tut.point(q), q);
     if (!p) { console.log('   ! not found:', q); return; }
+    if (a.type) hit({ x: p.x - p.w / 2, y: p.y - p.h / 2, w: p.w, h: p.h });   // a field being filled: zoom to it
     await sleep(700);                                                   // the finger travels there first
     await page.evaluate((x, y) => window.__tut.ripple(x, y), p.x, p.y);
     if (device === 'phone') {
@@ -229,9 +245,10 @@ async function act(page, a, device) {
       const n = els[idx]; if (!n) return null;
       n.scrollIntoView({ block: 'center', inline: 'nearest' });
       const r = n.getBoundingClientRect(); const x = r.left + Math.min(r.width / 2, 70), y = r.top + r.height / 2;
-      window.__tut.moveTo(x, y); return { x, y };
+      window.__tut.moveTo(x, y); return { x, y, rx: r.left, ry: r.top, rw: r.width, rh: r.height };
     }, sel, idx);
     if (!p) { console.log('   ! typeAt not found:', sel, idx); return; }
+    hit({ x: p.rx, y: p.ry, w: p.rw, h: p.rh });
     await sleep(650);
     await page.evaluate((x, y) => window.__tut.ripple(x, y), p.x, p.y);
     if (device === 'phone') await page.touchscreen.tap(p.x, p.y); else await page.mouse.click(p.x, p.y);
@@ -244,6 +261,7 @@ async function act(page, a, device) {
     // A signature: a few connected strokes across the pad, drawn at finger speed.
     const box = await page.evaluate((q) => { const vis = (c) => { const r = c.getBoundingClientRect(); return r.width > 20 && r.height > 20; }; const n = q === 'canvas:last' ? Array.from(document.querySelectorAll('canvas')).filter(vis).pop() : document.querySelector(q); if (!n) return null; n.scrollIntoView({ block: 'center' }); const r = n.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }, a.draw);
     if (!box) { console.log('   ! draw target not found:', a.draw); return; }
+    hit(box);
     await page.evaluate((x, y) => window.__tut.point && window.__tut.ripple(x, y), box.x + box.w * 0.2, box.y + box.h * 0.55);
     const pts = [];
     for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push([box.x + box.w * (0.15 + 0.7 * t), box.y + box.h * (0.55 + 0.18 * Math.sin(t * Math.PI * 3))]); }
@@ -270,9 +288,10 @@ async function act(page, a, device) {
       window.__tutLastSelect = s;
       const o = Array.from(s.options).find(want);
       s.scrollIntoView({ block: 'center' }); s.value = o.value; s.dispatchEvent(new Event('input', { bubbles: true })); s.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
+      const r = s.getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height };
     }, a.choose[0], a.choose[1]);
-    if (!ok) console.log('   ! choose failed:', JSON.stringify(a.choose));
+    if (!ok) console.log('   ! choose failed:', JSON.stringify(a.choose)); else hit(ok);
     await page.evaluate(() => { const s = window.__tutLastSelect; if (s) { s.setAttribute('data-tut-sel', '1'); window.__tut.ring('[data-tut-sel="1"]', 1200); s.removeAttribute('data-tut-sel'); } });
     await sleep(a.settle || 1300);
     return;
@@ -290,12 +309,19 @@ function duration(file) {
 const vttTime = (t) => { const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = (t % 60).toFixed(3).padStart(6, '0'); return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + s; };
 const ff = (args) => execFileSync(FF, ['-y', '-loglevel', 'error', ...args], { stdio: 'inherit', timeout: 300000 });
 
-/* ── narrate (server-side TTS, one file per sentence so captions are exact) ── */
+/* ── narrate (server-side TTS, one file per sentence so captions are exact) ──
+   Line 0 is Clara's introduction over the branded intro card, lines 1..n are the steps
+   (paced against the screen recording), and the last is her sign-off over the outro. */
+// One sentence each: the voice pauses about a second at every full stop.
+const introLine = (sc) => `Hi, I'm ${NARRATOR} from KiddieTrac, with a quick guide to ${String(sc.introAs || sc.title).replace(/\s+—\s+/g, ', ').replace(/[.!?]+$/, '')}.`;
+const OUTRO_LINE = "Thanks for watching, and you'll find more guides like this one in Help and guides.";
+
 function narrate(sc, dir) {
-  const lines = sc.steps.map(s => s.say);
+  const lines = [introLine(sc), ...sc.steps.map(s => s.say), OUTRO_LINE];
   const key = sc.audience + '__' + sc.slug;
-  const allThere = lines.every((l, i) => fs.existsSync(path.join(dir, `${i}.mp3`)) && fs.readFileSync(path.join(dir, `${i}.txt`), 'utf8') === l);
+  const allThere = lines.every((l, i) => fs.existsSync(path.join(dir, `${i}.mp3`)) && fs.existsSync(path.join(dir, `${i}.txt`)) && fs.readFileSync(path.join(dir, `${i}.txt`), 'utf8') === l);
   if (!allThere) {
+    for (const f of fs.readdirSync(dir)) if (/^\d+\.(mp3|txt)$/.test(f)) fs.unlinkSync(path.join(dir, f));
     const j = path.join(os.tmpdir(), key + '.json');
     fs.writeFileSync(j, JSON.stringify({ voice: VOICE, [key]: lines }));
     scpTo(j, '/tmp/' + key + '.json');
@@ -310,14 +336,21 @@ function narrate(sc, dir) {
       fs.writeFileSync(path.join(dir, `${i}.txt`), l);
     });
   }
+  const dIntro = duration(path.join(dir, '0.mp3'));
+  const dOutro = duration(path.join(dir, `${lines.length - 1}.mp3`));
   let t = 0.8;
-  const cues = lines.map((text, i) => {
-    const d = duration(path.join(dir, `${i}.mp3`));
-    const c = { start: +t.toFixed(2), end: +(t + d).toFixed(2), text, hold: sc.steps[i].hold || 0 };
-    t += d + GAP + (sc.steps[i].hold || 0);
+  const cues = sc.steps.map((s, i) => {
+    const d = duration(path.join(dir, `${i + 1}.mp3`));
+    const c = { start: +t.toFixed(2), end: +(t + d).toFixed(2), text: s.say, hold: s.hold || 0, file: `${i + 1}.mp3` };
+    t += d + GAP + (s.hold || 0);
     return c;
   });
-  return { cues, total: +(t + 0.6).toFixed(2) };
+  return {
+    cues, total: +(t + 0.6).toFixed(2),
+    // Each clip ends in ~0.9s of the voice's own silence, so it is not padded again.
+    intro: { text: lines[0], file: '0.mp3', at: 0.7, dur: +Math.max(4.2, 0.7 + dIntro + 0.3).toFixed(2) },
+    outro: { text: OUTRO_LINE, file: `${lines.length - 1}.mp3`, at: 1.2, dur: +Math.max(4.8, 1.2 + dOutro + 0.9).toFixed(2) },
+  };
 }
 
 /* ── record, paced to the narration ─────────────────────────────── */
@@ -327,9 +360,30 @@ async function record(sc, cues, total, dir, token) {
     const page = await openAs(b, sc.account, sc.device, token);
     await go(page, sc.start, sc.warm || 7000);
     for (const a of (sc.before || [])) { await act(page, a, sc.device); }
-    const webm = path.join(dir, 'raw.webm');
-    const rec = await page.screencast({ path: webm, ffmpegPath: FF });
+
+    /* OUR OWN CAPTURE, TIMED BY CHROME'S CLOCK (2026-10-05).
+       page.screencast() stamped every frame as if it arrived at an even 25 a second, but
+       Chrome only sends a frame when the screen changes: a 24s lesson came out as 10.4s of
+       picture, running ~2.3x fast against the narration and freezing for the rest. Here
+       every frame is saved with Chrome's own timestamp and later held on screen for exactly
+       as long as it was really there. Captured at device pixels (phones 780x1688, not
+       390x844) so a zoom stays sharp. */
+    const fdir = path.join(dir, 'frames-raw');
+    fs.rmSync(fdir, { recursive: true, force: true }); fs.mkdirSync(fdir, { recursive: true });
+    const [VW, VH] = VIEW[sc.device], dpr = sc.device === 'phone' ? 2 : 1;
+    const client = await page.createCDPSession();
+    const frames = [];
+    const writes = [];
+    client.on('Page.screencastFrame', (ev) => {
+      const name = `f${String(frames.length).padStart(5, '0')}.jpg`;
+      frames.push({ ts: Date.now(), name });   // arrival time: the same clock as t0 and the zoom log
+      writes.push(fs.promises.writeFile(path.join(fdir, name), Buffer.from(ev.data, 'base64')));
+      client.send('Page.screencastFrameAck', { sessionId: ev.sessionId }).catch(() => {});
+    });
+    await client.send('Page.startScreencast', { format: 'jpeg', quality: 88, maxWidth: VW * dpr, maxHeight: VH * dpr, everyNthFrame: 1 });
+    await sleep(300);                                   // first frame in hand before the clock starts
     const t0 = Date.now();
+    REC = { t0, events: [] };
     for (let i = 0; i < sc.steps.length; i++) {
       const wait = cues[i].start * 1000 - (Date.now() - t0);
       if (wait > 0) await sleep(wait); else if (wait < -400) console.log(`   ! step ${i} started ${(-wait / 1000).toFixed(1)}s late`);
@@ -337,31 +391,131 @@ async function record(sc, cues, total, dir, token) {
     }
     const rest = total * 1000 + 500 - (Date.now() - t0);
     if (rest > 0) await sleep(rest);
-    await rec.stop();
+    const tEnd = Date.now();
+    await client.send('Page.stopScreencast').catch(() => {});
+    await Promise.all(writes);
     await page.close();
-  } finally { await b.close(); }
+
+    // Constant-frame-rate clip: each frame lasts until the next one arrived, starting at t0.
+    if (!frames.length) throw new Error('no frames captured');
+    // Frame names relative to the list; the LIST is passed with forward slashes, or this
+    // ffmpeg cannot find its folder (and it treats C:/... inside the list as relative).
+    const fwd = (n) => path.join(fdir, n).split(path.sep).join('/');
+    const lines = ['ffconcat version 1.0'];
+    let firstIdx = frames.findIndex((f) => f.ts > t0);
+    if (firstIdx === -1) firstIdx = frames.length;
+    const startFrame = frames[Math.max(0, firstIdx - 1)];                // what was on screen at t0
+    const seq = [{ ...startFrame, ts: t0 }, ...frames.slice(firstIdx).filter((f) => f.ts < tEnd)];
+    seq.forEach((f, i) => {
+      const next = i + 1 < seq.length ? seq[i + 1].ts : tEnd;
+      lines.push(`file '${f.name}'`, `duration ${Math.max(0.001, (next - f.ts) / 1000).toFixed(3)}`);
+    });
+    lines.push(`file '${seq[seq.length - 1].name}'`);                     // concat demuxer: last entry repeated
+    fs.writeFileSync(path.join(fdir, 'list.ffconcat'), lines.join('\n'));
+    ff(['-f', 'concat', '-safe', '0', '-i', fwd('list.ffconcat'), '-vf', `fps=25,scale=${VW * dpr}:${VH * dpr},format=yuv420p`,
+      '-c:v', 'libx264', '-crf', '16', '-preset', 'veryfast', path.join(dir, 'raw.mp4')]);
+    fs.rmSync(fdir, { recursive: true, force: true });
+    return REC.events;
+  } finally { REC = null; await b.close(); }
 }
 
-/* ── mix voice onto the picture, captions, poster, chapters ─────── */
-function mix(sc, cues, total, dir) {
-  const d = String(total);
-  const vIn = ['-f', 'lavfi', '-t', d, '-i', 'anullsrc=r=48000:cl=stereo'];
-  cues.forEach((c, i) => vIn.push('-i', path.join(dir, `${i}.mp3`)));
-  const vf = cues.map((c, i) => `[${i + 1}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${Math.round(c.start * 1000)}|${Math.round(c.start * 1000)}[s${i}]`);
-  vf.push(`[0:a]${cues.map((c, i) => `[s${i}]`).join('')}amix=inputs=${cues.length + 1}:duration=first:dropout_transition=0,volume=${cues.length + 1}[vo]`);
-  ff([...vIn, '-filter_complex', vf.join(';'), '-map', '[vo]', '-t', d, path.join(dir, 'voice.wav')]);
-  ff(['-i', path.join(dir, 'voice.wav'), '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', '-ar', '48000', '-ac', '2', '-t', d, path.join(dir, 'final.wav')]);
-  const scale = sc.device === 'phone' ? 'scale=540:-2' : 'scale=1280:-2';
-  ff(['-i', path.join(dir, 'raw.webm'), '-i', path.join(dir, 'final.wav'), '-vf', `${scale},fps=25,format=yuv420p`,
-    '-map', '0:v', '-map', '1:a', '-t', d, '-c:v', 'libx264', '-crf', '26', '-preset', 'slow', '-c:a', 'aac', '-b:a', '112k',
-    '-movflags', '+faststart', path.join(dir, 'video.mp4')]);
-  ff(['-ss', String(sc.posterAt || 2.0), '-i', path.join(dir, 'video.mp4'), '-frames:v', '1', '-q:v', '3', path.join(dir, 'poster.jpg')]);
-  fs.writeFileSync(path.join(dir, 'captions.vtt'), 'WEBVTT\n\n' + cues.map((c, i) => `${i + 1}\n${vttTime(c.start)} --> ${vttTime(c.end + 0.3)}\n${c.text}\n`).join('\n'));
-  // Review sheet: one frame a second, so every frame can be checked for leaks before publishing.
+/* ── zooms: every highlighted field/option, eased in and out ────────
+   The recording logged where each one sat (CSS px). Here that becomes a zoompan over the
+   main segment. Highlights that follow one another closely form a CHAIN: one zoom in at
+   the start, a smooth glide from target to target, one zoom out at the end — rather than
+   pumping in and out for each. Phones (filmed 390px wide, fields edge to edge) get a fixed
+   gentle zoom; desktop sizes to the target, at least 1.3x. */
+function zoomWindows(events, device, M) {
+  const [VW, VH] = VIEW[device];
+  const maxZ = device === 'phone' ? 1.35 : 1.8;
+  const ev = (events || []).filter((e) => !(e.w / VW > 0.85 && e.h / VH > 0.5) && e.t < M - 1).map((e) => ({
+    t: e.t, end: e.end,
+    z: device === 'phone' ? maxZ : Math.max(1.3, Math.min(maxZ, 0.55 / (e.w / VW), 0.5 / (e.h / VH))),
+    cx: (e.x + e.w / 2) / VW, cy: (e.y + e.h / 2) / VH,
+  })).sort((a, b) => a.t - b.t);
+  const chains = [];
+  for (const e of ev) {
+    const c = chains[chains.length - 1];
+    if (c && e.t - c.last < 0.8) { c.keys.push(e); c.last = Math.max(c.last, e.end); continue; }
+    chains.push({ keys: [e], last: e.end });
+  }
+  const wins = chains.map((c) => ({
+    s: Math.max(0, c.keys[0].t - 0.15),
+    e: Math.max(c.last + 0.35, c.keys[0].t + 1.6),
+    z: Math.min(...c.keys.map((k) => k.z)),
+    keys: c.keys.map((k) => ({ t: k.t, cx: k.cx, cy: k.cy })),
+  }));
+  for (let i = 1; i < wins.length; i++) {          // never overlap: the earlier one gives way
+    const p = wins[i - 1], w = wins[i];
+    if (w.s < p.e + 0.1) { p.e = Math.max(p.s + 1.0, w.s - 0.1); w.s = Math.max(w.s, p.e + 0.1); }
+  }
+  return wins.map((w) => ({ ...w, e: Math.min(w.e, M - 0.4) })).filter((w) => w.e - w.s >= 0.9);
+}
+
+function zoomFilter(wins, W, H) {
+  if (!wins.length) return `scale=${W}:${H}:flags=lanczos,fps=25`;
+  const R = 0.45, P = 0.5, T = '(in/25)';
+  const f = (n) => n.toFixed(3);
+  const ramp = (w) => `clip((${T}-${f(w.s)})/${R},0,1)*clip((${f(w.e)}-${T})/${R},0,1)`;
+  const z = '1+' + wins.map((w) => `${ramp(w)}*${f(w.z - 1)}`).join('+');
+  // Inside a window the centre glides (smoothstep) from each target to the next.
+  const glide = (w, k) => w.keys.slice(1).reduce((acc, key, j) => {
+    const a = w.keys[j][k], b = key[k], t0 = f(key.t), u = `clip((${T}-${t0})/${P},0,1)`;
+    return `if(lt(${T},${t0}),${acc},${f(a)}+(${f(b - a)})*${u}*${u}*(3-2*${u}))`;
+  }, f(w.keys[0][k]));
+  const pick = (k) => wins.reduceRight((acc, w) => `if(between(${T},${f(w.s)},${f(w.e)}),${glide(w, k)},${acc})`, '0.5');
+  // Upscaled first so the pan does not step a whole source pixel at a time.
+  const UW = Math.round(W * 1.5 / 2) * 2, UH = Math.round(H * 1.5 / 2) * 2;
+  return `scale=${UW}:${UH}:flags=lanczos,fps=25,`
+    + `zoompan=z='${z}':x='clip(${pick('cx')}*iw-iw/zoom/2,0,iw-iw/zoom)':y='clip(${pick('cy')}*ih-ih/zoom/2,0,ih-ih/zoom)':d=1:s=${W}x${H}:fps=25`;
+}
+
+/* ── assemble: intro card → recording (zooms, fades) → outro with animated logo ── */
+async function mix(sc, cues, total, dir, intro, outro, zooms) {
+  const [W, H] = OUT_SIZE[sc.device];
+  const I = intro.dur, M = total, O = outro.dur, T = +(I + M + O).toFixed(2);
+  const brand = require('./brand');
+  const cache = path.join(OUT, '_brand'); fs.mkdirSync(cache, { recursive: true });
+  const b = await browser();
+  let outroFile;
+  try {
+    await brand.intro(b, { title: sc.title, audience: sc.audience }, W, H, I, path.join(dir, 'intro.mp4'));
+    outroFile = await brand.outro(b, W, H, O, cache);
+  } finally { await b.close().catch(() => {}); }
+
+  // The recording: zooms, then a fade up from black and a fade down at the end.
+  const wins = zoomWindows(zooms, sc.device, M);
+  fs.writeFileSync(path.join(dir, "zooms.json"), JSON.stringify({ events: zooms, windows: wins }, null, 1));   // for review
+  ff(['-i', path.join(dir, 'raw.mp4'), '-vf', `${zoomFilter(wins, W, H)},setsar=1,format=yuv420p,fade=t=in:st=0:d=0.5,fade=t=out:st=${(M - 0.5).toFixed(2)}:d=0.5`,
+    '-t', String(M), '-an', '-c:v', 'libx264', '-crf', '20', '-preset', 'medium', path.join(dir, 'main.mp4')]);
+
+  // One voice track for the whole timeline.
+  const all = [{ file: intro.file, at: intro.at }, ...cues.map((c) => ({ file: c.file, at: I + c.start })), { file: outro.file, at: I + M + outro.at }];
+  const vIn = ['-f', 'lavfi', '-t', String(T), '-i', 'anullsrc=r=48000:cl=stereo'];
+  all.forEach((c) => vIn.push('-i', path.join(dir, c.file)));
+  const vf = all.map((c, i) => `[${i + 1}:a]aresample=48000,aformat=channel_layouts=stereo,adelay=${Math.round(c.at * 1000)}|${Math.round(c.at * 1000)}[s${i}]`);
+  vf.push(`[0:a]${all.map((c, i) => `[s${i}]`).join('')}amix=inputs=${all.length + 1}:duration=first:dropout_transition=0,volume=${all.length + 1}[vo]`);
+  ff([...vIn, '-filter_complex', vf.join(';'), '-map', '[vo]', '-t', String(T), path.join(dir, 'voice.wav')]);
+  ff(['-i', path.join(dir, 'voice.wav'), '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', '-ar', '48000', '-ac', '2', '-t', String(T), path.join(dir, 'final.wav')]);
+
+  ff(['-i', path.join(dir, 'intro.mp4'), '-i', path.join(dir, 'main.mp4'), '-i', outroFile, '-i', path.join(dir, 'final.wav'),
+    '-filter_complex', '[0:v]setsar=1,fps=25,format=yuv420p[a];[1:v]setsar=1,fps=25,format=yuv420p[b];[2:v]setsar=1,fps=25,format=yuv420p[c];[a][b][c]concat=n=3:v=1:a=0[v]',
+    '-map', '[v]', '-map', '3:a', '-t', String(T), '-c:v', 'libx264', '-crf', '24', '-preset', 'slow', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '112k', '-movflags', '+faststart', path.join(dir, 'video.mp4')]);
+
+  // Poster: the branded title card, once its title has settled in.
+  ff(['-ss', String(Math.min(I - 0.6, 2.8)), '-i', path.join(dir, 'video.mp4'), '-frames:v', '1', '-q:v', '3', path.join(dir, 'poster.jpg')]);
+  const caps = [{ s: intro.at, e: intro.at + duration(path.join(dir, intro.file)), t: intro.text },
+    ...cues.map((c) => ({ s: I + c.start, e: I + c.end, t: c.text })),
+    { s: I + M + outro.at, e: I + M + outro.at + duration(path.join(dir, outro.file)), t: outro.text }];
+  fs.writeFileSync(path.join(dir, 'captions.vtt'), 'WEBVTT\n\n' + caps.map((c, i) => `${i + 1}\n${vttTime(c.s)} --> ${vttTime(c.e + 0.3)}\n${c.t}\n`).join('\n'));
+  // Review sheet: a frame every two seconds, so every frame can be checked for leaks before publishing.
   const frames = path.join(dir, 'frames'); fs.mkdirSync(frames, { recursive: true });
   for (const f of fs.readdirSync(frames)) fs.unlinkSync(path.join(frames, f));
   ff(['-i', path.join(dir, 'video.mp4'), '-vf', 'fps=1/2,scale=270:-2,tile=6x3', path.join(frames, 'sheet-%02d.jpg')]);
-  return sc.steps.map((s, i) => s.chapter ? { t: Math.max(0, Math.floor(cues[i].start - 0.3)), label: s.chapter } : null).filter(Boolean);
+  for (const f of ['intro.mp4', 'main.mp4']) { try { fs.unlinkSync(path.join(dir, f)); } catch (e) {} }
+  const chapters = sc.steps.map((s, i) => s.chapter ? { t: Math.max(0, Math.floor(I + cues[i].start - 0.3)), label: s.chapter } : null).filter(Boolean);
+  return { chapters, total: T, zooms: wins.length };
 }
 
 /* ── upload + register as DRAFT ─────────────────────────────────── */
@@ -399,8 +553,8 @@ async function make(file) {
   const sc = JSON.parse(fs.readFileSync(file, 'utf8'));
   const dir = path.join(OUT, sc.audience, sc.slug); fs.mkdirSync(dir, { recursive: true });
   console.log(`▶ ${sc.audience}/${sc.slug} — ${sc.title}`);
-  const { cues, total } = narrate(sc, dir);
-  console.log(`   narration ${total}s, ${cues.length} lines`);
+  const { cues, total, intro, outro } = narrate(sc, dir);
+  console.log(`   narration ${total}s, ${cues.length} lines (+ ${NARRATOR}'s intro ${intro.dur}s, outro ${outro.dur}s)`);
   const since = php('echo now()->format("Y-m-d H:i:s");').split('\n').pop();
   /* setup: server-side PHP that creates the demo data the lesson needs (a task, an
      award...) and echoes a JSON object of what it made. teardown gets that object back
@@ -413,7 +567,8 @@ async function make(file) {
   }
   const token = mint(ACCOUNTS[sc.account], RUN_TOKEN);
   if (Object.keys(ctx).length) { let j = JSON.stringify(sc.steps); for (const k of Object.keys(ctx)) j = j.split('{{' + k + '}}').join(String(ctx[k])); sc.steps = JSON.parse(j); }
-  try { await record(sc, cues, total, dir, token); } finally {
+  let zooms = [];
+  try { zooms = await record(sc, cues, total, dir, token); } finally {
     revoke(RUN_TOKEN);
     if (sc.teardown) {
       const out = php('$ctx = json_decode(base64_decode("' + Buffer.from(JSON.stringify(ctx)).toString('base64') + '"), true);\n' + sc.teardown.join('\n'));
@@ -421,8 +576,9 @@ async function make(file) {
     }
   }
   const cl = cleanup(sc, since); if (cl) console.log('   cleanup', cl);
-  const chapters = mix(sc, cues, total, dir);
-  const reg = publishDraft(sc, dir, chapters, total);
+  const m = await mix(sc, cues, total, dir, intro, outro, zooms);
+  const reg = publishDraft(sc, dir, m.chapters, m.total);
+  console.log(`   ${m.zooms} zoom${m.zooms === 1 ? '' : 's'}, ${m.total}s`);
   console.log(`   uploaded, ${reg} (draft), ${(fs.statSync(path.join(dir, 'video.mp4')).size / 1048576).toFixed(1)} MB`);
 }
 

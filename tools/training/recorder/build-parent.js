@@ -212,5 +212,8 @@ sec.teardown = ['DB::table("users")->where("id", 94)->update(["password" => $ctx
   '$h = \\Illuminate\\Support\\Facades\\Schema::hasTable("password_history") ? DB::table("password_history")->where("user_id", 94)->where("created_at", ">=", $ctx["since"])->delete() : 0;',
   'echo "password restored, history:$h";'];
 
+// Titles that do not read after "a quick guide to": what Clara says instead.
+const INTRO_AS = { 'i-dont-see-my-childs-data': "what to do when you don't see your child's data" };
+scripts.forEach((s) => { if (INTRO_AS[s.slug]) s.introAs = INTRO_AS[s.slug]; });
 for (const s of scripts) { delete s.skip; fs.writeFileSync(path.join(dir, s.slug + '.json'), JSON.stringify(s, null, 2)); }
 console.log('wrote', scripts.length, 'parent scripts');

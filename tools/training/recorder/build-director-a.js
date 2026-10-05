@@ -207,5 +207,7 @@ const SKIPPED = {
   'parent-side or no director path found': ['autopay', 'parent-wallet', 'family-ledger', 't4a-receipts', 'missed-chat-emails'],
 };
 
+// Lives in Email settings, which is agency configuration: recorded as the demo agency admin (2026-10-05).
+scripts.forEach((s) => { if (s.slug === "automated-billing-reminders") s.account = "admin"; });
 for (const s of scripts) fs.writeFileSync(path.join(dir, s.slug + '.json'), JSON.stringify(s, null, 2));
 console.log('wrote', scripts.length, 'director scripts (group A);', Object.values(SKIPPED).flat().length, 'skipped');

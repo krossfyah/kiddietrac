@@ -36,6 +36,8 @@ function scrubInPage() {
   function hideRow(node) {
     const start = node.parentElement;
     if (!start || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|TITLE|HEAD)$/.test(start.tagName)) return;
+    // A real person in a dropdown: drop that one option, not the form around it.
+    if (start.tagName === 'OPTION' || start.tagName === 'OPTGROUP') { start.remove(); return; }
     const big = (e) => !e || e === document.body || e === document.documentElement || /^(app|appMain|appSidebar|appShell)$/.test(e.id) ||
       (e.querySelector && e.querySelector('#appMain, #appSidebar, #navLinks')) || e.getBoundingClientRect().height > 360;
     // A card-like ancestor first: hiding only the name leaves the family's balance on show.
