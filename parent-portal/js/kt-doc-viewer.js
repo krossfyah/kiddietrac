@@ -177,9 +177,21 @@
     /* A PDF in a WebView needs canvas, not a frame — see the note above. Decided from
        the MIME type the caller passed (it holds the Blob) and the URL as a fallback,
        because a blob: URL has no extension to read. */
+    /* IN THE APP, DECIDED BY THE BYTES, NOT THE NAME (2026-10-05).
+       Anthony: "viewing signed forms in the forms manager in the mobile apk doesnt show
+       anything." The completed form is served through a signed media link
+       (/api/v1/media/f?expires=…&p=…) with no ".pdf" on the end and no MIME type passed,
+       so this read it as "not a PDF" and framed it — blank in Android's WebView. The same
+       was true of every protected document opened through a signed link.
+
+       So in the app, anything that is not plainly an image is fetched and sniffed: "%PDF-"
+       (or a pdf Content-Type) is drawn with pdf.js, an image is shown as one, and anything
+       else (generated HTML, text) goes in a frame, which the WebView can display. Desktop
+       is unchanged — its iframe shows PDFs natively. */
     var mime = String(opts.mime || '');
-    var looksPdf = /pdf/i.test(mime) || /\.pdf(\?|#|$)/i.test(String(url || ''));
-    var usePdfJs = looksPdf && nativePrintUnavailable();
+    var native = nativePrintUnavailable();
+    var plainImage = !/pdf/i.test(mime) && (isImage(url) || opts.image);
+    var usePdfJs = native && !plainImage;
 
     var inner = usePdfJs
       ? '<div class="ktdv-pdf" data-kt-scroll="1" style="flex:1;overflow:auto;background:#0B1220;padding:14px 12px;">'
@@ -236,8 +248,24 @@
       });
       Promise.race([
         w.fetch(url)
-          .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.arrayBuffer(); })
-          .then(function (buf) { return renderPdfInto(pdfHost, buf); })
+          .then(function (r) {
+            if (!r.ok) { throw new Error('HTTP ' + r.status); }
+            var ct = (r.headers && r.headers.get('content-type')) || mime;
+            return r.arrayBuffer().then(function (buf) { return { buf: buf, ct: ct }; });
+          })
+          .then(function (x) {
+            var head = String.fromCharCode.apply(null, new Uint8Array(x.buf.slice(0, 5)));
+            if (head === '%PDF-' || /pdf/i.test(x.ct)) { return renderPdfInto(pdfHost, x.buf); }
+            if (/^image\//i.test(x.ct)) {
+              var iu = w.URL.createObjectURL(new Blob([x.buf], { type: x.ct }));
+              pdfHost.style.cssText = 'flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;';
+              pdfHost.innerHTML = '<img src="' + esc(iu) + '" alt="' + esc(title) + '" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;">';
+              return;
+            }
+            // Not a PDF and not an image (generated HTML, text): a frame shows it in the web view.
+            pdfHost.style.cssText = 'flex:1;display:flex;background:#fff;';
+            pdfHost.innerHTML = '<iframe src="' + esc(url) + '" title="' + esc(title) + '" style="flex:1;width:100%;border:0;background:#fff;"></iframe>';
+          })
           .then(function () { settled = true; }),
         watchdog,
       ])
