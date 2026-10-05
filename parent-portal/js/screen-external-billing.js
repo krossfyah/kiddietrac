@@ -815,13 +815,19 @@
       + 'border-radius:50%;cursor:pointer;font-size:17px;line-height:1;flex-shrink:0;';
     head.appendChild(x);
 
-    var frame = document.createElement('iframe');
-    frame.style.cssText = 'flex:1;width:100%;border:0;background:#fff;';
+    /* In the app a frame shows a PDF as a blank white page (Android's WebView has no PDF
+       viewer), so the viewer's pdf.js draws it into the sheet instead. */
+    var nativeApp = !!(window.KT && KT.isNativeApp && KT.isNativeApp() && KT.renderDocumentInto);
+    var frame = document.createElement(nativeApp ? 'div' : 'iframe');
+    frame.style.cssText = nativeApp
+      ? 'flex:1;overflow:auto;background:#0B1220;padding:14px 12px;'
+      : 'flex:1;width:100%;border:0;background:#fff;';
     frame.title = title;
-    frame.src = blobUrl;
+    if (nativeApp) { frame.setAttribute('data-kt-scroll', '1'); } else { frame.src = blobUrl; }
 
     shell.appendChild(head); shell.appendChild(frame); ov.appendChild(shell);
     document.body.appendChild(ov);
+    if (nativeApp) { KT.renderDocumentInto(frame, blobUrl, { title: title }); }
 
     function shut() {
       document.removeEventListener('keydown', onKey);

@@ -2324,6 +2324,7 @@
     var parentTo = (r.email || '').trim();
     var agencyTo = (r.form_notify_email || '').trim();
     var formUrl = fileUrl(r.filled_file_url || r.file_url);
+    var nativeApp = !!(window.KT && KT.isNativeApp && KT.isNativeApp() && KT.renderDocumentInto);
     var signature = null;
     var annotated = null;   // {base64, notes} once the reviewer adds anything
 
@@ -2344,7 +2345,9 @@
         + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
       /* header */
       + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:14px;flex:0 0 auto;flex-wrap:wrap;">'
-        + '<div style="min-width:0;flex:1;">'
+        /* flex-basis, so on a phone the title keeps a usable width and the step pills
+           wrap underneath instead of squeezing it to one word per line. */
+        + '<div style="min-width:0;flex:1 1 220px;">'
           + '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">REVIEW &amp; COUNTER-SIGN</div>'
           + '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
             + esc(r.form_title || 'Form') + '</div>'
@@ -2362,8 +2365,12 @@
       /* ── step 1: the form, full size, plus anything the reviewer wants to add ── */
       + '<div id="cs-step1" style="flex:1;display:flex;flex-direction:column;min-height:0;">'
         + (formUrl
-            ? '<iframe id="cs-frame" src="' + esc(formUrl) + '" title="Completed form" '
-              + 'style="flex:1;width:100%;border:0;background:#fff;min-height:0;"></iframe>'
+            ? (nativeApp
+                /* The app's WebView cannot draw a PDF in a frame (a blank panel); the
+                   viewer's pdf.js fills this host instead, after the dialog is built. */
+                ? '<div id="cs-frame" data-kt-scroll="1" style="flex:1;overflow:auto;background:#0B1220;padding:14px 12px;min-height:0;"></div>'
+                : '<iframe id="cs-frame" src="' + esc(formUrl) + '" title="Completed form" '
+                  + 'style="flex:1;width:100%;border:0;background:#fff;min-height:0;"></iframe>')
             : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#64748B;background:#fff;">'
               + 'This form was signed as a read-and-sign notice, so there is no PDF to review.</div>')
         + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E5E7EB;padding:12px 16px;">'
@@ -2454,6 +2461,7 @@
     $('#cs-x').onclick = close;
     $('#cs-cancel').onclick = close;
     if ($('#cs-newtab')) { $('#cs-newtab').onclick = function () { openUrl(formUrl); }; }
+    if (nativeApp && formUrl && $('#cs-frame')) { KT.renderDocumentInto($('#cs-frame'), formUrl, { title: r.form_title || 'Form' }); }
 
     /* EDITING THE DOCUMENT ITSELF, not just adding a note beside it.
 
@@ -2470,7 +2478,11 @@
       b.style.background = '#065F46';
       /* Show the edited copy, so what is reviewed on screen is what gets sent. */
       var fr = $('#cs-frame');
-      if (fr) { fr.src = 'data:application/pdf;base64,' + res.base64; }
+      if (fr && nativeApp) {
+        var bin = atob(res.base64), bytes = new Uint8Array(bin.length);
+        for (var bi = 0; bi < bin.length; bi++) { bytes[bi] = bin.charCodeAt(bi); }
+        KT.renderDocumentInto(fr, bytes.buffer, { title: r.form_title || 'Form' });
+      } else if (fr) { fr.src = 'data:application/pdf;base64,' + res.base64; }
     }
 
     if ($('#cs-annotate')) {

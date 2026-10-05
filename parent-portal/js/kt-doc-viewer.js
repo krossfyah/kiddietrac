@@ -148,7 +148,12 @@
               host.appendChild(canvas);
               var ctx = canvas.getContext('2d');
               ctx.scale(dpr, dpr);
-              return page.render({ canvasContext: ctx, viewport: viewport }).promise;
+              /* ANNOTATIONS ON THE CANVAS. pdf.js by default leaves form-field values for
+                 an HTML layer this viewer does not build, so a filled form that kept its
+                 fields drew with every box EMPTY. ENABLE paints the field appearances
+                 (typed answers, ticks) the way a desktop viewer shows them. */
+              var AM = w.pdfjsLib && w.pdfjsLib.AnnotationMode;
+              return page.render({ canvasContext: ctx, viewport: viewport, annotationMode: AM ? AM.ENABLE : undefined }).promise;
             });
           });
         }(i));
@@ -618,7 +623,166 @@
     }));
   }
 
+  /* ── embedding a document INSIDE another dialog ───────────────────────────
+     The counter-sign review shows the parent's form inside its own two-step dialog,
+     so it cannot hand off to view(). It framed the PDF, which Android's WebView draws
+     as a blank white panel. This fills a host element the same way view() fills its
+     panel: a frame on desktop, pdf.js in the app. `src` is a URL or the PDF's bytes. */
+  function renderDocumentInto(host, src, opts) {
+    opts = opts || {};
+    if (!host) return Promise.resolve();
+    var title = opts.title || 'Document';
+    function frame(u) {
+      host.innerHTML = '<iframe src="' + esc(u) + '" title="' + esc(title) + '" style="flex:1;width:100%;height:100%;border:0;background:#fff;"></iframe>';
+    }
+    if (typeof src === 'string' && !nativePrintUnavailable()) { frame(src); return Promise.resolve(); }
+    host.innerHTML = '<div style="color:#94A3B8;font-size:13px;text-align:center;padding:18px;">Opening the document…</div>';
+    var got = (typeof src === 'string')
+      ? w.fetch(src).then(function (r) {
+          if (!r.ok) { throw new Error('HTTP ' + r.status); }
+          var ct = (r.headers && r.headers.get('content-type')) || '';
+          return r.arrayBuffer().then(function (buf) { return { buf: buf, ct: ct }; });
+        })
+      : Promise.resolve({ buf: src, ct: 'application/pdf' });
+    return got.then(function (x) {
+      var head = String.fromCharCode.apply(null, new Uint8Array(x.buf.slice(0, 5)));
+      if (head === '%PDF-' || /pdf/i.test(x.ct)) { return renderPdfInto(host, x.buf); }
+      if (/^image\//i.test(x.ct)) {
+        var iu = w.URL.createObjectURL(new Blob([x.buf], { type: x.ct }));
+        host.innerHTML = '<img src="' + esc(iu) + '" alt="' + esc(title) + '" style="display:block;margin:0 auto;max-width:100%;border-radius:8px;background:#fff;">';
+        return;
+      }
+      if (typeof src === 'string') { frame(src); }
+    }).catch(function (e) {
+      host.innerHTML = '<div style="max-width:420px;margin:40px auto;background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:13.5px;color:#334155;">'
+        + '<div style="font-weight:800;color:#0F172A;margin-bottom:6px;">This document could not be shown here</div>'
+        + '<div style="color:#64748B;">' + esc((e && e.message) || 'The viewer could not load.') + '</div></div>';
+    });
+  }
+
+  /* ── THE APP'S SAFETY NET for every screen that still opens files the browser way ──
+     Anthony, 2026-10-05: "viewing signed forms in the forms manager in the mobile apk
+     doesnt show anything - check this with all forms viewable in the mobile apk."
+
+     Sixty-odd call sites across twenty-five screens still do one of three things, and in
+     the APK's WebView each of them silently does nothing:
+       1. window.open(url)                       → a stub window; nothing opens.
+       2. var win = window.open(''); … win.location = url / win.document.write(html)
+                                                  → the same stub, written to and discarded.
+       3. a.href = URL.createObjectURL(blob); a.download = name; a.click()
+                                                  → WebView has no download manager; nothing.
+     Rewriting each one is sixty chances to miss one, and the next screen written would
+     bring the pattern back. So in the app only, these three entry points are answered
+     here: our own documents open in the viewer panel (pdf.js for PDFs), a page on another
+     site goes to the in-app browser tab, and a downloaded Blob is shown rather than lost.
+     The browser build is untouched — every patch checks nativePrintUnavailable() first. */
+  (function installNativeNet() {
+    var blobs = {};
+    var origCreate = w.URL && w.URL.createObjectURL;
+    var origRevoke = w.URL && w.URL.revokeObjectURL;
+    if (origCreate && origRevoke) {
+      // Remember the Blob behind each object URL, because callers revoke the URL right
+      // after a.click() — before anything here could fetch it back.
+      w.URL.createObjectURL = function (o) {
+        var u = origCreate.apply(w.URL, arguments);
+        try { if (nativePrintUnavailable() && o instanceof Blob) { blobs[u] = o; } } catch (e) {}
+        return u;
+      };
+      w.URL.revokeObjectURL = function (u) {
+        if (blobs[u]) { w.setTimeout(function () { delete blobs[u]; }, 120000); }
+        return origRevoke.apply(w.URL, arguments);
+      };
+    }
+
+    var VIEWABLE_TYPE = /^(application\/pdf|image\/|text\/)/i;
+
+    function ours(u) {
+      try {
+        var abs = new URL(u, w.location.href);
+        return abs.origin === w.location.origin || /(^|\.)kiddietrac\.com$/i.test(abs.hostname);
+      } catch (e) { return false; }
+    }
+
+    function showBlob(blob, name) {
+      var type = blob.type || '';
+      if (!type || VIEWABLE_TYPE.test(type) || /\.(pdf|png|jpe?g|gif|webp|txt|csv|html?)$/i.test(name || '')) {
+        return viewBlob(blob, { title: name || 'Document', filename: name });
+      }
+      // A spreadsheet or archive: the WebView cannot show it and has nowhere to save it.
+      // Say so, rather than the button appearing to do nothing.
+      if (w.KT && w.KT.toast) {
+        w.KT.toast('📄', 'Open on a computer', (name || 'This file') + ' can only be downloaded from the KiddieTrac website, not inside the app.', '#B45309');
+      }
+      return null;
+    }
+
+    function openNative(url, name) {
+      url = String(url || '');
+      if (!url || url === 'about:blank') return;
+      if (/^blob:/i.test(url)) { return blobs[url] ? showBlob(blobs[url], name) : view(url, { title: name || 'Document' }); }
+      if (/^data:/i.test(url)) { return view(url, { title: name || 'Document', mime: (url.match(/^data:([^;,]+)/i) || [])[1] }); }
+      // mailto:/tel:/sms: — the WebView hands these to the phone when navigated to.
+      if (/^(mailto|tel|sms|geo|intent):/i.test(url)) { w.location.href = url; return; }
+      if (ours(url)) {
+        var abs = new URL(url, w.location.href);
+        // One of the portal's own pages ("open in new tab"): just go there.
+        if (abs.origin === w.location.origin && /(\.html?$|^\/$)/i.test(abs.pathname)) { w.location.href = abs.href; return; }
+        return view(abs.href, { title: name || 'Document' });
+      }
+      openExternally(url);
+    }
+
+    // A window handle answering what the call sites use: location (set, .href, .assign,
+    // .replace), document.write & co. (through docWindow), focus, print, close.
+    function pseudoWindow() {
+      var dw = docWindow({});
+      function go(u) { try { dw.close(); } catch (e) {} openNative(u); }
+      var loc = {};
+      Object.defineProperty(loc, 'href', { get: function () { return 'about:blank'; }, set: go });
+      loc.assign = go; loc.replace = go;
+      loc.toString = function () { return 'about:blank'; };
+      Object.defineProperty(dw, 'location', { get: function () { return loc; }, set: go });
+      dw.opener = null;
+      return dw;
+    }
+
+    var origOpen = w.open;
+    w.open = function (url) {
+      if (!nativePrintUnavailable()) { return origOpen.apply(w, arguments); }
+      var u = url == null ? '' : String(url);
+      if (u && u !== 'about:blank') { openNative(u); }
+      return pseudoWindow();
+    };
+
+    function handleAnchor(a) {
+      var href = a.href || a.getAttribute('href') || '';
+      if (!href) return false;
+      var name = a.getAttribute('download') || '';
+      if (/^(blob|data):/i.test(href) || ours(href)) { openNative(href, name); return true; }
+      return false;
+    }
+
+    // Programmatic downloads: a.download = …; a.click().
+    var AP = w.HTMLAnchorElement && w.HTMLAnchorElement.prototype;
+    if (AP && AP.click) {
+      var origClick = AP.click;
+      AP.click = function () {
+        if (nativePrintUnavailable() && this.hasAttribute('download') && handleAnchor(this)) return;
+        return origClick.apply(this, arguments);
+      };
+    }
+    // …and real taps on a download link, which the viewer delegate above leaves alone.
+    d.addEventListener('click', function (e) {
+      if (!nativePrintUnavailable() || e.defaultPrevented) return;
+      var a = e.target && e.target.closest ? e.target.closest('a[download]') : null;
+      if (!a || (a.closest && a.closest('.kt-doc-viewer'))) return;
+      if (handleAnchor(a)) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+  }());
+
   w.KT.viewDocument = view;
+  w.KT.renderDocumentInto = renderDocumentInto;
+  w.KT.isNativeApp = nativePrintUnavailable;
   w.KT.viewBlob = viewBlob;
   w.KT.viewHtml = viewHtml;
   w.KT.docWindow = docWindow;
