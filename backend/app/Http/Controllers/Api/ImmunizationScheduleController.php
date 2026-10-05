@@ -232,6 +232,11 @@ final class ImmunizationScheduleController extends Controller
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
+            /* The caller's centres, not the whole agency (2026-10-05). childStatus()
+               below refuses a child outside them, so for a centre director the first
+               child of another centre aborted the whole report with an empty 403 —
+               "No enrolled children" on a screen that should list ten. */
+            ->whereIn('c.id', $this->visibleCentreIds($request) ?: [0])
             ->whereNull('ch.deleted_at')
             ->where('ch.enrollment_status', 'enrolled')
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth',

@@ -58,6 +58,41 @@ final class AdminController extends Controller
             ->value('agency_id');
     }
 
+    /**
+     * WHO A READ-ONLY LIST MAY COVER (2026-10-05).
+     *
+     * listCentres / listFamilies / listAgencyChildren / listUsers were agency_admin
+     * only, and every director screen built on them (closures, conferences, background
+     * checks, vacation holds, billing schedule, expenses, tuition plans, report cards…)
+     * met a 403 and showed an empty dropdown. Anthony: open them to directors, own
+     * centre only.
+     *
+     * getAgencyId() is deliberately NOT widened: it only knows agency admins, and
+     * every other method here relies on that. An agency-wide caller keeps exactly what
+     * it had. A centre director gets the agency of their own director assignment and
+     * the centres Visibility gives them — CENTRE_SCOPED, intersected with the agency,
+     * failing closed to [].
+     *
+     * @return array{0:?int,1:array<int,int>,2:bool} [agencyId, centreIds, agencyWide]
+     */
+    private function listScope(Request $request): array
+    {
+        $agencyId = $this->getAgencyId($request);
+        if ($agencyId) {
+            return [$agencyId, $this->getCentreIds($agencyId), true];
+        }
+        $user = $request->user();
+        $dir = DB::table('role_assignments')->where('user_id', $user->id)
+            ->where('role', 'centre_director')->where('active', true)
+            ->whereNotNull('agency_id')->pluck('agency_id')->map(fn ($v) => (int) $v)->unique()->values();
+        if ($dir->isEmpty()) {
+            return [null, [], false];
+        }
+        $active = (int) $request->header('X-Active-Agency-Id');
+        $agency = ($active && $dir->contains($active)) ? $active : (int) $dir->first();
+        return [$agency, \App\Support\Visibility::centreIds($agency, $user), false];
+    }
+
     private function getCentreIds(int $agencyId): array
     {
         return DB::table('centres')
@@ -238,11 +273,12 @@ final class AdminController extends Controller
 
     public function listCentres(Request $request): JsonResponse
     {
-        $agencyId = $this->getAgencyId($request);
+        [$agencyId, $scopeIds, $wide] = $this->listScope($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $centres = DB::table('centres')
             ->where('agency_id', $agencyId)
+            ->when(! $wide, fn ($q) => $q->whereIn('id', $scopeIds ?: [0]))   // a director: their own centres
             ->whereNull('deleted_at')
             ->orderBy('name')
             ->get();
@@ -1549,9 +1585,8 @@ final class AdminController extends Controller
      */
     public function listAgencyChildren(Request $request)
     {
-        $agencyId = $this->getAgencyId($request);
+        [$agencyId, $centreIds] = $this->listScope($request);   // a director: own centres only
         if (!$agencyId) return response()->json(['children' => []]);
-        $centreIds = $this->getCentreIds($agencyId);
         if (empty($centreIds)) return response()->json(['children' => []]);
 
         $q = DB::table('children as c')
@@ -1661,10 +1696,13 @@ final class AdminController extends Controller
             ->where('role', 'platform_admin')->where('active', true)->exists();
         $allMode = $isPlatform && strtolower(trim((string) $request->header('X-Active-Agency-Id'))) === 'all';
 
-        $agencyId = $allMode ? null : $this->getAgencyId($request);
+        $wide = true;
+        if ($allMode) {
+            $agencyId = null; $centreIds = [];
+        } else {
+            [$agencyId, $centreIds, $wide] = $this->listScope($request);
+        }
         if (!$allMode && !$agencyId) return response()->json(['message' => 'No agency access'], 403);
-
-        $centreIds = $allMode ? [] : $this->getCentreIds($agencyId);
         $roleFilter = $request->input('role');
         $searchQuery = $request->input('q');
 
@@ -1683,14 +1721,18 @@ final class AdminController extends Controller
 
         $userIdsQuery = DB::table('role_assignments')
             ->when(! $deactivated, function ($q) { $q->where('active', true); })
-            ->when(! $allMode, function ($q) use ($agencyId, $centreIds) {
+            ->when(! $allMode && $wide, function ($q) use ($agencyId, $centreIds) {
                 $q->where(function ($qq) use ($agencyId, $centreIds) {
                     $qq->where('agency_id', $agencyId);
                     if (!empty($centreIds)) {
                         $qq->orWhereIn('centre_id', $centreIds);
                     }
                 });
-            });
+            })
+            /* A centre director: people assigned to THEIR centres only. Not agency_id —
+               every educator's row carries the agency id too, so matching on it would
+               list every centre's staff. */
+            ->when(! $allMode && ! $wide, fn ($q) => $q->whereIn('centre_id', $centreIds ?: [0]));
 
         if ($roleFilter) {
             $userIdsQuery->where('role', $roleFilter);
@@ -1823,6 +1865,29 @@ final class AdminController extends Controller
                human can judge.
 
            Batched for the page, like the comms lookup below it. */
+        /* INSIDE THE TENANT (2026-10-05). The sibling pool, role names and guardian links
+           below were read platform-wide, so an agency admin saw the email and username of
+           a same-named person in ANOTHER agency, the roles they hold there, and the name
+           of a family that left another agency. Bounded to this agency's people now; a
+           centre director's sibling search to the people they can already see. The
+           platform "All agencies" view is the only one that still spans tenants. */
+        $agencyCentres = $allMode ? [] : $this->getCentreIds($agencyId);
+        $poolIds = null;
+        if (! $allMode) {
+            if ($wide) {
+                $poolIds = array_values(array_unique(array_merge(
+                    DB::table('role_assignments')->where(function ($w) use ($agencyId, $agencyCentres) {
+                        $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $agencyCentres ?: [0]);
+                    })->pluck('user_id')->all(),
+                    DB::table('guardians')->join('families', 'families.id', '=', 'guardians.family_id')
+                        ->whereIn('families.centre_id', $agencyCentres ?: [0])
+                        ->whereNotNull('guardians.user_id')->pluck('guardians.user_id')->all()
+                )));
+            } else {
+                $poolIds = $userIds;
+            }
+        }
+
         $siblings = [];
         try {
             if ($userIds) {
@@ -1834,6 +1899,7 @@ final class AdminController extends Controller
                     ->filter()->unique()->all();
 
                 $pool = DB::table('users')->whereNull('deleted_at')->where('status', '!=', 'deactivated')
+                    ->when($poolIds !== null, fn ($q) => $q->whereIn('id', $poolIds ?: [0]))
                     ->where(function ($w) use ($emails, $names) {
                         if ($emails) { $w->whereIn(DB::raw('LOWER(TRIM(email))'), $emails); }
                         if ($names) {
@@ -1892,6 +1958,11 @@ final class AdminController extends Controller
         $allAssignments = DB::table('role_assignments')
             ->whereIn('user_id', $users->pluck('id'))
             ->when(! $deactivated, function ($q) { $q->where('active', true); })
+            ->when(! $allMode, function ($q) use ($agencyId, $agencyCentres) {   // this agency's roles only
+                $q->where(function ($w) use ($agencyId, $agencyCentres) {
+                    $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $agencyCentres ?: [0]);
+                });
+            })
             ->get()
             ->groupBy('user_id');
 
@@ -1902,6 +1973,7 @@ final class AdminController extends Controller
         $allGuardianLinks = DB::table('guardians')
             ->join('families', 'families.id', '=', 'guardians.family_id')
             ->whereIn('guardians.user_id', $users->pluck('id'))
+            ->when(! $allMode, fn ($q) => $q->whereIn('families.centre_id', $agencyCentres ?: [0]))   // this agency's families only
             ->select(
                 'guardians.user_id',
                 'families.centre_id',
@@ -2782,10 +2854,9 @@ final class AdminController extends Controller
 
     public function listFamilies(Request $request)
     {
-        $agencyId = $this->getAgencyId($request);
+        [$agencyId, $centreIds] = $this->listScope($request);   // a director: own centres only
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
-        $centreIds = $this->getCentreIds($agencyId);
         $centreFilter = $request->input('centre_id');
 
         $query = DB::table('families')

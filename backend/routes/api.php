@@ -1591,7 +1591,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::put ('/agency-mail',      [AdminController::class, 'saveAgencyMailConfig']);
         Route::post('/agency-mail/test', [AdminController::class, 'testAgencyMail']);
 
-        Route::get('/centres', [AdminController::class, 'listCentres']);
+        // Route::get('/centres', -> moved to the director-capable admin group (2026-10-05)
         Route::post('/centres/{centre}/coords', [AdminController::class, 'saveCentreCoords']);
         // Rooms of one centre (with educators + headcount) — used by the family wizard.
         Route::get('/centres/{centre}/rooms', [AdminController::class, 'centreRooms']);
@@ -1612,7 +1612,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p3.4: per-centre branding logo upload
         Route::post('/centres/{centre}/logo', [AdminController::class, 'uploadCentreLogo']);
     
-        Route::get('/users', [AdminController::class, 'listUsers']);
+        // Route::get('/users', -> moved to the director-capable admin group (2026-10-05)
         Route::get('/username-available', [AdminController::class, 'usernameAvailable']);
         Route::post('/users', [AdminController::class, 'createUser']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
@@ -1644,7 +1644,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // v22p3.5: reopen onboarding wizard for a user
         Route::post('/users/{user}/reopen-onboarding', [AdminController::class, 'reopenOnboarding']);
     
-        Route::get('/families', [AdminController::class, 'listFamilies']);
+        // Route::get('/families', -> moved to the director-capable admin group (2026-10-05)
         // v22p9: sibling discount tiers (per-agency)
         Route::get('/sibling-discounts', [\App\Http\Controllers\Api\SiblingDiscountController::class, 'show']);
         // v22p8 Phase A: custom roles CRUD
@@ -1662,7 +1662,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/presence', [AdminController::class, 'presence']);
         // v22p47: compliance dashboard + agency-wide children list (+ CSV)
         Route::get('/compliance', [AdminController::class, 'compliance']);
-        Route::get('/children', [AdminController::class, 'listAgencyChildren']);
+        // Route::get('/children', -> moved to the director-capable admin group (2026-10-05)
         // v22p42: bulk invoice generation by centre (extends director endpoint with centre_id arg)
         Route::post('/invoices/generate-batch', [\App\Http\Controllers\Api\InvoiceController::class, 'generateBatchByCentre']);
         // #12: bulk-invoice kebab — list a centre's invoices for a period + email them to families.
@@ -1780,6 +1780,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // SearchController::resolveAgencyId now walks director.centre_id ->
     // centres.agency_id so directors get correctly scoped results.
     Route::middleware('role:agency_admin,centre_director,platform_admin')->prefix('admin')->group(function () {
+        /* READ-ONLY LISTS a centre director may use (2026-10-05). AdminController::listScope()
+           confines a director to their own centres; agency admins see what they always did.
+           Writes on these resources stay in the agency_admin group. */
+        Route::get('/centres', [AdminController::class, 'listCentres']);
+        Route::get('/users', [AdminController::class, 'listUsers']);
+        Route::get('/families', [AdminController::class, 'listFamilies']);
+        Route::get('/children', [AdminController::class, 'listAgencyChildren']);
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
         // v22p47: audit trail — agency admins (whole agency) + directors (their centre)
         Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
