@@ -2344,7 +2344,11 @@ class ManagedFormController extends Controller
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
-                if ($absPdf) $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
+                /* Checked again when the queued job RUNS, not only when it was queued: the
+                   mail queue runs once a minute, and a file removed in between (a withdrawn
+                   or cleaned-up signoff) threw "Unable to open path" and lost the whole
+                   email (support tickets #113, #114). Without the file, send without it. */
+                if ($absPdf && is_file($absPdf)) $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
             });
             // Stamped only once the send has actually returned, so the Completed tab
