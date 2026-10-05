@@ -93,6 +93,8 @@ final class ComplianceController extends Controller
             ->join('families as f', 'f.id', '=', 'e.family_id')
             ->join('centres as c', 'c.id', '=', DB::raw('COALESCE(e.centre_id, f.centre_id)'))
             ->where('c.agency_id', $agencyId)
+            // The caller's centres (also feeds the PDF and CSV): a director's own (2026-10-05).
+            ->whereIn('c.id', \App\Support\Visibility::centreIds((int) $agencyId, $request->user()) ?: [0])
             ->where('e.enrolled_from', '<=', $end->toDateString())
             ->where(function ($w) use ($start) {
                 $w->whereNull('e.enrolled_to')->orWhere('e.enrolled_to', '>=', $start->toDateString());

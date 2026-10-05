@@ -328,6 +328,7 @@ final class OperationsController extends Controller
         $rows = DB::table('field_trips as ft')
             ->join('centres as c', 'c.id', '=', 'ft.centre_id')
             ->where('ft.agency_id', $agencyId)
+            ->whereIn('c.id', $this->visibleCentreIds($request) ?: [0])   // a director: their own centres' trips (2026-10-05)
             ->orderByDesc('ft.trip_date')
             ->select('ft.*', 'c.name as centre_name')
             ->limit(100)

@@ -27,6 +27,8 @@ final class PayrollController extends Controller
             ->join('users as u', 'u.id', '=', 'tp.user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'tp.centre_id')
             ->where('c.agency_id', $agencyId)
+            // The caller's centres: a centre director's payroll is their own staff's (2026-10-05).
+            ->whereIn('c.id', \App\Support\Visibility::centreIds((int) $agencyId, $request->user()) ?: [0])
             ->whereNotNull('tp.punched_out_at')
             ->whereBetween('tp.punched_in_at', [$from, $to])
             ->select(
