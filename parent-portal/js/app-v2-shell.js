@@ -229,7 +229,7 @@
       var _hccAg_v = parseInt(sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id') || '0', 10);
       var hccEnabled_v = (!_hccAg_v) || _hccAg_v === 2 || _hccAg_v === 6 || isPlatformAdmin_v22p34;
       var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }, { hash: 'admin-centres', label: 'Centres', icon: '🏫' }, { hash: 'provider-day', label: 'Daily Overview', icon: '🗓️' }, { hash: 'provider-map', label: 'Provider map', icon: '🗺️' }];
-      if (!isPlatformAdmin_v22p34) overviewItems.push({ hash: 'agencies', label: 'Agencies', icon: '🏢' });
+      if (!isPlatformAdmin_v22p34) overviewItems.push({ hash: 'agencies', label: 'My agency', icon: '🏢' });   // an agency admin sees only their own (2026-10-05)
       return [
         { label: 'Overview', items: overviewItems },
         { label: 'Operations', items: [

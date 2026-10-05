@@ -719,7 +719,9 @@
     var TABS = EMAIL_TABS.filter(function (t) {
       return !t.requiresEl || (main && main.querySelector('#' + t.id));
     });
-    var root = main.firstElementChild;
+    /* NOT firstElementChild: that is the top bar, so its contents were moved into hidden
+       panes and the tab strip sat inside the top bar on every later screen (2026-10-05). */
+    var root = Array.prototype.find.call(main.children, function (c) { return c.id !== 'kt-topbar' && !(c.classList && c.classList.contains('kt-topbar')); });
     if (!root || root.getAttribute('data-kt-tabbed')) { return; }
     root.setAttribute('data-kt-tabbed', '1');
     var hero = root.querySelector('.kt-page-hero');
