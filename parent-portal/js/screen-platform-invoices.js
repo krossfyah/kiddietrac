@@ -624,14 +624,15 @@
       }
 
       main.querySelectorAll('button[data-act]').forEach(function (b) {
-        b.addEventListener('click', function () {
+        b.addEventListener('click', async function () {
           var id = b.getAttribute('data-id');
           var act = b.getAttribute('data-act');
 
           /* Void and mark-paid change what is owed, so they are confirmed. Issuing
-             only stamps a date and is reversible by voiding. */
-          if (act === 'void' && !window.confirm('Void this invoice? It stays on record but stops counting as owed.')) { return; }
-          if (act === 'paid' && !window.confirm('Mark this invoice paid in full?')) { return; }
+             only stamps a date and is reversible by voiding. KiddieTrac dialogs, not the
+             browser's: those blocked the page and looked like a different product. */
+          if (act === 'void' && !(await KT.confirm({ title: 'Void this invoice?', description: 'It stays on record but stops counting as owed.', okLabel: 'Void invoice', tone: 'danger' }))) { return; }
+          if (act === 'paid' && !(await KT.confirm({ title: 'Mark this invoice paid in full?', description: 'The balance is cleared and it stops counting as owed.', okLabel: 'Mark paid' }))) { return; }
 
           var row = byId[String(id)] || {};
 
@@ -639,11 +640,12 @@
             /* The address is NEVER inferred. It is prefilled from the agency contact so
                this is one keystroke, but a person reads it before a customer is emailed —
                a wrong address here bills the wrong company. */
-            var to = window.prompt(
-              'Email invoice ' + (row.number || '') + ' to:\n\n'
-                + 'The PDF is attached. A draft becomes issued once it is sent.',
-              row.agency_email || ''
-            );
+            var to = await KT.prompt({
+              title: 'Email invoice ' + (row.number || ''),
+              description: 'The PDF is attached. A draft becomes issued once it is sent.',
+              fields: [{ key: 'to', label: 'Send to', type: 'email', value: row.agency_email || '' }],
+              okLabel: 'Send invoice',
+            });
             if (to === null) { return; }
             to = to.trim();
             if (!to) { window.alert('No address given — nothing was sent.'); return; }
@@ -659,9 +661,20 @@
 
           if (act === 'edit') {
             var cur = (Number(row.subtotal_cents) || Number(row.amount_cents) || 0) / 100;
-            var amt = window.prompt('Amount BEFORE tax for ' + (row.number || 'this invoice')
-              + ' (' + (row.currency || 'CAD') + '):', String(cur.toFixed(2)));
-            if (amt === null) { return; }
+            /* One dialog for what used to be four prompts in a row. */
+            var ed = await KT.prompt({
+              title: 'Edit ' + (row.number || 'this invoice'),
+              description: 'The tax and total are recalculated from these.',
+              fields: [
+                { key: 'amount', label: 'Amount before tax (' + (row.currency || 'CAD') + ')', value: String(cur.toFixed(2)) },
+                { key: 'due', label: 'Due date (YYYY-MM-DD), or blank for none', type: 'date', value: row.due_at ? String(row.due_at).slice(0, 10) : '' },
+                { key: 'rate', label: 'Tax rate % (0 for none)', value: String(((Number(row.tax_rate_bps) || 0) / 100).toFixed(2)) },
+                { key: 'label', label: 'What the tax is called on the invoice', placeholder: 'HST', value: row.tax_label || 'HST' },
+              ],
+              okLabel: 'Save changes',
+            });
+            if (ed === null) { return; }
+            var amt = ed.amount;
             /* Strip currency symbols and thousands separators before validating —
                typing "$149.00" is normal and must not be rejected as non-numeric. */
             var clean = String(amt).replace(/[^0-9.\-]/g, '');
@@ -669,22 +682,18 @@
               window.alert('That is not a valid amount — nothing was changed.');
               return;
             }
-            var dd = window.prompt('Due date (YYYY-MM-DD), or blank for none:', row.due_at || '');
-            if (dd === null) { return; }
+            var dd = String(ed.due || '');
             dd = dd.trim();
             if (dd && !/^\d{4}-\d{2}-\d{2}$/.test(dd)) {
               window.alert('Due date must look like 2026-09-01 — nothing was changed.');
               return;
             }
             b.disabled = true;
-            var rate = window.prompt('Tax rate % (0 for none):',
-              String(((Number(row.tax_rate_bps) || 0) / 100).toFixed(2)));
-            if (rate === null) { b.disabled = false; return; }
+            var rate = ed.rate;
             var bps = Math.round((parseFloat(String(rate).replace(/[^0-9.\-]/g, '')) || 0) * 100);
             var taxLabel = row.tax_label || '';
             if (bps > 0) {
-              taxLabel = window.prompt('What is that tax called on the invoice?', taxLabel || 'HST');
-              if (taxLabel === null) { b.disabled = false; return; }
+              taxLabel = String(ed.label || '');
               taxLabel = taxLabel.trim();
               if (!taxLabel) {
                 b.disabled = false;
@@ -705,10 +714,13 @@
           }
 
           if (act === 'delete') {
-            if (!window.confirm('Delete draft ' + (row.number || '') + ' permanently?\n\n'
-              + 'This removes it entirely. Only a draft that was never emailed can be '
-              + 'deleted — anything a customer has seen must be voided instead, so the '
-              + 'record of it survives.')) { return; }
+            if (!(await KT.confirm({
+              title: 'Delete draft ' + (row.number || '') + ' permanently?',
+              description: 'This removes it entirely. Only a draft that was never emailed can be '
+                + 'deleted — anything a customer has seen must be voided instead, so the '
+                + 'record of it survives.',
+              okLabel: 'Delete draft', tone: 'danger',
+            }))) { return; }
             b.disabled = true;
             api('/platform/invoices/' + id, 'DELETE')
               .then(function () { render(main); })

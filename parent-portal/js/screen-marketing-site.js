@@ -352,7 +352,7 @@
     var add = host.querySelector('#ws-sub-add');
     if (add) {
       add.addEventListener('click', async function () {
-        var email = window.prompt('Email address to add:');
+        var email = await KT.prompt({ title: 'Add a subscriber', description: 'This address is added to the website mailing list.', placeholder: 'name@example.com', type: 'email', okLabel: 'Add subscriber' });
         if (!email) { return; }
         try {
           await subsApi('/platform/site-subscribers', { method: 'POST', body: JSON.stringify({ email: email.trim() }) });
@@ -450,9 +450,18 @@
           setCount(leads.length);
         }).catch(function () { del.disabled = false; window.alert('Delete failed'); });
       });
-      if (edt) edt.addEventListener('click', function () {
-        var nn = window.prompt('Subscriber name:', row.getAttribute('data-name') || ''); if (nn === null) return;
-        var aa = window.prompt('Agency / centre:', row.getAttribute('data-agency') || ''); if (aa === null) return;
+      if (edt) edt.addEventListener('click', async function () {
+        // One dialog for what used to be two prompts in a row.
+        var v = await KT.prompt({
+          title: 'Edit subscriber', description: email,
+          fields: [
+            { key: 'name', label: 'Subscriber name', value: row.getAttribute('data-name') || '' },
+            { key: 'agency', label: 'Agency / centre', value: row.getAttribute('data-agency') || '' },
+          ],
+          okLabel: 'Save',
+        });
+        if (v === null) return;
+        var nn = String(v.name || ''), aa = String(v.agency || '');
         nn = nn.trim(); aa = aa.trim(); edt.disabled = true;
         Api.post('/platform/marketing-site/leads/update', { email: email, at: at, name: nn, agency: aa }).then(function () {
           row.querySelector('.cellName').textContent = nn || '—'; row.querySelector('.cellAgency').textContent = aa || '—';

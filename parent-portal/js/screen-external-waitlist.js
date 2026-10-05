@@ -42,15 +42,15 @@
   function delEntry(container, id) {
     Api.delete('/agency/waitlist/' + id).then(function () { load(container); if (KT.toast) KT.toast('🗑', 'Deleted', 'Waitlist entry removed.', '#64748B'); }).catch(function () {});
   }
-  function enrollLead(container, e) {
+  async function enrollLead(container, e) {
     if (!e) return;
     if (e.status === 'Enrolled') { if (KT.toast) KT.toast('ℹ️', 'Already enrolled', 'This lead is already enrolled.', '#64748B'); return; }
     var who = e.parent_name || 'this parent';
-    if (!window.confirm('Enrol ' + who + '?\n\nThis creates a family' + (e.child_name ? ' and child (' + e.child_name + ')' : '') + ' in KiddieTrac and starts the enrolment process.')) return;
-    Api.post('/agency/waitlist/' + e.id + '/enroll', {}).then(function (r) {
+    if (!(await KT.confirm({ title: 'Enrol ' + who + '?', description: 'This creates a family' + (e.child_name ? ' and child (' + e.child_name + ')' : '') + ' in KiddieTrac and starts the enrolment process.', okLabel: 'Enrol' }))) return;
+    Api.post('/agency/waitlist/' + e.id + '/enroll', {}).then(async function (r) {
       load(container);
       if (KT.toast) KT.toast('🎓', 'Enrolled', 'Family created — enrolment started.', '#16A34A');
-      if (r && r.family_id && window.confirm('Family created. Open the Families list now?')) { location.hash = '#families'; }
+      if (r && r.family_id && await KT.confirm({ title: 'Family created', description: 'Open the Families list now?', okLabel: 'Open Families', cancelLabel: 'Stay here' })) { location.hash = '#families'; }
     }).catch(function (err) { if (KT.toast) KT.toast('⚠️', 'Could not enrol', (err && err.message) || 'Error.', '#DC2626'); });
   }
   function openReachOut(container, e) {
@@ -92,7 +92,7 @@
       { label: '✏️  Edit', fn: function () { openForm(container, e); } },
       { label: '✅  Approve', fn: function () { setStatus(container, e.id, 'Approved'); } },
       { label: '🚫  Decline', fn: function () { setStatus(container, e.id, 'Declined'); } },
-      { label: '🗑  Delete', danger: true, fn: function () { if (window.confirm('Delete this waitlist entry?')) delEntry(container, e.id); } }
+      { label: '🗑  Delete', danger: true, fn: async function () { if (await KT.confirm({ title: 'Delete this waitlist entry?', description: 'It is removed from the waitlist and cannot be recovered.', okLabel: 'Delete', tone: 'danger' })) delEntry(container, e.id); } }
     ];
     menu.innerHTML = items.map(function (it, i) { return '<div class="wl-mi" data-i="' + i + '" style="padding:10px 14px;cursor:pointer;font-weight:600;color:' + (it.danger ? '#DC2626' : '#334155') + ';' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">' + it.label + '</div>'; }).join('');
     document.body.appendChild(menu);
@@ -206,7 +206,7 @@
           else if (act === 'enroll') enrollLead(container, e);
           else if (act === 'approve') setStatus(container, e.id, 'Approved');
           else if (act === 'decline') setStatus(container, e.id, 'Declined');
-          else if (act === 'delete') { if (window.confirm('Delete this waitlist entry?')) delEntry(container, e.id); }
+          else if (act === 'delete') { KT.confirm({ title: 'Delete this waitlist entry?', description: 'It is removed from the waitlist and cannot be recovered.', okLabel: 'Delete', tone: 'danger' }).then(function (ok) { if (ok) delEntry(container, e.id); }); }
         });
       });
     }).catch(function (e) { body.innerHTML = '<div class="kt-card" style="color:#DC2626;padding:24px;text-align:center;">Could not load: ' + esc(e.message || 'error') + '</div>'; });

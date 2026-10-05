@@ -698,8 +698,12 @@
     toolbar.appendChild(divider());
 
     // ── Link + image ──────────────────────────────────────────────
-    toolbar.appendChild(btn('🔗', 'Insert link', function () {
-      var url = prompt('Link URL (https://…):');
+    toolbar.appendChild(btn('🔗', 'Insert link', async function () {
+      // A KiddieTrac dialog takes focus: keep the selection and put it back before linking.
+      var sel = window.getSelection(), range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+      var url = await KT.prompt({ title: 'Insert a link', description: 'The selected text becomes a link to this address.', placeholder: 'https://…', type: 'url', okLabel: 'Insert link' });
+      editor.focus();
+      if (range) { sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
       if (url) exec('createLink', url);
     }));
     toolbar.appendChild(btn('🚫🔗', 'Remove link', function () { exec('unlink'); }));

@@ -268,8 +268,20 @@
     body.querySelector('#et-size').addEventListener('change', function (e) { cmd('fontSize', e.target.value); });
     body.querySelector('#et-color').addEventListener('input', function (e) { cmd('foreColor', e.target.value); });
     body.querySelector('#et-clear').addEventListener('click', function () { cmd('removeFormat'); });
-    body.querySelector('#et-link').addEventListener('click', function () { var u = prompt('Link URL (https://…)'); if (u) cmd('createLink', u); });
-    body.querySelector('#et-img').addEventListener('click', function () { var u = prompt('Image URL (https://…)'); if (u) cmd('insertImage', u); });
+    // A KiddieTrac dialog takes focus, so the editor's selection is kept and put back
+    // before the link or image goes in — otherwise it would land in the wrong place.
+    function keepSel() { var s = window.getSelection(); return s && s.rangeCount ? s.getRangeAt(0).cloneRange() : null; }
+    function restoreSel(r) { focusField(); if (!r) return; var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+    body.querySelector('#et-link').addEventListener('click', async function () {
+      var r = keepSel();
+      var u = await KT.prompt({ title: 'Insert a link', description: 'The selected text becomes a link to this address.', placeholder: 'https://…', type: 'url', okLabel: 'Insert link' });
+      restoreSel(r); if (u) cmd('createLink', u);
+    });
+    body.querySelector('#et-img').addEventListener('click', async function () {
+      var r = keepSel();
+      var u = await KT.prompt({ title: 'Insert an image', description: 'The image at this address is placed in the email.', placeholder: 'https://…', type: 'url', okLabel: 'Insert image' });
+      restoreSel(r); if (u) cmd('insertImage', u);
+    });
     body.querySelectorAll('.et-tag').forEach(function (btn) {
       btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
       btn.addEventListener('click', function () { insertTag(btn.getAttribute('data-tag')); });

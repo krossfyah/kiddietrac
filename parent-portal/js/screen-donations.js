@@ -255,7 +255,7 @@
     body.querySelectorAll('[data-copy]').forEach(function (b) {
       b.onclick = function () {
         var url = b.getAttribute('data-copy');
-        (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function () { toast('Link copied', 'success'); }, function () { window.prompt('Copy this link', url); });
+        (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(function () { toast('Link copied', 'success'); }, function () { KT.prompt({ title: 'Copy this link', description: 'Your browser did not allow copying automatically — select the link and copy it.', fields: [{ key: 'url', label: 'Donation link', value: url }], okLabel: 'Done' }); });
       };
     });
   }

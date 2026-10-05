@@ -348,7 +348,10 @@
       </div>
     </div>`;
     main.querySelectorAll('button[data-decide]').forEach(b => b.onclick = async () => {
-      const credit = b.dataset.action === 'approved' ? prompt('Credit amount (or leave blank for auto):', '') : null;
+      // As before, closing this dialog still approves with an automatic credit.
+      const credit = b.dataset.action === 'approved'
+        ? await KT.prompt({ title: 'Approve vacation hold', description: 'Enter a credit amount for the family, or leave it blank to calculate it automatically.', placeholder: 'Credit amount (blank = automatic)', okLabel: 'Approve' })
+        : null;
       await Api.patch(`/billing/vacation-holds/${b.dataset.decide}`, { status: b.dataset.action, credit_amount: credit ? parseFloat(credit) : null });
       renderVacationHolds(main);
     });
@@ -427,10 +430,20 @@
         </table>
       </div>
     </div>`;
-    document.getElementById('ti-new').onclick = () => {
-      const eff = prompt('Effective date (YYYY-MM-DD)?');
-      const amount = prompt('Amount (number)?');
-      const type = prompt('Type? "percent" or "flat"', 'percent');
+    document.getElementById('ti-new').onclick = async () => {
+      // One dialog for what used to be three prompts in a row.
+      const v = await KT.prompt({
+        title: 'Schedule a tuition increase',
+        description: 'Families are told before it takes effect; their tuition changes from that date.',
+        fields: [
+          { key: 'eff', label: 'Effective date', type: 'date' },
+          { key: 'amount', label: 'Amount (number)', type: 'number', step: 'any' },
+          { key: 'type', label: 'Type: "percent" or "flat"', value: 'percent' },
+        ],
+        okLabel: 'Schedule increase',
+      });
+      if (!v) return;
+      const eff = v.eff, amount = v.amount, type = v.type;
       if (!eff || !amount) return;
       Api.post('/billing/tuition-increases', {
         effective_date: eff, amount: parseFloat(amount), increase_type: type || 'percent',
@@ -464,10 +477,20 @@
         </table>
       </div>
     </div>`;
-    document.getElementById('re-new').onclick = () => {
-      const name = prompt('Campaign name?', 'Fall 2026 re-enrolment');
-      const term = prompt('Target term?', 'Fall 2026');
-      const deadline = prompt('Deadline (YYYY-MM-DD)?');
+    document.getElementById('re-new').onclick = async () => {
+      // One dialog for what used to be three prompts in a row.
+      const v = await KT.prompt({
+        title: 'Launch a re-enrolment campaign',
+        description: 'Every guardian is notified and asked to confirm next term in the portal.',
+        fields: [
+          { key: 'name', label: 'Campaign name', value: 'Fall 2026 re-enrolment' },
+          { key: 'term', label: 'Target term', value: 'Fall 2026' },
+          { key: 'deadline', label: 'Deadline', type: 'date' },
+        ],
+        okLabel: 'Launch campaign',
+      });
+      if (!v) return;
+      const name = v.name, term = v.term, deadline = v.deadline;
       if (!name || !term || !deadline) return;
       Api.post('/engagement/reenrollment', { campaign_name: name, target_term: term, deadline })
         .then(r => { alert(`Invited ${r.invited} children`); renderReenrollment(main); });

@@ -595,11 +595,16 @@
     const rte = $('#kt-rte', mount);
     $('#kt-rte-tb', mount).querySelectorAll('button[data-cmd]').forEach((b) => {
       b.addEventListener('mousedown', (e) => e.preventDefault()); // keep selection/focus
-      b.addEventListener('click', () => {
+      b.addEventListener('click', async () => {
         const cmd = b.getAttribute('data-cmd');
         rte.focus();
         if (cmd === 'createLink') {
-          const url = window.prompt('Link URL (https://…)');
+          // A KiddieTrac dialog takes focus: keep the selection and put it back before linking.
+          let sel = window.getSelection();
+          const range = sel && sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+          const url = await KT.prompt({ title: 'Insert a link', description: 'The selected text becomes a link to this address.', placeholder: 'https://…', type: 'url', okLabel: 'Insert link' });
+          rte.focus();
+          if (range) { sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
           if (url) document.execCommand('createLink', false, url);
         } else {
           document.execCommand(cmd, false, null);
