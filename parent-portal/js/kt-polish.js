@@ -39,8 +39,10 @@
     document.head.appendChild(s);
   }
 
-  KT.prompt = function (opts) {
-    if (typeof opts === 'string') opts = { title: opts };
+  KT.prompt = function (opts, more) {
+    /* (title, { description, ... }) is accepted too: several callers wrote it that way
+       and their description and button label were silently dropped (2026-10-05). */
+    if (typeof opts === 'string') opts = Object.assign({ title: opts }, more || {});
     opts = opts || {};
     return new Promise((resolve) => {
       const o = buildOverlay();
@@ -89,8 +91,9 @@
     });
   };
 
-  KT.confirm = function (opts) {
-    if (typeof opts === 'string') opts = { title: opts };
+  KT.confirm = function (opts, more) {
+    // (title, { description, okLabel, ... }) accepted as well as one object — see KT.prompt.
+    if (typeof opts === 'string') opts = Object.assign({ title: opts }, more || {});
     opts = opts || {};
     // Auto-flag clearly DESTRUCTIVE actions with the danger (red ⚠) tone + a
     // matching action label, unless the caller set a tone explicitly. This makes

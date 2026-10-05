@@ -348,10 +348,13 @@
       </div>
     </div>`;
     main.querySelectorAll('button[data-decide]').forEach(b => b.onclick = async () => {
-      // As before, closing this dialog still approves with an automatic credit.
+      /* Cancel means "don't approve" (2026-10-05). It used to approve anyway, with an
+         automatic credit — a family's bill changed by a click meant to back out.
+         OK with the field blank still approves with the automatic credit. */
       const credit = b.dataset.action === 'approved'
         ? await KT.prompt({ title: 'Approve vacation hold', description: 'Enter a credit amount for the family, or leave it blank to calculate it automatically.', placeholder: 'Credit amount (blank = automatic)', okLabel: 'Approve' })
         : null;
+      if (b.dataset.action === 'approved' && credit === null) return;
       await Api.patch(`/billing/vacation-holds/${b.dataset.decide}`, { status: b.dataset.action, credit_amount: credit ? parseFloat(credit) : null });
       renderVacationHolds(main);
     });
