@@ -38,6 +38,7 @@ final class ConferenceController extends Controller
             ->leftJoin('users as b', 'b.id', '=', 'cs.booked_by_user_id')
             ->leftJoin('children as c', 'c.id', '=', 'cs.booked_child_id')
             ->where('cs.agency_id', $agencyId)
+            ->whereIn('cs.centre_id', $this->staffCentres($request, $agencyId) ?: [0])   // their own centres
             ->where('cs.slot_at', '>=', now()->subDays(7))
             ->orderBy('cs.slot_at')
             ->select('cs.*',
@@ -60,7 +61,15 @@ final class ConferenceController extends Controller
             'location' => 'nullable|string|max:120',
         ]);
         $this->assertStaff($request);
-        $agencyId = (int) DB::table('centres')->where('id', $data['centre_id'])->value('agency_id');
+        /* The centre must be one the caller works at, in their active agency (2026-10-05).
+           The agency used to be read off whatever centre_id was sent, so staff of ANY
+           agency could publish slots at any centre on the platform. */
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless(in_array((int) $data['centre_id'], $this->staffCentres($request, $agencyId), true), 403, 'That centre is not one of yours.');
+        if (! empty($data['teacher_user_id'])) {
+            abort_unless(DB::table('role_assignments')->where('user_id', $data['teacher_user_id'])->where('active', 1)
+                ->where('agency_id', $agencyId)->exists(), 422, 'That teacher is not in this agency.');
+        }
         $start = Carbon::parse($data['date'] . ' ' . $data['start_time']);
         $end = Carbon::parse($data['date'] . ' ' . $data['end_time']);
         $created = 0;
@@ -89,7 +98,9 @@ final class ConferenceController extends Controller
         abort_unless($familyId, 403);
         $child = DB::table('children')->where('id', $data['child_id'])->where('family_id', $familyId)->first();
         abort_unless($child, 403);
-        $slot = DB::table('conference_slots')->where('id', $slotId)->where('status', 'open')->first();
+        // Only a slot at the family's own centre.
+        $slot = DB::table('conference_slots')->where('id', $slotId)->where('status', 'open')
+            ->where('centre_id', DB::table('families')->where('id', $familyId)->value('centre_id'))->first();
         abort_unless($slot, 422, 'Slot no longer available');
         DB::table('conference_slots')->where('id', $slotId)->update([
             'status' => 'booked',
@@ -116,8 +127,11 @@ final class ConferenceController extends Controller
         $u = $request->user();
         $slot = DB::table('conference_slots')->where('id', $slotId)->first();
         abort_unless($slot, 404);
-        // Either booker or staff can cancel
-        if ($slot->booked_by_user_id !== $u->id) $this->assertStaff($request);
+        // Either the booker, or staff of the slot's own centre, can cancel.
+        if ((int) $slot->booked_by_user_id !== (int) $u->id) {
+            $this->assertStaff($request);
+            abort_unless(in_array((int) $slot->centre_id, $this->staffCentres($request, $this->resolveAgencyId($request)), true), 404);
+        }
         DB::table('conference_slots')->where('id', $slotId)->update([
             'status' => 'open',
             'booked_by_user_id' => null, 'booked_child_id' => null, 'booked_at' => null,
@@ -141,6 +155,12 @@ final class ConferenceController extends Controller
             ->value('agency_id');
         abort_unless($first, 400);
         return (int) $first;
+    }
+
+    /** The centres this staff member may manage conferences for (agency-wide for an admin). */
+    private function staffCentres(Request $request, int $agencyId): array
+    {
+        return \App\Support\Visibility::centreIds($agencyId, $request->user());
     }
 
     private function assertStaff(Request $request): void

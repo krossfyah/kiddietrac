@@ -54,6 +54,23 @@ class TaskController extends Controller
         return $ids; // [] means "no centres" → sees nothing
     }
 
+    /* WHO A DIRECTOR MAY ASSIGN TO (2026-10-05). Educators at their centres; home
+       visitors (they serve the agency); and parents of THEIR centres' families. A parent's
+       role row carries no centre, so "always include guardians" handed a Sunny Meadows
+       director every parent in the agency — names and emails of other centres' families. */
+    private function assignableScope($q, array $centreIds, string $p = ''): void
+    {
+        $ids = $centreIds ?: [-1];
+        $parents = DB::table('guardians')->join('families', 'families.id', '=', 'guardians.family_id')
+            ->whereIn('families.centre_id', $ids)->whereNull('families.deleted_at')
+            ->whereNotNull('guardians.user_id')->pluck('guardians.user_id')->all() ?: [-1];
+        $q->where(function ($w) use ($ids, $parents, $p) {
+            $w->whereIn($p . 'centre_id', $ids)
+              ->orWhere($p . 'role', 'home_visitor')
+              ->orWhere(fn ($g) => $g->where($p . 'role', 'guardian')->whereIn($p . 'user_id', $parents));
+        });
+    }
+
     private function name($u): string
     {
         if (! $u) return 'Unknown';
@@ -122,14 +139,8 @@ class TaskController extends Controller
             ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
             ->whereIn('ra.role', self::ASSIGNABLE)->where('ra.active', true)
             ->where('ra.agency_id', $agencyId)
-            ->when(is_array($centreIds), function ($q) use ($centreIds) {
-                // Directors: educators are limited to their centre(s); home visitors
-                // and parents are agency-level (no centre) so are always included.
-                $q->where(function ($w) use ($centreIds) {
-                    $w->whereIn('ra.centre_id', $centreIds ?: [-1])
-                      ->orWhereIn('ra.role', ['home_visitor', 'guardian']);
-                });
-            })
+            // Directors: their centres' educators and families, plus home visitors.
+            ->when(is_array($centreIds), fn ($q) => $this->assignableScope($q, $centreIds, 'ra.'))
             ->orderByRaw("FIELD(ra.role,'educator','home_visitor','guardian')")
             ->orderBy('u.first_name')->orderBy('u.last_name')
             ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'ra.role', 'ra.centre_id', 'c.name as centre_name'])
@@ -216,11 +227,7 @@ class TaskController extends Controller
         $assignee = DB::table('role_assignments')
             ->whereIn('role', self::ASSIGNABLE)->where('active', true)
             ->where('agency_id', $agencyId)->where('user_id', $data['assigned_to'])
-            ->when(is_array($centreIds), function ($q) use ($centreIds) {
-                $q->where(function ($w) use ($centreIds) {
-                    $w->whereIn('centre_id', $centreIds ?: [-1])->orWhereIn('role', ['home_visitor', 'guardian']);
-                });
-            })
+            ->when(is_array($centreIds), fn ($q) => $this->assignableScope($q, $centreIds))
             ->first();
         abort_unless($assignee, 422, 'That person is not assignable in your agency/centre.');
 
@@ -267,8 +274,10 @@ class TaskController extends Controller
             $update['completed_at'] = $data['status'] === 'done' ? now() : null;
         }
         if (array_key_exists('assigned_to', $update)) {
+            $centreIds = $this->directorCentreIds($request, (int) $row->agency_id);   // same rule as assigning
             $ra = DB::table('role_assignments')->whereIn('role', self::ASSIGNABLE)->where('active', true)
-                ->where('agency_id', $row->agency_id)->where('user_id', $update['assigned_to'])->first();
+                ->where('agency_id', $row->agency_id)->where('user_id', $update['assigned_to'])
+                ->when(is_array($centreIds), fn ($q) => $this->assignableScope($q, $centreIds))->first();
             abort_unless($ra, 422, 'That person is not assignable in this agency.');
             $update['centre_id'] = $ra->centre_id;
         }

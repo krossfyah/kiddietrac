@@ -69,8 +69,13 @@ class SafeArrivalController extends Controller
         usort($out, fn ($a, $b) => [$rank[$a['state']], $a['name']] <=> [$rank[$b['state']], $b['name']]);
         $counts = array_count_values(array_column($out, 'state'));
 
+        // An educator's picker: the centres of their own rooms, not every centre (2026-10-05).
+        $pick = $centres;
+        if ($pick === null && $rooms !== null) {
+            $pick = DB::table('rooms')->whereIn('id', $rooms ?: [0])->pluck('centre_id')->map(fn ($x) => (int) $x)->unique()->values()->all();
+        }
         $centreList = DB::table('centres')->where('agency_id', $agencyId)
-            ->when($centres !== null && ! $request->filled('centre_id'), fn ($q) => $q->whereIn('id', $centres ?: [0]))
+            ->when($pick !== null && ! $request->filled('centre_id'), fn ($q) => $q->whereIn('id', $pick ?: [0]))
             ->orderBy('name')->get(['id', 'name']);
 
         return response()->json([
