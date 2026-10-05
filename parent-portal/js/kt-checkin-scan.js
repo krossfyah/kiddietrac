@@ -274,7 +274,9 @@
       var ids = children.map(function (c) { return c.child_id; }).filter(function (id) { return chosen[id]; });
       if (!ids.length) { confirm.textContent = 'Pick at least one child'; setTimeout(function () { confirm.textContent = 'Confirm'; }, 1600); return; }
       confirm.disabled = true; confirm.textContent = 'Saving…';
-      post(code, ids).then(function (res) { pendingSelect = null; showResult((res && res.results) || [], null, null); })
+      // Pass who scanned: without it the result read "Scanned by: A guardian" with a "?"
+      // for every parent with more than one child (2026-10-05).
+      post(code, ids).then(function (res) { pendingSelect = null; showResult((res && res.results) || [], null, null, (res && res.scanned_by) || null); })
         .catch(function (e) { confirm.disabled = false; confirm.textContent = 'Confirm'; alert((e && e.message) || 'Could not save — please try again.'); });
     });
     var cancel = el('button', 'background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.5);border-radius:14px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;', 'Cancel');

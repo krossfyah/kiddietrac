@@ -367,6 +367,12 @@
   // An educator (active role, or previewed via view-as). Educators are phone-first
   // too, so they get the same floating settings gear + a check-in QR button.
   function isEducatorView() { return activeRole() === 'educator'; }
+  /* For the desktop/tablet top bar (kt-topbar), which has no bottom bar to carry the
+     educator's Check-in QR (2026-10-05). Same overlay, same daily code. */
+  window.KT = window.KT || {};
+  window.KT.showCheckinQr = function () { showCheckinQr(); };
+  window.KT.mnavIsEducator = function () { return isEducatorView(); };
+  window.KT.mnavIsPhone = function () { return isPhoneSized(); };
 
   // Fullscreen check-in QR for the educator's centre — parents scan it off the
   // educator's phone (or print it). The code is fetched fresh and rotates daily

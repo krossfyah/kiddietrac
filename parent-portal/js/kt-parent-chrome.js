@@ -324,6 +324,14 @@
       // Home used to point at #dashboard (the roster) — but the tiles live on the
       // launcher, so Home now takes every role there.
       wrap.appendChild(iconBtn('🏠', 'Home', function () { location.hash = '#home'; }));
+      /* The educator's Check-in QR at desktop/tablet width (2026-10-05). On a phone it is
+         the raised button in the bottom bar; wider screens have no bottom bar, so the QR
+         parents scan at drop-off could not be reached. Same overlay (kt-mobilenav). */
+      if (role === 'educator') {
+        wrap.appendChild(iconBtn('📷', 'Check-in QR', function () {
+          if (window.KT && window.KT.showCheckinQr) window.KT.showCheckinQr();
+        }));
+      }
       if (role === 'sales_rep') {
         // Sales rep messaging is the shared portal chat dock (restricted to the sales
         // team + superadmins). Pipeline + Messages (unread indicator) + inbox.
