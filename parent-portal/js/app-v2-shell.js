@@ -394,6 +394,11 @@
     }
     if (role === 'centre_director') {
       return [
+        /* 2026-10-05: agency-level configuration (email accounts and settings, clock,
+           calendar and billing settings) and admin-only screens (bulk invoice run,
+           account ledgers) left this menu. Their APIs are agency_admin only, so they
+           showed a 403 or fell back to the dashboard. Expenses and Tuition plans
+           joined: their APIs now admit a director for their own centres. */
         { label: 'Overview', items: [
           { hash: 'dashboard',      label: 'Dashboard',        icon: '🏠' },
           { hash: 'children',       label: 'Children',         icon: '🧒' },
@@ -416,7 +421,6 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Messenger',         icon: '💬', badgeKey: 'chat_unread' },
-          { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
@@ -431,7 +435,6 @@
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
           { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
           { hash: 'maintenance',   label: 'Maintenance',      icon: '🛠️' },
-          { hash: 'mail-settings', label: 'Email',            icon: '✉️' },
         ]},
         { label: 'Growth', items: [
           { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📣' },
@@ -470,23 +473,20 @@
         ]},
         { label: 'Finance', items: [
           { hash: 'late-events',      label: 'Late pick-ups',    icon: '⏰' },
-          { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
           { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
           { hash: 'payment-plans',    label: 'Payment schedules', icon: '📅' },
+          { hash: 'tuition-plans',    label: 'Tuition plans',    icon: '🏷' },
+          { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
           { hash: 'refunds',          label: 'Refunds',          icon: '↩' },
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
-          { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
           { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
           { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
-          { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
-          { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           /* No "My profile" here either: a director's name in the top bar opens
              #my-profile (kt-topbar openProfile). */
-          { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
 
 
 
