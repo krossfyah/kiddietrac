@@ -52,10 +52,13 @@ class EducatorRoomController extends Controller
     {
         $this->assertAdmin($request);
         $agencyId = $this->agency($request);
+        // A centre director: their own centres' rooms and people (2026-10-05). See CentreScope.
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
 
         $rooms = DB::table('rooms as r')
             ->join('centres as c', 'c.id', '=', 'r.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
             ->where(function ($q) { $q->where('r.active', 1)->orWhereNull('r.active'); })
             ->orderBy('c.name')->orderBy('r.name')
             ->get(['r.id', 'r.name', 'r.age_group', 'c.id as centre_id', 'c.name as centre_name']);
@@ -79,6 +82,7 @@ class EducatorRoomController extends Controller
             ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
             ->where('ra.active', 1)->where('ra.agency_id', $agencyId)
             ->whereIn('ra.role', ['educator', 'home_visitor'])
+            ->when($scope !== null, fn ($q) => $q->whereIn('ra.centre_id', $scope ?: [0]))
             ->whereNull('u.deleted_at')
             ->orderBy('u.first_name')
             ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'ra.role',
@@ -86,6 +90,7 @@ class EducatorRoomController extends Controller
 
         $assigned = DB::table('educator_rooms')
             ->whereIn('user_id', $roleRows->pluck('id')->unique())
+            ->when($scope !== null, fn ($q) => $q->whereIn('room_id', $rooms->pluck('id')->all() ?: [0]))
             ->get(['user_id', 'room_id'])
             ->groupBy('user_id');
 
@@ -144,15 +149,24 @@ class EducatorRoomController extends Controller
 
         // Only rooms and people that belong to this agency. Without this, a crafted
         // request could attach one agency's educator to another agency's room.
+        /* A centre director changes only their own centres' rooms, for people posted to
+           those centres (2026-10-05). Saving REPLACES a person's set, so rooms outside the
+           director's centres are carried over untouched rather than dropped because the
+           director could not see them. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
         $validRooms = DB::table('rooms as r')->join('centres as c', 'c.id', '=', 'r.centre_id')
-            ->where('c.agency_id', $agencyId)->pluck('r.id')->map(fn ($v) => (int) $v)->all();
+            ->where('c.agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
+            ->pluck('r.id')->map(fn ($v) => (int) $v)->all();
         $validUsers = DB::table('role_assignments')->where('active', 1)->where('agency_id', $agencyId)
-            ->whereIn('role', ['educator', 'home_visitor'])->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all();
+            ->whereIn('role', ['educator', 'home_visitor'])
+            ->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $scope ?: [0]))
+            ->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all();
 
         $changed = 0;
         $skipped = 0;
 
-        DB::transaction(function () use ($data, $validRooms, $validUsers, $request, &$changed, &$skipped) {
+        DB::transaction(function () use ($data, $validRooms, $validUsers, $request, $scope, &$changed, &$skipped) {
             foreach ($data['assignments'] as $a) {
                 $uid = (int) $a['user_id'];
                 if (! in_array($uid, $validUsers, true)) {
@@ -166,6 +180,13 @@ class EducatorRoomController extends Controller
 
                 $current = DB::table('educator_rooms')->where('user_id', $uid)
                     ->pluck('room_id')->map(fn ($v) => (int) $v)->all();
+                if ($scope !== null) {
+                    // Keep what this director cannot see or change.
+                    $wanted = array_values(array_unique(array_merge(
+                        $wanted,
+                        array_values(array_diff($current, $validRooms))
+                    )));
+                }
                 sort($current);
                 $sorted = $wanted;
                 sort($sorted);
