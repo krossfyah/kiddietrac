@@ -2806,6 +2806,58 @@
     },
   };
 
+  /* A DIALOG BELONGS TO THE SCREEN IT WAS OPENED ON (2026-10-05).
+
+     Confirms already close when you leave their screen (above). Everything else did not:
+     the closure, conference and background-check dialogs, the Shell's own forms and the
+     ~85 hand-built overlays stayed up on the next screen — after the phone's Back button,
+     a dialog about one screen sat answerable on top of another.
+
+     Each full-screen overlay is stamped with the hash it opened on. When the hash leaves
+     that screen it is closed, but only if it is an ordinary dialog: it offers its own way
+     out (Cancel / Close / ×) and it is not one of the gates that must outlive navigation —
+     terms, MFA, PIN or biometric unlock, the session-timeout warning, urgent alerts, the
+     onboarding tour. Same-tick openings (set the hash, then open) are stamped with the new
+     hash, so they are never closed by their own navigation. */
+  (function closeDialogsOnNavigation() {
+    const stamp = new WeakMap();
+    const GATE = '[id^="kt-agree"],[id^="kt-mfa-gate"],[id^="kt-pin"],[id^="kt-bio"],[id^="kt-session"],[id^="kt-urgent"],[id^="kt-onboarding"],[id^="kt-step-"],[id^="kt-decl"],[data-kt-keep-open]';
+    const isOverlay = (el) => {
+      if (!el || el.nodeType !== 1) return false;
+      const cs = getComputedStyle(el);
+      if (cs.position !== 'fixed') return false;
+      const r = el.getBoundingClientRect();
+      return r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9;
+    };
+    const dismissable = (el) => Array.from(el.querySelectorAll('button,[role=button],a'))
+      .some((b) => /^(cancel|close|×|✕|✖|x|done|not now)$/i.test((b.textContent || b.getAttribute('aria-label') || '').trim()));
+    new MutationObserver((muts) => {
+      muts.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1 && !stamp.has(n)) stamp.set(n, location.hash); }));
+    }).observe(document.body, { childList: true });
+    const modalRoot = () => document.getElementById('modalRoot');
+    let modalHash = null;
+    const mr = modalRoot();
+    if (mr) {
+      new MutationObserver(() => { modalHash = mr.children.length ? (modalHash || location.hash) : null; })
+        .observe(mr, { childList: true });
+    }
+    window.addEventListener('hashchange', () => {
+      const now = location.hash;
+      let closed = 0;
+      Array.from(document.body.children).forEach((el) => {
+        if (!stamp.has(el) || stamp.get(el) === now) return;
+        if (!isOverlay(el) || el.matches(GATE) || el.querySelector(GATE) || !dismissable(el)) return;
+        el.remove(); closed++;
+      });
+      if (modalHash && modalHash !== now && mr && mr.children.length && !mr.querySelector(GATE)) { Modal.close(); modalHash = null; closed++; }
+      // A removed overlay cannot undo the scroll lock it set: release it if nothing is left open.
+      if (closed && !Array.from(document.body.children).some((el) => isOverlay(el) && el.id !== 'appShell')) {
+        document.documentElement.style.overflow = ''; document.body.style.overflow = '';
+        document.body.classList.remove('kt-dialog-open');
+      }
+    });
+  })();
+
   // ──────────────── Generic helpers ────────────────────────────
   function emptyState(emoji, title, sub) {
     return Dom.el('div', { class: 'empty-large' },
@@ -2998,7 +3050,11 @@
     }
 
     Dom.$('#navUser')?.addEventListener('click', () => {
-      if (confirm('Sign out?')) Auth.logout();
+      // A KiddieTrac dialog, not the browser's (which also froze the page in the app).
+      (window.KT && KT.confirm
+        ? KT.confirm({ title: 'Sign out?', description: 'You will need to sign in again to use KiddieTrac on this device.', okLabel: 'Sign out' })
+        : Promise.resolve(window.confirm('Sign out?'))
+      ).then((yes) => { if (yes) Auth.logout(); });
     });
 
     buildNav(user);
