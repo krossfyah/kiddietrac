@@ -134,7 +134,9 @@ final class ReportsController extends Controller
         ]);
         $filters = json_decode($row->filters ?? '{}', true) ?: [];
         $columns = json_decode($row->columns ?? '[]', true) ?: [];
-        $data = $this->execute($row->report_type, $filters, $columns, $row->sort_column, $row->sort_direction, $this->resolveAgencyId($request));
+        $agencyId = $this->resolveAgencyId($request);
+        $data = $this->execute($row->report_type, $filters, $columns, $row->sort_column, $row->sort_direction, $agencyId,
+            5000, \App\Support\CentreScope::ids($request, (int) $agencyId));
         return response()->json([
             'name' => $row->name,
             'report_type' => $row->report_type,
@@ -162,12 +164,13 @@ final class ReportsController extends Controller
             $data['sort_column'] ?? null,
             $data['sort_direction'] ?? 'asc',
             $agencyId,
-            $data['limit'] ?? 100
+            $data['limit'] ?? 100,
+            \App\Support\CentreScope::ids($request, (int) $agencyId)
         );
         return response()->json(['rows' => $rows, 'count' => $rows->count()]);
     }
 
-    private function execute(string $type, array $filters, array $columns, ?string $sortColumn, ?string $sortDir, int $agencyId, int $limit = 5000)
+    private function execute(string $type, array $filters, array $columns, ?string $sortColumn, ?string $sortDir, int $agencyId, int $limit = 5000, ?array $scope = null)
     {
         $q = match ($type) {
             'users' => DB::table('users as u')
@@ -225,6 +228,20 @@ final class ReportsController extends Controller
                     'tour_at', 'status', 'created_at'),
             default => throw new \RuntimeException('unknown report type'),
         };
+
+        /* A CENTRE DIRECTOR'S CUSTOM REPORT COVERS THEIR CENTRES (2026-10-05).
+           Every type above is bounded by the agency only, so a director's builder report
+           read the whole agency. $scope comes from CentreScope (null = agency-wide). */
+        if ($scope !== null) {
+            $ids = $scope ?: [0];
+            match ($type) {
+                'users' => $q->whereIn('ra.centre_id', $ids),
+                'background_checks' => $q->whereIn('bc.user_id', DB::table('role_assignments')
+                    ->where('active', 1)->whereIn('centre_id', $ids)->pluck('user_id')->all() ?: [0]),
+                'tour_bookings' => $q->whereIn('centre_id', $ids),
+                default => $q->whereIn('c.id', $ids),
+            };
+        }
 
         foreach ($filters as $col => $val) {
             if ($val === null || $val === '') continue;
