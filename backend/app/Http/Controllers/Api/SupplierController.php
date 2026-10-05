@@ -35,14 +35,33 @@ final class SupplierController extends Controller
         return $ok ? $centreId : null;
     }
 
+    /* A CENTRE DIRECTOR, OWN CENTRES ONLY (2026-10-05). See App\Support\CentreScope.
+       Agency-wide suppliers (centre_id NULL) are a shared list a director may read and
+       use on a bill, never change. A director's new supplier belongs to one of their
+       centres: the only one they have, or the one they chose. */
+    private function writableCentreId(?array $scope, ?int $centreId, int $agencyId): ?int
+    {
+        $c = $this->scopedCentreId($centreId, $agencyId);
+        if ($scope === null) {
+            return $c;
+        }
+        if ($c === null && count($scope) === 1) {
+            return $scope[0];
+        }
+        abort_unless(\App\Support\CentreScope::canWrite($scope, $c), 403, 'Choose one of your centres.');
+        return $c;
+    }
+
     /** GET /admin/suppliers */
     public function index(Request $request): JsonResponse
     {
         $agencyId = $this->agencyOrFail($request);
 
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
         $q = DB::table('suppliers')
             ->where('agency_id', $agencyId)
-            ->whereNull('deleted_at');
+            ->whereNull('deleted_at')
+            ->when($scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('centre_id')->orWhereIn('centre_id', $scope ?: [0])));
 
         if ($request->filled('centre_id')) {
             $q->where('centre_id', (int) $request->input('centre_id'));
@@ -64,6 +83,7 @@ final class SupplierController extends Controller
         // Attach outstanding balance (unpaid bill total) per supplier.
         $balances = DB::table('expense_invoices')
             ->where('agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $scope ?: [0]))   // their centres' bills only
             ->whereNull('deleted_at')
             ->whereNotIn('status', ['void', 'paid'])
             ->groupBy('supplier_id')
@@ -100,7 +120,7 @@ final class SupplierController extends Controller
 
         $id = DB::table('suppliers')->insertGetId([
             'agency_id'        => $agencyId,
-            'centre_id'        => $this->scopedCentreId($data['centre_id'] ?? null, $agencyId),
+            'centre_id'        => $this->writableCentreId(\App\Support\CentreScope::ids($request, $agencyId), $data['centre_id'] ?? null, $agencyId),
             'name'             => $data['name'],
             'contact_name'     => $data['contact_name'] ?? null,
             'email'            => $data['email'] ?? null,
@@ -123,11 +143,13 @@ final class SupplierController extends Controller
     {
         $agencyId = $this->agencyOrFail($request);
         $supplier = DB::table('suppliers')->where('id', $supplierId)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
-        if (! $supplier) {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if (! $supplier || ! \App\Support\CentreScope::canRead($scope, $supplier->centre_id, true)) {
             return response()->json(['message' => 'Not found'], 404);
         }
         $bills = DB::table('expense_invoices')
             ->where('supplier_id', $supplierId)->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $scope ?: [0]))
             ->orderByDesc('issue_date')->orderByDesc('id')->limit(50)->get();
         return response()->json(['supplier' => $supplier, 'bills' => $bills]);
     }
@@ -140,6 +162,8 @@ final class SupplierController extends Controller
         if (! $supplier) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        abort_unless(\App\Support\CentreScope::canWrite($scope, $supplier->centre_id), 403, 'Only a supplier of one of your centres can be changed.');
 
         $data = $request->validate([
             'name'             => ['sometimes', 'required', 'string', 'max:200'],
@@ -161,7 +185,7 @@ final class SupplierController extends Controller
             }
         }
         if (array_key_exists('centre_id', $data)) {
-            $patch['centre_id'] = $this->scopedCentreId($data['centre_id'], $agencyId);
+            $patch['centre_id'] = $this->writableCentreId($scope, $data['centre_id'], $agencyId);
         }
         $patch['updated_at'] = now();
 
@@ -177,6 +201,8 @@ final class SupplierController extends Controller
         if (! $supplier) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        abort_unless(\App\Support\CentreScope::canWrite($scope, $supplier->centre_id), 403, 'Only a supplier of one of your centres can be changed.');
         DB::table('suppliers')->where('id', $supplierId)->update(['deleted_at' => now(), 'updated_at' => now()]);
         return response()->json(['ok' => true]);
     }

@@ -15,13 +15,32 @@ final class ExpenseInvoiceController extends Controller
 {
     use ResolvesCentreContext;
 
+    /** The caller's centres, set by agencyOrFail(); null = agency-wide. See App\Support\CentreScope. */
+    private ?array $scope = null;
+
     private function agencyOrFail(Request $request): int
     {
         $agencyId = $this->resolveAgencyId($request);
         if (! $agencyId) {
             abort(403, 'No agency context.');
         }
+        // A centre director: own centres only (2026-10-05). See App\Support\CentreScope.
+        $this->scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
         return (int) $agencyId;
+    }
+
+    /** The centre a new or moved record may carry: one of the caller's own, never agency-wide. */
+    private function writableCentreId(?int $centreId, int $agencyId): ?int
+    {
+        $c = $this->scopedCentreId($centreId, $agencyId);
+        if ($this->scope === null) {
+            return $c;
+        }
+        if ($c === null && count($this->scope) === 1) {
+            return $this->scope[0];
+        }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $c), 403, 'Choose one of your centres.');
+        return $c;
     }
 
     private function scopedCentreId(?int $centreId, int $agencyId): ?int
@@ -38,7 +57,9 @@ final class ExpenseInvoiceController extends Controller
         if (! $supplierId) {
             return null;
         }
-        return DB::table('suppliers')->where('id', $supplierId)->where('agency_id', $agencyId)->whereNull('deleted_at')->exists()
+        return DB::table('suppliers')->where('id', $supplierId)->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->when($this->scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('centre_id')->orWhereIn('centre_id', $this->scope ?: [0])))
+            ->exists()
             ? $supplierId : null;
     }
 
@@ -95,6 +116,7 @@ final class ExpenseInvoiceController extends Controller
         $q = DB::table('expense_invoices as ei')
             ->leftJoin('suppliers as s', 's.id', '=', 'ei.supplier_id')
             ->where('ei.agency_id', $agencyId)
+            ->when($this->scope !== null, fn ($q) => $q->whereIn('ei.centre_id', $this->scope ?: [0]))
             ->whereNull('ei.deleted_at')
             ->select('ei.*', 's.name as supplier_name', DB::raw('ROUND(ei.total - ei.amount_paid, 2) as balance'));
 
@@ -152,7 +174,7 @@ final class ExpenseInvoiceController extends Controller
         $id = DB::transaction(function () use ($request, $agencyId, $data, $supplierId, $lines, $subtotal, $tax) {
             $newId = DB::table('expense_invoices')->insertGetId([
                 'agency_id'      => $agencyId,
-                'centre_id'      => $this->scopedCentreId($data['centre_id'] ?? null, $agencyId),
+                'centre_id'      => $this->writableCentreId($data['centre_id'] ?? null, $agencyId),
                 'supplier_id'    => $supplierId,
                 'reference'      => 'PENDING',
                 'invoice_number' => $data['invoice_number'] ?? null,
@@ -199,6 +221,7 @@ final class ExpenseInvoiceController extends Controller
         if (! $bill) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $bill->centre_id), 403, 'Only a record of one of your centres can be changed.');
 
         $data = $request->validate([
             'supplier_id'    => ['sometimes', 'integer'],
@@ -227,7 +250,7 @@ final class ExpenseInvoiceController extends Controller
             }
         }
         if (array_key_exists('centre_id', $data)) {
-            $patch['centre_id'] = $this->scopedCentreId($data['centre_id'], $agencyId);
+            $patch['centre_id'] = $this->writableCentreId($data['centre_id'], $agencyId);
         }
 
         DB::transaction(function () use ($id, $bill, $data, &$patch) {
@@ -260,6 +283,7 @@ final class ExpenseInvoiceController extends Controller
         if (! $bill) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $bill->centre_id), 403, 'Only a record of one of your centres can be changed.');
         if (! in_array($bill->status, ['draft', 'awaiting_approval'], true)) {
             return response()->json(['message' => 'Only draft or awaiting-approval bills can be approved.'], 422);
         }
@@ -281,6 +305,7 @@ final class ExpenseInvoiceController extends Controller
         if (! $bill) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $bill->centre_id), 403, 'Only a record of one of your centres can be changed.');
         if ($bill->status === 'void') {
             return response()->json(['message' => 'Cannot pay a void bill.'], 422);
         }
@@ -324,6 +349,7 @@ final class ExpenseInvoiceController extends Controller
         if (! $bill) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $bill->centre_id), 403, 'Only a record of one of your centres can be changed.');
         DB::table('expense_invoices')->where('id', $id)->update(['status' => 'void', 'updated_at' => now()]);
         return response()->json($this->hydrate($agencyId, $id));
     }
@@ -336,6 +362,7 @@ final class ExpenseInvoiceController extends Controller
         if (! $bill) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $bill->centre_id), 403, 'Only a record of one of your centres can be changed.');
         DB::table('expense_invoices')->where('id', $id)->update(['deleted_at' => now(), 'updated_at' => now()]);
         return response()->json(['ok' => true]);
     }
@@ -346,7 +373,10 @@ final class ExpenseInvoiceController extends Controller
         $agencyId = $this->agencyOrFail($request);
         $centreFilter = $request->filled('centre_id') ? (int) $request->input('centre_id') : null;
 
+        // A centre director's totals are their own centres' (2026-10-05).
+        $scope = $this->scope;
         $base = fn () => DB::table('expense_invoices')->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $scope ?: [0]))
             ->when($centreFilter, fn ($q) => $q->where('centre_id', $centreFilter));
 
         $outstanding = (float) (clone $base())->whereNotIn('status', ['paid', 'void'])->sum(DB::raw('total - amount_paid'));
@@ -361,6 +391,9 @@ final class ExpenseInvoiceController extends Controller
             ->when($centreFilter, function ($q) use ($centreFilter) {
                 $q->whereIn('expense_invoice_id', DB::table('expense_invoices')->where('centre_id', $centreFilter)->pluck('id'));
             })
+            ->when($scope !== null, function ($q) use ($scope) {
+                $q->whereIn('expense_invoice_id', DB::table('expense_invoices')->whereIn('centre_id', $scope ?: [0])->pluck('id'));
+            })
             ->whereDate('paid_at', '>=', $monthStart)->sum('amount');
 
         $byStatus = (clone $base())->groupBy('status')->selectRaw('status, COUNT(*) c, ROUND(SUM(total),2) total')->get();
@@ -373,8 +406,8 @@ final class ExpenseInvoiceController extends Controller
                 'overdue_count'     => (int) ($overdue->c ?? 0),
                 'overdue_amount'    => round((float) ($overdue->amt ?? 0), 2),
                 'paid_this_month'   => round($paidThisMonth, 2),
-                'supplier_count'    => DB::table('suppliers')->where('agency_id', $agencyId)->whereNull('deleted_at')->when($centreFilter, fn ($q) => $q->where('centre_id', $centreFilter))->count(),
-                'open_po_count'     => DB::table('purchase_orders')->where('agency_id', $agencyId)->whereNull('deleted_at')->whereIn('status', ['draft', 'ordered'])->when($centreFilter, fn ($q) => $q->where('centre_id', $centreFilter))->count(),
+                'supplier_count'    => DB::table('suppliers')->where('agency_id', $agencyId)->whereNull('deleted_at')->when($scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('centre_id')->orWhereIn('centre_id', $scope ?: [0])))->when($centreFilter, fn ($q) => $q->where('centre_id', $centreFilter))->count(),
+                'open_po_count'     => DB::table('purchase_orders')->where('agency_id', $agencyId)->whereNull('deleted_at')->whereIn('status', ['draft', 'ordered'])->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $scope ?: [0]))->when($centreFilter, fn ($q) => $q->where('centre_id', $centreFilter))->count(),
                 'by_status'         => $byStatus,
                 'by_category'       => $byCategory,
             ],
@@ -385,7 +418,7 @@ final class ExpenseInvoiceController extends Controller
     private function hydrate(int $agencyId, int $id): ?array
     {
         $bill = DB::table('expense_invoices')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
-        if (! $bill) {
+        if (! $bill || ! \App\Support\CentreScope::canRead($this->scope, $bill->centre_id)) {
             return null;
         }
         $bill->balance = round((float) $bill->total - (float) $bill->amount_paid, 2);

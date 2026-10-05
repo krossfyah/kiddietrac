@@ -1558,7 +1558,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // PUBLIC — branding lookup (login page needs this BEFORE auth)
     // PUBLIC — Stripe webhook (for reseller subscriptions)
     // AGENCY-ADMIN ROUTES
-    Route::prefix('admin')->middleware('role:agency_admin')->group(function () {
+    /* EXPENSES, OWN CENTRE (2026-10-05): suppliers, purchase orders and bills admit a centre
+       director as well. App\Support\CentreScope confines them to their own centres inside
+       each controller; agency admins are unchanged. */
+    Route::prefix('admin')->middleware('role:agency_admin,centre_director')->group(function () {
         // ── v23 Expense management: suppliers / purchase orders / bills ──
         Route::get('/suppliers', [\App\Http\Controllers\Api\SupplierController::class, 'index']);
         Route::post('/suppliers', [\App\Http\Controllers\Api\SupplierController::class, 'store']);
@@ -1585,7 +1588,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/expense-invoices/{bill}/payments', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'recordPayment']);
         Route::post('/expense-invoices/{bill}/void', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'void']);
         Route::delete('/expense-invoices/{bill}', [\App\Http\Controllers\Api\ExpenseInvoiceController::class, 'destroy']);
+    });
 
+    Route::prefix('admin')->middleware('role:agency_admin')->group(function () {
         // White-label email: agency's own Microsoft 365 / Google outbound.
         Route::get ('/agency-mail',      [AdminController::class, 'agencyMailConfig']);
         Route::put ('/agency-mail',      [AdminController::class, 'saveAgencyMailConfig']);
@@ -2106,17 +2111,22 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get('/admin/country',  [\App\Http\Controllers\Api\CurrencyController::class, 'showCountry']);
 
     // ---- Agency billing config (late-fee + SMS + locale) ----
-    Route::middleware('role:agency_admin,platform_admin')->group(function () {
-        Route::get  ('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'show']);
-        // v22p87: combined guided billing setup (defaults + payment methods + autopay)
-        Route::get  ('/admin/billing-setup', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'showSetup']);
-        Route::patch('/admin/billing-setup', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'updateSetup']);
-        // v22p86: reusable tuition / fee plans
+    /* TUITION / FEE PLANS, OWN CENTRE (2026-10-05): a centre director manages their own
+       centres' plans; FeePlanController keeps agency-wide plans the agency admin's. */
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
         Route::get   ('/admin/fee-plans',        [\App\Http\Controllers\Api\FeePlanController::class, 'index']);
         Route::post  ('/admin/fee-plans',        [\App\Http\Controllers\Api\FeePlanController::class, 'store']);
         Route::patch ('/admin/fee-plans/{id}',   [\App\Http\Controllers\Api\FeePlanController::class, 'update']);
         Route::delete('/admin/fee-plans/{id}',   [\App\Http\Controllers\Api\FeePlanController::class, 'destroy']);
         Route::post  ('/admin/fee-plans/{id}/generate-invoices', [\App\Http\Controllers\Api\FeePlanController::class, 'generateInvoices']);
+    });
+
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get  ('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'show']);
+        // v22p87: combined guided billing setup (defaults + payment methods + autopay)
+        Route::get  ('/admin/billing-setup', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'showSetup']);
+        Route::patch('/admin/billing-setup', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'updateSetup']);
+        // v22p86: reusable tuition / fee plans live in their own group above (directors too).
         /* The GETs live OUTSIDE this group — see below. Only the writes are
            administrative. */
         Route::patch('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'update']);

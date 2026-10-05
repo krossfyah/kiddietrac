@@ -14,13 +14,32 @@ final class PurchaseOrderController extends Controller
 {
     use ResolvesCentreContext;
 
+    /** The caller's centres, set by agencyOrFail(); null = agency-wide. See App\Support\CentreScope. */
+    private ?array $scope = null;
+
     private function agencyOrFail(Request $request): int
     {
         $agencyId = $this->resolveAgencyId($request);
         if (! $agencyId) {
             abort(403, 'No agency context.');
         }
+        // A centre director: own centres only (2026-10-05). See App\Support\CentreScope.
+        $this->scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
         return (int) $agencyId;
+    }
+
+    /** The centre a new or moved record may carry: one of the caller's own, never agency-wide. */
+    private function writableCentreId(?int $centreId, int $agencyId): ?int
+    {
+        $c = $this->scopedCentreId($centreId, $agencyId);
+        if ($this->scope === null) {
+            return $c;
+        }
+        if ($c === null && count($this->scope) === 1) {
+            return $this->scope[0];
+        }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $c), 403, 'Choose one of your centres.');
+        return $c;
     }
 
     private function scopedCentreId(?int $centreId, int $agencyId): ?int
@@ -37,7 +56,9 @@ final class PurchaseOrderController extends Controller
         if (! $supplierId) {
             return null;
         }
-        return DB::table('suppliers')->where('id', $supplierId)->where('agency_id', $agencyId)->whereNull('deleted_at')->exists()
+        return DB::table('suppliers')->where('id', $supplierId)->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->when($this->scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('centre_id')->orWhereIn('centre_id', $this->scope ?: [0])))
+            ->exists()
             ? $supplierId : null;
     }
 
@@ -70,6 +91,7 @@ final class PurchaseOrderController extends Controller
         $q = DB::table('purchase_orders as po')
             ->leftJoin('suppliers as s', 's.id', '=', 'po.supplier_id')
             ->where('po.agency_id', $agencyId)
+            ->when($this->scope !== null, fn ($q) => $q->whereIn('po.centre_id', $this->scope ?: [0]))
             ->whereNull('po.deleted_at')
             ->select('po.*', 's.name as supplier_name');
 
@@ -114,7 +136,7 @@ final class PurchaseOrderController extends Controller
         $poId = DB::transaction(function () use ($request, $agencyId, $data, $supplierId, $lines, $subtotal, $tax) {
             $id = DB::table('purchase_orders')->insertGetId([
                 'agency_id'     => $agencyId,
-                'centre_id'     => $this->scopedCentreId($data['centre_id'] ?? null, $agencyId),
+                'centre_id'     => $this->writableCentreId($data['centre_id'] ?? null, $agencyId),
                 'supplier_id'   => $supplierId,
                 'po_number'     => 'PENDING',
                 'status'        => $data['status'] ?? 'draft',
@@ -158,6 +180,7 @@ final class PurchaseOrderController extends Controller
         if (! $po) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $po->centre_id), 403, 'Only a record of one of your centres can be changed.');
 
         $data = $request->validate([
             'supplier_id'   => ['sometimes', 'integer'],
@@ -185,7 +208,7 @@ final class PurchaseOrderController extends Controller
             }
         }
         if (array_key_exists('centre_id', $data)) {
-            $patch['centre_id'] = $this->scopedCentreId($data['centre_id'], $agencyId);
+            $patch['centre_id'] = $this->writableCentreId($data['centre_id'], $agencyId);
         }
 
         DB::transaction(function () use ($poId, $data, &$patch) {
@@ -219,6 +242,7 @@ final class PurchaseOrderController extends Controller
         if (! $po) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $po->centre_id), 403, 'Only a record of one of your centres can be changed.');
         $data = $request->validate(['status' => ['required', 'in:draft,ordered,received,cancelled']]);
         DB::table('purchase_orders')->where('id', $poId)->update(['status' => $data['status'], 'updated_at' => now()]);
         return response()->json($this->hydrate($agencyId, $poId));
@@ -232,6 +256,7 @@ final class PurchaseOrderController extends Controller
         if (! $po) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $po->centre_id), 403, 'Only a record of one of your centres can be changed.');
         $existing = DB::table('expense_invoices')->where('purchase_order_id', $poId)->whereNull('deleted_at')->first();
         if ($existing) {
             return response()->json(['message' => 'A bill already exists for this PO.', 'expense_invoice_id' => $existing->id], 409);
@@ -284,6 +309,7 @@ final class PurchaseOrderController extends Controller
         if (! $po) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        abort_unless(\App\Support\CentreScope::canWrite($this->scope, $po->centre_id), 403, 'Only a record of one of your centres can be changed.');
         DB::table('purchase_orders')->where('id', $poId)->update(['deleted_at' => now(), 'updated_at' => now()]);
         return response()->json(['ok' => true]);
     }
@@ -292,7 +318,7 @@ final class PurchaseOrderController extends Controller
     private function hydrate(int $agencyId, int $poId): ?array
     {
         $po = DB::table('purchase_orders')->where('id', $poId)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
-        if (! $po) {
+        if (! $po || ! \App\Support\CentreScope::canRead($this->scope, $po->centre_id)) {
             return null;
         }
         $po->supplier = DB::table('suppliers')->where('id', $po->supplier_id)->first();

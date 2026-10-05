@@ -33,7 +33,10 @@ final class FeePlanController extends Controller
         $aid = $this->agencyId($r);
         if (!$aid) return response()->json(['plans' => []]);
 
+        // A centre director: their centres' plans and the agency-wide ones (2026-10-05).
+        $scope = \App\Support\CentreScope::ids($r, $aid);
         $plans = DB::table('fee_plans')->where('agency_id', $aid)->whereNull('deleted_at')
+            ->when($scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('centre_id')->orWhereIn('centre_id', $scope ?: [0])))
             ->orderByDesc('active')->orderBy('name')->get();
         $centreNames = DB::table('centres')->where('agency_id', $aid)->pluck('name', 'id');
         $roomNames = DB::table('rooms')->pluck('name', 'id');
@@ -61,7 +64,7 @@ final class FeePlanController extends Controller
     {
         $aid = $this->agencyId($r);
         if (!$aid) return response()->json(['message' => 'No agency access'], 403);
-        $d = $this->validateData($r);
+        $d = $this->placed($r, $aid, $this->validateData($r));
         $id = DB::table('fee_plans')->insertGetId(array_merge($d, [
             'agency_id' => $aid, 'created_at' => now(), 'updated_at' => now(),
         ]));
@@ -73,7 +76,8 @@ final class FeePlanController extends Controller
         $aid = $this->agencyId($r);
         $row = DB::table('fee_plans')->where('id', $id)->where('agency_id', $aid)->whereNull('deleted_at')->first();
         if (!$row) return response()->json(['message' => 'Not found'], 404);
-        $d = $this->validateData($r);
+        $this->guardWrite($r, (int) $aid, $row->centre_id);
+        $d = $this->placed($r, (int) $aid, $this->validateData($r));
         $d['updated_at'] = now();
         DB::table('fee_plans')->where('id', $id)->update($d);
         return response()->json(['message' => 'Updated']);
@@ -82,6 +86,8 @@ final class FeePlanController extends Controller
     public function destroy(Request $r, int $id): JsonResponse
     {
         $aid = $this->agencyId($r);
+        $row = DB::table('fee_plans')->where('id', $id)->where('agency_id', $aid)->whereNull('deleted_at')->first();
+        if ($row) $this->guardWrite($r, (int) $aid, $row->centre_id);
         $n = DB::table('fee_plans')->where('id', $id)->where('agency_id', $aid)->whereNull('deleted_at')
             ->update(['deleted_at' => now(), 'updated_at' => now()]);
         return response()->json(['message' => $n ? 'Deleted' : 'Not found']);
@@ -97,6 +103,8 @@ final class FeePlanController extends Controller
         $aid = $this->agencyId($r);
         $plan = DB::table('fee_plans')->where('id', $id)->where('agency_id', $aid)->whereNull('deleted_at')->first();
         if (!$plan) return response()->json(['message' => 'Plan not found'], 404);
+        // A director raises invoices only from their own centre's plan, for its families.
+        $this->guardWrite($r, (int) $aid, $plan->centre_id);
 
         $data = $r->validate([
             'family_ids' => ['required', 'array', 'min:1'],
@@ -171,6 +179,37 @@ final class FeePlanController extends Controller
         ]);
 
         return response()->json(['created' => $created, 'status' => $status]);
+    }
+
+    /* OWN CENTRES ONLY (2026-10-05). An agency-wide plan (centre_id NULL) is the agency
+       admin's: a director can read it but not change it or bill from it. */
+    private function guardWrite(Request $r, int $aid, $centreId): void
+    {
+        abort_unless(\App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($r, $aid), $centreId), 403,
+            'Only a plan of one of your centres can be changed.');
+    }
+
+    /* Where a plan may be placed. centre_id and room_id were stored as sent, so a plan
+       could name another agency's centre or room. Both must now be this agency's (and the
+       room that centre's), and a director's plan one of their own centres. */
+    private function placed(Request $r, int $aid, array $d): array
+    {
+        if ($d['centre_id'] !== null
+            && ! DB::table('centres')->where('id', $d['centre_id'])->where('agency_id', $aid)->whereNull('deleted_at')->exists()) {
+            abort(422, 'That centre is not in this agency.');
+        }
+        $scope = \App\Support\CentreScope::ids($r, $aid);
+        if ($scope !== null && $d['centre_id'] === null && count($scope) === 1) {
+            $d['centre_id'] = $scope[0];
+        }
+        abort_unless(\App\Support\CentreScope::canWrite($scope, $d['centre_id']), 403, 'Choose one of your centres.');
+        if ($d['room_id'] !== null) {
+            $room = DB::table('rooms as rm')->join('centres as c', 'c.id', '=', 'rm.centre_id')
+                ->where('rm.id', $d['room_id'])->where('c.agency_id', $aid)->first(['rm.centre_id']);
+            abort_unless($room && ($d['centre_id'] === null || (int) $room->centre_id === (int) $d['centre_id']), 422,
+                'That room is not in this centre.');
+        }
+        return $d;
     }
 
     private function validateData(Request $r): array
