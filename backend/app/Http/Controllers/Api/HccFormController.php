@@ -59,6 +59,22 @@ class HccFormController extends Controller
     }
 
     /** GET /inspection-forms/schemas — the list of fillable forms (empty if not enabled). */
+    /* WHICH REPORTS A REVIEWER MAY OPEN (2026-10-05). isReviewer() is true for a
+       centre director too, and was read as "the whole agency": a Sunny Meadows director
+       saw every centre's reports. Agency-wide reviewers keep that; a director reviews
+       their own centres' (App\Support\CentreScope). */
+    private function reviews(Request $request, int $agencyId, $centreId): bool
+    {
+        return $this->isReviewer($request)
+            && \App\Support\CentreScope::canRead(\App\Support\CentreScope::ids($request, $agencyId), $centreId);
+    }
+
+    /** null = every report in the agency; otherwise the centres a director reviews. */
+    private function reviewScope(Request $request, ?int $agencyId): ?array
+    {
+        return $agencyId ? \App\Support\CentreScope::ids($request, $agencyId) : null;
+    }
+
     public function schemas(Request $request): JsonResponse
     {
         if (! $this->enabled($request)) {
@@ -100,6 +116,9 @@ class HccFormController extends Controller
             ->leftJoin('users as u', 'u.id', '=', 'f.home_visitor_id')
             ->when($agencyId, fn ($x) => $x->where('f.agency_id', $agencyId))
             ->when(! $this->isReviewer($request), fn ($x) => $x->where('f.home_visitor_id', $request->user()->id))
+            // A centre director: their centres' forms, and any they filed themselves.
+            ->when($this->isReviewer($request) && ($sc = $this->reviewScope($request, $agencyId)) !== null,
+                fn ($x) => $x->where(fn ($w) => $w->whereIn('f.centre_id', $sc ?: [0])->orWhere('f.home_visitor_id', $request->user()->id)))
             ->whereNull('f.deleted_at')
             ->orderByDesc('f.visit_date')->orderByDesc('f.id')
             ->limit(500)
@@ -292,7 +311,7 @@ class HccFormController extends Controller
                 'status'         => $row->status,
                 'home_visitor'   => $meta['home_visitor'],
                 'centre_name'    => $meta['centre_name'],
-                'editable'       => $this->isReviewer($request) || (int) $row->home_visitor_id === (int) $request->user()->id,
+                'editable'       => $this->reviews($request, (int) $row->agency_id, $row->centre_id) || (int) $row->home_visitor_id === (int) $request->user()->id,
             ],
             'answers' => $answers,
             'history' => $auditTrail,
@@ -353,7 +372,7 @@ class HccFormController extends Controller
         $row = DB::table('hcc_inspection_forms')->where('id', $id)->whereNull('deleted_at')->first();
         abort_unless($row, 404);
         abort_unless((int) $row->agency_id === (int) $agencyId, 403);
-        abort_unless($this->isReviewer($request) || (int) $row->home_visitor_id === (int) $request->user()->id, 403);
+        abort_unless($this->reviews($request, (int) $row->agency_id, $row->centre_id) || (int) $row->home_visitor_id === (int) $request->user()->id, 403);
         return $row;
     }
 
@@ -383,7 +402,7 @@ class HccFormController extends Controller
 
     private function notifyReviewers(int $agencyId, int $id, array $data, string $hvName): void
     {
-        $recipients = $this->alertRecipients($agencyId);
+        $recipients = $this->alertRecipients($agencyId, ! empty($data['centre_id']) ? (int) $data['centre_id'] : null);
         if (! $recipients) return;
 
         $row = DB::table('hcc_inspection_forms')->where('id', $id)->first();

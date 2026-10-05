@@ -32,13 +32,26 @@ trait ReportAlerts
         return $roles ?: ['agency_admin', 'centre_director'];
     }
 
-    /** Emails of the configured alert recipients for an agency. */
-    protected function alertRecipients(int $agencyId): array
+    /** Emails of the configured alert recipients for an agency.
+     *
+     *  CENTRE-AWARE (2026-10-05). Every centre director in the agency was emailed the
+     *  PDF of every report, whichever centre it was about. Agency-wide roles still get
+     *  them all; a centre-scoped role (director, educator, home visitor) only for their
+     *  own centre — and none when the report names no centre. */
+    protected function alertRecipients(int $agencyId, ?int $centreId = null): array
     {
+        $roles = $this->alertRoles($agencyId);
+        $wide = array_values(array_intersect($roles, ['agency_admin', 'auditor', 'platform_admin']));
+        $scoped = array_values(array_diff($roles, $wide));
         return DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.agency_id', $agencyId)
-            ->whereIn('ra.role', $this->alertRoles($agencyId))
+            ->where(function ($q) use ($wide, $scoped, $centreId) {
+                $q->whereIn('ra.role', $wide ?: ['-']);
+                if ($centreId && $scoped) {
+                    $q->orWhere(fn ($w) => $w->whereIn('ra.role', $scoped)->where('ra.centre_id', $centreId));
+                }
+            })
             ->where('ra.active', true)
             ->whereNull('u.deleted_at')
             ->whereNotNull('u.email')

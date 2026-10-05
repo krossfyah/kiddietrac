@@ -37,6 +37,23 @@ class HomeVisitReportController extends Controller
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
     }
 
+
+    /* WHICH REPORTS A REVIEWER MAY OPEN (2026-10-05). isReviewer() is true for a
+       centre director too, and was read as "the whole agency": a Sunny Meadows director
+       saw every centre's reports. Agency-wide reviewers keep that; a director reviews
+       their own centres' (App\Support\CentreScope). */
+    private function reviews(Request $request, int $agencyId, $centreId): bool
+    {
+        return $this->isReviewer($request)
+            && \App\Support\CentreScope::canRead(\App\Support\CentreScope::ids($request, $agencyId), $centreId);
+    }
+
+    /** null = every report in the agency; otherwise the centres a director reviews. */
+    private function reviewScope(Request $request, ?int $agencyId): ?array
+    {
+        return $agencyId ? \App\Support\CentreScope::ids($request, $agencyId) : null;
+    }
+
     /** GET /home-visits/centres — every centre in the visitor's agency (dropdown). */
     public function centres(Request $request): JsonResponse
     {
@@ -65,6 +82,9 @@ class HomeVisitReportController extends Controller
             ->whereNull('r.deleted_at')
             ->when(! $allMode && $agencyId, fn ($x) => $x->where('r.agency_id', $agencyId))
             ->when(! $this->isReviewer($request), fn ($x) => $x->where('r.home_visitor_id', $request->user()->id))
+            // A centre director: their centres' reports, and any they filed themselves.
+            ->when($this->isReviewer($request) && ($sc = $this->reviewScope($request, $agencyId)) !== null,
+                fn ($x) => $x->where(fn ($w) => $w->whereIn('r.centre_id', $sc ?: [0])->orWhere('r.home_visitor_id', $request->user()->id)))
             ->orderByDesc('r.visit_date')->orderByDesc('r.id')
             ->limit(500)
             ->get(['r.*', 'c.name as centre_name',
@@ -130,7 +150,7 @@ class HomeVisitReportController extends Controller
     /** Email the agency's configured alert roles when a home-visit report is submitted. */
     private function notifyReviewers(int $agencyId, int $id, array $data, $actor): void
     {
-        $recipients = $this->alertRecipients($agencyId);
+        $recipients = $this->alertRecipients($agencyId, ! empty($data['centre_id']) ? (int) $data['centre_id'] : null);
         if (! $recipients) return;
 
         $hvName = trim(($actor->first_name ?? '') . ' ' . ($actor->last_name ?? '')) ?: 'A home visitor';
@@ -188,7 +208,7 @@ class HomeVisitReportController extends Controller
         if (! $isPlatform) {
             abort_unless((int) $row->agency_id === (int) $this->agencyId($request), 403);
         }
-        abort_unless($this->isReviewer($request) || (int) $row->home_visitor_id === (int) $request->user()->id, 403);
+        abort_unless($this->reviews($request, (int) $row->agency_id, $row->centre_id) || (int) $row->home_visitor_id === (int) $request->user()->id, 403);
         return $row;
     }
 
@@ -372,7 +392,7 @@ class HomeVisitReportController extends Controller
         $row = DB::table('home_visit_reports')->where('id', $report)->whereNull('deleted_at')->first();
         abort_unless($row, 404);
         $u = $request->user();
-        $isReviewer = $this->isReviewer($request);
+        $isReviewer = $this->reviews($request, (int) $row->agency_id, $row->centre_id);
         $isAuthor = (int) $row->home_visitor_id === (int) $u->id;
         // Reviewers (agency admin / director) may amend any report (audited).
         // The home visitor who filed it may edit their OWN report only while it is
