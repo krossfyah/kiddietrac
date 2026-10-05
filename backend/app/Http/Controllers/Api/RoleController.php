@@ -26,6 +26,7 @@ final class RoleController extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         if (! $agencyId) return response()->json(['message' => 'No agency context'], 403);
+        $this->ensureSystemRoles((int) $agencyId);
 
         $roles = DB::table('roles')
             ->where('agency_id', $agencyId)
@@ -219,6 +220,62 @@ final class RoleController extends Controller
      * doesnt have to reach into an anonymous migration class. Keep these
      * two lists in sync. (Phase B will probably move to a single config file.)
      */
+    /* THE FIVE SYSTEM ROLES, FOR EVERY AGENCY (2026-10-05). They were seeded once, by the
+       v22p8 migration, for the agencies that existed that day (one). Every agency created
+       since showed "0 records" on Roles & permissions. Same baseline as that migration;
+       adds only the ones this agency is missing, never touches an existing row (whose
+       permissions the agency may have edited) and never another agency's. */
+    private function ensureSystemRoles(int $agencyId): void
+    {
+        $baseline = [
+            'agency_admin' => ['Agency Admin', 'Full access to every agency feature.', array_keys($this->catalogStatic())],
+            'centre_director' => ['Centre Director', 'Operational lead at one centre.', [
+                'centres.view', 'families.view', 'families.edit',
+                'children.view', 'children.edit', 'children.archive',
+                'staff.view', 'staff.invite', 'staff.schedule',
+                'rooms.view', 'rooms.edit',
+                'invoices.view', 'invoices.generate',
+                'reports.compliance', 'reports.attendance',
+                'incidents.view', 'incidents.review', 'incidents.notify_parent',
+                'medications.view', 'medications.authorize',
+                'observations.view', 'observations.create',
+                'lesson_plans.view', 'lesson_plans.create',
+                'kiosk.manage',
+                'edocuments.view', 'edocuments.send',
+                'announcements.create',
+            ]],
+            'educator' => ['Educator', 'Day-to-day care staff.', [
+                'children.view',
+                'incidents.view', 'incidents.create',
+                'observations.view', 'observations.create',
+                'lesson_plans.view',
+                'medications.view',
+                'attendance.record',
+            ]],
+            'guardian' => ['Parent / Guardian', 'Self-serve parent portal.', [
+                'own_children.view',
+                'own_invoices.view', 'own_invoices.pay',
+                'incidents.acknowledge',
+                'edocuments.sign',
+            ]],
+            'auditor' => ['Auditor', 'Read-only access for compliance review.', [
+                'centres.view', 'families.view', 'children.view',
+                'staff.view', 'rooms.view', 'invoices.view',
+                'reports.compliance', 'reports.attendance',
+                'audit.view',
+            ]],
+        ];
+        $have = DB::table('roles')->where('agency_id', $agencyId)->pluck('key')->all();   // incl. soft-deleted: unique key
+        foreach ($baseline as $key => [$name, $desc, $perms]) {
+            if (in_array($key, $have, true)) continue;
+            DB::table('roles')->insertOrIgnore([
+                'agency_id' => $agencyId, 'key' => $key, 'name' => $name, 'description' => $desc,
+                'permissions' => json_encode($perms), 'is_system' => true,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+    }
+
     private function catalogStatic(): array
     {
         return [

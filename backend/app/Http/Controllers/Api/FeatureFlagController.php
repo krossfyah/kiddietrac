@@ -354,8 +354,8 @@ final class FeatureFlagController extends Controller
         if (! $agency) return response()->json(['message' => 'Agency not found'], 404);
 
         $isPlatform = $this->isPlatformAdmin($user);
-        $isAgencyOwner = (isset($user->agency_id) && (int) $user->agency_id === (int) $agency->id
-            && in_array($user->primary_role ?? '', ['agency_admin', 'centre_director']));
+        // Only an agency admin of THIS agency changes its branding and invoice settings.
+        $isAgencyOwner = $this->holdsRole($user, (int) $agency->id, ['agency_admin']);
 
         if (! $isPlatform && ! $isAgencyOwner) {
             return response()->json(['message' => 'Forbidden'], 403);
@@ -498,18 +498,28 @@ final class FeatureFlagController extends Controller
         $user = $request->user();
         if (! $user) abort(401);
         if ($this->isPlatformAdmin($user)) return;
-        // Agency admins of THIS agency can read
-        if (isset($user->agency_id) && $user->agency_id == $agency->id
-            && in_array($user->primary_role ?? '', ['agency_admin', 'centre_director'])) {
+        // Agency admins and centre directors of THIS agency can read.
+        if ($this->holdsRole($user, (int) $agency->id, ['agency_admin', 'centre_director'])) {
             return;
         }
         abort(403, 'Not authorized to view this agency');
+    }
+
+    /* ROLES LIVE IN role_assignments (2026-10-05). This read $user->agency_id and
+       $user->primary_role, neither of which is a column on users, so every agency admin
+       was refused their own Branding screen (and invoice numbering/style with it) and
+       only the platform admin could open it. Scoped to the one agency being asked for. */
+    private function holdsRole($user, int $agencyId, array $roles): bool
+    {
+        return DB::table('role_assignments')->where('user_id', $user->id)->where('active', 1)
+            ->where('agency_id', $agencyId)->whereIn('role', $roles)->exists();
     }
 
     private function isPlatformAdmin($user): bool
     {
         // Platform admin = role 'platform_admin' OR a specific user_id from .env
         if (($user->primary_role ?? null) === 'platform_admin') return true;
+        if (DB::table('role_assignments')->where('user_id', $user->id)->where('active', 1)->where('role', 'platform_admin')->exists()) return true;
         $superId = (int) env('PLATFORM_ADMIN_USER_ID', 1);
         if ($superId && (int) $user->id === $superId) return true;
         return false;
