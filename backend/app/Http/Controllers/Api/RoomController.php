@@ -211,7 +211,23 @@ final class RoomController extends Controller
         // agency's local zone (Eastern for Ontario), not UTC.
         $tz = AgencyTime::tzForCentre((int) $room->centre_id);
 
-        $roster = $children->map(function ($child) use ($checkEvents, $allFlags, $lastEvents, $tz) {
+        /* TODAY'S ABSENCES (2026-10-05). A parent's "not coming in today" reached the
+           inbox and Safe Arrival but not this card, which still read NOT IN with Check in
+           as its first button. Today in the centre's zone; who reported it says whether
+           the family or a colleague told us. */
+        $absences = empty($childIds) ? collect() : DB::table('child_absences as a')
+            ->leftJoin('users as u', 'u.id', '=', 'a.reported_by_id')
+            ->whereIn('a.child_id', $childIds)
+            ->where('a.absent_on', Carbon::now($tz)->toDateString())
+            ->orderByDesc('a.id')
+            ->get(['a.child_id', 'a.reason', 'a.note', 'a.reported_by_id', 'u.first_name', 'u.last_name'])
+            ->unique('child_id')->keyBy('child_id');
+        $guardianOf = $absences->isEmpty() ? collect() : DB::table('guardians as g')
+            ->join('children as c', 'c.family_id', '=', 'g.family_id')
+            ->whereIn('c.id', $absences->keys()->all())
+            ->get(['c.id as child_id', 'g.user_id'])->groupBy('child_id');
+
+        $roster = $children->map(function ($child) use ($checkEvents, $allFlags, $lastEvents, $tz, $absences, $guardianOf) {
             $checks = $checkEvents->get($child->id, collect());
             $lastCheck = $checks->last();
             $isAtCentre = $lastCheck && $lastCheck->event_type === 'check_in';
@@ -244,6 +260,13 @@ final class RoomController extends Controller
                     'category' => $f->category,
                 ])->values(),
                 'last_event' => $lastEvent ? $this->summarizeEvent($lastEvent, $tz) : null,
+                // Only while they have not arrived: a child who came in after all is just "in".
+                'absence' => ($status === 'away' && ($a = $absences->get($child->id))) ? [
+                    'reason' => $a->reason,
+                    'note' => $a->note,
+                    'by_parent' => $guardianOf->get($child->id, collect())->pluck('user_id')->map(fn ($v) => (int) $v)->contains((int) $a->reported_by_id),
+                    'by_name' => trim(($a->first_name ?? '') . ' ' . ($a->last_name ?? '')) ?: null,
+                ] : null,
             ];
         });
 

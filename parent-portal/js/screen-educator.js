@@ -575,6 +575,10 @@
     // now, amber = signed out (went home), grey = not in yet. The avatar keeps the
     // per-child identity colour so a child stays recognisable.
     const _st = child.status || (child.is_at_centre ? 'in' : 'away');
+    /* Reported absent today (2026-10-05): a parent's absence used to leave this card
+       reading NOT IN with Check in first. It now says ABSENT, who reported it and why,
+       and Check in drops to a small secondary button for the child who turns up anyway. */
+    const _abs = (_st === 'away' && child.absence) ? child.absence : null;
     // Colourize the WHOLE card by presence so the room reads at a glance:
     // green = here now, amber = signed out / gone home, white = not in yet.
     // [ accent (left bar + text), full wash, all-round border ]
@@ -614,8 +618,9 @@
       in:   ['#15803D', 'rgba(22,163,74,.14)',  '#16A34A', '✓ IN',    child.arrived_at || ''],
       out:  ['#B45309', 'rgba(245,158,11,.16)', '#F59E0B', '← OUT',   child.departed_at || ''],
       away: ['#475569', 'rgba(148,163,184,.18)', '#94A3B8', 'NOT IN', ''],
+      absent: ['#9A3412', 'rgba(251,146,60,.18)', '#F97316', '🏠 ABSENT', ''],
     };
-    const _p = PILL[_st] || PILL.away;
+    const _p = _abs ? PILL.absent : (PILL[_st] || PILL.away);
     const statusPill = Dom.el('div', {
       class: 'child-card-pill',
       style: 'display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;background:' + _p[1] + ';color:' + _p[0] + ';font-weight:800;font-size:11.5px;letter-spacing:.3px;white-space:nowrap;',
@@ -635,6 +640,12 @@
     ));
     // Presence pill on its own row — prominent and never overlapping the name.
     card.appendChild(Dom.el('div', { style: 'margin-top:9px;' }, statusPill));
+    if (_abs) {
+      const why = String(_abs.reason || '').replace(/_/g, ' ');
+      const who = _abs.by_parent ? 'reported by parent' : ('reported by ' + (_abs.by_name || 'staff'));
+      card.appendChild(Dom.el('div', { class: 'child-card-absence', style: 'margin-top:7px;font-size:12.5px;color:#9A3412;line-height:1.4;' },
+        'Absent · ' + who + (why ? ' — ' + why.charAt(0).toUpperCase() + why.slice(1) : '') + (_abs.note ? ': “' + _abs.note + '”' : '')));
+    }
 
     // Health flags
     if (child.urgent_flags && child.urgent_flags.length > 0) {
@@ -676,6 +687,13 @@
         style: bigBtn + 'flex:1 1 60%;background:linear-gradient(135deg,#F59E0B,#D97706);color:#fff;box-shadow:0 6px 14px -7px rgba(217,119,6,.7);',
         onClick: (e) => { e.stopPropagation(); confirmCheckOut(child, card); },
       }, '← Check out'));
+    } else if (_abs) {
+      // Absent today: no primary button, and no second "Absent" (it already is).
+      actions.appendChild(Dom.el('button', {
+        style: bigBtn + 'flex:0 1 auto;padding:8px 12px;font-size:13px;background:#fff;color:#15803D;border:1.5px solid rgba(22,163,74,.35);',
+        title: (child.display_name || 'This child') + ' was reported absent. Check them in only if they arrived after all.',
+        onClick: (e) => { e.stopPropagation(); doCheckIn(child, card); },
+      }, '✓ Check in anyway'));
     } else {
       actions.appendChild(Dom.el('button', {
         style: bigBtn + 'flex:1 1 auto;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;box-shadow:0 6px 14px -7px rgba(21,128,61,.7);',
