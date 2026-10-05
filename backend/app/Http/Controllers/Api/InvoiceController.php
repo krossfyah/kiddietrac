@@ -263,6 +263,7 @@ final class InvoiceController extends Controller
 
         $inv = DB::table('external_invoices')->where('id', $id)->first();
         abort_unless($inv && (int) $inv->agency_id === (int) $agencyId, 404, 'Invoice not found');
+        $this->guardInvoiceFamily($request, (int) $agencyId, $inv->family_id);
         abort_unless($inv->pdf_url, 404, 'No document for this invoice');
 
         return response()->json([
@@ -479,6 +480,26 @@ final class InvoiceController extends Controller
         ]);
     }
 
+    /* A CENTRE DIRECTOR'S ACCOUNTING IS THEIR OWN CENTRES' FAMILIES (2026-10-05).
+       These routes admit centre_director, but every query here was bounded by agency
+       only: a Sunny Meadows director listed (and could pay, void or edit by id) Maple
+       Grove families' invoices. null = agency-wide caller; otherwise the family ids of
+       their centres, failing closed. */
+    private function directorFamilyIds(Request $request, int $agencyId): ?array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) {
+            return null;
+        }
+        return DB::table('families')->whereIn('centre_id', $scope ?: [0])->pluck('id')->map(fn ($v) => (int) $v)->all();
+    }
+
+    private function guardInvoiceFamily(Request $request, int $agencyId, $familyId): void
+    {
+        $fams = $this->directorFamilyIds($request, $agencyId);
+        abort_unless($fams === null || ($familyId && in_array((int) $familyId, $fams, true)), 404, 'That invoice no longer exists.');
+    }
+
     public function externalForAgency(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
@@ -516,7 +537,8 @@ final class InvoiceController extends Controller
            Related: [[kiddietrac-parent-ledger-external]] and
            [[kiddietrac-outstanding-balances]] — both say the same thing about other
            screens, which is how a third one was found reading only half the money. */
-        $unionOf = function () use ($agencyId) {
+        $scopeFams = $this->directorFamilyIds($request, (int) $agencyId);
+        $unionOf = function () use ($agencyId, $scopeFams) {
             $ext = DB::table('external_invoices')
                 ->where('agency_id', $agencyId)
                 /* EVERY string column is collated explicitly on BOTH sides.
@@ -585,7 +607,9 @@ final class InvoiceController extends Controller
                     . " CONVERT(CASE WHEN kind IN ('educator','parent','contractor') THEN kind ELSE 'misc' END"
                     . "   USING utf8mb4) COLLATE utf8mb4_unicode_ci as counterparty");
 
-            return $ext->unionAll($native)->unionAll($payee);
+            $all = $ext->unionAll($native)->unionAll($payee);
+            // A director: only their centres' families (payee invoices without one drop out).
+            return $scopeFams === null ? $all : DB::query()->fromSub($all, 'su')->whereIn('su.family_id', $scopeFams ?: [0]);
         };
 
         // Family labels (primary guardian's name) for every family in this agency's
@@ -841,6 +865,7 @@ final class InvoiceController extends Controller
         abort_unless($agencyId, 400, 'No active agency.');
         $row = DB::table('external_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
         abort_unless($row, 404, 'That invoice no longer exists.');
+        $this->guardInvoiceFamily($request, (int) $agencyId, $row->family_id);
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01'],
@@ -1041,6 +1066,7 @@ final class InvoiceController extends Controller
         abort_unless($agencyId, 400, 'No active agency.');
         $row = DB::table('external_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
         abort_unless($row, 404, 'That invoice no longer exists.');
+        $this->guardInvoiceFamily($request, (int) $agencyId, $row->family_id);
 
         if ((string) $row->status === 'void') {
             return response()->json(['message' => 'That invoice is already void.'], 422);
@@ -1107,6 +1133,7 @@ final class InvoiceController extends Controller
         abort_unless($agencyId, 400, 'No active agency.');
         $row = DB::table('external_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
         abort_unless($row, 404);
+        $this->guardInvoiceFamily($request, (int) $agencyId, $row->family_id);
         $d = $request->validate([
             'number'      => 'nullable|string|max:120',
             'status'      => 'nullable|string|max:40',
