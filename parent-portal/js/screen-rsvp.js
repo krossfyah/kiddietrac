@@ -34,10 +34,24 @@
     var c = { open: ['#DCFCE7', '#166534', 'Open'], draft: ['#F1F5F9', '#475569', 'Draft'], closed: ['#FEE2E2', '#991B1B', 'Closed'] }[s] || ['#F1F5F9', '#475569', s];
     return '<span class="rv-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(c[2]) + '</span>';
   }
+  /* TABLE DATES, short. The report rows carry "2026-10-05 5:51 PM" (also what the CSV
+     wants); in a table column that wrapped onto four lines and made every row tall —
+     the "gaps" (Anthony, 2026-10-06). "Oct 5, 5:51 PM", with the year only when it is
+     not this year. */
+  function when(s) {
+    if (!s) { return '—'; }
+    var m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})\s+(.+)$/);
+    if (!m) { return esc(s); }
+    var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var y = +m[1] !== new Date().getFullYear() ? ' ' + m[1] : '';
+    return '<span title="' + esc(s) + '">' + MON[+m[2] - 1] + ' ' + (+m[3]) + y + ', ' + esc(m[4]) + '</span>';
+  }
+
   function sendPill(s, label) {
     var c = { sent: ['#DCFCE7', '#166534'], queued: ['#E0F2FE', '#075985'], pending: ['#F1F5F9', '#475569'], suppressed: ['#FEF3C7', '#92400E'],
       failed: ['#FEE2E2', '#991B1B'], skipped: ['#F1F5F9', '#64748B'], not_invited: ['#EDE9FE', '#5B21B6'] }[s] || ['#F1F5F9', '#475569'];
-    return '<span class="rv-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(label || s) + '</span>';
+    var short = s === 'not_invited' ? 'Shareable link' : (label || s);
+    return '<span class="rv-pill" style="background:' + c[0] + ';color:' + c[1] + '"' + (short !== (label || s) ? ' title="' + esc(label) + '"' : '') + '>' + esc(short) + '</span>';
   }
 
   async function download(path, filename) {
@@ -80,6 +94,13 @@
     + '.rv-tabs button{border:0;background:transparent;border-radius:8px;padding:0 14px;height:28px;font-weight:700;font-size:12.5px;cursor:pointer;color:var(--kt-text-muted,#475569);font-family:inherit}'
     + '.rv-tabs button.on{background:var(--kt-bg-elevated,#fff);color:var(--kt-text,#0F172A);box-shadow:var(--kt-shadow-sm,0 1px 3px rgba(15,23,42,.08))}'
     + '.rv-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rv-bar select,.rv-bar input{padding:4px 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;height:30px}'
+    + '#appMain .rv-tscroll{overflow-x:auto !important;padding:0 !important}'
+    + '#appMain table.rv-table{width:auto !important;min-width:100%;border-collapse:collapse}'
+    + '#appMain table.rv-table thead th{white-space:nowrap !important;padding:9px 24px 9px 12px !important;vertical-align:middle !important;font-size:11px !important;line-height:1.3 !important;height:auto !important}'
+    + '#appMain table.rv-table thead th .kt-sort-indicator{top:50% !important;transform:translateY(-50%)}'
+    + '#appMain table.rv-table tbody td{white-space:nowrap !important;padding:9px 12px !important;vertical-align:top !important;line-height:1.4 !important;height:auto !important}'
+    + '#appMain table.rv-table tbody td.rv-wrap{white-space:pre-line !important;min-width:170px;max-width:320px}'
+    + '#appMain table.rv-table .rv-hint{white-space:normal;max-width:240px;margin-top:2px}'
     + '.rv-pill{display:inline-block;border-radius:10px;padding:1px 8px;font-size:11.5px;font-weight:700;white-space:nowrap;vertical-align:middle}'
     + '.rv-h{font-size:15px;margin:4px 0 6px}'
     /* event cards */
@@ -952,12 +973,12 @@
      never reports, and Apple Mail reports every message as opened. */
   function openedCell(r) {
     if (!r.email_opened_at) { return '—'; }
-    return esc(r.email_opened_at) + (r.email_opens > 1 ? '<div class="rv-hint">' + r.email_opens + ' times</div>' : '');
+    return when(r.email_opened_at) + (r.email_opens > 1 ? '<div class="rv-hint">' + r.email_opens + ' times</div>' : '');
   }
 
   function remindedCell(r) {
     if (!r.reminded_at) { return '—'; }
-    return esc(r.reminded_at) + (r.reminders > 1 ? '<div class="rv-hint">' + r.reminders + ' reminders</div>' : '');
+    return when(r.reminded_at) + (r.reminders > 1 ? '<div class="rv-hint">' + r.reminders + ' reminders</div>' : '');
   }
 
   function inviteTable(rows) {
@@ -971,7 +992,7 @@
     return (anyResend ? '<div class="rv-bar rv-bulk" data-bulkbar style="display:none"><b data-bulkn>0 selected</b>'
         + '<button type="button" class="rv-btn pri" data-kt-iconized="1" data-bulkresend>↻ Resend invitation</button>'
         + '<button type="button" class="rv-btn" data-kt-iconized="1" data-bulkclear>Clear</button></div>' : '')
-      + '<div class="kt-card"><table><thead><tr>'
+      + '<div class="kt-card rv-tscroll"><table class="rv-table"><thead><tr>'
       + (anyResend ? '<th style="width:30px"><input type="checkbox" data-selall title="Select everyone who can be sent the invitation again" aria-label="Select all"></th>' : '')
       + '<th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th>'
       + '<th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th>'
@@ -985,8 +1006,8 @@
         return '<tr>' + (anyResend ? '<td>' + (canResend(r) ? '<input type="checkbox" data-pick="' + r.id + '" aria-label="Select ' + esc(r.email) + '">' : '') + '</td>' : '')
           + '<td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label)
           + (r.note ? '<div class="rv-hint" title="' + esc(r.note) + '">' + esc(r.note.length > 70 ? r.note.slice(0, 70) + '…' : r.note) + '</div>' : '') + '</td>'
-          + '<td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
-          + '<td>' + esc(r.registered_at || '—') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
+          + '<td>' + when(r.sent_at) + '</td><td>' + openedCell(r) + '</td><td>' + when(r.opened_at) + '</td>'
+          + '<td>' + when(r.registered_at) + '</td><td>' + when(r.opted_out_at) + '</td>'
           + '<td>' + remindedCell(r) + '</td>'
           + '<td style="text-align:center;white-space:nowrap">' + acts + '</td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -1387,12 +1408,12 @@
     body.innerHTML = '<div class="rv-bar"><select data-ev>' + evs.map(function (e) { return '<option value="' + e.id + '"' + (e.id === state.reportEvent ? ' selected' : '') + '>' + esc(e.title) + '</option>'; }).join('') + '</select>'
       + '<button class="rv-btn" data-kt-iconized="1" data-csv title="Download this view as a CSV file">⬇ CSV</button><span class="rv-hint">Times are ' + esc(rep.tz) + '.</span></div>'
       + '<div class="rv-chips" style="margin-bottom:10px">' + VIEWS.map(function (v) { return '<button data-view="' + v[0] + '" class="' + (v[0] === state.view ? 'on' : '') + '">' + v[1] + (counts[v[0]] != null ? ' · ' + counts[v[0]] : '') + '</button>'; }).join('') + '</div>'
-      + (rows.length ? '<div class="kt-card" style="overflow:auto"><table data-kt-export-title="' + esc(exportTitle) + '"><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th>Reminded</th>'
+      + (rows.length ? '<div class="kt-card rv-tscroll"><table class="rv-table" data-kt-export-title="' + esc(exportTitle) + '"><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th>Reminded</th>'
         + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
-          return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
-            + '<td>' + esc(r.registered_at || '—') + (r.updated_response_at ? '<div class="rv-hint">updated ' + esc(r.updated_response_at) + '</div>' : '') + '</td><td>' + esc(r.opted_out_at || '—') + '</td><td>' + remindedCell(r) + '</td>'
-            + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<td style="white-space:pre-line;max-width:320px">' + esc(r.answers[c.key] || '') + '</td>'; }).join('') + '</tr>';
+          return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + when(r.sent_at) + '</td><td>' + openedCell(r) + '</td><td>' + when(r.opened_at) + '</td>'
+            + '<td>' + when(r.registered_at) + (r.updated_response_at ? '<div class="rv-hint">updated ' + when(r.updated_response_at) + '</div>' : '') + '</td><td>' + when(r.opted_out_at) + '</td><td>' + remindedCell(r) + '</td>'
+            + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<td class="rv-wrap">' + esc(r.answers[c.key] || '') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>'
         : '<div class="kt-card" style="color:#64748B">Nobody in this view.</div>')
       + await optOutsHtml();
@@ -1410,7 +1431,7 @@
     try { d = await Api.get('/admin/rsvp/optouts'); } catch (e) { return ''; }
     var rows = d.optouts || [];
     return '<h3 style="margin:22px 0 4px;font-size:15px">Unsubscribed from all event invitations</h3><div class="rv-hint" style="margin-bottom:8px">Nobody here is sent another invitation by your agency, whichever event it is for.</div>'
-      + (rows.length ? '<div class="kt-card" data-optouts><table><thead><tr><th>Email</th><th>When</th><th>From the invitation for</th><th></th></tr></thead><tbody>'
+      + (rows.length ? '<div class="kt-card rv-tscroll" data-optouts><table class="rv-table"><thead><tr><th>Email</th><th>When</th><th>From the invitation for</th><th></th></tr></thead><tbody>'
         + rows.map(function (o) {
           return '<tr><td>' + esc(o.email) + '</td><td>' + esc(o.at || '') + '</td><td>' + esc(o.event || '—') + '</td>'
             + '<td style="text-align:center"><button type="button" class="kt-btn" data-resub="' + o.id + '" data-email="' + esc(o.email) + '" title="Resubscribe">Resubscribe</button></td></tr>';
