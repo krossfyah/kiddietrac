@@ -94,7 +94,11 @@
     + '.rv-tabs button{border:0;background:transparent;border-radius:8px;padding:0 14px;height:28px;font-weight:700;font-size:12.5px;cursor:pointer;color:var(--kt-text-muted,#475569);font-family:inherit}'
     + '.rv-tabs button.on{background:var(--kt-bg-elevated,#fff);color:var(--kt-text,#0F172A);box-shadow:var(--kt-shadow-sm,0 1px 3px rgba(15,23,42,.08))}'
     + '.rv-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.rv-bar select,.rv-bar input{padding:4px 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;height:30px}'
-    + '#appMain .rv-tscroll{overflow-x:auto !important;padding:0 !important}'
+    /* ONE scrollbar: the table's own kt-tbl-scroll scrolls sideways. The card around it
+       must not be a second scroller (Anthony: "two scrolling horizontal bars") — clip
+       keeps it from scrolling without turning overflow-y into a scroller too. */
+    + '#appMain .rv-tscroll{overflow-x:clip !important;overflow-y:visible !important;padding:0 !important}'
+    + '#appMain .rv-tscroll .kt-tbl-scroll{max-width:100%;overflow-x:auto}'
     + '#appMain table.rv-table{width:auto !important;min-width:100%;border-collapse:collapse}'
     + '#appMain table.rv-table thead th{white-space:nowrap !important;padding:9px 24px 9px 12px !important;vertical-align:middle !important;font-size:11px !important;line-height:1.3 !important;height:auto !important}'
     + '#appMain table.rv-table thead th .kt-sort-indicator{top:50% !important;transform:translateY(-50%)}'
