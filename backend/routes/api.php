@@ -662,6 +662,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get ('/mail-settings',      [\App\Http\Controllers\Api\MailSettingsController::class, 'show']);
             Route::put ('/mail-settings',      [\App\Http\Controllers\Api\MailSettingsController::class, 'save']);
             Route::post('/mail-settings/test', [\App\Http\Controllers\Api\MailSettingsController::class, 'sendTest']);
+            // The Google client behind RSVP "Connect Gmail" (saved here, not in .env).
+            Route::put ('/mail-settings/google',       [\App\Http\Controllers\Api\MailSettingsController::class, 'saveGoogle']);
+            Route::post('/mail-settings/google/check', [\App\Http\Controllers\Api\MailSettingsController::class, 'checkGoogle'])->middleware('throttle:10,1,ggchk');
             // Scheduled maintenance / downtime (super-admin).
             Route::get ('/maintenance',            [\App\Http\Controllers\Api\MaintenanceController::class, 'show']);
             Route::post('/maintenance',            [\App\Http\Controllers\Api\MaintenanceController::class, 'save']);

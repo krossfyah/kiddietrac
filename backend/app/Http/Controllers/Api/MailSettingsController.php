@@ -39,7 +39,96 @@ class MailSettingsController extends Controller
                 'secret_days_left'  => $daysLeft,
             ],
             'last_test'         => $s['mail.last_test'] ?? null,
+            // The Google OAuth client behind "Connect Gmail" on RSVP sender accounts.
+            // The secret is write-only, like the Graph one.
+            'google_gmail' => [
+                'client_id'    => $s['rsvp.google.client_id'] ?? null,
+                'secret_set'   => ! empty($s['rsvp.google.client_secret']),
+                'redirect_uri' => \App\Support\RsvpGmail::REDIRECT_URI,
+                'in_use'       => \App\Support\RsvpGmail::clientKind(),
+                'last_check'   => $s['rsvp.google.last_check'] ?? null,
+            ],
         ]);
+    }
+
+    /**
+     * Save the Google OAuth client used by RSVP "Connect Gmail". Separate from save() so
+     * it never touches the platform mailer. A blank secret keeps the stored one; an empty
+     * client id with clear=1 removes both.
+     */
+    public function saveGoogle(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'client_id'     => ['nullable', 'string', 'max:200', 'regex:/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/i'],
+            'client_secret' => 'nullable|string|max:200',
+            'clear'         => 'nullable|boolean',
+        ], ['client_id.regex' => 'That is not a Google OAuth client ID — it ends in .apps.googleusercontent.com.']);
+
+        if (! empty($data['clear'])) {
+            PlatformSettings::set('rsvp.google.client_id', null);
+            PlatformSettings::set('rsvp.google.client_secret', null);
+            PlatformSettings::set('rsvp.google.last_check', null);
+            \App\Support\CriticalNotifier::send('Gmail sign-in client removed', ['RSVP "Connect Gmail" no longer has a Google client.']);
+
+            return response()->json(['ok' => true]);
+        }
+        $id = trim((string) ($data['client_id'] ?? ''));
+        if ($id === '') {
+            return response()->json(['message' => 'Enter the Client ID.'], 422);
+        }
+        $haveSecret = ! empty($data['client_secret']) || PlatformSettings::getSecret('rsvp.google.client_secret');
+        if (! $haveSecret) {
+            return response()->json(['message' => 'Enter the Client secret.'], 422);
+        }
+        $changedId = $id !== (string) PlatformSettings::get('rsvp.google.client_id');
+        PlatformSettings::set('rsvp.google.client_id', $id);
+        if (! empty($data['client_secret'])) {
+            PlatformSettings::setSecret('rsvp.google.client_secret', trim($data['client_secret']));
+        }
+        $check = $this->googleCheckResult();
+        PlatformSettings::set('rsvp.google.last_check', json_encode($check));
+        \App\Support\CriticalNotifier::send('Gmail sign-in client updated', array_values(array_filter([
+            $changedId ? 'Client ID set to ' . $id : null,
+            ! empty($data['client_secret']) ? 'The client secret was changed.' : null,
+            'Check with Google: ' . $check['result'],
+        ])));
+
+        return response()->json(['ok' => true, 'check' => $check]);
+    }
+
+    public function checkGoogle(Request $request): JsonResponse
+    {
+        $check = $this->googleCheckResult();
+        PlatformSettings::set('rsvp.google.last_check', json_encode($check));
+
+        return response()->json(['check' => $check]);
+    }
+
+    /* ASK GOOGLE WHETHER THE PAIR IS REAL, without anyone signing in: exchange a code
+       that cannot exist. A wrong ID or secret is refused as invalid_client; a right pair
+       gets as far as the code and is refused as invalid_grant. */
+    private function googleCheckResult(): array
+    {
+        $id = \App\Support\RsvpGmail::clientId();
+        $secret = \App\Support\RsvpGmail::clientSecret();
+        if (! $id || ! $secret) {
+            return ['ok' => false, 'result' => 'not set', 'at' => now()->toDateTimeString()];
+        }
+        try {
+            $r = Http::asForm()->timeout(15)->post('https://oauth2.googleapis.com/token', [
+                'code' => 'kt-credential-check', 'client_id' => $id, 'client_secret' => $secret,
+                'redirect_uri' => \App\Support\RsvpGmail::REDIRECT_URI, 'grant_type' => 'authorization_code',
+            ]);
+            $err = (string) $r->json('error');
+            if ($err === 'invalid_grant') {
+                return ['ok' => true, 'result' => 'Google accepted the client ID and secret', 'at' => now()->toDateTimeString()];
+            }
+            $why = $err === 'invalid_client' ? 'Google does not recognise this client ID and secret pair — check both were copied exactly.' : ('Google said: ' . substr($err . ' ' . (string) $r->json('error_description'), 0, 200));
+
+            return ['ok' => false, 'result' => $why, 'at' => now()->toDateTimeString()];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'result' => 'Could not reach Google: ' . substr($e->getMessage(), 0, 160), 'at' => now()->toDateTimeString()];
+        }
     }
 
     public function save(Request $request): JsonResponse

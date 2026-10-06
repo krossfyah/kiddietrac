@@ -60,6 +60,11 @@ return [
         ],
     ],
 
+    // RSVP "Connect Gmail" client — normally saved in Platform → Email settings instead.
+    'google_gmail' => [
+        'client_id' => env('GOOGLE_GMAIL_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_GMAIL_CLIENT_SECRET'),
+    ],
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),

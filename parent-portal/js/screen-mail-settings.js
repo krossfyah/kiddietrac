@@ -99,6 +99,8 @@
       + '</div>'
       + '</div>'
 
+      + googleCard(d.google_gmail || {}, field)
+
       // Test panel
       + '<div class="ms-card" style="margin-top:16px;background:#F9FBFC;">'
       + '<div style="font-weight:800;font-size:13.5px;margin-bottom:4px;">📤 Send a test</div>'
@@ -131,6 +133,8 @@
       }).catch(function (e) { out.style.color = '#B91C1C'; out.textContent = '✗ ' + e.message; });
     };
 
+    wireGoogle(container);
+
     document.getElementById('ms-test').onclick = function () {
       var to = document.getElementById('ms-testto').value.trim();
       var out = document.getElementById('ms-testout');
@@ -142,6 +146,77 @@
         out.innerHTML = (ok ? '✓ Sent via <b>' + esc(r.via) + '</b>. ' : '✗ Send failed. ')
           + 'Graph credentials: <b>' + esc(r.graph_credentials) + '</b>.' + (r.error ? ' <span style="color:#B91C1C;">' + esc(r.error) + '</span>' : '');
       }).catch(function (e) { out.style.color = '#B91C1C'; out.textContent = '✗ ' + e.message; });
+    };
+  }
+
+  /* GMAIL SIGN-IN FOR RSVP SENDERS (2026-10-05). The Google OAuth client behind
+     "Connect Gmail" on Event RSVPs → Sender accounts. The host blocks outbound SMTP, so a
+     sender is a Gmail account signed in through Google, and Google needs this client to
+     let anyone sign in. Anthony: "make sure settings can be saved in the settings through
+     the gui" — it was in the server's .env, where nobody could see or change it. */
+  function googleCard(gg, field) {
+    var lc = null; try { lc = gg.last_check ? JSON.parse(gg.last_check) : null; } catch (e) {}
+    var status = !gg.client_id
+      ? '<span style="color:#B45309;font-weight:700;">Not set up — "Connect Gmail" will not work yet.</span>'
+      : (lc ? '<span style="color:' + (lc.ok ? '#047857' : '#B91C1C') + ';font-weight:700;">' + (lc.ok ? '✓ ' : '✗ ') + esc(lc.result) + '</span>'
+            + '<span style="color:#94A3B8;"> · checked ' + esc(lc.at || '') + '</span>' : '');
+    return '<div class="ms-card" style="margin-top:16px;">'
+      + '<div class="ms-sec" style="margin-bottom:6px;">📧 Gmail sign-in for RSVP senders</div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:14px;">The Google client that lets an agency connect a Gmail account under '
+      + '<b>Event RSVPs → Sender accounts</b>. From Google Cloud Console → Google Auth Platform → Clients.</div>'
+      + field('Client ID', '<input id="gg-id" class="ms-input" value="' + esc(gg.client_id || '') + '" placeholder="123456789-abc….apps.googleusercontent.com" autocomplete="off" spellcheck="false">')
+      + field('Client secret', '<input id="gg-secret" type="password" autocomplete="new-password" class="ms-input" placeholder="' + (gg.secret_set ? '•••••••• (unchanged)' : 'GOCSPX-…') + '">',
+          gg.secret_set ? 'Set — leave blank to keep the current secret.' : 'Not set yet.')
+      + field('Authorized redirect URI (paste this into the Google client)',
+          '<div style="display:flex;gap:8px;"><input id="gg-redirect" class="ms-input" readonly value="' + esc(gg.redirect_uri || '') + '" style="background:#F8FAFC;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">'
+          + '<button id="gg-copy" type="button" style="background:#fff;border:1.5px solid #CBD5E1;border-radius:10px;padding:0 14px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;">Copy</button></div>')
+      + '<div id="gg-status" style="font-size:12.5px;margin:-4px 0 12px;">' + status + '</div>'
+      + '<div style="padding-top:14px;border-top:1px solid #EEF2F6;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
+      + '<button id="gg-save" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:9px 20px;font-weight:800;font-size:13px;cursor:pointer;">Save Gmail settings</button>'
+      + (gg.client_id ? '<button id="gg-check" type="button" style="background:#fff;border:1.5px solid #CBD5E1;border-radius:10px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;">Check with Google</button>'
+          + '<button id="gg-clear" type="button" style="background:none;border:0;color:#B91C1C;font-weight:700;font-size:12.5px;cursor:pointer;margin-left:auto;">Remove</button>' : '')
+      + '<span id="gg-out" style="font-size:13px;font-weight:700;"></span>'
+      + '</div>'
+      + '</div>';
+  }
+
+  function wireGoogle(container) {
+    var out = document.getElementById('gg-out');
+    function say(ok, t) { out.style.color = ok == null ? '#64748B' : (ok ? '#047857' : '#B91C1C'); out.textContent = t; }
+    function result(r) {
+      var c = r && r.check;
+      if (c) { say(c.ok, (c.ok ? '✓ ' : '✗ ') + c.result); } else { say(true, '✓ Saved.'); }
+      setTimeout(function () { render(container); }, c && !c.ok ? 4000 : 1400);
+    }
+    document.getElementById('gg-copy').onclick = function () {
+      var i = document.getElementById('gg-redirect');
+      try { navigator.clipboard.writeText(i.value).then(function () { say(true, '✓ Copied.'); }); }
+      catch (e) { i.select(); try { document.execCommand('copy'); say(true, '✓ Copied.'); } catch (_e) {} }
+    };
+    document.getElementById('gg-save').onclick = function () {
+      var body = { client_id: document.getElementById('gg-id').value.trim() };
+      var sec = document.getElementById('gg-secret').value.trim();
+      if (sec) body.client_secret = sec;
+      say(null, 'Saving and checking with Google…');
+      mapi('/platform/mail-settings/google', 'PUT', body).then(result)
+        .catch(function (e) { say(false, '✗ ' + e.message); });
+    };
+    var chk = document.getElementById('gg-check');
+    if (chk) chk.onclick = function () {
+      say(null, 'Checking…');
+      mapi('/platform/mail-settings/google/check', 'POST', {}).then(result)
+        .catch(function (e) { say(false, '✗ ' + e.message); });
+    };
+    var clr = document.getElementById('gg-clear');
+    if (clr) clr.onclick = function () {
+      var go = (window.KT && KT.confirm)
+        ? KT.confirm({ title: 'Remove the Gmail sign-in client?', description: 'Agencies will not be able to connect a Gmail sender until a client is saved again. Gmail senders already connected stop sending.', okLabel: 'Remove' })
+        : Promise.resolve(false);
+      go.then(function (yes) {
+        if (!yes) return;
+        mapi('/platform/mail-settings/google', 'PUT', { clear: true }).then(function () { say(true, '✓ Removed.'); setTimeout(function () { render(container); }, 900); })
+          .catch(function (e) { say(false, '✗ ' + e.message); });
+      });
     };
   }
 

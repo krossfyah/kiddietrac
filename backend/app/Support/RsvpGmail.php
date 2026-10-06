@@ -26,18 +26,37 @@ final class RsvpGmail
     private const STATE_TTL = 900;   // 15 minutes to finish signing in
 
     /** A dedicated Gmail client, else the social-login Google client if that is set. */
+    /* WHERE THE CLIENT COMES FROM, in order: the one saved in Platform → Email settings
+       (the normal place), then services.google_gmail (.env, for a server without a GUI),
+       then the social-login client. The ID and secret always come from the SAME source —
+       an ID from one and a secret from another is a pair Google rejects.
+
+       Not env() directly: with the config cached, env() returns null and this silently
+       fell through to the social-login client. */
+    private static function pair(): array
+    {
+        $id = \App\Support\PlatformSettings::get('rsvp.google.client_id');
+        if ($id) {
+            return [(string) $id, \App\Support\PlatformSettings::getSecret('rsvp.google.client_secret'), 'dedicated'];
+        }
+        if (config('services.google_gmail.client_id')) {
+            return [(string) config('services.google_gmail.client_id'), config('services.google_gmail.client_secret'), 'dedicated'];
+        }
+        if (config('services.google.client_id')) {
+            return [(string) config('services.google.client_id'), config('services.google.client_secret'), 'login'];
+        }
+
+        return [null, null, null];
+    }
+
     public static function clientId(): ?string
     {
-        $v = env('GOOGLE_GMAIL_CLIENT_ID') ?: config('services.google_gmail.client_id') ?: config('services.google.client_id');
-
-        return $v ? (string) $v : null;
+        return self::pair()[0] ?: null;
     }
 
     public static function clientSecret(): ?string
     {
-        $v = env('GOOGLE_GMAIL_CLIENT_ID')
-            ? env('GOOGLE_GMAIL_CLIENT_SECRET')
-            : (config('services.google_gmail.client_id') ? config('services.google_gmail.client_secret') : config('services.google.client_secret'));
+        $v = self::pair()[1];
 
         return $v ? (string) $v : null;
     }
@@ -50,9 +69,7 @@ final class RsvpGmail
     /** 'dedicated' | 'login' | null — which Google client Connect would use. */
     public static function clientKind(): ?string
     {
-        if (env('GOOGLE_GMAIL_CLIENT_ID') || config('services.google_gmail.client_id')) return 'dedicated';
-
-        return config('services.google.client_id') ? 'login' : null;
+        return self::pair()[2];
     }
 
     /** The exact URI registered on the Google OAuth client. FIXED — it is what was entered
