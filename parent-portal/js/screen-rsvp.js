@@ -975,6 +975,28 @@
   /* "Email opened": the first open, and how many times when more than once. Opens come
      from the image in the email, so they are approximate — a mail app that blocks images
      never reports, and Apple Mail reports every message as opened. */
+  /* REPORT COLUMNS (Anthony, 2026-10-06: "two columns for name and full name - remove
+     the full name and condense some of the column headings"). The form's own name
+     question repeats the Name column, so it is left out (and fills Name when the row has
+     none). Long question labels get a short heading; the full wording is on hover. */
+  var NAME_KEYS = { full_name: 1, name: 1, your_name: 1 };
+  var SHORT = { attending_count: 'Attending', attendee_names: 'Attendees', street_address: 'Address', address: 'Address',
+    town_city: 'Town', city: 'Town', phone: 'Phone', topics: 'Topics' };
+  function shortLabel(c) {
+    if (SHORT[c.key]) { return SHORT[c.key]; }
+    var l = String(c.label || c.key).replace(/\s*\([^)]*\)/g, '').replace(/[?:.]+$/, '').trim();
+    if (l.length <= 16) { return l; }
+    var w = l.split(/\s+/).filter(function (x) { return !/^(the|a|an|of|to|you|your|you’d|you'd|would|like|please|which|what|how|many|are|is|do|does|at|for|in|on|and|or|including)$/i.test(x); });
+    var t = w.slice(0, 2).join(' ');
+    return (t || l.slice(0, 16)).replace(/^./, function (ch) { return ch.toUpperCase(); });
+  }
+  function answerCols(cols) { return cols.filter(function (c) { return c.key !== 'email' && !NAME_KEYS[c.key]; }); }
+  function rowName(r) {
+    if (r.name) { return r.name; }
+    for (var k in NAME_KEYS) { if (r.answers && r.answers[k]) { return r.answers[k]; } }
+    return '—';
+  }
+
   function openedCell(r) {
     if (!r.email_opened_at) { return '—'; }
     return when(r.email_opened_at) + (r.email_opens > 1 ? '<div class="rv-hint">' + r.email_opens + ' times</div>' : '');
@@ -998,9 +1020,9 @@
         + '<button type="button" class="rv-btn" data-kt-iconized="1" data-bulkclear>Clear</button></div>' : '')
       + '<div class="kt-card rv-tscroll"><table class="rv-table"><thead><tr>'
       + (anyResend ? '<th style="width:30px"><input type="checkbox" data-selall title="Select everyone who can be sent the invitation again" aria-label="Select all"></th>' : '')
-      + '<th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th>'
-      + '<th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th>'
-      + '<th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th title="The last reminder sent to them">Reminded</th><th></th></tr></thead><tbody>'
+      + '<th>Name</th><th>Email</th><th title="Invitation status">Status</th><th>Sent</th>'
+      + '<th title="When the invitation email was first opened (from the image in the email — approximate)">Opened</th>'
+      + '<th title="When they opened the RSVP page from the invitation">Clicked</th><th>Signed up</th><th>Opted out</th><th title="The last reminder sent to them">Reminded</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         var acts = '';
         if (canResend(r)) {
@@ -1412,12 +1434,12 @@
     body.innerHTML = '<div class="rv-bar"><select data-ev>' + evs.map(function (e) { return '<option value="' + e.id + '"' + (e.id === state.reportEvent ? ' selected' : '') + '>' + esc(e.title) + '</option>'; }).join('') + '</select>'
       + '<button class="rv-btn" data-kt-iconized="1" data-csv title="Download this view as a CSV file">⬇ CSV</button><span class="rv-hint">Times are ' + esc(rep.tz) + '.</span></div>'
       + '<div class="rv-chips" style="margin-bottom:10px">' + VIEWS.map(function (v) { return '<button data-view="' + v[0] + '" class="' + (v[0] === state.view ? 'on' : '') + '">' + v[1] + (counts[v[0]] != null ? ' · ' + counts[v[0]] : '') + '</button>'; }).join('') + '</div>'
-      + (rows.length ? '<div class="kt-card rv-tscroll"><table class="rv-table" data-kt-export-title="' + esc(exportTitle) + '"><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th>Reminded</th>'
-        + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>'
+      + (rows.length ? '<div class="kt-card rv-tscroll"><table class="rv-table" data-kt-export-title="' + esc(exportTitle) + '"><thead><tr><th>Name</th><th>Email</th><th title="Invitation status">Status</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Opened</th><th title="When they opened the RSVP page from the invitation">Clicked</th><th>Signed up</th><th>Opted out</th><th>Reminded</th>'
+        + answerCols(cols).map(function (c) { return '<th title="' + esc(c.label) + '">' + esc(shortLabel(c)) + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
-          return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + when(r.sent_at) + '</td><td>' + openedCell(r) + '</td><td>' + when(r.opened_at) + '</td>'
+          return '<tr><td>' + esc(rowName(r)) + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + when(r.sent_at) + '</td><td>' + openedCell(r) + '</td><td>' + when(r.opened_at) + '</td>'
             + '<td>' + when(r.registered_at) + (r.updated_response_at ? '<div class="rv-hint">updated ' + when(r.updated_response_at) + '</div>' : '') + '</td><td>' + when(r.opted_out_at) + '</td><td>' + remindedCell(r) + '</td>'
-            + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<td class="rv-wrap">' + esc(r.answers[c.key] || '') + '</td>'; }).join('') + '</tr>';
+            + answerCols(cols).map(function (c) { return '<td class="rv-wrap">' + esc(r.answers[c.key] || '') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>'
         : '<div class="kt-card" style="color:#64748B">Nobody in this view.</div>')
       + await optOutsHtml();
