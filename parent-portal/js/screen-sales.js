@@ -147,6 +147,24 @@
   }
   function input(attrs) { return el('input', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' }, attrs || {})); }
   function textarea(attrs) { return el('textarea', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:76px;resize:vertical' }, attrs || {})); }
+  /* A lead's stored source may not be one of SOURCES: the website form writes
+     "marketing-site", the chat "website-chat", older leads "manual" or "Cold call". The
+     edit dropdown then showed blank and saving any field sent source = null, which the
+     server refused (ticket #116). Match case-insensitively, and otherwise add the stored
+     value as its own option so it is kept. */
+  var SOURCE_NAMES = { 'marketing-site': 'Marketing site form', 'website-chat': 'Website chat', manual: 'Added manually' };
+  function sourceValue(v) {
+    if (!v) { return ''; }
+    var hit = SOURCES.filter(function (o) { return o.v && o.v.toLowerCase() === String(v).toLowerCase(); })[0];
+    return hit ? hit.v : v;
+  }
+  function sourceOptions(v) {
+    var sv = sourceValue(v);
+    if (!sv || SOURCES.some(function (o) { return o.v === sv; })) { return SOURCES; }
+    var label = SOURCE_NAMES[sv] || String(sv).replace(/[-_]+/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); });
+    return SOURCES.concat([{ v: sv, l: label }]);
+  }
+
   function selectEl(opts, val, attrs) {
     var s = el('select', Object.assign({ class: 'input select', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' }, attrs || {}));
     opts.forEach(function (o) { var op = el('option', { value: o.v }, [o.l]); if (String(o.v) === String(val)) op.selected = true; s.appendChild(op); });
@@ -507,7 +525,7 @@
         field('Using today', e.current_solution = input({ value: lead.current_solution || '', placeholder: 'HiMama, paper…' })),
         field('# children', e.num_children = input({ type: 'number', min: '0', value: lead.num_children == null ? '' : lead.num_children })),
         field('# locations', e.num_locations = input({ type: 'number', min: '0', value: lead.num_locations == null ? '' : lead.num_locations })),
-        field('Lead source', e.source = selectEl(SOURCES, lead.source || '')),
+        field('Lead source', e.source = selectEl(sourceOptions(lead.source), sourceValue(lead.source))),
         field('Owner', e.owner_id = selectEl(ownerOpts(), lead.owner_id || '')),
         field('Est. value ($)', e.value = input({ type: 'number', step: '0.01', value: lead.value == null ? '' : lead.value })),
         field('Expected close', e.expected_close = input({ type: 'date', value: lead.expected_close || '' })),

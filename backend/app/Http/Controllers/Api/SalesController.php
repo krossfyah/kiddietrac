@@ -92,6 +92,13 @@ class SalesController extends Controller
     {
         $l = SalesLead::findOrFail($lead);
         $data = $this->validateLead($r, false);
+        /* A blank source on an edit means "not changed", not "erase it": the column is NOT
+           NULL, and a lead from the website form ("marketing-site") or chat had a source
+           the edit form's dropdown did not list, so saving any other field sent null and
+           failed (ticket #116, lead 35). */
+        if (array_key_exists('source', $data) && trim((string) $data['source']) === '') {
+            unset($data['source']);
+        }
 
         // Stage transition → log it + reflect won/lost on status.
         if (array_key_exists('stage', $data) && $data['stage'] !== $l->stage) {
