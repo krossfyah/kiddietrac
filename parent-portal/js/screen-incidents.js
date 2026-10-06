@@ -500,7 +500,7 @@
           '<h2 style="font-family:var(--kt-font-display); font-size:16px; margin-bottom:12px;">Acknowledgments</h2>' +
           inc.acknowledgments.map(function (a) {
             return '<div style="padding:10px 0; border-bottom:1px solid var(--kt-border); font-size:13px;">' +
-              '<strong>' + esc(a.signed_name) + '</strong> &middot; ' + fmt(a.signed_at) + '<br>' +
+              '<strong>' + esc(a.signed_name) + '</strong> &middot; ' + fmtInstant(a.signed_at) + '<br>' +
               (a.comment ? '<em style="color:var(--kt-text-muted);">' + esc(a.comment) + '</em><br>' : '') +
               '<span style="color:var(--kt-text-faint); font-size:11px;">IP ' + esc(a.ip_address || '-') + '</span>' +
             '</div>';
@@ -554,13 +554,17 @@
 
       '<div style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:20px; margin-bottom:16px;">' +
         '<h2 style="font-family:var(--kt-font-display); font-size:16px; margin-bottom:12px;">Timeline</h2>' +
+        /* INSTANTS (submitted, reviewed, notified, acknowledged, closed) are written by
+           the server in UTC, so fmtInstant — the wall-clock fmt() is only right for
+           occurred_at. With fmt() a report submitted at 9:50 AM Toronto read "1:50 PM"
+           (Anthony, 2026-10-06). Same for signatures and note stamps. */
         '<div style="font-size:13px; line-height:1.8; color:var(--kt-text-muted);">' +
           '<div>Recorded by ' + esc(personName(inc.recorded_by)) + '</div>' +
-          (inc.submitted_at        ? '<div>Submitted: ' + fmt(inc.submitted_at) + '</div>' : '') +
-          (inc.reviewed_at         ? '<div>Reviewed by ' + esc((inc.reviewed_by && inc.reviewed_by.name) || '-') + ': ' + fmt(inc.reviewed_at) + '</div>' : '') +
-          (inc.parent_notified_at  ? '<div>Parent notified: ' + fmt(inc.parent_notified_at) + '</div>' : '') +
-          (inc.acknowledged_at     ? '<div>Acknowledged: ' + fmt(inc.acknowledged_at) + '</div>' : '') +
-          (inc.closed_at           ? '<div>Closed: ' + fmt(inc.closed_at) + '</div>' : '') +
+          (inc.submitted_at        ? '<div>Submitted: ' + fmtInstant(inc.submitted_at) + '</div>' : '') +
+          (inc.reviewed_at         ? '<div>Reviewed by ' + esc((inc.reviewed_by && inc.reviewed_by.name) || '-') + ': ' + fmtInstant(inc.reviewed_at) + '</div>' : '') +
+          (inc.parent_notified_at  ? '<div>Parent notified: ' + fmtInstant(inc.parent_notified_at) + '</div>' : '') +
+          (inc.acknowledged_at     ? '<div>Acknowledged: ' + fmtInstant(inc.acknowledged_at) + '</div>' : '') +
+          (inc.closed_at           ? '<div>Closed: ' + fmtInstant(inc.closed_at) + '</div>' : '') +
         '</div>' +
       '</div>' +
 
@@ -595,7 +599,7 @@
       return '<div class="kt-note-item" style="padding:11px 0;border-bottom:1px solid var(--kt-border);">' +
         '<div style="font-size:12.5px;color:var(--kt-text-muted);">' +
           '<strong style="color:var(--kt-text);">' + esc(noteAuthor(n)) + '</strong>' +
-          '<span style="color:var(--kt-text-faint);"> &middot; ' + fmt(n.created_at) + '</span>' +
+          '<span style="color:var(--kt-text-faint);"> &middot; ' + fmtInstant(n.created_at) + '</span>' +
         '</div>' +
         '<div style="white-space:pre-wrap;line-height:1.55;margin-top:3px;font-size:14px;">' + esc(n.note) + '</div>' +
       '</div>';
