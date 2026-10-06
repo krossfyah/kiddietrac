@@ -84,6 +84,11 @@
 
   var CSS = '#appMain .lp-btn{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid #CBD5E1;background:#fff;color:#0F172A;font-family:inherit;white-space:nowrap}'
     + '#appMain .lp-btn.pri{background:#1F6080;border-color:#1F6080;color:#fff}'
+    /* The banner's own action: WHITE. A teal primary on the teal banner was the same colour
+       as the banner (#1F6080 both) and could not be seen ("log late pick up button not
+       visible", 2026-10-06). Out-specifies the hero's own button styling. */
+    + '#appMain .kt-hero-actions #lp-new{background:#fff !important;color:#1F6080 !important;border:1px solid #fff !important;box-shadow:0 2px 8px rgba(8,20,40,.25) !important;opacity:1 !important;backdrop-filter:none !important}'
+    + '#appMain .kt-hero-actions #lp-new:hover{background:#F1F5F9 !important}'
     + '#appMain .lp-tabs{display:flex;gap:4px;flex-wrap:wrap;margin:0 0 10px}'
     // !important + #appMain: the phone layout's big-touch-target button rules otherwise win.
     + '#appMain .lp-tabs button{height:30px !important;min-height:0 !important;width:auto !important;flex:0 0 auto !important;padding:0 12px !important;border-radius:999px !important;border:1px solid #E2E8F0;background:#fff;font-size:12.5px !important;font-weight:700;color:#475569;cursor:pointer;line-height:1 !important}'
