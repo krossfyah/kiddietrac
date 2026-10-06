@@ -32,6 +32,12 @@
     var t = h ? (h.textContent || '').replace(/\s+/g, ' ').trim() : '';
     return t || 'Report';
   }
+  /* A table can name its own export (data-kt-export-title): a report screen holding
+     several reports otherwise gives every file the screen's name. */
+  function titleFor(table) {
+    var t = table && table.getAttribute && table.getAttribute('data-kt-export-title');
+    return (t && t.trim()) || pageTitle();
+  }
   function sane(s) { return (s || 'report').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-+|-+$/g, '') || 'report'; }
 
   function extract(table) {
@@ -71,7 +77,7 @@
     var d = extract(table); if (!d) return;
     var q = function (v) { v = String(v == null ? '' : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
     var s = d.headers.map(q).join(',') + '\n' + d.rows.map(function (r) { return r.map(q).join(','); }).join('\n');
-    save(new Blob(['﻿' + s], { type: 'text/csv' }), sane(pageTitle()) + '.csv');
+    save(new Blob(['﻿' + s], { type: 'text/csv' }), sane(titleFor(table)) + '.csv');
   }
 
   async function serverExport(table, fmt, btn) {
@@ -91,10 +97,10 @@
       var res = await fetch(base + '/exports/table', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'X-Active-Agency-Id': agency, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: pageTitle(), format: fmt, columns: d.headers, rows: d.rows }),
+        body: JSON.stringify({ title: titleFor(table), format: fmt, columns: d.headers, rows: d.rows }),
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      save(await res.blob(), sane(pageTitle()) + '.' + fmt);
+      save(await res.blob(), sane(titleFor(table)) + '.' + fmt);
     } catch (e) { alert(fmt.toUpperCase() + ' export failed: ' + (e.message || e)); }
     busy(btn, false);
   }

@@ -1167,11 +1167,15 @@
     var rep = await Api.get('/admin/rsvp/events/' + state.reportEvent + '/report?view=' + encodeURIComponent(state.view));
     if (!main.isConnected) { return; }
     var s = rep.stats || {}, cols = rep.columns || [], rows = rep.rows || [];
+    // Names the 📊 / 📄 / 📕 files after the event and the view, not "Event RSVPs".
+    var evNow = evs.filter(function (e) { return e.id === state.reportEvent; })[0] || {};
+    var viewLabel = (VIEWS.filter(function (v) { return v[0] === state.view; })[0] || [])[1];
+    var exportTitle = (evNow.title || 'Event') + ' — RSVP report' + (state.view !== 'all' && viewLabel ? ' (' + viewLabel + ')' : '');
     var counts = { all: null, sent: s.sent, registered: s.registered, opted_out: s.opted_out, no_response: s.no_response, not_sent: (s.pending || 0) + (s.queued || 0) + (s.not_delivered || 0) };
     body.innerHTML = '<div class="rv-bar"><select data-ev>' + evs.map(function (e) { return '<option value="' + e.id + '"' + (e.id === state.reportEvent ? ' selected' : '') + '>' + esc(e.title) + '</option>'; }).join('') + '</select>'
       + '<button class="rv-btn" data-kt-iconized="1" data-csv title="Download this view as a CSV file">⬇ CSV</button><span class="rv-hint">Times are ' + esc(rep.tz) + '.</span></div>'
       + '<div class="rv-chips" style="margin-bottom:10px">' + VIEWS.map(function (v) { return '<button data-view="' + v[0] + '" class="' + (v[0] === state.view ? 'on' : '') + '">' + v[1] + (counts[v[0]] != null ? ' · ' + counts[v[0]] : '') + '</button>'; }).join('') + '</div>'
-      + (rows.length ? '<div class="kt-card" style="overflow:auto"><table><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th>'
+      + (rows.length ? '<div class="kt-card" style="overflow:auto"><table data-kt-export-title="' + esc(exportTitle) + '"><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th>'
         + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
