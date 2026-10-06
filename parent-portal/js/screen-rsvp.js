@@ -44,7 +44,7 @@
     if (!m) { return esc(s); }
     var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var y = +m[1] !== new Date().getFullYear() ? ' ' + m[1] : '';
-    return '<span title="' + esc(s) + '">' + MON[+m[2] - 1] + ' ' + (+m[3]) + y + ', ' + esc(m[4]) + '</span>';
+    return '<span title="' + esc(s) + '" data-export="' + esc(s) + '">' + MON[+m[2] - 1] + ' ' + (+m[3]) + y + ', ' + esc(m[4]) + '</span>';
   }
 
   function sendPill(s, label) {

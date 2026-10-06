@@ -56,7 +56,17 @@
       if (tr.querySelector('td[colspan]')) return;                        // empty-state row
       if (tr.style.display === 'none') return;                           // filtered out
       var tds = tr.children;
-      rows.push(keep.map(function (i) { var c = tds[i]; return c ? (c.textContent || '').replace(/\s+/g, ' ').trim() : ''; }));
+      rows.push(keep.map(function (i) {
+        var c = tds[i]; if (!c) return '';
+        /* A cell can show a short form and export a full one: anything inside it with
+           data-export contributes that value instead of its text ("Oct 5, 5:51 PM" on
+           screen, "2026-10-05 5:51 PM" in the file). */
+        if (c.querySelector('[data-export]')) {
+          c = c.cloneNode(true);
+          c.querySelectorAll('[data-export]').forEach(function (x) { x.textContent = x.getAttribute('data-export'); });
+        }
+        return (c.textContent || '').replace(/\s+/g, ' ').trim();
+      }));
     });
     return { headers: headers, rows: rows };
   }
