@@ -1086,16 +1086,31 @@
   // response to any #appMain mutation, so re-adding the bar makes them wipe it again —
   // an uncapped remount is an infinite render loop that freezes the tab. After the cap
   // we leave it to kt-topbar's own 1.2s poll, which is slow enough not to spiral.
-  var _tbHash = null, _tbMounts = 0;
+  /* LIVE bar only (a direct child of the live #appMain): the refresh cover is a clone that
+     carries its own id="kt-topbar", and getElementById found that one, so a background
+     refresh skipped the remount and the bar was missing when the cover came off.
+
+     The loop guard is a RATE, not a per-visit budget. A per-visit cap of 3 ran out after
+     three background refreshes of the same screen (~2 minutes on a 45s poll) and from then
+     on the shell stopped putting the bar back at all. A remount loop is many mounts in a
+     moment, so that is what is capped: 3 within 2s. (2026-10-06) */
+  var _tbStamps = [];
+  function liveTopbar() {
+    var m = document.getElementById('appMain');
+    if (!m) return null;
+    for (var i = 0; i < m.children.length; i++) { if (m.children[i].id === 'kt-topbar') return m.children[i]; }
+    return null;
+  }
   function ensureTopbar(hash) {
-    var h = String(hash || '').split('/')[0];
-    if (h !== _tbHash) { _tbHash = h; _tbMounts = 0; }
-    if (_tbMounts >= 3) return;
-    if (document.getElementById('kt-topbar')) return;
+    void hash;
+    if (liveTopbar()) return;
+    var now = Date.now();
+    _tbStamps = _tbStamps.filter(function (t) { return now - t < 2000; });
+    if (_tbStamps.length >= 3) return;
     try {
       if (window.KT && KT.topbar && KT.topbar.ensure) {
         KT.topbar.ensure();
-        if (document.getElementById('kt-topbar')) _tbMounts++;
+        if (liveTopbar()) _tbStamps.push(now);
       }
     } catch (e) {}
   }
@@ -1659,6 +1674,13 @@
       __ktDropSnapshot();
       var r = main.getBoundingClientRect();
       if (!r || r.width < 2 || r.height < 2) { return null; }
+      /* Where the live top bar is, before the clone is made (see below). */
+      var _barTop = null;
+      try {
+        for (var _bi = 0; _bi < main.children.length; _bi++) {
+          if (main.children[_bi].id === 'kt-topbar') { _barTop = main.children[_bi].getBoundingClientRect().top; break; }
+        }
+      } catch (e) {}
       var snap = main.cloneNode(true);
       /* THE COVER KEEPS THE NAME #appMain (2026-09-29).
 
@@ -1681,15 +1703,42 @@
       snap.setAttribute('aria-hidden', 'true');
       try { snap.inert = true; } catch (e) {}
       snap.removeAttribute('data-kt-pretty');
-      var _bg = getComputedStyle(main).backgroundColor || '#fff';
+      var _mcs = getComputedStyle(main);
+      var _bg = _mcs.backgroundColor || '#fff';
       snap.style.cssText = '';
+      /* THE SAME BOX, PADDING INCLUDED (2026-10-06). Dropping data-kt-pretty (so the
+         page-wide [data-kt-pretty] table sweeps leave the picture alone) also dropped the
+         rules that give #appMain its compact 12px padding, so the clone fell back to 28px:
+         everything in the picture — the top bar first — sat 16px lower than the live page
+         (bar at y=34 under the cover, y=12 live) and jumped up when the cover came off.
+         Copy the live node's computed padding, as its position and size already are. */
       [['position', 'fixed'], ['left', r.left + 'px'], ['top', r.top + 'px'], ['right', 'auto'], ['bottom', 'auto'],
        ['width', r.width + 'px'], ['height', r.height + 'px'], ['max-width', 'none'], ['max-height', 'none'],
        ['margin', '0'], ['transform', 'none'], ['overflow', 'hidden'], ['pointer-events', 'none'],
+       ['padding-top', _mcs.paddingTop], ['padding-right', _mcs.paddingRight],
+       ['padding-bottom', _mcs.paddingBottom], ['padding-left', _mcs.paddingLeft], ['box-sizing', _mcs.boxSizing],
        ['z-index', '300'], ['visibility', 'visible'], ['opacity', '1'], ['background', _bg]].forEach(function (p) {
         snap.style.setProperty(p[0], p[1], 'important');
       });
       document.body.appendChild(snap);
+      /* THE PICTURE OF THE BAR GOES WHERE THE BAR IS (2026-10-06). The bar is
+         position:sticky, and inside the clone it sticks to the CLONE (an overflow:hidden
+         box), not to the page — so it sat 6px off the live bar and moved when the cover
+         came off. Measured, not modelled: whatever layout the page is in (window scroll on
+         desktop, #appMain scroll on a phone, stuck or not), pin the copy to the live
+         bar's position as it was the moment the picture was taken. */
+      try {
+        if (_barTop != null) {
+          var _sb = null;
+          for (var _sj = 0; _sj < snap.children.length; _sj++) { if (snap.children[_sj].id === 'kt-topbar') { _sb = snap.children[_sj]; break; } }
+          if (_sb) {
+            _sb.style.setProperty('position', 'relative', 'important');
+            _sb.style.setProperty('top', '0px', 'important');
+            var _d = _barTop - _sb.getBoundingClientRect().top;
+            if (Math.abs(_d) > 0.5) { _sb.style.setProperty('top', _d + 'px', 'important'); }
+          }
+        }
+      } catch (e) {}
       window.__ktSnapGen = (gen == null ? null : gen);
       /* AND HIDE WHAT IS UNDERNEATH IT (2026-09-17).
 

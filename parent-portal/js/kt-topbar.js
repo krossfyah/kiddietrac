@@ -386,10 +386,22 @@
   function openHome() { location.hash = '#dashboard'; }
   function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
 
+  /* THE BAR MUST NOT FADE IN (Anthony, 2026-10-06: "the top bar disappears and
+     reappears"). Measured frame by frame: the bar was never missing — every removal (the
+     #appMain swap, and each Dom.clear() a screen does) was put back by the microtask
+     remount before paint. It was TRANSPARENT: `#appMain > * { animation: kt-fade-in
+     0.12s both !important }` (kt-consistency-polish.css) is the screen-entrance fade, the
+     bar is a direct child of #appMain, and a CSS animation restarts whenever its element
+     is re-attached — so every navigation replayed it 2–3 times (opacity 0 for 2–4
+     frames each time, e.g. at 9ms and again at ~600ms when the screen re-cleared). The
+     bar is persistent chrome, not part of the screen being entered, so it opts out of
+     that fade, of its own kt-tb-in, and of the phone .kt-screen-in slide — two ids
+     outrank `#appMain > *` and `#appMain > .kt-screen-in`, both !important. */
   function injectStyle() {
     if (document.getElementById('kt-topbar-style')) return;
     var s = document.createElement('style'); s.id = 'kt-topbar-style';
     s.textContent = [
+      '#appMain>#kt-topbar,#appMain>#kt-topbar.kt-screen-in,#appMain>#kt-topbar.kt-banner-fx{animation:none !important;opacity:1;}',
       '.kt-topbar{position:sticky;top:6px;z-index:50;display:flex;align-items:center;justify-content:space-between;gap:14px;',
       'color:#1E293B;border-radius:13px;padding:7px 14px;margin-bottom:14px;',
       'background:rgba(255,255,255,.6);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);',
@@ -523,9 +535,22 @@
      browser paints — instead of waiting for the bus. Rebuilt only when who it is for
      changes. */
   var _bar = null, _barKey = '';
+  /* THE LIVE BAR, not any element with the id. During a background refresh the shell lays
+     a clone of #appMain over the page (#kt-refresh-snap) and the clone carries its own
+     id="kt-topbar". getElementById found THAT one, so ensure() and the remount observer
+     decided the bar was mounted and did nothing: when the cover came off the real bar was
+     missing — ~170ms on most refreshes, for good on a screen that had finished drawing
+     under the cover (measured 2026-10-06). The live bar is a direct child of the live
+     #appMain (getElementById('appMain') is the live one; the clone is appended after it).
+     Walked rather than :scope, which some app WebViews lack. */
+  function liveBar(host) {
+    if (!host) return null;
+    for (var i = 0; i < host.children.length; i++) { if (host.children[i].id === 'kt-topbar') return host.children[i]; }
+    return null;
+  }
   function ensure() {
     var host = document.getElementById('appMain');
-    if (!host || !store('kt_token') || document.getElementById('kt-topbar')) return;
+    if (!host || !store('kt_token') || liveBar(host)) return;
     var u = user();
     // Top bar is for admins / directors / super admins only. While a platform
     // admin previews a lower role via "View as", honour that (hide the bar too).
@@ -750,7 +775,7 @@
   (function () {
     var stamps = [];
     function onMain() {
-      if (document.getElementById('kt-topbar')) return;
+      if (liveBar(document.getElementById('appMain'))) return;
       var now = Date.now();
       stamps = stamps.filter(function (t) { return now - t < 2000; });
       if (stamps.length >= 8) return;

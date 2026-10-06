@@ -285,7 +285,14 @@
 }
 
 /* ============================ Smooth page transitions ============================ */
-[data-kt-pretty] {
+/* NOT #appMain (2026-10-06). #appMain is a brand-new node on every render
+   (__ktSwapMain) and carries data-kt-pretty, so this replayed on every navigation —
+   and it fades the WHOLE container, the persistent top bar inside it included: the
+   bar went to opacity 0 and slid 6px each time ("the top bar disappears and
+   reappears"). A screen's content already gets its entrance from `#appMain > *`
+   (kt-consistency-polish.css), which the bar opts out of; other [data-kt-pretty]
+   hosts keep this one. */
+[data-kt-pretty]:not(#appMain) {
   animation: kt-page-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

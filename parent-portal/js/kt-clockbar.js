@@ -269,11 +269,20 @@
 
 
   // The strip lives at the top of the screen content, under the header.
+  /* UNDER the header, as the comment always said (2026-10-06). It went in at
+     main.firstChild — and #kt-topbar is #appMain's first child — so on the director's
+     dashboard the pill landed ABOVE the greeting bar ~20ms into every render, and the bar
+     jumped 80px down. It also re-checked "am I first?" and moved itself back on top each
+     time the bar was re-inserted. Anchored the way the shell's heroAnchor() is: right
+     after the live bar when there is one, first otherwise. Walked, not :scope. */
   function mount(el) {
     var main = document.getElementById('appMain');
     if (!main) return;
-    if (el.parentElement !== main || main.firstElementChild !== el) {
-      main.insertBefore(el, main.firstChild);
+    var bar = null;
+    for (var i = 0; i < main.children.length; i++) { if (main.children[i].id === 'kt-topbar') { bar = main.children[i]; break; } }
+    var want = bar ? bar.nextSibling : main.firstChild;
+    if (el.parentElement !== main || (bar ? el.previousElementSibling !== bar : main.firstElementChild !== el)) {
+      if (want !== el) main.insertBefore(el, want);
     }
   }
 
