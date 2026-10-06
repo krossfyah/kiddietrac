@@ -1049,6 +1049,13 @@ class RsvpController extends Controller
     private function queue(object $e, array $ids): int
     {
         $n = 0;
+        /* PACED when the event sends through a personal mailbox. Fifty identical messages
+           leaving a new Gmail account in the same second is the pattern its filters treat
+           as spam; one every few seconds is not. Agency mail is left as it was. */
+        $paced = false;
+        if (! empty($e->sender_id)) {
+            $paced = DB::table('rsvp_senders')->where('id', $e->sender_id)->where('agency_id', $e->agency_id)->value('type') === 'gmail_oauth';
+        }
         foreach (array_chunk($ids, 500) as $chunk) {
             $rows = DB::table('rsvp_invites')->whereIn('id', $chunk)->where('event_id', $e->id)->get(['id', 'email']);
             foreach ($rows as $r) {
@@ -1057,7 +1064,8 @@ class RsvpController extends Controller
                     continue;
                 }
                 DB::table('rsvp_invites')->where('id', $r->id)->update(['send_status' => 'queued', 'send_error' => null, 'queued_at' => now(), 'updated_at' => now()]);
-                SendRsvpMail::dispatch('invite', (int) $r->id)->onQueue('mail');
+                $job = SendRsvpMail::dispatch('invite', (int) $r->id)->onQueue('mail');
+                if ($paced && $n > 0) { $job->delay(now()->addSeconds(min($n * 6, 6 * 3600))); }
                 $n++;
             }
         }

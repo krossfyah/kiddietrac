@@ -96,6 +96,14 @@ class SuppressAgencyMail
             if ($hdrs && $hdrs->has('X-KT-Track')) {
                 return;   // already done (a message re-entering the gate)
             }
+            /* RSVP mail opts out. A hidden 1x1 image from a third domain is one of the
+               things that sends a personal Gmail sender's invitations to junk, and the RSVP
+               report counts opens from the RSVP page itself, so it gains nothing. The marker
+               is removed so it never leaves the server. */
+            if ($hdrs && $hdrs->has('X-KT-No-Track')) {
+                $hdrs->remove('X-KT-No-Track');
+                return;
+            }
 
             $html = $msg->getHtmlBody();
             if (! is_string($html) || trim($html) === '') {

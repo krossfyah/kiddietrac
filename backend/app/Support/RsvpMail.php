@@ -32,6 +32,34 @@ final class RsvpMail
         return self::APP . '/rsvp.html?o=' . $inviteToken;
     }
 
+    /** The endpoint a mail provider POSTs to for one-click unsubscribe (RFC 8058). */
+    public static function oneClickUrl(string $inviteToken): string
+    {
+        return 'https://api.kiddietrac.com/api/v1/public/rsvp/optout/' . $inviteToken;
+    }
+
+    /* A PLAIN-TEXT COPY of the HTML. HTML-only mail scores worse with spam filters than
+       the same message with a text part, and some readers prefer it. Links keep their
+       address, written after the text, so nothing in the text copy is unclickable. */
+    public static function plainText(string $html): string
+    {
+        $t = preg_replace('#<(head|style|script)\b[^>]*>.*?</\1>#is', '', $html);
+        $t = preg_replace('#<div[^>]*display:\s*none[^>]*>.*?</div>#is', '', $t);          // preheader
+        $t = preg_replace_callback('#<a\b[^>]*href="([^"]+)"[^>]*>(.*?)</a>#is', function ($m) {
+            $label = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $url = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return ($label !== '' && $label !== $url) ? $label . ': ' . $url : $url;
+        }, $t);
+        $t = preg_replace('#<(br|/p|/h[1-6]|/tr|/div|/li)\b[^>]*>#i', "\n", $t);
+        $t = preg_replace('#</td>#i', "  ", $t);
+        $t = html_entity_decode(strip_tags($t), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $t = preg_replace("/[ \t]+/", ' ', $t);
+        $t = preg_replace("/ *\n */", "\n", $t);
+        $t = preg_replace("/\n{3,}/", "\n\n", $t);
+
+        return trim($t) . "\n";
+    }
+
     public static function publicUrl(string $eventToken): string
     {
         return self::APP . '/rsvp.html?e=' . $eventToken;
@@ -146,10 +174,12 @@ final class RsvpMail
         return $out;
     }
 
-    private static function image(?string $url): string
+    private static function image(?string $url, string $alt = ''): string
     {
         if (! $url) return '';
-        return '<div style="margin:0 0 18px;text-align:center"><img src="' . e($url) . '" alt="" width="560" '
+        // Described, not alt="": an image with no text is a junk-mail signal, and the text
+        // is what a reader sees when their mail app blocks images.
+        return '<div style="margin:0 0 18px;text-align:center"><img src="' . e($url) . '" alt="' . e($alt) . '" width="560" '
             . 'style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:12px;margin:0 auto"></div>';
     }
 
@@ -184,7 +214,7 @@ final class RsvpMail
     public static function invite(object $event, object $invite): array
     {
         $subject = self::fill((string) $event->email_subject, $event, $invite->name);
-        $body = self::image($event->image_url)
+        $body = self::image($event->image_url, (string) ($event->title ?? ''))
             . self::heading($event, (string) $event->title)
             . self::para(self::fill((string) $event->email_body, $event, $invite->name))
             . self::detailsBox($event)
@@ -206,7 +236,7 @@ final class RsvpMail
         $msg = trim((string) ($event->confirmation_message ?? '')) !== ''
             ? self::fill((string) $event->confirmation_message, $event, $response->name)
             : 'Thank you for registering for {{event}}. Here is a copy of the details you sent us.';
-        $body = self::image($event->image_url)
+        $body = self::image($event->image_url, (string) ($event->title ?? ''))
             . self::heading($event, 'You’re registered: ' . $event->title)
             . self::para(self::fill('Hi {{first_name}},', $event, $response->name) . "\n\n" . self::fill($msg, $event, $response->name))
             . self::detailsBox($event)
@@ -276,7 +306,7 @@ final class RsvpMail
                 return ['status' => 'failed', 'error' => 'The sender account chosen for this event no longer exists. Pick another on the event.', 'log_id' => null];
             }
         }
-        $build = function ($m) use ($to, $toName, $subject, $opts, $agencyId) {
+        $build = function ($m) use ($to, $toName, $subject, $opts, $agencyId, $html) {
             $m->to($to, $toName ?: null)->subject($subject);
             // An unbranded event names itself (or its sender account), never the agency.
             if (! empty($opts['from'][0])) {
@@ -286,8 +316,22 @@ final class RsvpMail
                 $m->replyTo($opts['reply_to'], $opts['reply_to_name'] ?? null);
             }
             MailScope::agency($m, $agencyId);
+            /* DELIVERABILITY (2026-10-05: invitations from the Town of Mono Gmail landed in
+               junk). A text part alongside the HTML; no tracking pixel; and RFC 8058
+               one-click unsubscribe, which Gmail and Yahoo expect on invitation-style mail
+               and show as an "Unsubscribe" link beside the sender instead of a spam report. */
+            try { $m->getSymfonyMessage()->text(self::plainText($html)); } catch (\Throwable $e) {}
+            try { $m->getHeaders()->addTextHeader('X-KT-No-Track', '1'); } catch (\Throwable $e) {}
             if (! empty($opts['unsubscribe'])) {
-                try { $m->getHeaders()->addTextHeader('List-Unsubscribe', '<' . $opts['unsubscribe'] . '>'); } catch (\Throwable $e) {}
+                try {
+                    $tok = preg_match('/[?&]o=([A-Za-z0-9]{20,48})/', (string) $opts['unsubscribe'], $mm) ? $mm[1] : null;
+                    if ($tok) {
+                        $m->getHeaders()->addTextHeader('List-Unsubscribe', '<' . self::oneClickUrl($tok) . '>, <' . $opts['unsubscribe'] . '>');
+                        $m->getHeaders()->addTextHeader('List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
+                    } else {
+                        $m->getHeaders()->addTextHeader('List-Unsubscribe', '<' . $opts['unsubscribe'] . '>');
+                    }
+                } catch (\Throwable $e) {}
             }
         };
         $before = (int) DB::table('email_logs')->max('id');
