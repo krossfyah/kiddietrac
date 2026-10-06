@@ -71,6 +71,16 @@
          of what this work is for. */
       for (var i = 0; i < main.attributes.length; i++) {
         var a = main.attributes[i];
+        /* EXCEPT the reveal hold. data-kt-revealing hides every child of #appMain until
+           that navigation's reveal clears it - and the reveal clears the node it was SET
+           on. A same-screen re-render inside that window (live refresh, data arriving)
+           swapped in a fresh node that copied the hold, while the reveal and all three
+           backstops then cleared the old, detached node: the live page stayed opacity 0
+           for good, top bar visible, everything else white (Anthony, 2026-10-06:
+           "randomly portal goes to a blank white screen when navigating"; reproduced
+           5/5 with a renderScreen() 150ms after a navigation). A navigation sets its own
+           hold on the node it has just swapped in, so nothing is lost by not copying it. */
+        if (a.name === 'data-kt-revealing') { continue; }
         try { fresh.setAttribute(a.name, a.value); } catch (e) {}
       }
 

@@ -20,8 +20,17 @@
         which read as the page "refreshing itself" on each click. Swap it for a
         quick opacity-only fade so sections appear near-instantly. Opacity-only
         also avoids the retained transform that could clip modal overlays. ── */
+/* NEVER BELOW 60% (2026-10-06). Anthony: "randomly portal goes to a blank white screen
+   when navigating" — top bar there, page white. This fade started at opacity 0 with
+   fill-mode `both`, so until the browser actually STARTS it, every element of the new
+   screen is held invisible. A screen still busy rendering (heavy screens, or Back pressed
+   several times) delays the start, and for that whole time the page is blank though its
+   content is there — measured on #immunizations after back-navigation: 3 children, 2,192
+   characters of text, all at opacity 0, animation pending. Starting at .6 keeps the soft
+   entrance, and a delayed start now shows the page dimmed instead of not at all. */
+@keyframes kt-screen-in { from { opacity: .6; } to { opacity: 1; } }
 #appMain > * {
-  animation: kt-fade-in 0.12s ease both !important;
+  animation: kt-screen-in 0.12s ease both !important;
 }
 @media (prefers-reduced-motion: reduce) {
   #appMain > * { animation: none !important; }
@@ -35,7 +44,7 @@
    BOTH the fade-in and the shimmer. */
 #appMain .kt-banner-fx,
 #appMain > .kt-banner-fx {
-  animation: kt-fade-in 0.12s ease both, kt-hero-breathe 16s ease-in-out infinite !important;
+  animation: kt-screen-in 0.12s ease both, kt-hero-breathe 16s ease-in-out infinite !important;
   background-size: 200% 200% !important;
 }
 .kt-banner-fx {
@@ -44,7 +53,7 @@
      was overriding the shimmer entirely (computed animation-name came out as
      kt-fade-in), which is why banners stopped shimmering. Keep the fade-in AND the
      shimmer. */
-  animation: kt-fade-in 0.28s ease-out, kt-hero-breathe 16s ease-in-out infinite !important;
+  animation: kt-screen-in 0.28s ease-out, kt-hero-breathe 16s ease-in-out infinite !important;
 }
 /* Floating emoji art — identical to the native .kt-hero-emoji so EVERY banner's
    art is the same size / transparency / float (was 54px + opacity .85 + a
