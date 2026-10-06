@@ -30,29 +30,48 @@
   var seq = 0;
   var barWrap = null, fill = null, label = null, hideTimer = null;
 
-  /* ── the bar ─────────────────────────────────────────────────────────── */
+  /* ── the "please wait" popup ──────────────────────────────────────────────
+     Anthony, 2026-10-05: "when uploading files such as the event rsvp new image you
+     should have a please wait popup of some sort shown - full sweep."
+
+     This used to be a 3px bar across the top edge, which nobody noticed — so people
+     clicked Upload again, or left the screen while the file was still going. Now an
+     upload shows a centred popup over a dimmed page that also stops clicks underneath:
+     what is uploading, how far it has got, and "Processing…" for the wait between the
+     last byte and the server's answer (resizing an image, reading a PDF).
+
+     It appears only after SHOW_DELAY, so a 20 KB avatar does not flash a dialog; once
+     shown it stays at least MIN_SHOW, so it is read rather than flickered. Leaving the
+     page mid-upload asks first. data-kt-keep-open keeps the navigation sweep from
+     closing it. */
+  var SHOW_DELAY = 300, MIN_SHOW = 600;
+  var shownAt = 0, showTimer = null, wantShow = false, unloadOn = false;
+  var titleEl = null, subEl = null, pctEl = null, ringEl = null;
 
   function styles() {
     if (d.getElementById('kt-up-css')) { return; }
     var s = d.createElement('style');
     s.id = 'kt-up-css';
     s.textContent =
-      '#kt-upbar{position:fixed;left:0;right:0;z-index:2147400000;'
-      + 'top:calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)));'
-      + 'background:#0F172A;color:#fff;font:600 12.5px/1.3 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;'
-      + 'box-shadow:0 6px 20px -8px rgba(8,20,40,.65);transform:translateY(-100%);'
-      + 'transition:transform .22s ease;pointer-events:none;}'
-      + '#kt-upbar.kt-up-show{transform:none;}'
-      + '#kt-upbar .kt-up-row{display:flex;align-items:center;gap:10px;padding:8px 14px;}'
-      + '#kt-upbar .kt-up-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
-      + '#kt-upbar .kt-up-pct{flex:none;opacity:.85;font-variant-numeric:tabular-nums;}'
-      + '#kt-upbar .kt-up-track{height:3px;background:rgba(255,255,255,.18);}'
-      + '#kt-upbar .kt-up-fill{height:100%;width:0;background:linear-gradient(90deg,#13B7CC,#8EC73C);'
-      + 'transition:width .18s ease;}'
-      /* Total unknown (a stream, or a browser that reports no lengthComputable):
-         a moving stripe says "working" without claiming a percentage it does not know. */
-      + '#kt-upbar.kt-up-indet .kt-up-fill{width:35%;animation:kt-up-slide 1.1s ease-in-out infinite;}'
-      + '@keyframes kt-up-slide{0%{margin-left:-35%}100%{margin-left:100%}}';
+      '#kt-upwait{position:fixed;inset:0;z-index:2147482600;display:flex;align-items:center;justify-content:center;'
+      + 'padding:16px;background:rgba(15,23,42,.42);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);'
+      + 'cursor:progress;opacity:0;transition:opacity .16s ease;font-family:inherit;}'
+      + '#kt-upwait.kt-up-show{opacity:1;}'
+      + '#kt-upwait .kt-up-card{background:#fff;border-radius:16px;width:100%;max-width:360px;padding:22px 22px 18px;'
+      + 'box-shadow:0 30px 70px -20px rgba(8,20,40,.55);text-align:center;color:#0F172A;}'
+      + '#kt-upwait .kt-up-ring{width:38px;height:38px;margin:0 auto 12px;border-radius:50%;'
+      + 'border:4px solid rgba(31,96,128,.18);border-top-color:#1F6080;animation:kt-up-spin .75s linear infinite;}'
+      + '#kt-upwait .kt-up-ring.kt-up-ok{animation:none;border-color:#16A34A;background:#16A34A;position:relative;}'
+      + '#kt-upwait .kt-up-ring.kt-up-ok:after{content:"\\2713";position:absolute;inset:0;color:#fff;font:800 20px/30px system-ui,sans-serif;}'
+      + '#kt-upwait .kt-up-title{font-weight:800;font-size:15px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+      + '#kt-upwait .kt-up-sub{font-size:12.5px;color:#64748B;margin-top:4px;line-height:1.4;}'
+      + '#kt-upwait .kt-up-track{height:6px;background:#E2E8F0;border-radius:99px;overflow:hidden;margin:14px 0 6px;}'
+      + '#kt-upwait .kt-up-fill{height:100%;width:0;background:linear-gradient(90deg,#13B7CC,#8EC73C);border-radius:99px;transition:width .18s ease;}'
+      + '#kt-upwait.kt-up-indet .kt-up-fill{width:35%;animation:kt-up-slide 1.1s ease-in-out infinite;}'
+      + '#kt-upwait .kt-up-pct{font-size:12px;color:#475569;font-variant-numeric:tabular-nums;min-height:15px;}'
+      + '@keyframes kt-up-spin{to{transform:rotate(360deg)}}'
+      + '@keyframes kt-up-slide{0%{margin-left:-35%}100%{margin-left:100%}}'
+      + '@media (prefers-reduced-motion:reduce){#kt-upwait .kt-up-ring{animation-duration:2s}#kt-upwait.kt-up-indet .kt-up-fill{animation:none;width:100%;opacity:.5}}';
     d.head.appendChild(s);
   }
 
@@ -60,15 +79,56 @@
     if (barWrap && d.body.contains(barWrap)) { return; }
     styles();
     barWrap = d.createElement('div');
-    barWrap.id = 'kt-upbar';
-    barWrap.setAttribute('role', 'status');
+    barWrap.id = 'kt-upwait';
+    barWrap.setAttribute('role', 'alertdialog');
+    barWrap.setAttribute('aria-modal', 'true');
     barWrap.setAttribute('aria-live', 'polite');
+    barWrap.setAttribute('data-kt-keep-open', '1');
+    barWrap.setAttribute('data-no-modal-guard', '1');
     barWrap.innerHTML =
-      '<div class="kt-up-row"><span class="kt-up-txt"></span><span class="kt-up-pct"></span></div>'
-      + '<div class="kt-up-track"><div class="kt-up-fill"></div></div>';
+      '<div class="kt-up-card">'
+      + '<div class="kt-up-ring"></div>'
+      + '<div class="kt-up-title"></div>'
+      + '<div class="kt-up-sub"></div>'
+      + '<div class="kt-up-track"><div class="kt-up-fill"></div></div>'
+      + '<div class="kt-up-pct"></div>'
+      + '</div>';
+    // Swallow clicks and keys aimed at the page underneath while the upload runs.
+    ['click', 'mousedown', 'touchstart', 'keydown'].forEach(function (t) {
+      barWrap.addEventListener(t, function (e) { e.stopPropagation(); if (t !== 'touchstart') { e.preventDefault(); } }, true);
+    });
     d.body.appendChild(barWrap);
     fill = barWrap.querySelector('.kt-up-fill');
-    label = barWrap.querySelector('.kt-up-txt');
+    label = barWrap.querySelector('.kt-up-title');
+    titleEl = label;
+    subEl = barWrap.querySelector('.kt-up-sub');
+    pctEl = barWrap.querySelector('.kt-up-pct');
+    ringEl = barWrap.querySelector('.kt-up-ring');
+  }
+
+  function onBeforeUnload(e) {
+    if (!Object.keys(jobs).length) { return; }
+    e.preventDefault();
+    e.returnValue = 'An upload is still in progress.';
+    return e.returnValue;
+  }
+  function guardUnload(on) {
+    if (on === unloadOn) { return; }
+    unloadOn = on;
+    if (on) { w.addEventListener('beforeunload', onBeforeUnload); } else { w.removeEventListener('beforeunload', onBeforeUnload); }
+  }
+
+  function reveal() {
+    showTimer = null;
+    if (!wantShow || !Object.keys(jobs).length) { return; }
+    ensureBar();
+    // Focus off whatever button started it, so Enter cannot fire it again.
+    try { if (d.activeElement && d.activeElement.blur) { d.activeElement.blur(); } } catch (e) {}
+    barWrap.style.display = 'flex';
+    void barWrap.offsetWidth;
+    barWrap.classList.add('kt-up-show');
+    shownAt = Date.now();
+    draw();
   }
 
   function human(b) {
@@ -77,48 +137,77 @@
     return Math.max(1, Math.round(b / 1024)) + ' KB';
   }
 
-  function paint() {
+  function draw() {
+    if (!barWrap || !shownAt) { return; }
     var ids = Object.keys(jobs);
     if (!ids.length) { return; }
-    ensureBar();
-    var loaded = 0, total = 0, known = true, names = [];
+    var loaded = 0, total = 0, known = true, names = [], saving = true;
     for (var i = 0; i < ids.length; i++) {
       var j = jobs[ids[i]];
       loaded += j.loaded;
       if (j.total > 0) { total += j.total; } else { known = false; }
       if (j.name) { names.push(j.name); }
+      if (!j.saving) { saving = false; }
     }
     var n = ids.length;
-    var what = n > 1 ? ('Uploading ' + n + ' files') : ('Uploading ' + (names[0] || 'file'));
-    label.textContent = what;
-    if (known && total > 0) {
+    ringEl.classList.remove('kt-up-ok');
+    titleEl.textContent = saving ? ((n === 1 && jobs[ids[0]].title) ? jobs[ids[0]].title + '…' : 'Saving…')
+      : (n > 1 ? ('Uploading ' + n + ' files…') : ('Uploading ' + (names[0] || 'your file') + '…'));
+    var sent = known && total > 0 && loaded >= total;
+    if (!saving && known && total > 0 && !sent) {
       barWrap.classList.remove('kt-up-indet');
       var pct = Math.max(2, Math.min(100, Math.round(loaded / total * 100)));
       fill.style.width = pct + '%';
-      barWrap.querySelector('.kt-up-pct').textContent = pct + '%  ·  ' + human(loaded) + ' / ' + human(total);
+      pctEl.textContent = pct + '%  ·  ' + human(loaded) + ' of ' + human(total);
+      subEl.textContent = 'Please wait — don’t close this page.';
     } else {
+      // Every byte is up (or the size is unknown): the server is working on it now.
       barWrap.classList.add('kt-up-indet');
-      barWrap.querySelector('.kt-up-pct').textContent = human(loaded);
+      pctEl.textContent = sent ? 'Processing…' : (saving ? '' : human(loaded));
+      subEl.textContent = sent ? 'Almost done — finishing up on our side.' : 'Please wait — don’t close this page.';
     }
+  }
+
+  function paint() {
+    if (!Object.keys(jobs).length) { return; }
+    guardUnload(true);
     if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
-    barWrap.classList.add('kt-up-show');
+    wantShow = true;
+    if (shownAt) { draw(); return; }
+    if (!showTimer) { showTimer = setTimeout(reveal, SHOW_DELAY); }
+  }
+
+  function hideNow() {
+    if (!barWrap) { return; }
+    barWrap.classList.remove('kt-up-show');
+    shownAt = 0;
+    setTimeout(function () {
+      if (Object.keys(jobs).length || !barWrap) { return; }
+      barWrap.style.display = 'none';
+      fill.style.width = '0';
+    }, 180);
   }
 
   function finish(id, ok) {
     delete jobs[id];
     if (Object.keys(jobs).length) { paint(); return; }
-    if (!barWrap) { return; }
-    // Let a completed bar be SEEN before it goes: a bar that vanishes the instant it
-    // fills reads as a flicker rather than as "that finished".
-    barWrap.classList.remove('kt-up-indet');
-    fill.style.width = '100%';
-    barWrap.querySelector('.kt-up-pct').textContent = ok ? 'Done' : 'Failed';
-    label.textContent = ok ? 'Upload complete' : 'Upload failed';
-    hideTimer = setTimeout(function () {
-      if (Object.keys(jobs).length) { return; }
-      barWrap.classList.remove('kt-up-show');
-      setTimeout(function () { if (fill && !Object.keys(jobs).length) { fill.style.width = '0'; } }, 240);
-    }, ok ? 650 : 1800);
+    guardUnload(false);
+    wantShow = false;
+    if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+    if (!shownAt) { return; }                       // never shown: nothing to take down
+    var wait = Math.max(0, MIN_SHOW - (Date.now() - shownAt));
+    if (ok) {
+      // A brief tick, so "it finished" is seen rather than inferred from a vanishing box.
+      barWrap.classList.remove('kt-up-indet');
+      fill.style.width = '100%';
+      ringEl.classList.add('kt-up-ok');
+      titleEl.textContent = 'Done';
+      subEl.textContent = '';
+      pctEl.textContent = '';
+      wait = Math.max(wait, 450);
+    }
+    // On failure, get out of the way: the screen shows its own error message.
+    hideTimer = setTimeout(function () { hideTimer = null; if (!Object.keys(jobs).length) { hideNow(); } }, wait);
   }
 
   /* ── does this request carry a file? ─────────────────────────────────── */
@@ -139,12 +228,28 @@
   /* ── the shim ────────────────────────────────────────────────────────── */
 
   var orig = w.fetch;
+  var BIG_TEXT_BODY = 150 * 1024;   // a JSON body this size is carrying a file
 
   w.fetch = function (input, init) {
     var body = init && init.body;
     var isForm = body && (typeof FormData !== 'undefined') && (body instanceof FormData);
     var file = isForm ? fileIn(body) : null;
-    if (!file) { return orig.apply(this, arguments); }
+    if (!file) {
+      /* A FILE SENT AS TEXT. Some screens read the file into base64 and post it inside
+         JSON (signed documents, scanned forms). No progress events for those — fetch
+         has none — but a body this big is a file on its way up, and the popup still
+         says "please wait" until the answer comes back. */
+      if (typeof body === 'string' && body.length >= BIG_TEXT_BODY) {
+        var sid = 's' + (++seq);
+        jobs[sid] = { loaded: 0, total: 0, name: '', saving: true };
+        paint();
+        var p;
+        try { p = orig.apply(this, arguments); } catch (e) { finish(sid, false); throw e; }
+        return p.then(function (r) { finish(sid, !!(r && r.ok)); return r; },
+                      function (e) { finish(sid, false); throw e; });
+      }
+      return orig.apply(this, arguments);
+    }
 
     var url, method;
     try {
@@ -236,5 +341,16 @@
       paint();
     },
     done: function (id, ok) { if (jobs[id]) { finish(id, ok !== false); } },
+  };
+
+  /* The same popup for any other slow step a screen wants to cover (building a large
+     PDF, a bulk import that is not a file upload):
+         var done = KT.pleaseWait('Importing families');
+         try { await work(); done(true); } catch (e) { done(false); throw e; } */
+  w.KT.pleaseWait = function (title) {
+    var id = 'w' + (++seq);
+    jobs[id] = { loaded: 0, total: 0, name: title || '', saving: true, title: title || '' };
+    paint();
+    return function (ok) { if (jobs[id]) { finish(id, ok !== false); } };
   };
 })(window);
