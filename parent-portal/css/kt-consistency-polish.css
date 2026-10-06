@@ -760,3 +760,14 @@ table thead th.kt-today-cell {
     min-height: 0;
   }
 }
+
+/* ── 3) A FIXED-WIDTH PAGE (2026-10-06). Anthony's screen recording: the top bar
+        "stutters when navigating to and from sections" — its clock, icons and language
+        picker jumped ~15px sideways several times per navigation. The page (html) is the
+        scroller on desktop; while a section swaps, the page is briefly shorter than the
+        window (or scroll-locked) and the classic Windows scrollbar disappears, then
+        returns — every toggle changes the usable width and everything centred or
+        right-aligned moves with it. Measured with real scrollbars: clock at x=1390 with
+        the bar, 1405 without. Reserving the scrollbar's space permanently ends that; on
+        overlay-scrollbar devices (Mac, phones) it reserves nothing. ── */
+html { scrollbar-gutter: stable; }
