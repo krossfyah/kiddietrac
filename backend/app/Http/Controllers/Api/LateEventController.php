@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Support\AgencyTime;
+use App\Support\LatePickups;
+use App\Support\Visibility;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -13,163 +15,192 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Late arrivals and late departures, logged by the educator who was there.
+ * Late pickups and late arrivals — THE one place for them (2026-10-06).
  *
- * Distinct from invoices:apply-late-fees, which charges interest on an overdue invoice.
- * This is the other kind of late: a child collected after closing, or arriving after the
- * session started.
+ * Staff LOG what happened (the pickup time against the centre's close time, or minutes
+ * late); the agency's per-minute rate and grace period give a SUGGESTED fee. A director
+ * or admin DECIDES: approve (the fee goes on the invoice — App\Support\LatePickups::charge),
+ * waive, or decline. A director or admin may log and approve in one step.
  *
- * An educator RECORDS; an admin DECIDES. That separation is the point — the person at the
- * door knows what happened and should not have to judge whether it costs the family
- * money, and the person who bills should not be reconstructing the evening from memory. A
- * logged event is a fact; the fee is a decision made about it afterwards, with a name and
- * a timestamp against it.
+ * This replaced two separate sections: #late-pickups, which charged on logging, and
+ * #late-events, the record-then-decide list. Existing charges were migrated in as
+ * approved records (2026_10_06_210000_late_pickups_one_flow).
  */
 final class LateEventController extends Controller
 {
-    use \App\Http\Concerns\ReportAlerts;
-
     private const KINDS = ['arrival', 'departure'];
 
     private function ensureTable(): void
     {
         if (Schema::hasTable('late_events')) return;
-        Schema::create('late_events', function ($t) {
-            $t->id();
-            $t->unsignedBigInteger('child_id')->index();
-            $t->unsignedBigInteger('centre_id')->nullable()->index();
-            $t->string('kind', 16);                 // arrival | departure
-            $t->date('occurred_on');
-            $t->unsignedInteger('minutes')->default(0);
-            $t->text('note')->nullable();
-            $t->unsignedBigInteger('recorded_by_id')->nullable();
-            // pending until somebody with the authority to bill has looked at it.
-            $t->string('status', 16)->default('pending');
-            $t->decimal('fee_amount', 8, 2)->nullable();
-            $t->unsignedBigInteger('decided_by_id')->nullable();
-            $t->timestamp('decided_at')->nullable();
-            $t->text('decision_note')->nullable();
-            $t->timestamps();
-            $t->index(['centre_id', 'occurred_on']);
-        });
+        abort(503, 'Late pickups are being set up — try again in a minute.');
     }
 
-    /** Centres the caller can see, so nothing here can reach another agency's children. */
-    private function centreIds(Request $request): array
+    /** The agency in play: the selected one if the caller may use it, else their own. */
+    private function agencyId(Request $request): int
     {
         $uid = (int) $request->user()->id;
         $header = (int) $request->header('X-Active-Agency-Id');
         $isPlatform = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
             ->where('role', 'platform_admin')->exists();
-
-        $agencyId = null;
         if ($header && ($isPlatform || DB::table('role_assignments')->where('user_id', $uid)
                 ->where('active', 1)->where('agency_id', $header)->exists())) {
-            $agencyId = $header;
+            return $header;
         }
-        if (! $agencyId) {
-            $agencyId = (int) DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
-                ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])->value('agency_id');
-        }
-
-        if ($agencyId) {
-            return DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
-        }
-        // An educator without an agency-level role: their own centres only.
-        return DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
-            ->whereNotNull('centre_id')->pluck('centre_id')->unique()->values()->all();
+        if ($isPlatform) return 0;   // a platform admin must pick an agency first
+        return (int) DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->whereNotNull('agency_id')->orderBy('id')->value('agency_id');
     }
 
-    /** POST /provider/late-events — the educator's quick log. */
+    /** Centres the caller may see in that agency: all of it for an admin, their own
+        centre(s) for a director or educator (Visibility — fails closed). */
+    private function centreIds(Request $request): array
+    {
+        $agencyId = $this->agencyId($request);
+        return $agencyId ? Visibility::centreIds($agencyId, $request->user()) : [];
+    }
+
+    /** A director or admin IN THIS AGENCY (a platform admin anywhere). */
+    private function canDecide(Request $request): bool
+    {
+        $agencyId = $this->agencyId($request);
+        if (! $agencyId) return false;
+        return DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+            ->where(fn ($q) => $q->where('role', 'platform_admin')
+                ->orWhere(fn ($w) => $w->whereIn('role', ['agency_admin', 'centre_director'])->where('agency_id', $agencyId)))
+            ->exists();
+    }
+
+    /** GET /provider/late-events/options — children, centres with close times, the fee policy. */
+    public function options(Request $request): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $centreIds = $agencyId ? Visibility::centreIds($agencyId, $request->user()) : [];
+        $centres = DB::table('centres')->whereIn('id', $centreIds)->orderBy('name')->get(['id', 'name', 'close_time']);
+        $children = $centreIds ? DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+            ->whereIn('f.centre_id', $centreIds)->whereNull('c.deleted_at')
+            ->where(fn ($q) => $q->whereNull('c.enrollment_status')->orWhereNotIn('c.enrollment_status', ['withdrawn', 'waitlist', 'graduated']))
+            ->orderBy('c.first_name')->get(['c.id', 'c.first_name', 'c.last_name', 'f.centre_id']) : collect();
+        return response()->json([
+            'centres' => $centres, 'children' => $children,
+            'policy' => $agencyId ? LatePickups::policy($agencyId) : ['per_minute' => 0, 'grace' => 0],
+            'can_decide' => $this->canDecide($request),
+            'today' => Carbon::now(AgencyTime::tz($agencyId ?: null))->format('Y-m-d\TH:i'),
+        ]);
+    }
+
+    /**
+     * POST /provider/late-events — log a late pickup or arrival.
+     *   pickup_at + close_time (a pickup: minutes worked out), or minutes (either kind),
+     *   charge=true (director/admin only): approve at once with fee_amount (default: the
+     *   suggested fee).
+     */
     public function store(Request $request): JsonResponse
     {
         $this->ensureTable();
         $data = $request->validate([
             'child_id' => ['required', 'integer'],
-            'kind' => ['required', 'string', 'in:' . implode(',', self::KINDS)],
-            'minutes' => ['required', 'integer', 'min:1', 'max:1440'],
+            'kind' => ['nullable', 'string', 'in:' . implode(',', self::KINDS)],
+            'pickup_at' => ['nullable', 'date'],
+            'close_time' => ['nullable', 'date_format:H:i,H:i:s'],
+            'minutes' => ['nullable', 'integer', 'min:1', 'max:1440'],
             'note' => ['nullable', 'string', 'max:1000'],
             'occurred_on' => ['nullable', 'date'],
+            'charge' => ['nullable', 'boolean'],
+            'fee_amount' => ['nullable', 'numeric', 'min:0', 'max:10000'],
         ]);
+        $kind = $data['kind'] ?? 'departure';
 
         // The child must be one this person can actually see.
         $centreIds = $this->centreIds($request);
-        $centreId = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+        $centreId = $centreIds ? DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
             ->where('ch.id', $data['child_id'])->whereIn('f.centre_id', $centreIds)
-            ->value('f.centre_id');
+            ->value('f.centre_id') : null;
         abort_unless($centreId, 404, 'Child not found');
-
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
         $tz = AgencyTime::tzForCentre((int) $centreId) ?: 'America/Toronto';
-        // Agency time, not server time: an event logged at 18:10 in Toronto belongs to
-        // that day, not to whatever tomorrow UTC thinks it is.
-        // ?? not ?:, and the key may be absent entirely — a `nullable` rule does not put
-        // an omitted field into the validated array.
-        $on = ($data['occurred_on'] ?? null) ?: Carbon::now($tz)->toDateString();
+
+        // Wall clock as typed: "2026-10-06T18:32" is 6:32 PM at the centre, stored as such.
+        $pickupAt = ! empty($data['pickup_at']) ? Carbon::parse($data['pickup_at'])->format('Y-m-d H:i:s') : null;
+        $close = $data['close_time'] ?? null;
+        if (! $close && $pickupAt) {
+            $close = DB::table('centres')->where('id', $centreId)->value('close_time');
+        }
+        $minutes = (int) ($data['minutes'] ?? 0);
+        if ($pickupAt && $close && $kind === 'departure') {
+            $closeAt = Carbon::parse(substr($pickupAt, 0, 10) . ' ' . $close);
+            $minutes = (int) $closeAt->diffInMinutes(Carbon::parse($pickupAt), false);
+            if ($minutes < 1) {
+                return response()->json(['message' => 'The pickup time is not after the centre\'s close time (' . Carbon::parse($close)->format('g:i A') . ').'], 422);
+            }
+        }
+        if ($minutes < 1) {
+            return response()->json(['message' => 'Enter the pickup time (or how many minutes late).'], 422);
+        }
+        $on = $pickupAt ? substr($pickupAt, 0, 10) : (($data['occurred_on'] ?? null) ?: Carbon::now($tz)->toDateString());
+        $suggested = $kind === 'departure' ? LatePickups::suggest($agencyId, $minutes) : null;
+
+        $charge = ! empty($data['charge']);
+        if ($charge) {
+            abort_unless($this->canDecide($request), 403, 'Only directors and admins can charge a fee.');
+        }
 
         $id = DB::table('late_events')->insertGetId([
             'child_id' => $data['child_id'],
             'centre_id' => $centreId,
-            'kind' => $data['kind'],
+            'kind' => $kind,
             'occurred_on' => $on,
-            'minutes' => $data['minutes'],
+            'pickup_at' => $pickupAt,
+            'close_time' => $close,
+            'minutes' => $minutes,
+            'suggested_fee' => $suggested,
             'note' => $data['note'] ?? null,
             'recorded_by_id' => $request->user()->id,
             'status' => 'pending',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        $ev = DB::table('late_events')->where('id', $id)->first();
+        $mail = new LatePickups();
+
+        if ($charge) {
+            $fee = array_key_exists('fee_amount', $data) && $data['fee_amount'] !== null ? (float) $data['fee_amount'] : (float) ($suggested ?? 0);
+            if ($fee <= 0) {
+                // Nothing to charge (within the grace period): record it as waived, not as a $0 charge.
+                DB::table('late_events')->where('id', $id)->update(['status' => 'waived', 'fee_amount' => null,
+                    'decided_by_id' => $request->user()->id, 'decided_at' => now(), 'decision_note' => 'Within the grace period — no fee.', 'updated_at' => now()]);
+                return response()->json(['ok' => true, 'id' => $id, 'status' => 'waived', 'minutes' => $minutes, 'suggested_fee' => $suggested, 'fee' => 0], 201);
+            }
+            $res = DB::transaction(fn () => LatePickups::charge($ev, $fee, (int) $request->user()->id));
+            // One email: logged AND charged.
+            $mail->emailCharged($ev, $fee, $res['invoice'], $request->user());
+            return response()->json(['ok' => true, 'id' => $id, 'status' => 'approved', 'minutes' => $minutes, 'suggested_fee' => $suggested,
+                'fee' => $fee, 'charge_id' => $res['charge_id'], 'invoice_line_id' => $res['invoice_line_id']], 201);
+        }
+
         // Waiting on a director or admin to decide — tell them (never fails the log).
-        try { $this->emailPending($request, $id, (int) $centreId, $data, $on); }
-        catch (\Throwable $e) { \Illuminate\Support\Facades\Log::warning('late event alert failed', ['id' => $id, 'error' => $e->getMessage()]); }
-        return response()->json(['ok' => true, 'id' => $id], 201);
+        $mail->emailPending($ev, $request->user());
+        return response()->json(['ok' => true, 'id' => $id, 'status' => 'pending', 'minutes' => $minutes, 'suggested_fee' => $suggested], 201);
     }
 
-    /** Email the centre's directors and the agency admins that a late event needs a decision. */
-    private function emailPending(Request $request, int $id, int $centreId, array $data, string $on): void
-    {
-        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
-        if (! $agencyId) return;
-        $recipients = $this->alertRecipients($agencyId, $centreId);
-        if (! $recipients) return;
-        $child = DB::table('children')->where('id', $data['child_id'])->first(['first_name', 'last_name']);
-        $childName = trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? ''));
-        $by = $request->user();
-        $byName = trim(($by->first_name ?? '') . ' ' . ($by->last_name ?? '')) ?: 'A staff member';
-        $kind = $data['kind'] === 'arrival' ? 'late arrival' : 'late pickup';
-        $tz = AgencyTime::tz($agencyId);
-        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
-        $line = fn ($k, $v) => $v === null || $v === '' ? '' : '<tr><td style="padding:6px 12px 6px 0;color:#64748b;font-size:13px;white-space:nowrap;">' . $k . '</td><td style="padding:6px 0;font-weight:700;color:#0f172a;font-size:13px;">' . $e($v) . '</td></tr>';
-        $rows = $line('Child', $childName) . $line('Centre', DB::table('centres')->where('id', $centreId)->value('name'))
-            . $line('What', ucfirst($kind)) . $line('Date', Carbon::parse($on)->format('D M j, Y')) . $line('Minutes', $data['minutes'])
-            . $line('Recorded by', $byName) . $line('Recorded at', now()->setTimezone($tz)->format('M j, Y g:i A')) . $line('Note', $data['note'] ?? null);
-        $body = '<p style="margin:0 0 12px;font-size:14.5px;color:#243244;">A ' . $kind . ' was recorded and is waiting for a decision — approve a fee, waive it, or decline.</p>'
-            . '<table style="border-collapse:collapse;margin:8px 0 4px;">' . $rows . '</table>'
-            . '<p style="margin:14px 0 0;font-size:12.5px;color:#64748b;">Decide it under <strong>Late arrivals &amp; pickups</strong> in your portal.</p>';
-        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
-            'eyebrow' => strtoupper($kind), 'title' => ucfirst($kind) . ' needs a decision — ' . $childName,
-            'subtitle' => Carbon::parse($on)->format('M j, Y') . ' · ' . $data['minutes'] . ' min',
-            'preheader' => $byName . ' recorded a ' . $kind . ' for ' . $childName . '; it needs your decision.',
-        ]);
-        $this->sendReportAlert($agencyId, $recipients, ucfirst($kind) . ' to review: ' . $childName . ' (' . $data['minutes'] . ' min)', $html);
-    }
-
-    /** GET /provider/late-events — the review list. */
+    /** GET /provider/late-events — the one list. ?status=pending|approved|waived|declined|all */
     public function index(Request $request): JsonResponse
     {
         $this->ensureTable();
         $centreIds = $this->centreIds($request);
+        $empty = ['pending' => 0, 'approved' => 0, 'waived' => 0, 'declined' => 0, 'all' => 0];
         if (! $centreIds) {
-            return response()->json(['events' => [], 'counts' => ['pending' => 0]]);
+            return response()->json(['events' => [], 'counts' => $empty, 'can_decide' => $this->canDecide($request)]);
         }
-
         $q = DB::table('late_events as l')
             ->join('children as ch', 'ch.id', '=', 'l.child_id')
             ->leftJoin('families as f', 'f.id', '=', 'ch.family_id')
             ->leftJoin('centres as c', 'c.id', '=', 'l.centre_id')
             ->leftJoin('users as u', 'u.id', '=', 'l.recorded_by_id')
             ->leftJoin('users as d', 'd.id', '=', 'l.decided_by_id')
+            ->leftJoin('invoice_lines as il', 'il.id', '=', 'l.invoice_line_id')
+            ->leftJoin('invoices as inv', 'inv.id', '=', 'il.invoice_id')
             ->whereIn('l.centre_id', $centreIds);
-
         $status = strtolower(trim((string) $request->query('status', '')));
         if ($status !== '' && $status !== 'all') {
             $q->where('l.status', $status);
@@ -179,12 +210,18 @@ final class LateEventController extends Controller
 
         $rows = $q->orderByDesc('l.occurred_on')->orderByDesc('l.id')->limit(500)
             ->get([
-                'l.id', 'l.kind', 'l.occurred_on', 'l.minutes', 'l.note', 'l.status',
-                'l.fee_amount', 'l.decided_at', 'l.decision_note',
+                'l.id', 'l.kind', 'l.occurred_on', 'l.pickup_at', 'l.close_time', 'l.minutes', 'l.suggested_fee', 'l.note', 'l.status',
+                'l.fee_amount', 'l.decided_at', 'l.decision_note', 'l.created_at', 'l.charge_id', 'l.invoice_line_id',
+                'inv.id as invoice_id', 'inv.invoice_number',
                 'ch.first_name', 'ch.last_name', 'f.family_name', 'c.name as centre_name',
-                DB::raw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) as recorded_by"),
-                DB::raw("CONCAT(COALESCE(d.first_name,''),' ',COALESCE(d.last_name,'')) as decided_by"),
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as recorded_by"),
+                DB::raw("TRIM(CONCAT(COALESCE(d.first_name,''),' ',COALESCE(d.last_name,''))) as decided_by"),
             ]);
+
+        $counts = DB::table('late_events')->whereIn('centre_id', $centreIds)
+            ->selectRaw('status, COUNT(*) n')->groupBy('status')->pluck('n', 'status')->all();
+        $out = $empty;
+        foreach ($counts as $k => $n) { $out[$k] = (int) $n; $out['all'] += (int) $n; }
 
         return response()->json([
             'events' => $rows->map(fn ($r) => [
@@ -194,22 +231,28 @@ final class LateEventController extends Controller
                 'family_name' => $r->family_name,
                 'centre_name' => $r->centre_name,
                 'occurred_on' => $r->occurred_on,
+                'pickup_at' => $r->pickup_at,             // wall clock, as typed
+                'close_time' => $r->close_time,
                 'minutes' => (int) $r->minutes,
+                'suggested_fee' => $r->suggested_fee !== null ? (float) $r->suggested_fee : null,
                 'note' => $r->note,
                 'status' => $r->status,
                 'fee_amount' => $r->fee_amount !== null ? (float) $r->fee_amount : null,
-                'recorded_by' => trim((string) $r->recorded_by) ?: null,
-                'decided_by' => trim((string) $r->decided_by) ?: null,
-                'decided_at' => $r->decided_at,
+                'recorded_by' => $r->recorded_by ?: null,
+                'logged_at' => $r->created_at,            // UTC instant
+                'decided_by' => $r->decided_by ?: null,
+                'decided_at' => $r->decided_at,           // UTC instant
                 'decision_note' => $r->decision_note,
+                'charge_id' => $r->charge_id,
+                'invoice_id' => $r->invoice_id,
+                'invoice_number' => $r->invoice_number,
             ]),
-            'counts' => [
-                'pending' => DB::table('late_events')->whereIn('centre_id', $centreIds)->where('status', 'pending')->count(),
-            ],
+            'counts' => $out,
+            'can_decide' => $this->canDecide($request),
         ]);
     }
 
-    /** POST /provider/late-events/{id}/decide — approve with a fee, waive, or decline. */
+    /** POST /provider/late-events/{id}/decide — approve (charge), waive, or decline. Pending only. */
     public function decide(Request $request, int $id): JsonResponse
     {
         $this->ensureTable();
@@ -218,27 +261,37 @@ final class LateEventController extends Controller
             'fee_amount' => ['nullable', 'numeric', 'min:0', 'max:10000'],
             'decision_note' => ['nullable', 'string', 'max:1000'],
         ]);
-
         // Only somebody who can bill decides. An educator records and stops there.
-        $canDecide = DB::table('role_assignments')->where('user_id', $request->user()->id)
-            ->where('active', 1)->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])
-            ->exists();
-        abort_unless($canDecide, 403, 'Directors and admins only');
-
+        abort_unless($this->canDecide($request), 403, 'Directors and admins only');
         $centreIds = $this->centreIds($request);
-        $row = DB::table('late_events')->where('id', $id)->whereIn('centre_id', $centreIds)->first();
-        abort_unless($row, 404, 'Not found');
+        abort_unless($centreIds, 404, 'Not found');
 
-        DB::table('late_events')->where('id', $id)->update([
-            'status' => $data['status'],
-            // A waived or declined event carries no fee, whatever was typed in the box.
-            'fee_amount' => $data['status'] === 'approved' ? ($data['fee_amount'] ?? 0) : null,
-            'decision_note' => $data['decision_note'] ?? null,
-            'decided_by_id' => $request->user()->id,
-            'decided_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        return response()->json(['ok' => true]);
+        return DB::transaction(function () use ($data, $id, $centreIds, $request) {
+            // Locked, and pending only: a second click (or a second person) must not charge twice.
+            $row = DB::table('late_events')->where('id', $id)->whereIn('centre_id', $centreIds)->lockForUpdate()->first();
+            abort_unless($row, 404, 'Not found');
+            if ($row->status !== 'pending') {
+                return response()->json(['message' => 'This one has already been decided (' . $row->status . ').'], 409);
+            }
+            if ($data['status'] === 'approved') {
+                $fee = (float) ($data['fee_amount'] ?? 0);
+                if ($fee <= 0) {
+                    return response()->json(['message' => 'Enter a fee, or waive it instead.'], 422);
+                }
+                $res = LatePickups::charge($row, $fee, (int) $request->user()->id, $data['decision_note'] ?? null);
+                return response()->json(['ok' => true, 'charge_id' => $res['charge_id'], 'invoice_line_id' => $res['invoice_line_id'],
+                    'billed' => (bool) $res['invoice']]);
+            }
+            DB::table('late_events')->where('id', $id)->update([
+                'status' => $data['status'],
+                // A waived or declined event carries no fee, whatever was typed in the box.
+                'fee_amount' => null,
+                'decision_note' => $data['decision_note'] ?? null,
+                'decided_by_id' => $request->user()->id,
+                'decided_at' => now(),
+                'updated_at' => now(),
+            ]);
+            return response()->json(['ok' => true]);
+        });
     }
 }

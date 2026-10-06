@@ -190,7 +190,7 @@
   // v22p56 — Procare-parity screens
   ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':closures',          bridge('KT.V22p56', 'renderClosures'));
-    Shell.registerScreen(r + ':late-pickups',      bridge('KT.V22p56', 'renderLatePickup'));
+    /* late-pickups: now screen-late-events.js (one late-pickup section, 2026-10-06). */
     Shell.registerScreen(r + ':room-ratios',       bridge('KT.V22p56', 'renderRoomRatios'));
     Shell.registerScreen(r + ':vacation-holds',    bridge('KT.V22p56', 'renderVacationHolds'));
     Shell.registerScreen(r + ':tuition-increases', bridge('KT.V22p56', 'renderTuitionIncreases'));
@@ -206,7 +206,7 @@
     Shell.registerScreen(r + ':signed-docs',    bridge('KT.V22p56', 'renderSignedDocs'));
   });
   // Educators can log/see late pickups too (they're on the floor when a parent is late).
-  Shell.registerScreen('educator:late-pickups', bridge('KT.V22p56', 'renderLatePickup'));
+  /* late-pickups: now screen-late-events.js (one late-pickup section, 2026-10-06). */
 
 
   // v22p57 — combined features

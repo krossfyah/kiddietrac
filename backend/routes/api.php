@@ -1892,6 +1892,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'index']);
         Route::post('/late-events',            [\App\Http\Controllers\Api\LateEventController::class, 'store']);
         Route::post('/late-events/{id}/decide', [\App\Http\Controllers\Api\LateEventController::class, 'decide'])->where('id', '[0-9]+');
+        Route::get ('/late-events/options',    [\App\Http\Controllers\Api\LateEventController::class, 'options']);
         Route::get ('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'index']);
         Route::post('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'store']);
     });

@@ -19,8 +19,6 @@ use Illuminate\Support\Facades\DB;
  */
 final class OperationsV2Controller extends Controller
 {
-    use \App\Http\Concerns\ReportAlerts;
-
     // =========================================================
     // Closure / holiday calendar
     // =========================================================
@@ -347,6 +345,14 @@ final class OperationsV2Controller extends Controller
         return response()->json(['centres' => $centres, 'children' => $children]);
     }
 
+    /**
+     * POST /operations/late-pickup — the OLD one-step "log and charge", kept for any client
+     * that still calls it. Since 2026-10-06 it goes through the one late-pickup flow
+     * (App\Support\LatePickups): a late_events record is written and approved at once with
+     * the per-minute fee, which writes the invoice line, the late_pickup_charges row and the
+     * parents' notice, and sends ONE "logged and charged" email to the directors/admins.
+     * Within the grace period it still answers within_grace and records nothing.
+     */
     public function logLatePickup(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -358,111 +364,32 @@ final class OperationsV2Controller extends Controller
         ]);
         $this->assertCentreAccess($request, (int) $data['centre_id']);
         $centre = DB::table('centres')->where('id', $data['centre_id'])->first();
-        $agency = DB::table('agencies')->where('id', $centre->agency_id)->first();
-        $perMin = (float) ($agency->late_pickup_per_minute ?? 1.00);
-        $grace = (int) ($agency->late_pickup_grace_minutes ?? 5);
+        $child = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+            ->where('c.id', $data['child_id'])->where('f.centre_id', $centre->id)->first(['c.id']);
+        abort_unless($child, 404, 'Child not found at that centre');
+        $policy = \App\Support\LatePickups::policy((int) $centre->agency_id);
 
         $pickup = Carbon::parse($data['pickup_at']);
         $close = Carbon::parse($pickup->toDateString() . ' ' . $data['close_time']);
         $minutesLate = max(0, (int) $close->diffInMinutes($pickup, false));
-        if ($minutesLate <= $grace) {
+        if ($minutesLate <= $policy['grace']) {
             return response()->json(['status' => 'within_grace', 'minutes_late' => $minutesLate]);
         }
-        $chargeable = $minutesLate - $grace;
-        $fee = round($chargeable * $perMin, 2);
+        $chargeable = $minutesLate - $policy['grace'];
+        $fee = \App\Support\LatePickups::suggest((int) $centre->agency_id, $minutesLate);
 
-        $child = DB::table('children')->where('id', $data['child_id'])->first();
-        $family = DB::table('families')->where('id', $child->family_id)->first();
-
-        // Append a line to the most-recent open invoice for this family, or create a draft
-        $invoice = DB::table('invoices')->where('family_id', $family->id)
-            ->whereIn('status', ['draft', 'sent', 'partial', 'overdue'])
-            ->orderByDesc('id')->first();
-        $invoiceLineId = null;
-        if ($invoice) {
-            $invoiceLineId = DB::table('invoice_lines')->insertGetId([
-                'invoice_id' => $invoice->id,
-                'child_id' => $child->id,
-                'line_type' => 'late_pickup',
-                'description' => "Late pickup: {$chargeable} min on " . $pickup->format('M j'),
-                'quantity' => 1,
-                'unit_amount' => $fee,
-                'amount' => $fee,
-            ]);
-            DB::table('invoices')->where('id', $invoice->id)->update([
-                'total' => DB::raw("total + {$fee}"),
-                'balance_due' => DB::raw("balance_due + {$fee}"),
-                'updated_at' => now(),
-            ]);
-        }
-        $id = DB::table('late_pickup_charges')->insertGetId([
-            'agency_id' => $centre->agency_id,
-            'centre_id' => $centre->id,
-            'child_id' => $child->id,
-            'pickup_at' => $pickup,
-            'close_time' => $data['close_time'],
-            'minutes_late' => $minutesLate,
-            'fee_amount' => $fee,
-            'invoice_line_id' => $invoiceLineId,
-            'notes' => $data['notes'] ?? null,
-            'logged_by_id' => $request->user()->id,
-            'created_at' => now(),
+        $id = DB::table('late_events')->insertGetId([
+            'child_id' => $child->id, 'centre_id' => $centre->id, 'kind' => 'departure',
+            'occurred_on' => $pickup->toDateString(), 'pickup_at' => $pickup->format('Y-m-d H:i:s'),
+            'close_time' => $data['close_time'], 'minutes' => $minutesLate, 'suggested_fee' => $fee,
+            'note' => $data['notes'] ?? null, 'recorded_by_id' => $request->user()->id,
+            'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),
         ]);
+        $ev = DB::table('late_events')->where('id', $id)->first();
+        $res = DB::transaction(fn () => \App\Support\LatePickups::charge($ev, $fee, (int) $request->user()->id));
+        (new \App\Support\LatePickups())->emailCharged($ev, $fee, $res['invoice'], $request->user());
 
-        /* THE DIRECTOR AND ADMINS HEAR ABOUT IT (2026-10-06). Anthony: "when a late pick up
-           request is generated make sure an email gets sent out to director/admins". The
-           parents were told in the app; the people who bill and run the centre were not.
-           Never allowed to fail the log itself — the fee is already on the invoice. */
-        try {
-            $this->emailLatePickup($request, $centre, $child, $family, $pickup, $data, $minutesLate, $chargeable, $fee, $id, $invoice);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('late pickup alert failed', ['charge' => $id, 'error' => $e->getMessage()]);
-        }
-
-        // Notify guardians
-        $gids = DB::table('guardians')->where('family_id', $family->id)->pluck('user_id');
-        foreach ($gids as $gid) {
-            \App\Support\Notify::write([
-                'user_id' => $gid, 'type' => 'late_pickup',
-                'title' => "Late pickup fee \${$fee}",
-                'body' => "{$chargeable} minute(s) late on " . $pickup->format('M j') . '. Added to your next invoice.',
-                'data' => json_encode(['link' => '#billing', 'charge_id' => $id]),
-                'created_at' => now(),
-            ]);
-        }
-        return response()->json(['id' => $id, 'fee' => $fee, 'minutes_late' => $minutesLate, 'chargeable' => $chargeable], 201);
-    }
-
-    /** Email the centre's directors and the agency admins about a logged late pickup fee. */
-    private function emailLatePickup(Request $request, object $centre, object $child, object $family, Carbon $pickup, array $data, int $minutesLate, int $chargeable, float $fee, int $id, $invoice): void
-    {
-        $agencyId = (int) $centre->agency_id;
-        $recipients = $this->alertRecipients($agencyId, (int) $centre->id);
-        if (! $recipients) return;
-        $by = $request->user();
-        $byName = trim(($by->first_name ?? '') . ' ' . ($by->last_name ?? '')) ?: 'A staff member';
-        $childName = trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? ''));
-        $tz = \App\Support\AgencyTime::tz($agencyId);
-        // pickup_at is the wall-clock time typed on the form; "logged" is now, in the agency's zone.
-        $when = $pickup->format('D M j, Y \a\t g:i A');
-        $loggedAt = now()->setTimezone($tz)->format('M j, Y g:i A');
-        $money = '$' . number_format($fee, 2);
-        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
-        $line = fn ($k, $v) => $v === null || $v === '' ? '' : '<tr><td style="padding:6px 12px 6px 0;color:#64748b;font-size:13px;white-space:nowrap;">' . $k . '</td><td style="padding:6px 0;font-weight:700;color:#0f172a;font-size:13px;">' . $e($v) . '</td></tr>';
-        $rows = $line('Child', $childName) . $line('Family', $family->family_name ?? null) . $line('Centre', $centre->name ?? null)
-            . $line('Picked up', $when) . $line('Centre closed at', \Illuminate\Support\Carbon::parse($data['close_time'])->format('g:i A'))
-            . $line('Minutes late', $minutesLate . ' (' . $chargeable . ' charged after the grace period)')
-            . $line('Fee', $money) . $line('Invoice', $invoice ? ('Added to invoice ' . ($invoice->invoice_number ?? ('#' . $invoice->id))) : 'No open invoice — not yet billed')
-            . $line('Logged by', $byName) . $line('Logged at', $loggedAt) . $line('Notes', $data['notes'] ?? null);
-        $body = '<p style="margin:0 0 12px;font-size:14.5px;color:#243244;">A late pickup was just logged and a fee applied.</p>'
-            . '<table style="border-collapse:collapse;margin:8px 0 4px;">' . $rows . '</table>'
-            . '<p style="margin:14px 0 0;font-size:12.5px;color:#64748b;">See every late pickup under <strong>Late pickups</strong> in your portal.</p>';
-        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
-            'eyebrow' => 'LATE PICKUP', 'title' => 'Late pickup — ' . $childName,
-            'subtitle' => $when . ' · ' . $money,
-            'preheader' => $childName . ' was picked up ' . $minutesLate . ' min late; ' . $money . ' fee logged by ' . $byName . '.',
-        ]);
-        $this->sendReportAlert($agencyId, $recipients, 'Late pickup: ' . $childName . ' — ' . $minutesLate . ' min, ' . $money, $html);
+        return response()->json(['id' => $res['charge_id'], 'late_event_id' => $id, 'fee' => $fee, 'minutes_late' => $minutesLate, 'chargeable' => $chargeable], 201);
     }
 
     public function lateHistory(Request $request): JsonResponse
