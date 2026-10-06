@@ -22,6 +22,9 @@ use Illuminate\Support\Facades\Log;
  * request. The outcome is written back to the row from what the mail layer recorded
  * (RsvpMail::send), and a failure is recorded rather than thrown: a retried job would
  * send the same invite twice.
+ *
+ * Every message for an event goes out through the event's sender account when it has one
+ * (RsvpSender, 2026-10-06), otherwise through the agency's own mail.
  */
 class SendRsvpMail implements ShouldQueue
 {
@@ -69,7 +72,7 @@ class SendRsvpMail implements ShouldQueue
         }
         [$subject, $html] = RsvpMail::invite($event, $inv);
         $r = RsvpMail::send((int) $event->agency_id, $inv->email, $inv->name, $subject, $html, [
-            'reply_to' => $event->notify_email, 'unsubscribe' => RsvpMail::optOutUrl($inv->token),
+            'reply_to' => $event->notify_email, 'unsubscribe' => RsvpMail::optOutUrl($inv->token), 'sender_id' => $event->sender_id ?? null, 'from' => RsvpMail::fromFor($event),
         ]);
         DB::table('rsvp_invites')->where('id', $inv->id)->update([
             'send_status' => $r['status'], 'send_error' => $r['error'], 'email_log_id' => $r['log_id'],
@@ -88,7 +91,7 @@ class SendRsvpMail implements ShouldQueue
         $inv = $resp->invite_id ? DB::table('rsvp_invites')->where('id', $resp->invite_id)->first() : null;
         [$subject, $html] = RsvpMail::confirmation($event, $resp, $inv);
         $r = RsvpMail::send((int) $event->agency_id, $resp->email, $resp->name, $subject, $html, [
-            'reply_to' => $event->notify_email, 'unsubscribe' => $inv ? RsvpMail::optOutUrl($inv->token) : null,
+            'reply_to' => $event->notify_email, 'unsubscribe' => $inv ? RsvpMail::optOutUrl($inv->token) : null, 'sender_id' => $event->sender_id ?? null, 'from' => RsvpMail::fromFor($event),
         ]);
         DB::table('rsvp_responses')->where('id', $resp->id)->update(['confirm_status' => $r['status']]);
     }
@@ -101,7 +104,7 @@ class SendRsvpMail implements ShouldQueue
         if (! $event || ! $event->notify_email) return;
         $answers = array_values(json_decode((string) $resp->answers, true) ?: []);
         [$subject, $html] = RsvpMail::notice($event, $this->extra === 'updated' ? 'updated' : 'new', $resp->email, $resp->name, $answers);
-        $r = RsvpMail::send((int) $event->agency_id, $event->notify_email, null, $subject, $html, ['reply_to' => $resp->email, 'reply_to_name' => $resp->name]);
+        $r = RsvpMail::send((int) $event->agency_id, $event->notify_email, null, $subject, $html, ['reply_to' => $resp->email, 'reply_to_name' => $resp->name, 'sender_id' => $event->sender_id ?? null, 'from' => RsvpMail::fromFor($event)]);
         DB::table('rsvp_responses')->where('id', $resp->id)->update(['notify_status' => $r['status']]);
     }
 
@@ -112,6 +115,6 @@ class SendRsvpMail implements ShouldQueue
         $event = $this->event((int) $inv->event_id);
         if (! $event || ! $event->notify_email) return;
         [$subject, $html] = RsvpMail::notice($event, 'opt_out', $inv->email, $inv->name);
-        RsvpMail::send((int) $event->agency_id, $event->notify_email, null, $subject, $html);
+        RsvpMail::send((int) $event->agency_id, $event->notify_email, null, $subject, $html, ['sender_id' => $event->sender_id ?? null, 'from' => RsvpMail::fromFor($event)]);
     }
 }

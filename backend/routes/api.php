@@ -626,6 +626,8 @@ Route::get ('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpContro
 Route::post('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'submitInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsubi');
 Route::get ('/public/rsvp/optout/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'optOutInfo'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpoi');
 Route::post('/public/rsvp/optout/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'optOut'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:20,10,rsvpout');
+// Google sends the browser back here after "Connect Gmail"; the signed single-use state is the auth.
+Route::get ('/rsvp/google/callback', [\App\Http\Controllers\Api\RsvpController::class, 'googleCallback'])->middleware('throttle:30,1,rsvpgcb');
 Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, 'publicTourBook'])
     ->middleware('throttle:8,60');
 
@@ -2211,6 +2213,19 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/admin/rsvp/templates/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'deleteTemplate'])->where('id', '[0-9]+');
         Route::post  ('/admin/rsvp/templates/{id}/copy', [\App\Http\Controllers\Api\RsvpController::class, 'copyTemplate'])->where('id', '[0-9]+');
         Route::post  ('/admin/rsvp/image', [\App\Http\Controllers\Api\RsvpController::class, 'uploadImage']);
+        // Round 2 (2026-10-06): built-in templates, preview (sends nothing), per-event sender accounts.
+        Route::post  ('/admin/rsvp/presets/{key}/copy', [\App\Http\Controllers\Api\RsvpController::class, 'copyPreset'])->where('key', '[a-z_]{2,40}');
+        Route::post  ('/admin/rsvp/events/{id}/save-template', [\App\Http\Controllers\Api\RsvpController::class, 'saveEventAsTemplate'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/status', [\App\Http\Controllers\Api\RsvpController::class, 'setEventStatus'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/duplicate', [\App\Http\Controllers\Api\RsvpController::class, 'duplicateEvent'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/preview', [\App\Http\Controllers\Api\RsvpController::class, 'preview'])->middleware('throttle:60,1,rsvppv');
+        Route::get   ('/admin/rsvp/senders', [\App\Http\Controllers\Api\RsvpController::class, 'senders']);
+        Route::post  ('/admin/rsvp/senders', [\App\Http\Controllers\Api\RsvpController::class, 'saveSender']);
+        Route::post  ('/admin/rsvp/senders/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'saveSender'])->where('id', '[0-9]+');
+        Route::delete('/admin/rsvp/senders/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'deleteSender'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/senders/{id}/check', [\App\Http\Controllers\Api\RsvpController::class, 'checkSender'])->where('id', '[0-9]+')->middleware('throttle:10,1,rsvpchk');
+        Route::get   ('/admin/rsvp/senders/{id}/google/start', [\App\Http\Controllers\Api\RsvpController::class, 'googleStart'])->where('id', '[0-9]+')->middleware('throttle:20,1,rsvpgs');
+        Route::post  ('/admin/rsvp/senders/{id}/test', [\App\Http\Controllers\Api\RsvpController::class, 'testSender'])->where('id', '[0-9]+')->middleware('throttle:10,1,rsvpst');
         Route::get   ('/admin/rsvp/contacts', [\App\Http\Controllers\Api\RsvpController::class, 'contacts']);
         Route::get   ('/admin/rsvp/optouts', [\App\Http\Controllers\Api\RsvpController::class, 'optOuts']);
         Route::delete('/admin/rsvp/optouts/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'removeOptOut'])->where('id', '[0-9]+');

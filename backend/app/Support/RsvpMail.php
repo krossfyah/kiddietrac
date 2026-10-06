@@ -37,6 +37,66 @@ final class RsvpMail
         return self::APP . '/rsvp.html?e=' . $eventToken;
     }
 
+    /* ── BRANDING (2026-10-06) ─────────────────────────────────────────────────────
+       Anthony: "make event RSVP not branding to the agency with a setting and use no
+       kiddietrac or agency header or footers with this setting".
+
+       An UNBRANDED event ('none') is framed by self::frame() instead of
+       EmailTemplate::wrap(): no logo header, no footer, no product or agency name — only
+       the event's own image, title, text, details and the plain unsubscribe line. It is
+       still sent through RsvpMail::send() exactly like the branded mail, so suppression,
+       the email log and the (invisible) open-tracking pixel all still apply. */
+    public static function unbranded(object $event): bool
+    {
+        return ($event->branding ?? 'agency') === 'none';
+    }
+
+    /** Who an unbranded event's mail is from, by name: its sender account, else the event. */
+    private static function organiser(object $event): string
+    {
+        $s = ! empty($event->sender_id) ? RsvpSender::find((int) $event->agency_id, (int) $event->sender_id) : null;
+
+        return $s && trim((string) $s->from_name) !== '' ? (string) $s->from_name : (string) $event->title;
+    }
+
+    /**
+     * The From to set on an unbranded event's mail — [address, name] — or null to leave the
+     * mailer's own. The name is the sender account's, else the event title; never the
+     * agency's name.
+     */
+    public static function fromFor(object $event): ?array
+    {
+        if (! self::unbranded($event)) return null;
+        $s = ! empty($event->sender_id) ? RsvpSender::find((int) $event->agency_id, (int) $event->sender_id) : null;
+        if ($s) return [$s->from_address, trim((string) $s->from_name) !== '' ? $s->from_name : (string) $event->title];
+
+        return [AgencyMailer::forAgency((int) $event->agency_id)->fromAddress(), (string) $event->title];
+    }
+
+    /** The branded wrapper, or for an unbranded event a plain frame with nothing added. */
+    private static function frame(object $event, string $body, array $opts): string
+    {
+        if (! self::unbranded($event)) {
+            return EmailTemplate::wrap((int) $event->agency_id, $body, $opts);
+        }
+        $pre = e((string) ($opts['preheader'] ?? ''));
+
+        return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<meta name="color-scheme" content="light only"><title>' . e((string) ($opts['title'] ?? $event->title)) . '</title></head>'
+            . '<body style="margin:0;padding:0;background:#F4F6F8;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'
+            . ($pre !== '' ? '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' . $pre . '</div>' : '')
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6F8;"><tr><td align="center" style="padding:24px 12px;">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#FFFFFF;border-radius:14px;"><tr><td style="padding:26px 26px 22px;">'
+            . $body
+            . '</td></tr></table></td></tr></table></body></html>';
+    }
+
+    /** An unbranded mail's title, under its image (the branded wrapper puts it in the header). */
+    private static function heading(object $event, string $text): string
+    {
+        return self::unbranded($event) ? '<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:#0F172A;">' . e($text) . '</h1>' : '';
+    }
+
     /** "Saturday, November 14, 2026 · 10:00 AM – 12:00 PM EST", in the agency's zone. */
     public static function whenLabel(object $event): string
     {
@@ -57,7 +117,8 @@ final class RsvpMail
     /** {{name}}, {{first_name}}, {{event}}, {{date}}, {{location}}, {{agency}} */
     public static function fill(string $text, object $event, ?string $name): string
     {
-        $agency = (string) DB::table('agencies')->where('id', $event->agency_id)->value('name');
+        // Unbranded: {{agency}} is the organiser (sender account name, else the event), never the agency.
+        $agency = self::unbranded($event) ? self::organiser($event) : (string) DB::table('agencies')->where('id', $event->agency_id)->value('name');
         $name = trim((string) $name);
         $first = $name !== '' ? strtok($name, ' ') : '';
         $map = [
@@ -107,6 +168,11 @@ final class RsvpMail
 
     private static function optOutLine(object $event, string $inviteToken): string
     {
+        if (self::unbranded($event)) {
+            return '<p style="margin:22px 0 0;font-size:12px;color:#94A3B8;line-height:1.5;text-align:center">'
+                . 'You received this because you were invited to ' . e((string) $event->title) . '. '
+                . '<a href="' . e(self::optOutUrl($inviteToken)) . '" style="color:#64748B;text-decoration:underline">Unsubscribe from event invitations</a>.</p>';
+        }
         $agency = (string) DB::table('agencies')->where('id', $event->agency_id)->value('name');
 
         return '<p style="margin:22px 0 0;font-size:12px;color:#94A3B8;line-height:1.5;text-align:center">'
@@ -119,12 +185,16 @@ final class RsvpMail
     {
         $subject = self::fill((string) $event->email_subject, $event, $invite->name);
         $body = self::image($event->image_url)
+            . self::heading($event, (string) $event->title)
             . self::para(self::fill((string) $event->email_body, $event, $invite->name))
             . self::detailsBox($event)
             . EmailTemplate::button('RSVP now', self::rsvpUrl($invite->token))
-            . '<p style="margin:0;font-size:12.5px;color:#64748B;text-align:center">Or open this link: <a href="' . e(self::rsvpUrl($invite->token)) . '" style="color:#1F6080">' . e(self::rsvpUrl($invite->token)) . '</a></p>'
+            // Unbranded: the fallback is link TEXT, so the platform's address is never printed.
+            . (self::unbranded($event)
+                ? '<p style="margin:0;font-size:12.5px;color:#64748B;text-align:center">If the button doesn’t work, <a href="' . e(self::rsvpUrl($invite->token)) . '" style="color:#1F6080">open the RSVP form here</a>.</p>'
+                : '<p style="margin:0;font-size:12.5px;color:#64748B;text-align:center">Or open this link: <a href="' . e(self::rsvpUrl($invite->token)) . '" style="color:#1F6080">' . e(self::rsvpUrl($invite->token)) . '</a></p>')
             . self::optOutLine($event, $invite->token);
-        $html = EmailTemplate::wrap((int) $event->agency_id, $body, ['title' => (string) $event->title, 'preheader' => 'You’re invited — please RSVP']);
+        $html = self::frame($event, $body, ['title' => (string) $event->title, 'preheader' => 'You’re invited — please RSVP']);
 
         return [$subject, $html];
     }
@@ -137,12 +207,13 @@ final class RsvpMail
             ? self::fill((string) $event->confirmation_message, $event, $response->name)
             : 'Thank you for registering for {{event}}. Here is a copy of the details you sent us.';
         $body = self::image($event->image_url)
+            . self::heading($event, 'You’re registered: ' . $event->title)
             . self::para(self::fill('Hi {{first_name}},', $event, $response->name) . "\n\n" . self::fill($msg, $event, $response->name))
             . self::detailsBox($event)
             . self::answersTable($answers)
             . ($invite ? '<p style="margin:14px 0 0;font-size:13px;color:#64748B;text-align:center">Need to change something? <a href="' . e(self::rsvpUrl($invite->token)) . '" style="color:#1F6080">Update your RSVP</a>.</p>' : '')
             . ($invite ? self::optOutLine($event, $invite->token) : '');
-        $html = EmailTemplate::wrap((int) $event->agency_id, $body, ['title' => 'You’re registered', 'preheader' => (string) $event->title]);
+        $html = self::frame($event, $body, ['title' => 'You’re registered', 'preheader' => (string) $event->title]);
 
         return ['You’re registered: ' . $event->title, $html];
     }
@@ -160,9 +231,11 @@ final class RsvpMail
             $subject = ($kind === 'updated' ? 'RSVP updated: ' : 'New RSVP: ') . ($name ?: $email) . ' — ' . $event->title;
             $body = self::para($who . ($kind === 'updated' ? ' updated their RSVP' : ' signed up') . ' for ' . $event->title . ' on ' . $at . '.')
                 . self::answersTable($answers)
-                . '<p style="margin:14px 0 0;font-size:13px;color:#64748B">Reply to this email to reach them directly. The full list is in KiddieTrac → Event RSVPs.</p>';
+                . '<p style="margin:14px 0 0;font-size:13px;color:#64748B">Reply to this email to reach them directly. The full list is in '
+                . (self::unbranded($event) ? 'Event RSVPs' : 'KiddieTrac → Event RSVPs') . '.</p>';
         }
-        $html = EmailTemplate::wrap((int) $event->agency_id, $body, ['title' => $kind === 'opt_out' ? 'Opt-out' : 'New RSVP', 'preheader' => (string) $event->title]);
+        $body = self::heading($event, ($kind === 'opt_out' ? 'Opt-out: ' : 'New RSVP: ') . $event->title) . $body;
+        $html = self::frame($event, $body, ['title' => $kind === 'opt_out' ? 'Opt-out' : 'New RSVP', 'preheader' => (string) $event->title]);
 
         return [$subject, $html];
     }
@@ -193,21 +266,41 @@ final class RsvpMail
         if (! filter_var($to, FILTER_VALIDATE_EMAIL)) {
             return ['status' => 'failed', 'error' => 'Not a valid email address.', 'log_id' => null];
         }
+        /* A per-event sender account (RsvpSender) or the agency's own mail. A sender that has
+           since been deleted is a FAILURE, not a quiet fallback to another mailbox: the event
+           said which address its mail comes from. */
+        $sender = null;
+        if (! empty($opts['sender_id'])) {
+            $sender = RsvpSender::find($agencyId, (int) $opts['sender_id']);
+            if (! $sender) {
+                return ['status' => 'failed', 'error' => 'The sender account chosen for this event no longer exists. Pick another on the event.', 'log_id' => null];
+            }
+        }
+        $build = function ($m) use ($to, $toName, $subject, $opts, $agencyId) {
+            $m->to($to, $toName ?: null)->subject($subject);
+            // An unbranded event names itself (or its sender account), never the agency.
+            if (! empty($opts['from'][0])) {
+                $m->from($opts['from'][0], $opts['from'][1] ?? null);
+            }
+            if (! empty($opts['reply_to'])) {
+                $m->replyTo($opts['reply_to'], $opts['reply_to_name'] ?? null);
+            }
+            MailScope::agency($m, $agencyId);
+            if (! empty($opts['unsubscribe'])) {
+                try { $m->getHeaders()->addTextHeader('List-Unsubscribe', '<' . $opts['unsubscribe'] . '>'); } catch (\Throwable $e) {}
+            }
+        };
         $before = (int) DB::table('email_logs')->max('id');
         try {
-            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $subject, $opts, $agencyId) {
-                $m->to($to, $toName ?: null)->subject($subject);
-                if (! empty($opts['reply_to'])) {
-                    $m->replyTo($opts['reply_to'], $opts['reply_to_name'] ?? null);
-                }
-                MailScope::agency($m, $agencyId);
-                if (! empty($opts['unsubscribe'])) {
-                    try { $m->getHeaders()->addTextHeader('List-Unsubscribe', '<' . $opts['unsubscribe'] . '>'); } catch (\Throwable $e) {}
-                }
-            });
+            if ($sender) {
+                RsvpSender::html($sender, $agencyId, $html, $build);
+            } else {
+                AgencyMailer::forAgency($agencyId)->html($html, $build);
+            }
         } catch (\Throwable $e) {
-            Log::warning('rsvp mail failed', ['to' => $to, 'error' => $e->getMessage()]);
-            return ['status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 480), 'log_id' => null];
+            $msg = $sender ? RsvpSender::scrub($e->getMessage(), $sender) : mb_substr($e->getMessage(), 0, 480);
+            Log::warning('rsvp mail failed', ['to' => $to, 'sender_id' => $sender->id ?? null, 'error' => $msg]);
+            return ['status' => 'failed', 'error' => $msg, 'log_id' => null];
         }
         // Rows written for THIS message: the suppression listener's (suppressed) or the
         // MessageSent logger's (sent), or the failure-auditing transport's (failed).
@@ -219,7 +312,10 @@ final class RsvpMail
         }
         $status = in_array($row->status, ['sent', 'suppressed', 'failed'], true) ? $row->status : 'failed';
 
-        return ['status' => $status, 'error' => $status === 'sent' ? null : mb_substr((string) ($row->error ?: ($status === 'suppressed' ? 'Held back by the agency’s email settings.' : 'Delivery failed.')), 0, 480), 'log_id' => (int) $row->id];
+        $err = $status === 'sent' ? null : (string) ($row->error ?: ($status === 'suppressed' ? 'Held back by the agency’s email settings.' : 'Delivery failed.'));
+        if ($err !== null && $sender) $err = RsvpSender::scrub($err, $sender);
+
+        return ['status' => $status, 'error' => $err === null ? null : mb_substr($err, 0, 480), 'log_id' => (int) $row->id];
     }
 
     public static function optedOut(int $agencyId, string $email): bool

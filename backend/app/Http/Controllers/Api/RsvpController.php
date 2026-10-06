@@ -6,7 +6,12 @@ use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendRsvpMail;
 use App\Support\AgencyTime;
+use App\Services\AgencyMailer;
 use App\Support\RsvpMail;
+use App\Support\RsvpGmail;
+use App\Support\RsvpPresets;
+use App\Support\RsvpSender;
+use Illuminate\Support\Facades\Crypt;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,6 +41,10 @@ use Symfony\Component\HttpFoundation\Response;
  * agency, whichever event it is for. Unsubscribe is a POST from a page, never a GET from
  * the email, because mail scanners follow links.
  *
+ * ROUND 2 (2026-10-06): built-in templates (RsvpPresets) so an event can be made without
+ * first creating one; a preview of exactly what recipients get, rendered by the same code
+ * that sends it and sending nothing; and per-event SENDER ACCOUNTS (RsvpSender).
+ *
  * Every admin read and write is scoped to the ACTIVE agency, and the caller must be an
  * agency_admin OF that agency (or a platform admin): the role middleware only says they are
  * an agency admin somewhere.
@@ -59,7 +68,14 @@ class RsvpController extends Controller
             $r->fields = json_decode((string) $r->fields, true) ?: [];
             $r->events = (int) ($used[$r->id] ?? 0);
         }
-        $out = ['templates' => $rows, 'is_platform' => $this->isPlatform($request)];
+        $tz = AgencyTime::tz($agencyId);
+        $senders = DB::table('rsvp_senders')->where('agency_id', $agencyId)->whereNull('deleted_at')->orderBy('label')->get()
+            ->map(fn ($x) => RsvpSender::present($x, $tz))->values();
+        $am = AgencyMailer::forAgency($agencyId);
+        $out = ['templates' => $rows, 'presets' => array_values(RsvpPresets::all()), 'senders' => $senders,
+            'default_from' => ['name' => $am->fromName(), 'address' => $am->fromAddress()],
+            'gmail' => $this->gmailInfo(),
+            'is_platform' => $this->isPlatform($request)];
         if ($out['is_platform']) {
             $out['agencies'] = DB::table('agencies')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name']);
         }
@@ -79,7 +95,9 @@ class RsvpController extends Controller
             'email_body' => ['required', 'string', 'max:8000'],
             'confirmation_message' => ['nullable', 'string', 'max:4000'],
             'notify_email' => ['nullable', 'email', 'max:160'],
+            'branding' => ['nullable', 'in:agency,none'],
         ]);
+        $data['branding'] = $data['branding'] ?? 'agency';
         $data['fields'] = json_encode($this->normaliseFields($data['fields']), JSON_UNESCAPED_UNICODE);
         $data['image_url'] = $this->checkImage($data['image_url'] ?? null, $agencyId);
         $data['notify_email'] = isset($data['notify_email']) ? strtolower(trim($data['notify_email'])) : null;
@@ -122,7 +140,7 @@ class RsvpController extends Controller
         $new = DB::table('rsvp_templates')->insertGetId([
             'agency_id' => $target, 'name' => mb_substr($name, 0, 160), 'description' => $t->description, 'fields' => $t->fields,
             'image_url' => $t->image_url, 'email_subject' => $t->email_subject, 'email_body' => $t->email_body,
-            'confirmation_message' => $t->confirmation_message,
+            'confirmation_message' => $t->confirmation_message, 'branding' => $t->branding ?? 'agency',
             // The notify address belongs to the agency it was set for; the copy asks again.
             'notify_email' => $target === $agencyId ? $t->notify_email : null,
             'created_by_id' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now(),
@@ -134,6 +152,42 @@ class RsvpController extends Controller
         }
 
         return response()->json(['id' => $new, 'agency_id' => $target]);
+    }
+
+    /** "Customize" on a built-in: an agency copy to edit. The built-in itself never changes. */
+    public function copyPreset(Request $request, string $key): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $p = RsvpPresets::get($key);
+        abort_unless($p, 404);
+        $name = trim((string) $request->input('name', '')) ?: $p['name'];
+        $id = DB::table('rsvp_templates')->insertGetId([
+            'agency_id' => $agencyId, 'name' => mb_substr($name, 0, 160), 'description' => $p['description'],
+            'fields' => json_encode($this->normaliseFields($p['fields']), JSON_UNESCAPED_UNICODE),
+            'image_url' => $p['image_url'], 'email_subject' => $p['email_subject'], 'email_body' => $p['email_body'],
+            'confirmation_message' => $p['confirmation_message'], 'notify_email' => null, 'branding' => $p['branding'] ?? 'agency',
+            'created_by_id' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->audit($request, $agencyId, 'rsvp.template_saved', 'rsvp_template', $id, 'Saved built-in RSVP template "' . $p['name'] . '" as "' . $name . '"');
+
+        return response()->json(['id' => $id]);
+    }
+
+    /** "Save as my template" from an event: its questions, email and image. */
+    public function saveEventAsTemplate(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $data = $request->validate(['name' => ['required', 'string', 'max:160']]);
+        $tid = DB::table('rsvp_templates')->insertGetId([
+            'agency_id' => $agencyId, 'name' => trim($data['name']), 'description' => null, 'fields' => $e->fields,
+            'image_url' => $e->image_url, 'email_subject' => $e->email_subject, 'email_body' => $e->email_body,
+            'confirmation_message' => $e->confirmation_message, 'notify_email' => $e->notify_email, 'branding' => $e->branding ?? 'agency',
+            'created_by_id' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->audit($request, $agencyId, 'rsvp.template_saved', 'rsvp_template', $tid, 'Saved the event "' . $e->title . '" as template "' . trim($data['name']) . '"');
+
+        return response()->json(['id' => $tid]);
     }
 
     public function uploadImage(Request $request): JsonResponse
@@ -180,7 +234,9 @@ class RsvpController extends Controller
     {
         $agencyId = $this->agency($request);
         $data = $request->validate([
-            'template_id' => [$id ? 'nullable' : 'required', 'integer'],
+            'template_id' => ['nullable', 'integer'],
+            'preset' => ['nullable', 'string', 'max:40'],
+            'sender_id' => ['nullable', 'integer'],
             'title' => ['required', 'string', 'max:160'],
             'description' => ['nullable', 'string', 'max:4000'],
             'starts_local' => ['nullable', 'date_format:Y-m-d\TH:i'],
@@ -194,6 +250,7 @@ class RsvpController extends Controller
             'notify_email' => ['required', 'email', 'max:160'],
             'status' => ['required', 'in:draft,open,closed'],
             'capacity' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'branding' => ['nullable', 'in:agency,none'],
         ], ['notify_email.required' => 'Enter the address that should receive sign-ups.']);
         $tz = AgencyTime::tz($agencyId);
         $toUtc = fn ($v) => $v ? Carbon::createFromFormat('Y-m-d\TH:i', $v, $tz)->utc()->format('Y-m-d H:i:s') : null;
@@ -203,6 +260,13 @@ class RsvpController extends Controller
             'location' => $data['location'] ?? null, 'notify_email' => strtolower(trim($data['notify_email'])),
             'status' => $data['status'], 'capacity' => $data['capacity'] ?? null,
         ];
+        if (! empty($data['branding'])) $row['branding'] = $data['branding'];
+        // The sender must be one of THIS agency's accounts; empty means the agency's own email.
+        if (array_key_exists('sender_id', $data)) {
+            $sid = (int) ($data['sender_id'] ?? 0);
+            if ($sid) abort_unless(RsvpSender::find($agencyId, $sid), 422, 'Choose one of your sender accounts.');
+            $row['sender_id'] = $sid ?: null;
+        }
         if ($row['starts_at'] && $row['ends_at'] && $row['ends_at'] < $row['starts_at']) {
             return response()->json(['message' => 'The event ends before it starts.'], 422);
         }
@@ -216,11 +280,23 @@ class RsvpController extends Controller
             if (array_key_exists('image_url', $data)) $row['image_url'] = $this->checkImage($data['image_url'], $agencyId);
             DB::table('rsvp_events')->where('id', $id)->update($row + ['updated_at' => now()]);
         } else {
-            $t = DB::table('rsvp_templates')->where('id', $data['template_id'])->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
-            abort_unless($t, 422, 'Choose one of your templates.');
+            /* From one of the agency's templates, or straight from a built-in — no template
+               has to exist first. Either way the event takes its own snapshot. */
+            if (! empty($data['template_id'])) {
+                $t = DB::table('rsvp_templates')->where('id', $data['template_id'])->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+                abort_unless($t, 422, 'Choose one of your templates.');
+                $presetKey = null;
+            } else {
+                $p = RsvpPresets::get($data['preset'] ?? null);
+                abort_unless($p, 422, 'Choose a template to start from.');
+                $t = (object) ['id' => null, 'fields' => json_encode($p['fields']), 'image_url' => $p['image_url'], 'email_subject' => $p['email_subject'],
+                    'email_body' => $p['email_body'], 'confirmation_message' => $p['confirmation_message'], 'branding' => $p['branding'] ?? 'agency'];
+                $presetKey = $p['key'];
+            }
             $fields = isset($data['fields']) ? $this->normaliseFields($data['fields']) : (json_decode((string) $t->fields, true) ?: []);
+            $row['branding'] = $row['branding'] ?? ($t->branding ?? 'agency');
             $id = DB::table('rsvp_events')->insertGetId($row + [
-                'agency_id' => $agencyId, 'template_id' => $t->id,
+                'agency_id' => $agencyId, 'template_id' => $t->id, 'preset_key' => $presetKey,
                 'fields' => json_encode($this->normaliseFields($fields), JSON_UNESCAPED_UNICODE),
                 'image_url' => array_key_exists('image_url', $data) ? $this->checkImage($data['image_url'], $agencyId) : $t->image_url,
                 'email_subject' => trim((string) ($data['email_subject'] ?? '')) !== '' ? $data['email_subject'] : $t->email_subject,
@@ -233,6 +309,37 @@ class RsvpController extends Controller
         $this->audit($request, $agencyId, 'rsvp.event_saved', 'rsvp_event', $id, 'Saved RSVP event "' . $row['title'] . '" (' . $row['status'] . ')');
 
         return response()->json(['id' => $id]);
+    }
+
+    /** Open, close or return to draft — without resending every other field of the event. */
+    public function setEventStatus(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $data = $request->validate(['status' => ['required', 'in:draft,open,closed']]);
+        DB::table('rsvp_events')->where('id', $id)->update(['status' => $data['status'], 'updated_at' => now()]);
+        $this->audit($request, $agencyId, 'rsvp.event_saved', 'rsvp_event', $id, 'RSVP event "' . $e->title . '" is now ' . $data['status']);
+
+        return response()->json(['ok' => true, 'status' => $data['status']]);
+    }
+
+    /** A copy of the event — its questions, email, image and sender — as a new draft with no invitees. */
+    public function duplicateEvent(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $row = (array) $e;
+        unset($row['id'], $row['deleted_at']);
+        $row['title'] = mb_substr($e->title . ' (copy)', 0, 160);
+        $row['status'] = 'draft';
+        $row['public_token'] = Str::random(32);
+        $row['created_by_id'] = (int) $request->user()->id;
+        $row['created_at'] = now();
+        $row['updated_at'] = now();
+        $new = DB::table('rsvp_events')->insertGetId($row);
+        $this->audit($request, $agencyId, 'rsvp.event_saved', 'rsvp_event', $new, 'Duplicated RSVP event "' . $e->title . '" as a draft');
+
+        return response()->json(['id' => $new]);
     }
 
     public function deleteEvent(Request $request, int $id): JsonResponse
@@ -344,7 +451,7 @@ class RsvpController extends Controller
         // A test must not hand out a live link that would sign "Test Recipient" up, so its
         // buttons point at the event's shareable page instead.
         $html = str_replace([RsvpMail::rsvpUrl('test'), RsvpMail::optOutUrl('test')], [RsvpMail::publicUrl($e->public_token), RsvpMail::publicUrl($e->public_token)], $html);
-        $r = RsvpMail::send($agencyId, $data['to'], null, '[Test] ' . $subject, $html, ['reply_to' => $e->notify_email]);
+        $r = RsvpMail::send($agencyId, $data['to'], null, '[Test] ' . $subject, $html, ['reply_to' => $e->notify_email, 'sender_id' => $e->sender_id ?? null, 'from' => RsvpMail::fromFor($e)]);
         $this->audit($request, $agencyId, 'rsvp.test_sent', 'rsvp_event', $id, 'Test invitation for "' . $e->title . '" to ' . $data['to'] . ': ' . $r['status']);
 
         return response()->json(['sent' => $r['status'] === 'sent', 'status' => $r['status'], 'reason' => $r['error']]);
@@ -362,6 +469,299 @@ class RsvpController extends Controller
         $this->audit($request, $agencyId, 'rsvp.invitee_removed', 'rsvp_event', (int) $inv->event_id, 'Removed ' . $inv->email . ' from the invite list');
 
         return response()->json(['ok' => true]);
+    }
+
+    /* ═════════════ preview (sends nothing) ═════════════ */
+
+    /**
+     * POST /admin/rsvp/preview — what recipients will get, rendered by the SAME RsvpMail
+     * code that sends it, for a saved event, a template, a built-in, or the unsaved values
+     * in an open dialog (which override whichever of those it started from). Writes nothing
+     * and sends nothing; the links in it carry a token that matches no invite.
+     */
+    public function preview(Request $request): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $in = $request->validate([
+            'event_id' => ['nullable', 'integer'], 'template_id' => ['nullable', 'integer'], 'preset' => ['nullable', 'string', 'max:40'],
+            'title' => ['nullable', 'string', 'max:160'], 'description' => ['nullable', 'string', 'max:4000'],
+            'starts_local' => ['nullable', 'date_format:Y-m-d\TH:i'], 'ends_local' => ['nullable', 'date_format:Y-m-d\TH:i'],
+            'location' => ['nullable', 'string', 'max:250'], 'image_url' => ['nullable', 'string', 'max:500'],
+            'fields' => ['nullable', 'array', 'max:30'], 'email_subject' => ['nullable', 'string', 'max:200'],
+            'email_body' => ['nullable', 'string', 'max:8000'], 'confirmation_message' => ['nullable', 'string', 'max:4000'],
+            'notify_email' => ['nullable', 'string', 'max:160'], 'sender_id' => ['nullable', 'integer'],
+            'branding' => ['nullable', 'in:agency,none'],
+        ]);
+        $tz = AgencyTime::tz($agencyId);
+        $base = null;
+        if (! empty($in['event_id'])) {
+            $base = $this->ownEvent($agencyId, (int) $in['event_id']);
+        } elseif (! empty($in['template_id'])) {
+            $base = DB::table('rsvp_templates')->where('id', $in['template_id'])->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+            abort_unless($base, 404);
+        } elseif (! empty($in['preset'])) {
+            $p = RsvpPresets::get($in['preset']);
+            abort_unless($p, 404);
+            $base = (object) $p;
+        }
+        $base = (array) ($base ?: []);
+        // A template's or built-in's description is a note for the team, not the event's
+        // public "About" text — only a real event's description belongs on the RSVP page.
+        if (empty($in['event_id'])) unset($base['description']);
+        $pick = fn ($k, $d = null) => (array_key_exists($k, $in) && $in[$k] !== null && $in[$k] !== '') ? $in[$k] : ($base[$k] ?? $d);
+        $toUtc = fn ($v) => $v ? Carbon::createFromFormat('Y-m-d\TH:i', $v, $tz)->utc()->format('Y-m-d H:i:s') : null;
+        $fields = $pick('fields', []);
+        $fields = $this->normaliseFields(is_string($fields) ? (json_decode($fields, true) ?: []) : $fields);
+        $image = (string) $pick('image_url', '');
+        try { $image = $this->checkImage($image, $agencyId); } catch (\Throwable $ex) { $image = null; }
+        $e = (object) [
+            'id' => 0, 'agency_id' => $agencyId,
+            'title' => (string) ($pick('title') ?: ($base['name'] ?? 'Your event')),
+            'description' => $pick('description'), 'location' => $pick('location'),
+            'starts_at' => ! empty($in['starts_local']) ? $toUtc($in['starts_local']) : ($base['starts_at'] ?? null),
+            'ends_at' => ! empty($in['ends_local']) ? $toUtc($in['ends_local']) : ($base['ends_at'] ?? null),
+            'image_url' => $image, 'fields' => json_encode($fields), 'status' => 'open', 'capacity' => null,
+            'email_subject' => (string) ($pick('email_subject') ?: 'You’re invited: {{event}}'),
+            'email_body' => (string) ($pick('email_body') ?: ''), 'confirmation_message' => $pick('confirmation_message'),
+            'notify_email' => $pick('notify_email'), 'public_token' => 'preview',
+        ];
+        $sid = array_key_exists('sender_id', $in) ? (int) ($in['sender_id'] ?? 0) : (int) ($base['sender_id'] ?? 0);
+        $e->sender_id = $sid ?: null;
+        $e->branding = $pick('branding', 'agency') === 'none' ? 'none' : 'agency';
+        $sample = (object) ['name' => 'Alex Sample', 'email' => 'alex.sample@example.com', 'token' => 'preview'];
+        [$subject, $html] = RsvpMail::invite($e, $sample);
+        $answers = [];
+        foreach ($fields as $f) {
+            $answers[$f['key']] = ['label' => $f['label'], 'value' => match (true) {
+                $f['key'] === 'email' => $sample->email,
+                in_array($f['key'], ['full_name', 'name'], true) => $sample->name,
+                $f['type'] === 'tel' => '519-555-0142',
+                $f['type'] === 'checkbox' => 'Yes',
+                $f['type'] === 'select' => (string) ($f['options'][0] ?? ''),
+                $f['type'] === 'textarea' => 'An example answer, as a registrant might write it.',
+                default => $f['default'] !== '' ? $f['default'] : 'Example answer',
+            }];
+        }
+        [$cSubject, $cHtml] = RsvpMail::confirmation($e, (object) ['name' => $sample->name, 'answers' => json_encode($answers)], $sample);
+
+        // Who it is from: the event's sender account, or the agency's own email; unbranded
+        // names itself, exactly as RsvpMail::fromFor() will when it sends.
+        $sender = $sid ? RsvpSender::find($agencyId, $sid) : null;
+        $am = AgencyMailer::forAgency($agencyId);
+        $from = $sender ? ['name' => $sender->from_name ?: '', 'address' => $sender->from_address ?: '(connect Gmail first)', 'account' => $sender->label]
+            : ['name' => $am->fromName(), 'address' => $am->fromAddress(), 'account' => 'Agency default email'];
+        if ($f = RsvpMail::fromFor($e)) { $from['name'] = $f[1]; $from['address'] = $f[0]; }
+
+        $warnings = [];
+        if (! filter_var((string) $e->notify_email, FILTER_VALIDATE_EMAIL)) $warnings[] = 'No address is set to receive sign-ups yet.';
+        if (! $e->starts_at) $warnings[] = 'The event has no date yet, so the email shows no “When”.';
+        if (preg_match_all('/\{\{\s*([a-z_]+)\s*\}\}/i', $e->email_subject . ' ' . $e->email_body . ' ' . $e->confirmation_message, $m)) {
+            $unknown = array_diff(array_unique(array_map('strtolower', $m[1])), ['name', 'first_name', 'event', 'date', 'location', 'agency']);
+            if ($unknown) $warnings[] = 'Unknown placeholder(s) left as typed: {{' . implode('}}, {{', $unknown) . '}}.';
+        }
+        if ($sid && ! $sender) $warnings[] = 'The chosen sender account no longer exists.';
+        if ($sender && RsvpSender::isGmail($sender) && empty($sender->google_refresh_enc)) $warnings[] = 'The Gmail sender “' . $sender->label . '” is not connected yet — connect it on the Sender accounts tab before sending.';
+        if ($sender && RsvpSender::isGmail($sender) && ($sender->google_status ?? '') === 'needs_reconnect') $warnings[] = 'The Gmail sender “' . $sender->label . '” needs reconnecting before it can send.';
+        if (RsvpMail::unbranded($e) && ! $sender) $warnings[] = 'Unbranded, but with no sender account the email still comes from the platform address ' . $am->fromAddress() . '. Choose a sender account to send from your own address.';
+        if (RsvpMail::unbranded($e) && preg_match('/\{\{\s*agency\s*\}\}/i', $e->email_subject . ' ' . $e->email_body . ' ' . $e->confirmation_message)) $warnings[] = 'Unbranded: {{agency}} shows the sender account’s name, or the event title.';
+
+        $out = [
+            'invite' => ['subject' => $subject, 'html' => $html],
+            'confirmation' => ['subject' => $cSubject, 'html' => $cHtml],
+            'from' => $from, 'reply_to' => $e->notify_email, 'to' => $sample->name . ' <' . $sample->email . '>',
+            'form' => $this->publicPayload($e), 'branding' => $e->branding,
+            'warnings' => $warnings,
+        ];
+        if (! empty($in['event_id'])) {
+            $out['pending'] = (int) DB::table('rsvp_invites')->where('event_id', (int) $in['event_id'])->where('agency_id', $agencyId)->where('send_status', 'pending')->count();
+            $out['status'] = $base['status'] ?? null;
+        }
+
+        return response()->json($out);
+    }
+
+    /* ═════════════ sender accounts ═════════════ */
+
+    public function senders(Request $request): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $tz = AgencyTime::tz($agencyId);
+        $rows = DB::table('rsvp_senders')->where('agency_id', $agencyId)->whereNull('deleted_at')->orderBy('label')->get();
+        $used = DB::table('rsvp_events')->where('agency_id', $agencyId)->whereNull('deleted_at')->whereNotNull('sender_id')
+            ->selectRaw('sender_id, COUNT(*) c')->groupBy('sender_id')->pluck('c', 'sender_id');
+
+        return response()->json(['senders' => $rows->map(function ($x) use ($tz, $used) {
+            return RsvpSender::present($x, $tz) + ['events' => (int) ($used[$x->id] ?? 0)];
+        })->values(), 'gmail' => $this->gmailInfo()]);
+    }
+
+    private function gmailInfo(): array
+    {
+        return ['configured' => RsvpGmail::configured(), 'client' => RsvpGmail::clientKind(), 'redirect_uri' => RsvpGmail::redirectUri()];
+    }
+
+    /**
+     * A sender is 'gmail_oauth' (connect by signing in — the only kind that can send from
+     * this host, which blocks outbound SMTP) or 'smtp' (kept for a host that allows it).
+     * A Gmail sender's address comes from Google when it is connected.
+     */
+    public function saveSender(Request $request, ?int $id = null): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $old = $id ? RsvpSender::find($agencyId, $id) : null;
+        if ($id) abort_unless($old, 404);
+        $type = $old ? (($old->type ?? 'smtp') === 'gmail_oauth' ? 'gmail_oauth' : 'smtp') : ($request->input('type') === 'smtp' ? 'smtp' : 'gmail_oauth');
+        $rules = [
+            'label' => ['required', 'string', 'max:120'],
+            'from_name' => ['nullable', 'string', 'max:120'],
+            'reply_to' => ['nullable', 'email', 'max:190'],
+        ];
+        if ($type === 'smtp') {
+            $rules += [
+                'from_address' => ['required', 'email', 'max:190'],
+                'smtp_host' => ['required', 'string', 'max:190', 'regex:/^[A-Za-z0-9.\-]+$/'],
+                'smtp_port' => ['required', 'integer', 'min:1', 'max:65535'],
+                'smtp_encryption' => ['required', 'in:' . implode(',', RsvpSender::ENCRYPTIONS)],
+                'smtp_user' => ['nullable', 'string', 'max:190'],
+                'smtp_password' => ['nullable', 'string', 'max:500'],
+            ];
+        }
+        $data = $request->validate($rules, ['smtp_host.regex' => 'Enter just the server name, e.g. smtp.gmail.com.']);
+        $row = [
+            'type' => $type, 'label' => trim($data['label']), 'from_name' => isset($data['from_name']) ? trim($data['from_name']) : null,
+            'reply_to' => isset($data['reply_to']) ? strtolower(trim($data['reply_to'])) : null, 'updated_at' => now(),
+        ];
+        $pw = '';
+        if ($type === 'smtp') {
+            $row += [
+                'from_address' => strtolower(trim($data['from_address'])), 'smtp_host' => strtolower(trim($data['smtp_host'])),
+                'smtp_port' => (int) $data['smtp_port'], 'smtp_encryption' => $data['smtp_encryption'],
+                'smtp_user' => isset($data['smtp_user']) ? trim($data['smtp_user']) : null,
+            ];
+            // Blank keeps the saved password; a new one replaces it. Never echoed back.
+            $pw = (string) ($data['smtp_password'] ?? '');
+            if ($pw !== '') $row['smtp_pass_enc'] = Crypt::encryptString($pw);
+        }
+        if ($old) {
+            if ($type === 'smtp') {
+                // A changed server, login or password has not been checked yet.
+                foreach (['smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_user'] as $k) {
+                    if ((string) $old->$k !== (string) $row[$k]) $row['verified_at'] = null;
+                }
+                if ($pw !== '') $row['verified_at'] = null;
+            }
+            DB::table('rsvp_senders')->where('id', $id)->update($row);
+        } else {
+            if ($type === 'gmail_oauth') { $row['smtp_port'] = 587; $row['smtp_encryption'] = 'tls'; $row['last_test_status'] = 'not_connected'; }
+            $id = DB::table('rsvp_senders')->insertGetId($row + ['agency_id' => $agencyId, 'created_by_id' => (int) $request->user()->id, 'created_at' => now()]);
+        }
+        $this->audit($request, $agencyId, 'rsvp.sender_saved', 'agency', $agencyId, 'Saved RSVP sender account "' . $row['label'] . '" ('
+            . ($type === 'gmail_oauth' ? 'Gmail' : (($row['from_address'] ?? '') . ' via ' . ($row['smtp_host'] ?? ''))) . ')' . ($pw !== '' ? ', password updated' : ''));
+
+        return response()->json(['id' => $id, 'type' => $type]);
+    }
+
+    /** GET /admin/rsvp/senders/{id}/google/start — the Google sign-in URL for this sender. */
+    public function googleStart(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $s = RsvpSender::find($agencyId, $id);
+        abort_unless($s, 404);
+        abort_unless(RsvpSender::isGmail($s), 422, 'This account is not a Gmail sender.');
+        if (! RsvpGmail::configured()) {
+            return response()->json(['message' => 'Gmail connection isn’t set up yet — the platform admin needs to add a Google client.', 'not_configured' => true], 422);
+        }
+        $this->audit($request, $agencyId, 'rsvp.sender_connect_started', 'agency', $agencyId, 'Started connecting Gmail for RSVP sender "' . $s->label . '"');
+
+        return response()->json(['url' => RsvpGmail::authUrl($s, $agencyId, (int) $request->user()->id), 'redirect_uri' => RsvpGmail::redirectUri()]);
+    }
+
+    /**
+     * GET /rsvp/google/callback (https://api.kiddietrac.com/api/v1/rsvp/google/callback, the
+     * URI registered in Google Cloud) — where Google sends the browser back. No login here:
+     * the signed, single-use state is the proof of who started it. Always ends by sending
+     * the browser back to Event RSVPs with a result flag, never on a bare error page.
+     */
+    public function googleCallback(Request $request)
+    {
+        $back = fn (string $r, string $extra = '') => redirect()->away(RsvpMail::APP . '/dashboard.html?rsvp_gmail=' . $r . $extra . '#rsvp');
+        $st = RsvpGmail::readState($request->query('state'));
+        if (! $st) return $back('state');
+        if ($request->query('error')) return $back($request->query('error') === 'access_denied' ? 'denied' : 'google');
+        $code = (string) $request->query('code', '');
+        if ($code === '' || strlen($code) > 2048) return $back('google');
+        // The person who started it must still administer that agency, and the sender must still be theirs.
+        $admin = DB::table('role_assignments')->where('user_id', $st['u'])->where('active', 1)
+            ->where(function ($q) use ($st) {
+                $q->where('role', 'platform_admin')->orWhere(function ($q2) use ($st) { $q2->where('role', 'agency_admin')->where('agency_id', $st['a']); });
+            })->exists();
+        if (! $admin) return $back('state');
+        $s = RsvpSender::find($st['a'], $st['s']);
+        if (! $s || ! RsvpSender::isGmail($s)) return $back('sender_gone');
+        if (! RsvpGmail::configured()) return $back('not_configured');
+        try {
+            $r = RsvpGmail::connect($s, $code);
+        } catch (\Throwable $e) {
+            $r = ['ok' => false, 'reason' => 'exchange'];
+        }
+        try {
+            \App\Support\Audit::write(['user_id' => $st['u'], 'agency_id' => $st['a'], 'action' => 'rsvp.sender_connected', 'entity_type' => 'agency', 'entity_id' => $st['a'],
+                'payload' => json_encode(['summary' => $r['ok'] ? 'Connected Gmail ' . $r['email'] . ' to RSVP sender "' . $s->label . '"' : 'Connecting Gmail to RSVP sender "' . $s->label . '" failed (' . $r['reason'] . ')']),
+                'created_at' => now()]);
+        } catch (\Throwable $e) {
+        }
+        if (! $r['ok']) return $back((string) $r['reason']);
+
+        return $back('connected', '&email=' . rawurlencode($r['email']) . (! empty($r['changed_from']) ? '&was=' . rawurlencode($r['changed_from']) : ''));
+    }
+
+    public function deleteSender(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $s = RsvpSender::find($agencyId, $id);
+        abort_unless($s, 404);
+        $inUse = DB::table('rsvp_events')->where('agency_id', $agencyId)->where('sender_id', $id)->whereNull('deleted_at')->whereIn('status', ['open', 'draft'])->count();
+        if ($inUse) {
+            return response()->json(['message' => $inUse . ' open or draft event(s) send through this account. Switch them to another account first.'], 422);
+        }
+        RsvpGmail::revoke($s);
+        DB::table('rsvp_senders')->where('id', $id)->update(['deleted_at' => now(), 'smtp_pass_enc' => null, 'google_refresh_enc' => null, 'google_access_enc' => null]);
+        $this->audit($request, $agencyId, 'rsvp.sender_deleted', 'agency', $agencyId, 'Deleted RSVP sender account "' . $s->label . '"');
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Connect and log in, sending nothing. */
+    public function checkSender(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $s = RsvpSender::find($agencyId, $id);
+        abort_unless($s, 404);
+        $r = RsvpSender::check($s);
+        DB::table('rsvp_senders')->where('id', $id)->update(['verified_at' => $r['ok'] ? now() : null,
+            'last_test_status' => $r['ok'] ? 'connected' : 'connect_failed', 'last_test_error' => $r['error'], 'last_test_at' => now(), 'updated_at' => now()]);
+        $this->audit($request, $agencyId, 'rsvp.sender_checked', 'agency', $agencyId, 'Checked RSVP sender account "' . $s->label . '": ' . ($r['ok'] ? 'connected' : 'failed'));
+
+        return response()->json($r);
+    }
+
+    /** One real message to an address the admin types — required, never defaulted. */
+    public function testSender(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $s = RsvpSender::find($agencyId, $id);
+        abort_unless($s, 404);
+        $data = $request->validate(['to' => ['required', 'email', 'max:190']]);
+        $agency = (string) DB::table('agencies')->where('id', $agencyId)->value('name');
+        $html = \App\Services\EmailTemplate::wrap($agencyId, '<p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.6">This is a test from the KiddieTrac sender account <strong>' . e($s->label) . '</strong> for ' . e($agency) . '.</p>'
+            . '<p style="margin:0;font-size:15px;color:#334155;line-height:1.6">If you are reading this, event invitations sent through this account will arrive from <strong>' . e($s->from_address) . '</strong>.</p>',
+            ['title' => 'Sender account test', 'preheader' => 'Test message']);
+        $r = RsvpMail::send($agencyId, $data['to'], null, '[Test] KiddieTrac event sender: ' . $s->label, $html, ['reply_to' => $s->reply_to, 'sender_id' => $s->id]);
+        DB::table('rsvp_senders')->where('id', $id)->update(['last_test_status' => $r['status'], 'last_test_error' => $r['error'], 'last_test_at' => now(),
+            'verified_at' => $r['status'] === 'sent' ? now() : $s->verified_at, 'updated_at' => now()]);
+        $this->audit($request, $agencyId, 'rsvp.sender_test', 'agency', $agencyId, 'Test message through RSVP sender "' . $s->label . '" to ' . $data['to'] . ': ' . $r['status']);
+
+        return response()->json(['sent' => $r['status'] === 'sent', 'status' => $r['status'], 'reason' => $r['error']]);
     }
 
     /* ═════════════ reports ═════════════ */
@@ -477,6 +877,10 @@ class RsvpController extends Controller
     {
         [$inv, $e] = $this->inviteByToken($token, true);
         if (! $inv) return response()->json(['message' => 'This link is not valid.'], 404);
+        if ($e && RsvpMail::unbranded($e)) {
+            return response()->json(['email' => $this->mask($inv->email), 'event' => $e->title, 'branded' => false, 'agency' => null,
+                'opted_out' => RsvpMail::optedOut((int) $inv->agency_id, $inv->email)]);
+        }
         $agency = DB::table('agencies')->where('id', $inv->agency_id)->first(['name', 'brand_logo_url', 'logo_url', 'brand_primary_color']);
 
         return response()->json(['email' => $this->mask($inv->email), 'event' => $e->title ?? null,
@@ -598,7 +1002,8 @@ class RsvpController extends Controller
 
     private function publicPayload(object $e): array
     {
-        $agency = DB::table('agencies')->where('id', $e->agency_id)->first(['name', 'brand_logo_url', 'logo_url', 'brand_primary_color']);
+        $branded = ! RsvpMail::unbranded($e);
+        $agency = $branded ? DB::table('agencies')->where('id', $e->agency_id)->first(['name', 'brand_logo_url', 'logo_url', 'brand_primary_color']) : null;
         $count = (int) DB::table('rsvp_responses')->where('event_id', $e->id)->count();
         $fields = array_map(fn ($f) => array_intersect_key($f, array_flip(['key', 'label', 'type', 'required', 'options', 'placeholder', 'default', 'help'])),
             json_decode((string) $e->fields, true) ?: []);
@@ -607,7 +1012,9 @@ class RsvpController extends Controller
             'title' => $e->title, 'description' => $e->description, 'when' => RsvpMail::whenLabel($e), 'location' => $e->location,
             'image_url' => $e->image_url, 'fields' => $fields, 'open' => $e->status === 'open',
             'full' => $e->capacity ? $count >= (int) $e->capacity : false,
-            'agency' => ['name' => $agency->name ?? '', 'logo' => ($agency->brand_logo_url ?? null) ?: ($agency->logo_url ?? null), 'colour' => $agency->brand_primary_color ?? null],
+            // Unbranded: no agency name, logo or colour reaches the page at all.
+            'branded' => $branded,
+            'agency' => $branded ? ['name' => $agency->name ?? '', 'logo' => ($agency->brand_logo_url ?? null) ?: ($agency->logo_url ?? null), 'colour' => $agency->brand_primary_color ?? null] : null,
         ];
     }
 
@@ -794,6 +1201,7 @@ class RsvpController extends Controller
     {
         $url = trim((string) $url);
         if ($url === '') return null;
+        if (RsvpPresets::isPresetImage($url)) return $url;
         $prefix = rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/') . '/storage/rsvp/' . $agencyId . '/';
         abort_unless(str_starts_with($url, $prefix) && preg_match('#^[A-Za-z0-9]{32}\.(jpe?g|png|gif|webp)$#', substr($url, strlen($prefix))), 422, 'Upload the image here rather than linking to one.');
 

@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RSVP · KiddieTrac</title>
+  <title>RSVP</title>
   <meta name="description" content="Let us know you're coming.">
   <meta name="robots" content="noindex">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
-  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
+  <!-- No icon until we know the event is branded: an unbranded event must not show the
+       KiddieTrac favicon, and an empty icon stops the browser asking for /favicon.ico. -->
+  <link rel="icon" id="fav" href="data:,">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
   <meta name="theme-color" content="#081C41">
   <!-- Event RSVPs (2026-10-05). ?e=<event token> shareable link, ?i=<invite token> a personal
-       invite, ?o=<invite token> unsubscribe. Backend: RsvpController public* methods. -->
+       invite, ?o=<invite token> unsubscribe, ?preview=1 the admin preview frame. Backend: RsvpController public* methods. -->
   <style>
     :root { --brand: #1F6080; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; }
     * { box-sizing: border-box; }
@@ -68,12 +68,22 @@
   var token = clean(q.get('o') || q.get('i') || q.get('e'));
   var app = document.getElementById('app');
   var E = null;
+  /* BRANDING (2026-10-06). An unbranded event ('none') shows no KiddieTrac or agency name,
+     logo, header, footer or favicon — the server does not even send the agency. */
+  var BRANDED = true;
+  function setBranding(b) {
+    BRANDED = b !== false;
+    if (!BRANDED) { return; }
+    var f = document.getElementById('fav');
+    if (f) { f.type = 'image/svg+xml'; f.href = '/favicon.svg?v=20260901b'; }
+    var t = document.createElement('link'); t.rel = 'apple-touch-icon'; t.href = '/apple-touch-icon.png?v=20260901b'; document.head.appendChild(t);
+  }
 
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function card(inner, img) { return '<div class="card">' + (img || '') + '<div class="in">' + inner + '</div></div>'; }
   function fail(msg) { app.innerHTML = card('<h1>Sorry</h1><p class="desc">' + esc(msg) + '</p>'); }
-  function foot() { return '<div class="foot">Powered by KiddieTrac · <a href="https://kiddietrac.com/privacy" target="_blank" rel="noopener">Privacy</a></div>'; }
-  function head(a) { return '<div class="head">' + (a && a.logo ? '<img src="' + esc(a.logo) + '" alt="">' : '') + '<b>' + esc(a ? a.name : '') + '</b></div>'; }
+  function foot() { return BRANDED ? '<div class="foot">Powered by KiddieTrac · <a href="https://kiddietrac.com/privacy" target="_blank" rel="noopener">Privacy</a></div>' : ''; }
+  function head(a) { if (!BRANDED || !a) { return ''; } return '<div class="head">' + (a && a.logo ? '<img src="' + esc(a.logo) + '" alt="">' : '') + '<b>' + esc(a ? a.name : '') + '</b></div>'; }
   function brand(a) {
     // The agency colour, but only when white text stays readable on it.
     var hex = String((a && a.colour) || '').replace('#', '');
@@ -84,25 +94,44 @@
   function getJson(url, opts) {
     return fetch(url, opts).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); });
   }
+  /* PREVIEW (2026-10-06). The admin screen loads this page in a frame with ?preview=1 and
+     posts the event to it, so the form in the preview is drawn by the same code as the real
+     page. Same origin only, and nothing can be submitted from it. */
+  if (q.get('preview') === '1') {
+    window.addEventListener('message', function (ev) {
+      if (ev.origin !== location.origin || !ev.data || ev.data.type !== 'kt-rsvp-preview') { return; }
+      E = ev.data.event; setBranding(E.branded); paint();
+      var pf = document.getElementById('f');
+      if (pf) {
+        pf.onsubmit = function (e) {
+          e.preventDefault();
+          var er = document.getElementById('err'); if (er) { er.textContent = 'This is a preview. Nothing is sent from here.'; }
+        };
+      }
+    });
+    try { parent.postMessage({ type: 'kt-rsvp-preview-ready' }, location.origin); } catch (e) {}
+    return;
+  }
   if (!token || token.length < 20) { return fail('This link is incomplete. Please check the link you were sent.'); }
 
   if (mode === 'optout') {
     getJson(API + '/public/rsvp/optout/' + token, { headers: { Accept: 'application/json' } }).then(function (res) {
       if (!res.ok) { return fail(res.j.message || 'This link is not valid.'); }
-      var d = res.j; brand(d.agency);
-      document.title = 'Unsubscribe · ' + (d.agency.name || 'KiddieTrac');
+      var d = res.j; setBranding(d.branded); brand(d.agency);
+      var who = BRANDED && d.agency ? d.agency.name : '';
+      document.title = who ? 'Unsubscribe · ' + who : 'Unsubscribe';
       if (d.opted_out) {
-        app.innerHTML = head(d.agency) + card('<div class="done"><div class="big">✅</div><h1>You’re unsubscribed</h1><p class="desc">' + esc(d.email) + ' will not receive event invitations from ' + esc(d.agency.name) + '.</p></div>') + foot();
+        app.innerHTML = head(d.agency) + card('<div class="done"><div class="big">✅</div><h1>You’re unsubscribed</h1><p class="desc">' + esc(d.email) + ' will not receive ' + (who ? 'event invitations from ' + esc(who) : 'further event invitations') + '.</p></div>') + foot();
         return;
       }
-      app.innerHTML = head(d.agency) + card('<h1>Unsubscribe from event invitations?</h1><p class="desc">' + esc(d.agency.name) + ' will stop sending event invitations to <strong>' + esc(d.email) + '</strong>.</p>'
+      app.innerHTML = head(d.agency) + card('<h1>Unsubscribe from event invitations?</h1><p class="desc">' + (who ? esc(who) + ' will stop sending event invitations to' : 'You will stop receiving event invitations at') + ' <strong>' + esc(d.email) + '</strong>.</p>'
         + '<button class="btn" id="go" type="button">Unsubscribe</button><div class="err" id="err" role="alert"></div>') + foot();
       // A button, not the link itself: mail scanners open links, and must not unsubscribe anyone.
       document.getElementById('go').onclick = function () {
         var b = this; b.disabled = true; b.textContent = 'Working…';
         getJson(API + '/public/rsvp/optout/' + token, { method: 'POST', headers: { Accept: 'application/json' } }).then(function (r) {
           if (!r.ok) { b.disabled = false; b.textContent = 'Unsubscribe'; document.getElementById('err').textContent = r.status === 429 ? 'Too many attempts. Please wait a few minutes.' : (r.j.message || 'Something went wrong.'); return; }
-          app.innerHTML = head(d.agency) + card('<div class="done"><div class="big">✅</div><h1>You’re unsubscribed</h1><p class="desc">You won’t receive further event invitations from ' + esc(d.agency.name) + '.</p></div>') + foot();
+          app.innerHTML = head(d.agency) + card('<div class="done"><div class="big">✅</div><h1>You’re unsubscribed</h1><p class="desc">You won’t receive further event invitations' + (who ? ' from ' + esc(who) : '') + '.</p></div>') + foot();
         }).catch(function () { b.disabled = false; b.textContent = 'Unsubscribe'; document.getElementById('err').textContent = 'We could not reach the server. Please try again.'; });
       };
     }).catch(function () { fail('We could not load this page. Please try again in a moment.'); });
@@ -110,7 +139,7 @@
   }
 
   getJson(API + '/public/rsvp/' + (mode === 'invite' ? 'invite/' : 'event/') + token, { headers: { Accept: 'application/json' } })
-    .then(function (res) { if (!res.ok) { return fail(res.j.message || 'This RSVP link is not available.'); } E = res.j; paint(); })
+    .then(function (res) { if (!res.ok) { return fail(res.j.message || 'This RSVP link is not available.'); } E = res.j; setBranding(E.branded); paint(); })
     .catch(function () { fail('We could not load this page. Please try again in a moment.'); });
 
   function intro() {
