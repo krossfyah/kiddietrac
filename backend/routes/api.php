@@ -2408,6 +2408,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // they are allergic to, and their immunisations. Every handler proves the
         // child belongs to the signed-in guardian before reading or writing.
         Route::get ('/parent/onboarding/children', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'index']);
+        // Children added after the parent onboarded and still without a photo (sign-in catch-up).
+        Route::get ('/parent/onboarding/catch-up', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'catchUp']);
         Route::post('/parent/onboarding/children/{child}', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'save']);
         Route::post('/parent/onboarding/children/{child}/photo', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'photo']);
     });

@@ -116,6 +116,42 @@ class ParentChildOnboardingController extends Controller
     }
 
     /** GET /parent/onboarding/children — my children, and what is still missing. */
+    /**
+     * GET /parent/onboarding/catch-up
+     *
+     * The guardian's ENROLLED children (not withdrawn, not deleted) that have no photo.
+     *
+     * Onboarding runs once. A parent who finished it before their centre linked any
+     * children was told "your centre will add them" and was never asked again — so a
+     * child added afterwards never got the required photo, allergies or immunisations
+     * (Anthony, 2026-10-06: family 139, Alessia and Adriana). The portal asks this on
+     * every sign-in and, while it lists anyone, shows the same children step as
+     * onboarding until each has a photo.
+     *
+     * Same ownership rule as everything else here: only children in a family this
+     * user is a guardian of.
+     */
+    public function catchUp(Request $request): JsonResponse
+    {
+        $ids = $this->ownChildIds((int) $request->user()->id);
+        if (! $ids) {
+            return response()->json(['missing_photo' => []]);
+        }
+        $rows = DB::table('children')->whereIn('id', $ids)
+            ->where('enrollment_status', 'enrolled')
+            ->whereNull('withdrawn_at')->whereNull('deleted_at')
+            ->where(function ($q) { $q->whereNull('photo_url')->orWhere('photo_url', ''); })
+            ->orderBy('first_name')
+            ->get(['id', 'first_name', 'last_name', 'preferred_name']);
+
+        return response()->json([
+            'missing_photo' => $rows->map(fn ($c) => [
+                'id' => (int) $c->id,
+                'name' => trim((string) ($c->preferred_name ?: $c->first_name)),
+            ])->values(),
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $ids = $this->ownChildIds((int) $request->user()->id);

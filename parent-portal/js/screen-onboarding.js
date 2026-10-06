@@ -867,20 +867,40 @@
 
     state.kids = state.kids || { list: [], schedule: [] };
 
-    api('GET', '/parent/onboarding/children').then(function (res) {
-      state.kids.list = (res && res.children) || [];
-      state.kids.schedule = (res && res.schedule) || [];
-      paint();
-    }).catch(function () {
-      /* A failed load must not read as "no children to photograph". It used to
-         leave the list empty, and an empty list satisfies the photo check — so one
-         flaky request turned a required step into a skipped one, permanently,
-         because onboarding only ever runs once. */
-      state.kids.failed = true;
-      wrap.innerHTML = '<div style="color:#B45309;font-size:13px;padding:8px 0;">'
-        + 'We could not load your children just now. You can add these details later '
-        + 'from your child\'s profile.</div>';
-    });
+    function load() {
+      state.kids.failed = false;
+      state.kids.loaded = false;
+      wrap.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">Loading your children…</div>';
+      api('GET', '/parent/onboarding/children').then(function (res) {
+        var list = (res && res.children) || [];
+        /* The sign-in catch-up shows only the children it was opened for (enrolled,
+           no photo) — not a withdrawn sibling from years ago. */
+        if (state.kids.onlyIds) {
+          var want = {};
+          state.kids.onlyIds.forEach(function (id) { want[id] = 1; });
+          list = list.filter(function (k) { return want[k.id]; });
+        }
+        state.kids.list = list;
+        state.kids.schedule = (res && res.schedule) || [];
+        state.kids.loaded = true;
+        paint();
+      }).catch(function () {
+        /* A failed load must not read as "no children to photograph". It used to
+           leave the list empty, and an empty list satisfies the photo check — so one
+           flaky request turned a required step into a skipped one, permanently,
+           because onboarding only ever runs once. */
+        state.kids.failed = true;
+        wrap.innerHTML = '<div style="color:#B45309;font-size:13px;padding:8px 0;">'
+          + 'We could not load your children just now. '
+          + '<button type="button" data-kids-retry style="margin-left:6px;background:#fff;border:1.5px solid #FCD34D;'
+          + 'color:#92400E;border-radius:8px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;">Try again</button>'
+          + (state.kids.onlyIds ? '' : '<div style="margin-top:4px;">You can also add these details later from your child\'s profile.</div>')
+          + '</div>';
+        var rb = wrap.querySelector('[data-kids-retry]');
+        if (rb) { rb.addEventListener('click', load); }
+      });
+    }
+    load();
 
     function paint() {
       if (!state.kids.list.length) {
@@ -1484,6 +1504,109 @@
   // Kept for back-compat (called eagerly + by the shell); now the full gate.
   function maybeAutoTrigger() { forceGate(); }
 
+  /* ── SIGN-IN CATCH-UP: children added after the parent onboarded ─────────
+     Onboarding runs once. A parent who finished it before their centre linked any
+     children saw "your centre will add them" and was never asked again, so a child
+     added later never got the required photo (Anthony, 2026-10-06: Alessia and
+     Adriana). Now, on every sign-in, an onboarded GUARDIAN whose enrolled children
+     include any without a photo gets the same children step — photo, allergies,
+     immunisations — and cannot dismiss it until each listed child has a photo.
+     Sign out is always offered so nobody is trapped. Never for staff, "View as" or
+     an impersonated session. The id starts kt-onboarding, so the navigation sweep
+     leaves it open. */
+  var _catchUpStarted = false;
+  function catchUpEligible(u) {
+    if (!token() || !u || !u.id || !u.onboarded_at) { return false; }
+    try {
+      if (sessionStorage.getItem('kt_impersonating') === '1') { return false; }
+      if (sessionStorage.getItem('kt_view_as')) { return false; }
+    } catch (e) {}
+    var r = (u.primary_role || (u.roles && u.roles[0]) || '');
+    return r === 'guardian';
+  }
+
+  function maybeCatchUp(u, attempt) {
+    if (_catchUpStarted || !catchUpEligible(u)) { return; }
+    _catchUpStarted = true;
+    api('GET', '/parent/onboarding/catch-up').then(function (res) {
+      var missing = (res && res.missing_photo) || [];
+      if (missing.length) { showCatchUp(missing); }
+    }).catch(function () {
+      // Could not ask (offline, a blip). Ask again shortly; never assume "nothing missing".
+      _catchUpStarted = false;
+      if ((attempt || 0) < 3) { setTimeout(function () { maybeCatchUp(getUser(), (attempt || 0) + 1); }, 20000); }
+    });
+  }
+
+  function catchUpTitle(missing) {
+    var n = missing.map(function (m) { return m.name; });
+    if (n.length === 1) { return 'Add ' + n[0] + '’s photo'; }
+    if (n.length === 2) { return 'Add ' + n[0] + ' and ' + n[1] + '’s photos'; }
+    return 'Add your children’s photos';
+  }
+
+  function catchUpSignOut() {
+    if (window.KT && typeof KT.signOut === 'function') { try { KT.signOut(); return; } catch (e) {} }
+    try { sessionStorage.removeItem('kt_token'); localStorage.removeItem('kt_token'); sessionStorage.removeItem('kt_user'); } catch (e) {}
+    window.location.href = '/index.html';
+  }
+
+  function showCatchUp(missing) {
+    if (document.getElementById('kt-onboarding-catchup')) { return; }
+    var state = { kids: { list: [], schedule: [], onlyIds: missing.map(function (m) { return m.id; }) } };
+    var ov = document.createElement('div');
+    ov.id = 'kt-onboarding-catchup';
+    ov.setAttribute('data-kt-keep-open', '1');
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(8,15,30,0.74);'
+      + '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);overflow-y:auto;overflow-x:hidden;'
+      + 'display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;';
+    ov.innerHTML =
+      '<div style="background:#fff;border-radius:18px;width:100%;max-width:620px;margin:auto 0;'
+      + 'box-shadow:0 30px 80px -20px rgba(8,20,40,.6);overflow:hidden;">'
+      + '<div style="background:linear-gradient(135deg,#0B2545,#1F6080);color:#fff;padding:20px 22px;">'
+      +   '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;opacity:.8;">ONE MORE STEP</div>'
+      +   '<div style="font-size:20px;font-weight:800;margin-top:4px;">' + esc(catchUpTitle(missing)) + '</div>'
+      +   '<div style="font-size:13.5px;opacity:.9;margin-top:6px;line-height:1.45;">Staff use your child’s photo to recognise them at drop-off and pick-up — and in an emergency. '
+      +   'While you’re here, check their allergies and immunizations too.</div>'
+      + '</div>'
+      + '<div id="kt-catchup-body" style="padding:18px 18px 4px;"></div>'
+      + '<div id="kt-catchup-msg" style="padding:0 20px;font-size:13px;font-weight:700;min-height:18px;"></div>'
+      + '<div style="display:flex;gap:10px;justify-content:space-between;align-items:center;padding:14px 18px 18px;border-top:1px solid #EEF2F6;margin-top:10px;">'
+      +   '<button type="button" id="kt-catchup-out" style="background:none;border:0;color:#64748B;font-size:13px;font-weight:700;cursor:pointer;padding:8px 4px;">Sign out</button>'
+      +   '<button type="button" id="kt-catchup-done" style="background:#1F6080;color:#fff;border:0;border-radius:10px;padding:10px 22px;font-size:14px;font-weight:800;cursor:pointer;">Done</button>'
+      + '</div>'
+      + '</div>';
+    document.body.appendChild(ov);
+    var body = ov.querySelector('#kt-catchup-body');
+    var msg = ov.querySelector('#kt-catchup-msg');
+    body.appendChild(renderChildrenStep(state));
+
+    ov.querySelector('#kt-catchup-out').addEventListener('click', catchUpSignOut);
+    ov.querySelector('#kt-catchup-done').addEventListener('click', function () {
+      if (state.kids.failed || !state.kids.loaded) {
+        msg.style.color = '#DC2626';
+        msg.textContent = 'We could not load your children yet — press Try again above, then add the photos.';
+        return;
+      }
+      var kids = state.kids.list || [];
+      var noPhoto = kids.filter(function (k) { return !k.photo_url; });
+      if (noPhoto.length) {
+        msg.style.color = '#DC2626';
+        msg.textContent = noPhoto.length === 1
+          ? 'Please add a photo of ' + noPhoto[0].name + '.'
+          : 'Please add a photo of each child: ' + noPhoto.map(function (k) { return k.name; }).join(', ') + '.';
+        return;
+      }
+      // Allergies, dietary needs, notes and immunisations: saved the way onboarding saves them.
+      try { collectChildren(state, body); } catch (e) {}
+      if (ov.parentNode) { ov.parentNode.removeChild(ov); }
+      try { if (window.KT && KT.toast) { KT.toast('✅', 'Thank you', 'Your child’s details are saved.', '#16A34A'); } } catch (e) {}
+    });
+  }
+
   // Register screen for every role
   if (Shell && Shell.registerScreen) {
     ['agency_admin', 'centre_director', 'educator', 'guardian', 'auditor', 'home_visitor', 'sales_rep'].forEach(function (r) {
@@ -1491,7 +1614,7 @@
     });
   }
   window.KT = window.KT || {};
-  window.KT.Onboarding = { render: render, maybeAutoTrigger: maybeAutoTrigger, forceGate: forceGate };
+  window.KT.Onboarding = { render: render, maybeAutoTrigger: maybeAutoTrigger, forceGate: forceGate, catchUp: maybeCatchUp };
 
   // Install the navigation guard ONCE: every hash change while onboarding is
   // incomplete bounces straight back to #onboarding — this catches the browser
@@ -1526,6 +1649,7 @@
         var u = getUser(); if (!u || !u.id) u = {};
         setUser(Object.assign({}, u, fresh));   // fresh (incl. onboarded_at) wins
         if (fresh.onboarded_at) {
+          maybeCatchUp(getUser());
           var h = (window.location.hash || '').replace('#', '').split('?')[0];
           if (h === 'onboarding') {              // stuck on the wizard but actually done → release
             removeOnbOverlay();
@@ -1536,7 +1660,11 @@
           forceGate();                            // genuinely not onboarded → keep gating
         }
       })
-      .catch(function () { /* offline / transient — leave the eager gate as-is */ });
+      .catch(function () {
+        /* offline / transient — leave the eager gate as-is; the catch-up can still ask
+           from the cached user (it retries on its own if that request fails too). */
+        maybeCatchUp(getUser());
+      });
   }
   syncOnboardingFromServer();
 })(window);
