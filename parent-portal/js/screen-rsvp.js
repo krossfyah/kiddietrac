@@ -122,6 +122,7 @@
     + '.rv-fs{grid-column:1/-1;border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px 14px;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px}.rv-fs legend{font-weight:800;font-size:13px;padding:0 6px;color:#0F172A}'
     + '.rv-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;position:sticky;bottom:0;background:#fff;border-top:1px solid #E2E8F0;margin:14px -20px 0;padding:10px 20px;z-index:2}'
     + '.rv-hint{font-size:12px;color:#64748B;margin-top:3px;line-height:1.45}'
+    + '.rv-remchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px}.rv-remchips button[disabled]{opacity:.45;cursor:not-allowed}'
     + '.rv-bulk{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:6px 10px;position:sticky;top:0;z-index:2}.rv-bulk b{font-size:13px;color:#1E3A8A;margin-right:auto}'
     + '#appMain .rv-secs input[data-pick],#appMain .rv-secs input[data-selall]{width:16px;height:16px;cursor:pointer;margin:0}'
     + '.rv-q{border:1px solid #E2E8F0;border-radius:10px;padding:8px;margin-bottom:6px;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto auto;gap:6px;align-items:center;background:#FBFDFF}'
@@ -661,6 +662,189 @@
     window.addEventListener('resize', place);
   }
 
+  /* ── Reminders (2026-10-06) ─────────────────────────────────────────────
+     Anthony: "add a reminder feature in the event to be triggered by a schedule or
+     manually to send out a reminder about the upcoming event". A schedule is "N before the
+     event starts" (follows the event if its time changes) or a set date and time; the
+     server sends what is due every five minutes. "Send a reminder now" goes through a
+     preview and a confirm with the number of people it will reach. */
+  var REM_OFFSETS = [[10080, '1 week before'], [4320, '3 days before'], [1440, '1 day before'], [720, '12 hours before'], [180, '3 hours before'], [120, '2 hours before'], [60, '1 hour before']];
+  var REM_AUD = [['registered', 'Everyone who signed up'], ['no_response', 'Invited, but not replied yet'], ['both', 'Both — signed up and not replied']];
+  function audLabel(a) { return ({ registered: 'Signed up', no_response: 'Not replied yet', both: 'Signed up + not replied' })[a] || a; }
+  function remPill(s) {
+    var c = { scheduled: ['#EFF6FF', '#1D4ED8', 'Scheduled'], sending: ['#FEF3C7', '#92400E', 'Sending'], sent: ['#ECFDF5', '#047857', 'Sent'],
+      cancelled: ['#F1F5F9', '#64748B', 'Cancelled'], skipped: ['#FEF2F2', '#B91C1C', 'Not sent'] }[s] || ['#F1F5F9', '#475569', s];
+    return '<span class="rv-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + c[2] + '</span>';
+  }
+
+  async function loadReminders(main, host, ev) {
+    var d;
+    try { d = await Api.get('/admin/rsvp/events/' + ev.id + '/reminders'); }
+    catch (e) { host.innerHTML = '<div class="rv-hint" style="color:#B91C1C">Could not load reminders: ' + esc(e.message || e) + '</div>'; return; }
+    if (!host.isConnected) { return; }
+    var r = d.reminders || [], reach = d.reach || {};
+    var warn = '';
+    if (!d.has_start) { warn += '<div class="rv-warn" style="margin:0 0 8px">⚠ This event has no date and time yet. Reminders “before the event” need one — set it with Edit, or schedule a reminder for a specific date.</div>'; }
+    if (d.blocker) { warn += '<div class="rv-warn" style="margin:0 0 8px">⚠ ' + esc(d.blocker) + ' Reminders only go out while the event is open and before it starts.</div>'; }
+    var chips = '<div class="rv-chips rv-remchips"><span class="rv-hint" style="margin:0 4px 0 0;align-self:center">Add:</span>'
+      + [[10080, '1 week before'], [1440, '1 day before'], [120, '2 hours before']].map(function (o) { return '<button type="button" data-remadd="' + o[0] + '"' + (d.has_start ? '' : ' disabled') + '>＋ ' + o[1] + '</button>'; }).join('')
+      + '<button type="button" data-remadd="custom">＋ Custom…</button></div>';
+    var reachTxt = '<div class="rv-hint" style="margin:6px 0 8px">Right now a reminder would reach <b>' + (reach.registered || 0) + '</b> signed up'
+      + ' and <b>' + (reach.no_response || 0) + '</b> invited who haven’t replied. People who opted out are never included.</div>';
+    var list = r.length ? '<div class="kt-card" style="overflow:auto"><table data-kt-noexport data-kt-no-bulk data-kt-no-filter><thead><tr><th>When</th><th>To</th><th>Status</th><th>Result</th><th></th></tr></thead><tbody>'
+      + r.map(function (x) {
+        var when = x.manual ? 'Sent by hand' + (x.sent_label ? '<div class="rv-hint">' + esc(x.sent_label) + '</div>' : '')
+          : esc(x.offset_label || 'Set time') + '<div class="rv-hint">' + esc(x.status === 'sent' ? (x.sent_label || x.due_label) : (x.due_label || 'needs the event’s start time')) + '</div>';
+        var res = x.status === 'sent' ? (x.recipient_count ? x.recipient_count + ' queued · ' + x.sent_count + ' sent' + (x.failed_count ? ' · ' + x.failed_count + ' not delivered' : '') : '—')
+          : (x.status === 'scheduled' ? '—' : '');
+        return '<tr><td>' + when + '</td><td>' + esc(audLabel(x.audience)) + (x.subject ? '<div class="rv-hint">“' + esc(x.subject) + '”</div>' : '') + '</td>'
+          + '<td>' + remPill(x.status) + (x.status_note ? '<div class="rv-hint">' + esc(x.status_note) + '</div>' : '') + '</td><td>' + res + '</td>'
+          + '<td style="text-align:right"><button type="button" class="kt-ka-kebab" data-kt-iconized="1" data-remmenu="' + x.id + '" title="Reminder actions" aria-label="Reminder actions">⋮</button></td></tr>';
+      }).join('') + '</tbody></table></div>'
+      : '<div class="rv-hint" style="margin:4px 0 0">No reminders yet. Add one above — “1 day before” is a good start — or send one now.</div>';
+    host.innerHTML = warn + chips + reachTxt + list;
+
+    host.onclick = async function (e) {
+      var b = e.target.closest('button'); if (!b || !host.contains(b)) { return; }
+      e.stopPropagation();
+      var refresh = function () { loadReminders(main, host, ev); };
+      if (b.hasAttribute('data-remadd')) {
+        var v = b.getAttribute('data-remadd');
+        if (v === 'custom') { reminderDialog(ev, null, d, refresh); return; }
+        try { await Api.post('/admin/rsvp/events/' + ev.id + '/reminders', { audience: 'registered', offset_minutes: +v }); toast('Reminder scheduled', 'success'); refresh(); }
+        catch (err) { toast(err.message || 'Could not schedule', 'error'); }
+        return;
+      }
+      if (b.hasAttribute('data-remmenu')) {
+        var x = r.filter(function (y) { return y.id === +b.getAttribute('data-remmenu'); })[0]; if (!x) { return; }
+        var items = [];
+        var add = function (label, run) { var it = document.createElement('button'); it.type = 'button'; it.textContent = label; it.addEventListener('click', function () { run(); }); items.push(it); };
+        if (x.status === 'scheduled') {
+          add('✏️ Edit', function () { reminderDialog(ev, x, d, refresh); });
+          add('🔔 Send it now', function () { sendReminderNow(ev, x, refresh); });
+        }
+        add('👁 Preview', function () { reminderPreview(ev, { audience: x.audience, subject: x.subject, message: x.message }); });
+        add('✉️ Send a test', function () { reminderTest(ev, { audience: x.audience, subject: x.subject, message: x.message }); });
+        if (x.status === 'scheduled') {
+          add('✕ Cancel reminder', async function () {
+            var ok = await KT.confirm({ title: 'Cancel this reminder?', description: 'It will not be sent. You can add a new one any time.', okLabel: 'Cancel reminder', cancelLabel: 'Keep it' });
+            if (!ok) { return; }
+            try { await Api.post('/admin/rsvp/events/' + ev.id + '/reminders/' + x.id + '/cancel', {}); toast('Reminder cancelled', 'success'); refresh(); }
+            catch (err) { toast(err.message || 'Could not cancel', 'error'); }
+          });
+        }
+        openMenu(b, items);
+      }
+    };
+  }
+
+  /* Create or edit a scheduled reminder. */
+  function reminderDialog(ev, x, d, done) {
+    var defs = (d && d.defaults) || {};
+    var mode = x && x.offset_minutes == null && x.send_local ? 'time' : 'offset';
+    var offs = REM_OFFSETS.slice();
+    if (x && x.offset_minutes && !offs.some(function (o) { return o[0] === x.offset_minutes; })) { offs.push([x.offset_minutes, x.offset_label]); }
+    var html = '<div class="rv-f">'
+      + field('rmode', 'When', mode, { select: [['offset', 'Before the event starts'], ['time', 'At a specific date and time']], full: true })
+      + '<div class="full" data-offwrap><label>How long before</label><select data-k="offset_minutes">' + offs.map(function (o) { return '<option value="' + o[0] + '"' + (x && x.offset_minutes === o[0] ? ' selected' : (!x && o[0] === 1440 ? ' selected' : '')) + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'
+      + (d && !d.has_start ? '<div class="rv-hint" style="color:#B45309">This event has no start time yet — set one with Edit first, or pick a specific date and time.</div>' : '') + '</div>'
+      + '<div class="full" data-timewrap><label>Send at (' + esc((d && d.tz) || 'agency time') + ')</label><input type="datetime-local" data-k="send_local" value="' + esc(x ? x.send_local : '') + '"></div>'
+      + field('audience', 'Send to', x ? x.audience : 'registered', { select: REM_AUD, full: true })
+      + field('subject', 'Subject line (optional)', x ? x.subject : '', { full: true, ph: defs.subject || 'Reminder: {{event}} is coming up' })
+      + field('message', 'Message (optional)', x ? x.message : '', { area: true, full: true, rows: 5, max: 4000,
+          hint: 'Leave blank for a friendly default — people who signed up get “see you there” with their RSVP details; people who haven’t replied get an “RSVP now” button. The event details, the map and your tips are added for you. You can use {{first_name}}, {{event}}, {{date}} and {{location}}.' })
+      + '</div>';
+    var ov = dialog(x ? 'Edit reminder' : 'Schedule a reminder', html, async function (root) {
+      var v = vals(root), body = { audience: v.audience, subject: v.subject || null, message: v.message || null };
+      if (v.rmode === 'time') { if (!v.send_local) { throw new Error('Pick the date and time.'); } body.send_local = v.send_local; }
+      else { body.offset_minutes = +v.offset_minutes; }
+      await Api.post('/admin/rsvp/events/' + ev.id + '/reminders' + (x ? '/' + x.id : ''), body);
+      toast(x ? 'Reminder updated' : 'Reminder scheduled', 'success');
+      if (done) { done(); }
+    }, x ? 'Save reminder' : 'Schedule reminder', { width: 620, extra: [
+      { label: '👁 Preview', onClick: function (root) { var v = vals(root); reminderPreview(ev, { audience: v.audience, subject: v.subject, message: v.message }); } },
+      { label: '✉️ Test', onClick: function (root) { var v = vals(root); reminderTest(ev, { audience: v.audience, subject: v.subject, message: v.message }); } }] });
+    var dlg = ov.querySelector('.rv-dlg');
+    var sync = function () { var t = dlg.querySelector('[data-k="rmode"]').value === 'time'; dlg.querySelector('[data-offwrap]').style.display = t ? 'none' : ''; dlg.querySelector('[data-timewrap]').style.display = t ? '' : 'none'; };
+    dlg.querySelector('[data-k="rmode"]').addEventListener('change', sync);
+    sync();
+  }
+
+  /* Send now: write it (or take a scheduled one), see it, confirm the count, send. */
+  function sendReminderNow(ev, x, done) {
+    var go = async function (body) {
+      var pv;
+      try { pv = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-preview', body); }
+      catch (err) { toast(err.message || 'Could not prepare the reminder', 'error'); return false; }
+      var n = pv.recipients || 0;
+      if (!n) { toast('Nobody to remind for that choice — check who it goes to.', 'info'); return false; }
+      var ok = await KT.confirm({ title: 'Send this reminder to ' + n + (n === 1 ? ' person' : ' people') + ' now?',
+        description: 'Each of them gets their own copy' + (pv.from && pv.from.address ? ' from ' + (pv.from.name ? pv.from.name + ' ' : '') + '<' + pv.from.address + '>' : '') + '. People who opted out are never included.', okLabel: 'Send ' + n });
+      if (!ok) { return false; }
+      try {
+        var r = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-send', x ? { reminder_id: x.id } : body);
+        toast(r.queued ? r.queued + ' reminder' + (r.queued === 1 ? '' : 's') + ' on the way — they go out within a few minutes' : (r.note || 'Nothing was sent'), r.queued ? 'success' : 'info');
+        if (done) { done(); }
+      } catch (err) { toast(err.message || 'Could not send', 'error'); return false; }
+      return true;
+    };
+    if (x) { go({ audience: x.audience, subject: x.subject, message: x.message }); return; }
+    var html = '<div class="rv-f">'
+      + field('audience', 'Send to', 'registered', { select: REM_AUD, full: true })
+      + field('subject', 'Subject line (optional)', '', { full: true, ph: 'Reminder: {{event}} is coming up' })
+      + field('message', 'Message (optional)', '', { area: true, full: true, rows: 5, max: 4000,
+          hint: 'Leave blank for a friendly default. The event details, the map and your tips are added for you.' })
+      + '</div>';
+    dialog('Send a reminder now', html, async function (root) {
+      var v = vals(root);
+      var sent = await go({ audience: v.audience, subject: v.subject || null, message: v.message || null });
+      return sent ? true : false;
+    }, 'Continue', { width: 600, extra: [
+      { label: '👁 Preview', onClick: function (root) { var v = vals(root); reminderPreview(ev, { audience: v.audience, subject: v.subject, message: v.message }); } },
+      { label: '✉️ Test', onClick: function (root) { var v = vals(root); reminderTest(ev, { audience: v.audience, subject: v.subject, message: v.message }); } }] });
+  }
+
+  async function reminderPreview(ev, body) {
+    var d;
+    try { d = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-preview', { audience: body.audience || 'registered', subject: body.subject || null, message: body.message || null }); }
+    catch (e) { toast(e.message || 'Could not build the preview', 'error'); return; }
+    var tabs = [['registered', 'Signed up'], ['no_response', 'Not replied yet']].filter(function (t) { return d[t[0]]; });
+    var tab = tabs[0][0];
+    var ov = document.createElement('div');
+    ov.className = 'rv-ov';
+    ov.innerHTML = '<div class="rv-dlg rv-pv" role="dialog" aria-modal="true" style="max-width:880px"><h3>Reminder preview</h3>'
+      + (tabs.length > 1 ? '<div class="rv-tabs" data-pvtabs>' + tabs.map(function (t) { return '<button type="button" data-pv="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div>' : '')
+      + '<div class="rv-meta" data-meta></div><div class="rv-frame" data-frame></div>'
+      + '<div class="rv-hint" style="margin-top:6px">Shown for a sample person, “Alex Sample”. It would reach ' + (d.recipients || 0) + ' ' + ((d.recipients === 1) ? 'person' : 'people') + ' right now. Nothing is sent from here.</div>'
+      + '<div class="rv-actions"><button type="button" class="rv-btn ghost" data-kt-iconized="1" data-x>Close</button></div></div>';
+    document.body.appendChild(ov);
+    var down = null;
+    ov.addEventListener('mousedown', function (e) { down = e.target; });
+    ov.addEventListener('click', function (e) { if (e.target === ov && down === ov) { ov.remove(); } });
+    ov.querySelector('[data-x]').onclick = function () { ov.remove(); };
+    function show() {
+      ov.querySelectorAll('[data-pv]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-pv') === tab); });
+      ov.querySelector('[data-meta]').innerHTML = '<div><span>From</span><b>' + esc(d.from && d.from.address ? (d.from.name ? d.from.name + ' <' + d.from.address + '>' : d.from.address) : 'Agency email') + '</b></div>'
+        + '<div><span>Subject</span><b>' + esc(d[tab].subject) + '</b></div>';
+      var fr = ov.querySelector('[data-frame]'); fr.innerHTML = '';
+      var f = document.createElement('iframe'); f.title = 'Preview'; f.setAttribute('sandbox', ''); f.srcdoc = d[tab].html; fr.appendChild(f);
+    }
+    var t = ov.querySelector('[data-pvtabs]');
+    if (t) { t.onclick = function (e) { var b = e.target.closest('[data-pv]'); if (!b) { return; } tab = b.getAttribute('data-pv'); show(); }; }
+    show();
+  }
+
+  async function reminderTest(ev, body) {
+    var to = await KT.prompt({ title: 'Send a test reminder', description: 'Sends one copy, marked [Test], to the address you enter — as someone who signed up' + (body.audience === 'no_response' ? ' (or, for “not replied yet”, with the RSVP button)' : '') + '. Its buttons open the shareable page, so nobody is signed up by it.', placeholder: 'you@example.com', type: 'email', okLabel: 'Send test' });
+    if (to === null) { return; }
+    to = String(to || '').trim();
+    if (!isEmail(to)) { toast('Enter an email address', 'error'); return; }
+    try {
+      var r = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-test', { to: to, audience: body.audience || 'registered', subject: body.subject || null, message: body.message || null });
+      toast(r.sent ? 'Test reminder sent to ' + to : ('Not sent: ' + (r.reason || r.status)), r.sent ? 'success' : 'error');
+    } catch (err) { toast(err.message || 'Could not send', 'error'); }
+  }
+
   async function paintEvent(main, body, id) {
     var d, rep;
     try { d = await Api.get('/admin/rsvp/events/' + id); rep = await Api.get('/admin/rsvp/events/' + id + '/report?view=all'); }
@@ -696,11 +880,14 @@
           '<div class="rv-mail">' + (ev.image_url ? '<img src="' + esc(ev.image_url) + '" alt="">' : '') + '<div class="tx"><b>' + esc(ev.email_subject) + '</b><p>' + esc(ev.email_body) + '</p></div></div>')
       + sec('Sender & branding', btn('data-edit', 'Change') + btn('data-test', 'Test invitation') + btn('data-testconf', 'Test confirmation'), dl([['From', fromTxt], ['Account', snd ? esc(snd.label) : 'Agency default email'],
           ['Reply-To', esc(ev.notify_email)], ['Branding', ev.branding === 'none' ? 'Unbranded' : 'Agency branded']]))
+      + sec('Reminders', btn('data-remnow', '🔔 Send a reminder now'), '<div data-remhost><div class="rv-hint">Loading reminders…</div></div>', true)
       + sec('Invitees', btn('data-add', '＋ Add invitees') + btn('data-report', 'Full report'), inviteTable(rep.rows || []), true)
       + '</div>'
       + '<div class="rv-foot"><span class="hint">' + esc(footHint) + '</span>' + btn('data-back', 'Back', 'ghost') + btn('data-preview', '👁 Preview')
       + btn('data-pa="' + pa[0] + '"', esc(pa[1]), 'pri') + '</div>';
     pinFooter(main);
+    var remHost = body.querySelector('[data-remhost]');
+    if (remHost) { loadReminders(main, remHost, ev); }
     function picked() { return Array.prototype.slice.call(body.querySelectorAll('[data-pick]:checked')); }
     function syncBulk() {
       var bar = body.querySelector('[data-bulkbar]'); if (!bar) { return; }
@@ -747,6 +934,7 @@
       else if (b.hasAttribute('data-pa')) { runPrimary(main, ev, b.getAttribute('data-pa')); }
       else if (b.hasAttribute('data-test')) { sendTest(ev); }
       else if (b.hasAttribute('data-testconf')) { sendTestConfirmation(ev); }
+      else if (b.hasAttribute('data-remnow')) { sendReminderNow(ev, null, function () { var h = body.querySelector('[data-remhost]'); if (h) { loadReminders(main, h, ev); } }); }
       else if (b.hasAttribute('data-resend')) {
         var ok = await KT.confirm({ title: 'Send the invitation again?', description: 'This sends ' + b.getAttribute('data-email') + ' another copy of the invitation.', okLabel: 'Send again' });
         if (!ok) { return; }
@@ -767,6 +955,11 @@
     return esc(r.email_opened_at) + (r.email_opens > 1 ? '<div class="rv-hint">' + r.email_opens + ' times</div>' : '');
   }
 
+  function remindedCell(r) {
+    if (!r.reminded_at) { return '—'; }
+    return esc(r.reminded_at) + (r.reminders > 1 ? '<div class="rv-hint">' + r.reminders + ' reminders</div>' : '');
+  }
+
   function inviteTable(rows) {
     if (!rows.length) { return '<div class="kt-card" style="color:#64748B">Nobody on the list yet. Add invitees, or share the link — people who use it appear here too.</div>'; }
     /* SEVERAL AT ONCE (Anthony, 2026-10-05: "add a multiple option to select multiple
@@ -782,7 +975,7 @@
       + (anyResend ? '<th style="width:30px"><input type="checkbox" data-selall title="Select everyone who can be sent the invitation again" aria-label="Select all"></th>' : '')
       + '<th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th>'
       + '<th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th>'
-      + '<th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th></th></tr></thead><tbody>'
+      + '<th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th title="The last reminder sent to them">Reminded</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         var acts = '';
         if (canResend(r)) {
@@ -794,6 +987,7 @@
           + (r.note ? '<div class="rv-hint" title="' + esc(r.note) + '">' + esc(r.note.length > 70 ? r.note.slice(0, 70) + '…' : r.note) + '</div>' : '') + '</td>'
           + '<td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
           + '<td>' + esc(r.registered_at || '—') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
+          + '<td>' + remindedCell(r) + '</td>'
           + '<td style="text-align:center;white-space:nowrap">' + acts + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -1193,11 +1387,11 @@
     body.innerHTML = '<div class="rv-bar"><select data-ev>' + evs.map(function (e) { return '<option value="' + e.id + '"' + (e.id === state.reportEvent ? ' selected' : '') + '>' + esc(e.title) + '</option>'; }).join('') + '</select>'
       + '<button class="rv-btn" data-kt-iconized="1" data-csv title="Download this view as a CSV file">⬇ CSV</button><span class="rv-hint">Times are ' + esc(rep.tz) + '.</span></div>'
       + '<div class="rv-chips" style="margin-bottom:10px">' + VIEWS.map(function (v) { return '<button data-view="' + v[0] + '" class="' + (v[0] === state.view ? 'on' : '') + '">' + v[1] + (counts[v[0]] != null ? ' · ' + counts[v[0]] : '') + '</button>'; }).join('') + '</div>'
-      + (rows.length ? '<div class="kt-card" style="overflow:auto"><table data-kt-export-title="' + esc(exportTitle) + '"><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th>'
+      + (rows.length ? '<div class="kt-card" style="overflow:auto"><table data-kt-export-title="' + esc(exportTitle) + '"><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th>Reminded</th>'
         + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
           return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
-            + '<td>' + esc(r.registered_at || '—') + (r.updated_response_at ? '<div class="rv-hint">updated ' + esc(r.updated_response_at) + '</div>' : '') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
+            + '<td>' + esc(r.registered_at || '—') + (r.updated_response_at ? '<div class="rv-hint">updated ' + esc(r.updated_response_at) + '</div>' : '') + '</td><td>' + esc(r.opted_out_at || '—') + '</td><td>' + remindedCell(r) + '</td>'
             + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<td style="white-space:pre-line;max-width:320px">' + esc(r.answers[c.key] || '') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>'
         : '<div class="kt-card" style="color:#64748B">Nobody in this view.</div>')

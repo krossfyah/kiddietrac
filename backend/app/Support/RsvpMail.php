@@ -303,6 +303,63 @@ final class RsvpMail
             . $share . '</div>';
     }
 
+    public const REMINDER_SUBJECT = 'Reminder: {{event}} is coming up';
+    public const REMINDER_REGISTERED = "Hi {{first_name}},\n\nA friendly reminder that {{event}} is coming up soon — we’re looking forward to seeing you there.\n\nBring your questions and the topics you care about. This is your chance to be heard.";
+    public const REMINDER_NO_RESPONSE = "Hi {{first_name}},\n\n{{event}} is coming up soon and we’d love to have you there. There’s still time to RSVP — it only takes a minute.";
+
+    /**
+     * A reminder about an upcoming event (2026-10-06). The organiser's subject and message,
+     * else defaults that suit who is reading: someone who has signed up is told "see you
+     * there" with a summary of their RSVP and a link to change it; someone invited who has
+     * not replied gets a clear "RSVP now". Then the when/where, the map and the tips.
+     *
+     * $response is the person's RSVP (null if they have not signed up).
+     */
+    public static function reminder(object $event, object $invite, ?object $reminder, ?object $response): array
+    {
+        $registered = (bool) $response;
+        $name = $response->name ?? $invite->name ?? null;
+        $subject = self::fill(trim((string) ($reminder->subject ?? '')) !== '' ? (string) $reminder->subject : self::REMINDER_SUBJECT, $event, $name);
+        $msg = trim((string) ($reminder->message ?? '')) !== '' ? (string) $reminder->message : ($registered ? self::REMINDER_REGISTERED : self::REMINDER_NO_RESPONSE);
+        $url = self::rsvpUrl((string) $invite->token);
+
+        $summary = '';
+        if ($registered) {
+            $rows = '';
+            foreach (json_decode((string) $response->answers, true) ?: [] as $k => $a) {
+                $label = (string) ($a['label'] ?? $k);
+                $v = is_array($a) ? ($a['value'] ?? '') : $a;
+                if (is_bool($v)) $v = $v ? 'Yes' : 'No';
+                // What matters on the night: how many, and who.
+                if (trim((string) $v) === '' || ! preg_match('/attend|guest|party|people|names/i', $k . ' ' . $label)) continue;
+                $rows .= '<tr><td style="padding:4px 10px 4px 0;font-weight:700;color:#0F172A;vertical-align:top;width:46%">' . e($label) . '</td>'
+                    . '<td style="padding:4px 0;color:#334155">' . nl2br(e((string) $v)) . '</td></tr>';
+            }
+            $summary = '<div style="margin:16px 0 6px;border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px">'
+                . '<div style="font-size:12px;font-weight:800;color:#64748B;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px">Your RSVP</div>'
+                . ($rows !== '' ? '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:14px;line-height:1.5">' . $rows . '</table>'
+                    : '<div style="font-size:14px;color:#334155">You’re registered' . ($response->email ? ' as ' . e((string) $response->email) : '') . '.</div>')
+                . '<div style="margin-top:8px;font-size:13px"><a href="' . e($url) . '" style="color:#1F6080;font-weight:700">Update your RSVP</a></div></div>';
+        }
+
+        $body = self::image($event->image_url, (string) ($event->title ?? ''))
+            . self::heading($event, ($registered ? 'See you soon: ' : 'Coming up: ') . $event->title)
+            . self::para(self::fill($msg, $event, $name))
+            . self::detailsBox($event)
+            . ($registered ? $summary : EmailTemplate::button('RSVP now', $url))
+            . self::mapBlock($event)
+            . self::tipsBlock($event)
+            . self::optOutLine($event, (string) $invite->token);
+        $pre = self::fill($msg, $event, $name);
+        foreach (preg_split('/\R+/u', $pre) as $line) {
+            $line = trim($line);
+            if ($line !== '' && ! preg_match('/^(hi|hello|dear|hey)\b[^.!?]{0,40},?$/iu', $line)) { $pre = $line; break; }
+        }
+        $html = self::frame($event, $body, ['title' => (string) $event->title, 'preheader' => mb_strlen($pre) > 110 ? rtrim(mb_substr($pre, 0, 107)) . '…' : $pre]);
+
+        return [$subject, $html];
+    }
+
     public static function confirmation(object $event, object $response, ?object $invite): array
     {
         $answers = json_decode((string) $response->answers, true) ?: [];

@@ -33,6 +33,12 @@ Schedule::command('holidays:sync --months=14')
 
 Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
 
+/* Event RSVP reminders (2026-10-06): sends any reminder whose time has come — "1 day
+   before" the event, or a set date and time. Every five minutes, so one goes out within
+   five minutes of its time; each is claimed before sending, so overlapping runs cannot
+   send it twice. */
+Schedule::command('rsvp:send-reminders')->everyFiveMinutes()->withoutOverlapping(10);
+
 /* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
    had accumulated, 281 of them already expired: full-access credentials (`["*"]`) sitting
    in the table long after the browser that earned them was closed. Removing an EXPIRED

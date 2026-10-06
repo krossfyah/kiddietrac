@@ -10,6 +10,7 @@ use App\Services\AgencyMailer;
 use App\Support\RsvpMail;
 use App\Support\RsvpGmail;
 use App\Support\RsvpPresets;
+use App\Support\RsvpReminders;
 use App\Support\RsvpSender;
 use Illuminate\Support\Facades\Crypt;
 use Carbon\Carbon;
@@ -817,12 +818,12 @@ class RsvpController extends Controller
         $tz = AgencyTime::tz($agencyId);
         $cell = fn ($v) => preg_match('/^[=+\-@\t\r]/', (string) $v) ? "'" . $v : $v;   // no spreadsheet formulas from public input
         $out = fopen('php://temp', 'w+');
-        $head = ['Name', 'Email', 'Source', 'Invitation', 'Queued (' . $tz . ')', 'Sent (' . $tz . ')', 'Email opened (' . $tz . ')', 'Times opened', 'Clicked RSVP link (' . $tz . ')',
+        $head = ['Name', 'Email', 'Source', 'Invitation', 'Queued (' . $tz . ')', 'Sent (' . $tz . ')', 'Email opened (' . $tz . ')', 'Times opened', 'Clicked RSVP link (' . $tz . ')', 'Last reminder (' . $tz . ')',
             'Signed up (' . $tz . ')', 'Opted out (' . $tz . ')', 'Note'];
         foreach ($cols as $c) $head[] = $c['label'];
         fputcsv($out, $head);
         foreach ($rows as $r) {
-            $line = [$cell($r['name']), $cell($r['email']), $r['source'], $r['status_label'], $r['queued_at'], $r['sent_at'], $r['email_opened_at'], $r['email_opens'] ?: '', $r['opened_at'],
+            $line = [$cell($r['name']), $cell($r['email']), $r['source'], $r['status_label'], $r['queued_at'], $r['sent_at'], $r['email_opened_at'], $r['email_opens'] ?: '', $r['opened_at'], $r['reminded_at'],
                 $r['registered_at'], $r['opted_out_at'], $cell($r['note'])];
             foreach ($cols as $c) $line[] = $cell($r['answers'][$c['key']] ?? '');
             fputcsv($out, $line);
@@ -1166,6 +1167,8 @@ class RsvpController extends Controller
         $fields = json_decode((string) $e->fields, true) ?: [];
         $cols = array_map(fn ($f) => ['key' => $f['key'], 'label' => $f['label']], $fields);
         $known = array_flip(array_column($cols, 'key'));
+        $reminded = DB::table('rsvp_reminder_sends')->where('agency_id', $agencyId)->where('event_id', $e->id)->where('status', 'sent')
+            ->groupBy('invite_id')->selectRaw('invite_id, MAX(sent_at) last_at, COUNT(*) n')->get()->keyBy('invite_id');
         $label = ['pending' => 'Not sent yet', 'queued' => 'Sending', 'sent' => 'Sent', 'suppressed' => 'Held back', 'failed' => 'Failed',
             'skipped' => 'Not sent (opted out)', 'not_invited' => 'Not invited (used the shareable link)'];
         $rows = [];
@@ -1180,6 +1183,7 @@ class RsvpController extends Controller
                 'status' => $i->send_status, 'status_label' => $label[$i->send_status] ?? $i->send_status,
                 'queued_at' => $fmt($i->queued_at), 'sent_at' => $fmt($i->sent_at), 'opened_at' => $fmt($i->opened_at),
                 'email_opened_at' => $fmt($i->email_opened_at ?? null), 'email_opens' => (int) ($i->email_opens ?? 0),
+                'reminded_at' => isset($reminded[$i->id]) ? $fmt($reminded[$i->id]->last_at) : '', 'reminders' => isset($reminded[$i->id]) ? (int) $reminded[$i->id]->n : 0,
                 'registered_at' => $fmt($i->registered_at), 'opted_out_at' => $fmt($i->opted_out_at),
                 'updated_response_at' => ($i->response_updated_at && $i->response_at && $i->response_updated_at > $i->response_at) ? $fmt($i->response_updated_at) : '',
                 'note' => (string) ($i->send_error ?? ''), 'answers' => $ans, 'can_remove' => $i->send_status === 'pending' && ! $i->registered_at && ! $i->opted_out_at,
@@ -1187,6 +1191,194 @@ class RsvpController extends Controller
         }
 
         return [$cols, $rows];
+    }
+
+    /* ═════════════ reminders (2026-10-06) ═════════════ */
+
+    /** The event's reminders, plus how many people each audience would reach right now. */
+    public function reminders(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $tz = AgencyTime::tz($agencyId);
+        $rows = DB::table('rsvp_reminders')->where('event_id', $e->id)->where('agency_id', $agencyId)->orderByRaw("FIELD(status,'scheduled','sending','sent','skipped','cancelled')")->orderBy('id')->get();
+        $out = [];
+        foreach ($rows as $r) {
+            $due = RsvpReminders::dueAt($r, $e);
+            $out[] = [
+                'id' => (int) $r->id, 'audience' => $r->audience, 'offset_minutes' => $r->offset_minutes !== null ? (int) $r->offset_minutes : null,
+                'offset_label' => RsvpReminders::offsetLabel($r->offset_minutes !== null ? (int) $r->offset_minutes : null),
+                'send_local' => $r->send_at ? Carbon::parse($r->send_at, 'UTC')->setTimezone($tz)->format('Y-m-d\TH:i') : '',
+                'due_label' => $due ? AgencyTime::fmt($due, $tz, 'D M j, g:i A') : '',
+                'due_past' => $due ? $due->isPast() : false,
+                'subject' => $r->subject, 'message' => $r->message, 'status' => $r->status, 'status_note' => $r->status_note, 'manual' => (bool) $r->manual,
+                'recipient_count' => (int) $r->recipient_count, 'sent_count' => (int) $r->sent_count, 'failed_count' => (int) $r->failed_count,
+                'sent_label' => $r->sent_at ? AgencyTime::fmt($r->sent_at, $tz, 'D M j, g:i A') : '',
+                '_due' => $r->sent_at ? strtotime($r->sent_at . ' UTC') : ($due ? $due->getTimestamp() : PHP_INT_MAX),
+            ];
+        }
+        // Upcoming first, soonest first; then what has gone out, newest first.
+        $rank = ['scheduled' => 0, 'sending' => 1, 'sent' => 2, 'skipped' => 3, 'cancelled' => 4];
+        usort($out, function ($a, $b) use ($rows, $e, $rank) {
+            $ra = $rank[$a['status']] ?? 9; $rb = $rank[$b['status']] ?? 9;
+            if ($ra !== $rb) return $ra <=> $rb;
+            $ta = $a['_due'] ?? 0; $tb = $b['_due'] ?? 0;
+            return $ra === 0 ? $ta <=> $tb : $tb <=> $ta;
+        });
+        foreach ($out as &$o) unset($o['_due']);
+        unset($o);
+        $reach = [];
+        foreach (RsvpReminders::AUDIENCES as $a) $reach[$a] = count(RsvpReminders::recipients($e, $a));
+
+        return response()->json(['reminders' => $out, 'reach' => $reach, 'has_start' => ! empty($e->starts_at), 'tz' => $tz,
+            'defaults' => ['subject' => RsvpMail::REMINDER_SUBJECT, 'registered' => RsvpMail::REMINDER_REGISTERED, 'no_response' => RsvpMail::REMINDER_NO_RESPONSE],
+            'blocker' => RsvpReminders::blocker($e)]);
+    }
+
+    /** Validated reminder fields from a request; a schedule is an offset OR a local time. */
+    private function reminderInput(Request $request, object $e, int $agencyId, bool $needSchedule): array
+    {
+        $d = $request->validate([
+            'audience' => ['required', 'in:registered,no_response,both'],
+            'offset_minutes' => ['nullable', 'integer', 'min:5', 'max:129600'],
+            'send_local' => ['nullable', 'date_format:Y-m-d\TH:i'],
+            'subject' => ['nullable', 'string', 'max:200'],
+            'message' => ['nullable', 'string', 'max:4000'],
+        ]);
+        $row = ['audience' => $d['audience'], 'subject' => trim((string) ($d['subject'] ?? '')) ?: null, 'message' => trim((string) ($d['message'] ?? '')) ?: null];
+        if (! $needSchedule) return $row;
+        if (! empty($d['offset_minutes'])) {
+            abort_unless(! empty($e->starts_at), 422, 'Give the event a date and time first — a reminder "before the event" needs to know when it starts.');
+            $row['offset_minutes'] = (int) $d['offset_minutes'];
+            $row['send_at'] = null;
+            abort_if(Carbon::parse($e->starts_at, 'UTC')->subMinutes($row['offset_minutes'])->isPast(), 422, 'That time has already passed. Pick a shorter time before the event, or use “Send a reminder now”.');
+        } elseif (! empty($d['send_local'])) {
+            $at = Carbon::createFromFormat('Y-m-d\TH:i', $d['send_local'], AgencyTime::tz($agencyId))->utc();
+            abort_if($at->isPast(), 422, 'Pick a time in the future.');
+            abort_if(! empty($e->starts_at) && $at->gte(Carbon::parse($e->starts_at, 'UTC')), 422, 'Pick a time before the event starts.');
+            $row['send_at'] = $at->format('Y-m-d H:i:s');
+            $row['offset_minutes'] = null;
+        } else {
+            abort(422, 'Choose when the reminder goes out.');
+        }
+
+        return $row;
+    }
+
+    public function saveReminder(Request $request, int $id, ?int $rid = null): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $row = $this->reminderInput($request, $e, $agencyId, true);
+        if ($rid) {
+            $r = DB::table('rsvp_reminders')->where('id', $rid)->where('event_id', $e->id)->where('agency_id', $agencyId)->first();
+            abort_unless($r, 404);
+            abort_unless($r->status === 'scheduled', 422, 'Only a reminder that has not gone out can be changed.');
+            DB::table('rsvp_reminders')->where('id', $rid)->update($row + ['updated_at' => now()]);
+        } else {
+            abort_if(DB::table('rsvp_reminders')->where('event_id', $e->id)->where('status', 'scheduled')->count() >= 20, 422, 'An event can have up to 20 scheduled reminders.');
+            $rid = DB::table('rsvp_reminders')->insertGetId($row + ['agency_id' => $agencyId, 'event_id' => $e->id, 'status' => 'scheduled',
+                'created_by_id' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
+        $r = DB::table('rsvp_reminders')->where('id', $rid)->first();
+        $due = RsvpReminders::dueAt($r, $e);
+        $this->audit($request, $agencyId, 'rsvp.reminder_saved', 'rsvp_event', $e->id, 'Reminder for "' . $e->title . '" scheduled for '
+            . ($due ? AgencyTime::fmt($due, AgencyTime::tz($agencyId), 'D M j, g:i A') : '?') . ' (' . $r->audience . ')');
+
+        return response()->json(['id' => (int) $rid]);
+    }
+
+    public function cancelReminder(Request $request, int $id, int $rid): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $n = DB::table('rsvp_reminders')->where('id', $rid)->where('event_id', $e->id)->where('agency_id', $agencyId)->where('status', 'scheduled')
+            ->update(['status' => 'cancelled', 'status_note' => 'Cancelled by ' . trim(($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? '')), 'updated_at' => now()]);
+        abort_unless($n, 422, 'Only a reminder that has not gone out can be cancelled.');
+        $this->audit($request, $agencyId, 'rsvp.reminder_cancelled', 'rsvp_event', $e->id, 'Cancelled a reminder for "' . $e->title . '"');
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Send a reminder now — a saved one (rid) or a new one-off from the request. */
+    public function sendReminderNow(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $why = RsvpReminders::blocker($e);
+        abort_if($why, 422, $why . ' Reminders go out only for an open event that has not started.');
+        $rid = (int) $request->input('reminder_id', 0);
+        if ($rid) {
+            $r = DB::table('rsvp_reminders')->where('id', $rid)->where('event_id', $e->id)->where('agency_id', $agencyId)->first();
+            abort_unless($r && $r->status === 'scheduled', 422, 'That reminder has already gone out or was cancelled.');
+            DB::table('rsvp_reminders')->where('id', $rid)->update(['manual' => true, 'updated_at' => now()]);
+        } else {
+            $row = $this->reminderInput($request, $e, $agencyId, false);
+            $rid = DB::table('rsvp_reminders')->insertGetId($row + ['agency_id' => $agencyId, 'event_id' => $e->id, 'status' => 'scheduled', 'manual' => true,
+                'send_at' => now()->format('Y-m-d H:i:s'), 'created_by_id' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
+        }
+        $res = RsvpReminders::run($rid);
+        $this->audit($request, $agencyId, 'rsvp.reminder_sent', 'rsvp_event', $e->id, 'Reminder for "' . $e->title . '" sent now: ' . $res['queued'] . ' queued' . ($res['note'] ? ' (' . $res['note'] . ')' : ''));
+
+        return response()->json($res + ['id' => $rid]);
+    }
+
+    /** What a reminder looks like (nothing is sent) and how many it would reach now. */
+    public function previewReminder(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $rem = (object) $this->reminderInput($request, $e, $agencyId, false);
+        $inv = (object) ['name' => 'Alex Sample', 'email' => 'alex.sample@example.com', 'token' => 'preview'];
+        $out = ['recipients' => count(RsvpReminders::recipients($e, $rem->audience))];
+        if ($rem->audience !== 'no_response') {
+            [$s, $h] = RsvpMail::reminder($e, $inv, $rem, $this->sampleRegistrant($e));
+            $out['registered'] = ['subject' => $s, 'html' => $h];
+        }
+        if ($rem->audience !== 'registered') {
+            [$s, $h] = RsvpMail::reminder($e, $inv, $rem, null);
+            $out['no_response'] = ['subject' => $s, 'html' => $h];
+        }
+        $out['from'] = RsvpMail::fromFor($e);
+
+        return response()->json($out);
+    }
+
+    /** One copy to an address the admin names — required, never defaulted. Marked [Test]. */
+    public function testReminder(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $to = (string) $request->validate(['to' => ['required', 'email', 'max:190']])['to'];
+        $rem = (object) $this->reminderInput($request, $e, $agencyId, false);
+        $inv = (object) ['name' => 'Test Registrant', 'email' => $to, 'token' => 'test'];
+        [$subject, $html] = RsvpMail::reminder($e, $inv, $rem, $rem->audience === 'no_response' ? null : $this->sampleRegistrant($e, $to));
+        // A test must not hand out a live link, so its buttons open the shareable page.
+        $html = str_replace([RsvpMail::rsvpUrl('test'), RsvpMail::optOutUrl('test')], [RsvpMail::publicUrl($e->public_token), RsvpMail::publicUrl($e->public_token)], $html);
+        $r = RsvpMail::send($agencyId, $to, null, '[Test] ' . $subject, $html, ['reply_to' => $e->notify_email, 'sender_id' => $e->sender_id ?? null, 'from' => RsvpMail::fromFor($e)]);
+        $this->audit($request, $agencyId, 'rsvp.test_sent', 'rsvp_event', $id, 'Test reminder for "' . $e->title . '" to ' . $to . ': ' . $r['status']);
+
+        return response()->json(['sent' => $r['status'] === 'sent', 'status' => $r['status'], 'reason' => $r['error']]);
+    }
+
+    /** A pretend RSVP shaped like this event's questions, for previews and tests. */
+    private function sampleRegistrant(object $e, string $email = 'alex.sample@example.com'): object
+    {
+        $answers = [];
+        foreach ((is_string($e->fields) ? json_decode($e->fields, true) : (array) $e->fields) ?: [] as $f) {
+            $f = (array) $f;
+            $hay = ($f['key'] ?? '') . ' ' . ($f['label'] ?? '');
+            $v = match (true) {
+                ($f['type'] ?? '') === 'email' => $email,
+                (bool) preg_match('/names/i', $hay) => "Alex Sample\nJordan Sample",
+                (bool) preg_match('/attend|guest|people/i', $hay) => in_array('2', (array) ($f['options'] ?? []), true) ? '2' : 'Sample answer',
+                ($f['type'] ?? '') === 'checkbox' => 'Yes',
+                default => 'Sample answer',
+            };
+            $answers[$f['key']] = ['label' => $f['label'] ?? $f['key'], 'value' => $v];
+        }
+
+        return (object) ['name' => 'Alex Sample', 'email' => $email, 'answers' => json_encode($answers)];
     }
 
     private function decorate(object $e): void

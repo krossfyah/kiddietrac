@@ -2241,6 +2241,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/admin/rsvp/events/{id}/send', [\App\Http\Controllers\Api\RsvpController::class, 'sendInvites'])->where('id', '[0-9]+');
         Route::post  ('/admin/rsvp/events/{id}/test', [\App\Http\Controllers\Api\RsvpController::class, 'testInvite'])->where('id', '[0-9]+')->middleware('throttle:10,1,rsvptest');
         Route::post  ('/admin/rsvp/events/{id}/test-confirmation', [\App\Http\Controllers\Api\RsvpController::class, 'testConfirmation'])->where('id', '[0-9]+')->middleware('throttle:10,1,rsvptc');
+        // Event reminders (2026-10-06): scheduled or sent now.
+        Route::get   ('/admin/rsvp/events/{id}/reminders', [\App\Http\Controllers\Api\RsvpController::class, 'reminders'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/reminders', [\App\Http\Controllers\Api\RsvpController::class, 'saveReminder'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/reminders/{rid}', [\App\Http\Controllers\Api\RsvpController::class, 'saveReminder'])->where(['id' => '[0-9]+', 'rid' => '[0-9]+']);
+        Route::post  ('/admin/rsvp/events/{id}/reminders/{rid}/cancel', [\App\Http\Controllers\Api\RsvpController::class, 'cancelReminder'])->where(['id' => '[0-9]+', 'rid' => '[0-9]+']);
+        Route::post  ('/admin/rsvp/events/{id}/reminders-send', [\App\Http\Controllers\Api\RsvpController::class, 'sendReminderNow'])->where('id', '[0-9]+')->middleware('throttle:10,1,rsvprs');
+        Route::post  ('/admin/rsvp/events/{id}/reminders-preview', [\App\Http\Controllers\Api\RsvpController::class, 'previewReminder'])->where('id', '[0-9]+');
+        Route::post  ('/admin/rsvp/events/{id}/reminders-test', [\App\Http\Controllers\Api\RsvpController::class, 'testReminder'])->where('id', '[0-9]+')->middleware('throttle:10,1,rsvprt');
         Route::get   ('/admin/rsvp/events/{id}/report', [\App\Http\Controllers\Api\RsvpController::class, 'report'])->where('id', '[0-9]+');
         Route::get   ('/admin/rsvp/events/{id}/report.csv', [\App\Http\Controllers\Api\RsvpController::class, 'reportCsv'])->where('id', '[0-9]+');
         Route::delete('/admin/rsvp/invites/{id}', [\App\Http\Controllers\Api\RsvpController::class, 'removeInvite'])->where('id', '[0-9]+');

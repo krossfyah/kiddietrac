@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Log;
  *   confirmation  id = rsvp_responses.id   (the registrant's copy)
  *   notice        id = rsvp_responses.id   (to the event's notify address; $extra = 'new' | 'updated')
  *   optout        id = rsvp_invites.id     (to the event's notify address)
+ *   reminder      id = rsvp_reminder_sends.id   (one person's copy of a reminder)
  *
  * Queued because an invite run is many sends at ~0.5 s each, which is too long for a
  * request. The outcome is written back to the row from what the mail layer recorded
@@ -42,12 +43,16 @@ class SendRsvpMail implements ShouldQueue
                 'confirmation' => $this->confirmation(),
                 'notice' => $this->notice(),
                 'optout' => $this->optOut(),
+                'reminder' => $this->reminder(),
                 default => null,
             };
         } catch (\Throwable $e) {
             Log::error('SendRsvpMail ' . $this->kind . '#' . $this->id . ' failed: ' . $e->getMessage());
             if ($this->kind === 'invite') {
                 DB::table('rsvp_invites')->where('id', $this->id)->update(['send_status' => 'failed', 'send_error' => mb_substr($e->getMessage(), 0, 480), 'updated_at' => now()]);
+            }
+            if ($this->kind === 'reminder') {
+                $this->finishReminder('failed', mb_substr($e->getMessage(), 0, 480), null);
             }
         }
     }
@@ -107,6 +112,42 @@ class SendRsvpMail implements ShouldQueue
         [$subject, $html] = RsvpMail::notice($event, $this->extra === 'updated' ? 'updated' : 'new', $resp->email, $resp->name, $answers);
         $r = RsvpMail::send((int) $event->agency_id, $event->notify_email, null, $subject, $html, ['reply_to' => $resp->email, 'reply_to_name' => $resp->name, 'sender_id' => $event->sender_id ?? null, 'from' => RsvpMail::fromFor($event)]);
         DB::table('rsvp_responses')->where('id', $resp->id)->update(['notify_status' => $r['status']]);
+    }
+
+    /* One person's reminder. Re-checked at send time, not just when it was queued: they may
+       have opted out, or (for a "not replied yet" reminder) signed up, in the minutes the
+       queue took — and the reminder itself may have been cancelled. */
+    private function reminder(): void
+    {
+        $send = DB::table('rsvp_reminder_sends')->where('id', $this->id)->first();
+        if (! $send || $send->status !== 'queued') return;
+        $rem = DB::table('rsvp_reminders')->where('id', $send->reminder_id)->first();
+        $inv = DB::table('rsvp_invites')->where('id', $send->invite_id)->where('agency_id', $send->agency_id)->first();
+        $event = $inv ? $this->event((int) $inv->event_id) : null;
+        if (! $rem || $rem->status === 'cancelled') { $this->finishReminder('skipped', 'The reminder was cancelled.', null); return; }
+        if (! $inv || ! $event || (int) $event->agency_id !== (int) $send->agency_id) { $this->finishReminder('failed', 'The event or the person is no longer on the list.', null); return; }
+        if ($inv->opted_out_at || RsvpMail::optedOut((int) $inv->agency_id, $inv->email)) { $this->finishReminder('skipped', 'This address has opted out of event emails.', null); return; }
+        if ($rem->audience === 'no_response' && $inv->registered_at) { $this->finishReminder('skipped', 'Signed up before the reminder went out.', null); return; }
+        $resp = $inv->registered_at ? DB::table('rsvp_responses')->where('invite_id', $inv->id)->where('event_id', $event->id)->first() : null;
+        [$subject, $html] = RsvpMail::reminder($event, $inv, $rem, $resp);
+        $r = RsvpMail::send((int) $event->agency_id, $inv->email, $resp->name ?? $inv->name, $subject, $html, [
+            'reply_to' => $event->notify_email, 'unsubscribe' => RsvpMail::optOutUrl($inv->token), 'sender_id' => $event->sender_id ?? null, 'from' => RsvpMail::fromFor($event),
+            'track' => true,
+        ]);
+        $this->finishReminder($r['status'], $r['error'], $r['log_id']);
+    }
+
+    private function finishReminder(string $status, ?string $error, ?int $logId): void
+    {
+        $send = DB::table('rsvp_reminder_sends')->where('id', $this->id)->first();
+        if (! $send) return;
+        DB::table('rsvp_reminder_sends')->where('id', $send->id)->update(['status' => $status, 'error' => $error, 'email_log_id' => $logId,
+            'sent_at' => $status === 'sent' ? now() : null, 'updated_at' => now()]);
+        if ($status === 'sent') {
+            DB::table('rsvp_reminders')->where('id', $send->reminder_id)->increment('sent_count');
+        } elseif (in_array($status, ['failed', 'suppressed'], true)) {
+            DB::table('rsvp_reminders')->where('id', $send->reminder_id)->increment('failed_count');
+        }
     }
 
     private function optOut(): void
