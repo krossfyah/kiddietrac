@@ -200,17 +200,33 @@ final class RsvpMail
     {
         if (self::unbranded($event)) {
             return '<p style="margin:22px 0 0;font-size:12px;color:#94A3B8;line-height:1.5;text-align:center">'
-                . 'You received this because you were invited to ' . e((string) $event->title) . '. '
+                . 'You’re receiving this email about ' . e((string) $event->title) . '. '
                 . '<a href="' . e(self::optOutUrl($inviteToken)) . '" style="color:#64748B;text-decoration:underline">Unsubscribe from event invitations</a>.</p>';
         }
         $agency = (string) DB::table('agencies')->where('id', $event->agency_id)->value('name');
 
         return '<p style="margin:22px 0 0;font-size:12px;color:#94A3B8;line-height:1.5;text-align:center">'
-            . 'You received this because ' . e($agency) . ' invited you to an event. '
+            . 'You’re receiving this email from ' . e($agency) . ' about an event. '
             . '<a href="' . e(self::optOutUrl($inviteToken)) . '" style="color:#64748B;text-decoration:underline">Unsubscribe from event invitations</a>.</p>';
     }
 
     /** The invite. Returns [subject, html]. */
+    /* The grey line an inbox shows after the subject. It said "You’re invited — please
+       RSVP" on every invitation, whatever the organiser wrote (Anthony, 2026-10-05: "the
+       subject line always has You're invited - can you remove this"). Now it is the first
+       real line of their own message, skipping a "Hi …," greeting. */
+    private static function preheader(object $event, ?string $name): string
+    {
+        $text = self::fill((string) $event->email_body, $event, $name);
+        foreach (preg_split('/\R+/u', $text) as $line) {
+            $line = trim($line);
+            if ($line === '' || preg_match('/^(hi|hello|dear|hey)\b[^.!?]{0,40},?$/iu', $line)) continue;
+            return mb_strlen($line) > 110 ? rtrim(mb_substr($line, 0, 107)) . '…' : $line;
+        }
+
+        return (string) $event->title;
+    }
+
     public static function invite(object $event, object $invite): array
     {
         $subject = self::fill((string) $event->email_subject, $event, $invite->name);
@@ -224,7 +240,7 @@ final class RsvpMail
                 ? '<p style="margin:0;font-size:12.5px;color:#64748B;text-align:center">If the button doesn’t work, <a href="' . e(self::rsvpUrl($invite->token)) . '" style="color:#1F6080">open the RSVP form here</a>.</p>'
                 : '<p style="margin:0;font-size:12.5px;color:#64748B;text-align:center">Or open this link: <a href="' . e(self::rsvpUrl($invite->token)) . '" style="color:#1F6080">' . e(self::rsvpUrl($invite->token)) . '</a></p>')
             . self::optOutLine($event, $invite->token);
-        $html = self::frame($event, $body, ['title' => (string) $event->title, 'preheader' => 'You’re invited — please RSVP']);
+        $html = self::frame($event, $body, ['title' => (string) $event->title, 'preheader' => self::preheader($event, $invite->name)]);
 
         return [$subject, $html];
     }

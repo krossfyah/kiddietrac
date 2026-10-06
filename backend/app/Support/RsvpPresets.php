@@ -43,8 +43,8 @@ final class RsvpPresets
                     $f('phone', 'Phone', 'tel', false, ['help' => 'Optional — only used if we need to reach you about the event.']),
                     $f('topics', 'Topic(s) you’d like covered at the event', 'textarea', false, ['placeholder' => 'e.g. roads, parks, recreation programs']),
                 ],
-                'email_subject' => 'You’re invited: {{event}}',
-                'email_body' => "Hi {{first_name}},\n\nYou’re invited to {{event}} — a chance to hear what’s happening in our community and to have your say.\n\nPlease RSVP below and tell us which topics matter most to you, so we can make sure they’re covered.\n\nWe hope to see you there.",
+                'email_subject' => '{{event}}',
+                'email_body' => "Hi {{first_name}},\n\n{{event}} is a chance to hear what’s happening in our community and to have your say.\n\nPlease RSVP below and tell us which topics matter most to you, so we can make sure they’re covered.\n\nWe hope to see you there.",
                 'confirmation_message' => "Thank you for registering for {{event}}. We’ve noted the topics you’d like covered and look forward to seeing you.",
             ],
             'parent_info_night' => [
@@ -60,7 +60,7 @@ final class RsvpPresets
                     $f('questions', 'Anything you’d like us to cover?', 'textarea', false),
                 ],
                 'email_subject' => 'Join us for {{event}}',
-                'email_body' => "Hi {{first_name}},\n\nYou’re invited to {{event}}. Meet our educators, see how a day in the program works, and bring your questions.\n\nPlease RSVP so we can plan for the right number of people.",
+                'email_body' => "Hi {{first_name}},\n\nJoin us for {{event}}. Meet our educators, see how a day in the program works, and bring your questions.\n\nPlease RSVP so we can plan for the right number of people.",
                 'confirmation_message' => "Thank you for registering for {{event}}. We’re looking forward to meeting you.",
             ],
             'open_house' => [
@@ -90,7 +90,7 @@ final class RsvpPresets
                     $f('dietary', 'Dietary needs or allergies', 'text', false),
                     $f('volunteer', 'I’d like to help on the night', 'checkbox', false),
                 ],
-                'email_subject' => 'You’re invited: {{event}}',
+                'email_subject' => '{{event}}',
                 'email_body' => "Hi {{first_name}},\n\nPlease join us for {{event}}, an evening to celebrate our community and raise support for the children and families we serve.\n\nRSVP below to save your place.",
                 'confirmation_message' => "Thank you for registering for {{event}}. Your support means a great deal to us.",
             ],
@@ -106,7 +106,7 @@ final class RsvpPresets
                     $f('goals', 'What do you hope to learn?', 'textarea', false),
                 ],
                 'email_subject' => 'Register for {{event}}',
-                'email_body' => "Hi {{first_name}},\n\nYou’re invited to {{event}}. Spaces are limited, so please register below to hold your seat.",
+                'email_body' => "Hi {{first_name}},\n\nSpaces are limited for {{event}}, so please register below to hold your seat.",
                 'confirmation_message' => "Thank you for registering for {{event}}. We’ll see you there.",
             ],
             'family_event' => [
@@ -122,7 +122,7 @@ final class RsvpPresets
                     $f('photo_ok', 'Photos of our family may be shared with other families', 'checkbox', false),
                 ],
                 'email_subject' => 'Celebrate with us: {{event}}',
-                'email_body' => "Hi {{first_name}},\n\nYou and your family are invited to {{event}}. Come for the food, the fun and the company.\n\nPlease RSVP so we can plan food and activities for everyone.",
+                'email_body' => "Hi {{first_name}},\n\nBring the whole family to {{event}}. Come for the food, the fun and the company.\n\nPlease RSVP so we can plan food and activities for everyone.",
                 'confirmation_message' => "Thank you for registering for {{event}}. We can’t wait to celebrate with you.",
             ],
             'volunteer' => [
@@ -151,8 +151,8 @@ final class RsvpPresets
                     $f('guests', 'Number attending (including you)', 'select', false, ['options' => ['1', '2', '3', '4', '5']]),
                     $f('comments', 'Comments', 'textarea', false),
                 ],
-                'email_subject' => 'You’re invited: {{event}}',
-                'email_body' => "Hi {{first_name}},\n\nYou’re invited to {{event}}. Please let us know you’re coming by pressing RSVP below.\n\nWe hope to see you there.",
+                'email_subject' => '{{event}}',
+                'email_body' => "Hi {{first_name}},\n\nPlease let us know you’re coming to {{event}} by pressing RSVP below.\n\nWe hope to see you there.",
                 'confirmation_message' => "Thank you for registering for {{event}}. We look forward to seeing you.",
             ],
         ];

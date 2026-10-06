@@ -521,7 +521,7 @@ class RsvpController extends Controller
             'starts_at' => ! empty($in['starts_local']) ? $toUtc($in['starts_local']) : ($base['starts_at'] ?? null),
             'ends_at' => ! empty($in['ends_local']) ? $toUtc($in['ends_local']) : ($base['ends_at'] ?? null),
             'image_url' => $image, 'fields' => json_encode($fields), 'status' => 'open', 'capacity' => null,
-            'email_subject' => (string) ($pick('email_subject') ?: 'You’re invited: {{event}}'),
+            'email_subject' => (string) ($pick('email_subject') ?: '{{event}}'),
             'email_body' => (string) ($pick('email_body') ?: ''), 'confirmation_message' => $pick('confirmation_message'),
             'notify_email' => $pick('notify_email'), 'public_token' => 'preview',
         ];

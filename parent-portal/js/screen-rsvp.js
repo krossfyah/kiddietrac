@@ -122,6 +122,8 @@
     + '.rv-fs{grid-column:1/-1;border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px 14px;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px}.rv-fs legend{font-weight:800;font-size:13px;padding:0 6px;color:#0F172A}'
     + '.rv-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;position:sticky;bottom:0;background:#fff;border-top:1px solid #E2E8F0;margin:14px -20px 0;padding:10px 20px;z-index:2}'
     + '.rv-hint{font-size:12px;color:#64748B;margin-top:3px;line-height:1.45}'
+    + '.rv-bulk{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:6px 10px;position:sticky;top:0;z-index:2}.rv-bulk b{font-size:13px;color:#1E3A8A;margin-right:auto}'
+    + '#appMain .rv-secs input[data-pick],#appMain .rv-secs input[data-selall]{width:16px;height:16px;cursor:pointer;margin:0}'
     + '.rv-q{border:1px solid #E2E8F0;border-radius:10px;padding:8px;margin-bottom:6px;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto auto;gap:6px;align-items:center;background:#FBFDFF}'
     + '.rv-q .more{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:6px}.rv-q .req{display:flex;gap:4px;align-items:center;font-size:12px;font-weight:700;white-space:nowrap}'
     + '.rv-q .mv{display:flex;gap:2px}.rv-q .mv button{width:28px;height:28px;border:1px solid #CBD5E1;background:#fff;border-radius:7px;cursor:pointer;font-size:12px;padding:0}'
@@ -480,7 +482,8 @@
       + fs('Questions', '<div class="full"><div class="rv-qchips" data-qchips>' + qChips(qs) + '</div><div class="rv-hint">'
         + (ev ? 'Change them with <b>Edit questions</b> on the event page.' : 'From the template you start from. You can change them once the event is created.') + '</div></div>')
       + fs('Email & image', imageBlock(c.image_url)
-        + field('email_subject', 'Subject', c.email_subject, { full: true })
+        + field('email_subject', 'Subject line', c.email_subject, { full: true, ph: 'e.g. Town of Mono — Engaged Citizens, October 14',
+          hint: 'Your own subject line, exactly as people will see it. {{event}} puts in the event title and {{first_name}} the person’s first name — use them or leave them out.' })
         + field('email_body', 'Message', c.email_body, { area: true, full: true, max: 8000, hint: PLACEHOLDER_HINT })
         + field('confirmation_message', 'Confirmation message (sent to each registrant)', c.confirmation_message, { area: true, full: true }))
       + fs('Sender & branding', '<div><label>Send from</label><select data-k="sender_id">' + senderOptions(ev ? ev.sender_id : '') + '</select>'
@@ -692,8 +695,40 @@
       + '<div class="rv-foot"><span class="hint">' + esc(footHint) + '</span>' + btn('data-back', 'Back', 'ghost') + btn('data-preview', '👁 Preview')
       + btn('data-pa="' + pa[0] + '"', esc(pa[1]), 'pri') + '</div>';
     pinFooter(main);
+    function picked() { return Array.prototype.slice.call(body.querySelectorAll('[data-pick]:checked')); }
+    function syncBulk() {
+      var bar = body.querySelector('[data-bulkbar]'); if (!bar) { return; }
+      var all = body.querySelectorAll('[data-pick]'), n = picked().length, sa = body.querySelector('[data-selall]');
+      bar.style.display = n ? 'flex' : 'none';
+      bar.querySelector('[data-bulkn]').textContent = n + ' selected';
+      if (sa) { sa.checked = n > 0 && n === all.length; sa.indeterminate = n > 0 && n < all.length; }
+    }
+    body.onchange = function (e) {
+      var t = e.target;
+      if (t.hasAttribute && t.hasAttribute('data-selall')) {
+        body.querySelectorAll('[data-pick]').forEach(function (c) { c.checked = t.checked; });
+      }
+      if (t.hasAttribute && (t.hasAttribute('data-selall') || t.hasAttribute('data-pick'))) { syncBulk(); }
+    };
     body.onclick = async function (e) {
       var b = e.target.closest('button,a[data-copy]'); if (!b) { return; }
+      if (b.hasAttribute('data-bulkclear')) {
+        body.querySelectorAll('[data-pick],[data-selall]').forEach(function (c) { c.checked = false; c.indeterminate = false; });
+        syncBulk(); return;
+      }
+      if (b.hasAttribute('data-bulkresend')) {
+        var ids = picked().map(function (c) { return +c.getAttribute('data-pick'); });
+        if (!ids.length) { return; }
+        var okB = await KT.confirm({ title: 'Send the invitation again to ' + ids.length + (ids.length === 1 ? ' person?' : ' people?'),
+          description: 'Each of them gets another copy of the invitation. People who have signed up or opted out are never included.', okLabel: 'Send ' + ids.length });
+        if (!okB) { return; }
+        try {
+          var rb = await Api.post('/admin/rsvp/events/' + ev.id + '/send', { invite_ids: ids });
+          toast(rb.queued ? (rb.queued + ' invitation' + (rb.queued === 1 ? '' : 's') + ' queued — they go out within a few minutes') : 'Nothing to send', rb.queued ? 'success' : 'info');
+          paint(main);
+        } catch (err) { toast(err.message || 'Could not send', 'error'); }
+        return;
+      }
       if (b.hasAttribute('data-back')) { state.eventId = null; paint(main); }
       else if (b.hasAttribute('data-refresh')) { paint(main); }
       else if (b.hasAttribute('data-menu')) { e.stopPropagation(); openMenu(b, eventMenu(main, ev, true)); }
@@ -727,16 +762,28 @@
 
   function inviteTable(rows) {
     if (!rows.length) { return '<div class="kt-card" style="color:#64748B">Nobody on the list yet. Add invitees, or share the link — people who use it appear here too.</div>'; }
-    return '<div class="kt-card"><table><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th>'
+    /* SEVERAL AT ONCE (Anthony, 2026-10-05: "add a multiple option to select multiple
+       invitee's in the table to resend the email"). A tick only on rows that CAN be sent
+       again — the same rule as the row's Resend button and the server: not someone who has
+       signed up or opted out. The header box selects all of those. */
+    var canResend = function (r) { return r.status !== 'not_invited' && !r.registered_at && !r.opted_out_at && (r.status === 'sent' || r.status === 'failed' || r.status === 'suppressed'); };
+    var anyResend = rows.some(canResend);
+    return (anyResend ? '<div class="rv-bar rv-bulk" data-bulkbar style="display:none"><b data-bulkn>0 selected</b>'
+        + '<button type="button" class="rv-btn pri" data-kt-iconized="1" data-bulkresend>↻ Resend invitation</button>'
+        + '<button type="button" class="rv-btn" data-kt-iconized="1" data-bulkclear>Clear</button></div>' : '')
+      + '<div class="kt-card"><table><thead><tr>'
+      + (anyResend ? '<th style="width:30px"><input type="checkbox" data-selall title="Select everyone who can be sent the invitation again" aria-label="Select all"></th>' : '')
+      + '<th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th>'
       + '<th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th>'
       + '<th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         var acts = '';
-        if (r.status !== 'not_invited' && !r.registered_at && !r.opted_out_at && (r.status === 'sent' || r.status === 'failed' || r.status === 'suppressed')) {
+        if (canResend(r)) {
           acts += '<button type="button" class="kt-btn" data-resend="' + r.id + '" data-email="' + esc(r.email) + '" title="Send the invitation again">Resend</button>';
         }
         if (r.can_remove) { acts += '<button type="button" class="kt-btn" data-remove="' + r.id + '" title="Remove from the list">Remove</button>'; }
-        return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label)
+        return '<tr>' + (anyResend ? '<td>' + (canResend(r) ? '<input type="checkbox" data-pick="' + r.id + '" aria-label="Select ' + esc(r.email) + '">' : '') + '</td>' : '')
+          + '<td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label)
           + (r.note ? '<div class="rv-hint" title="' + esc(r.note) + '">' + esc(r.note.length > 70 ? r.note.slice(0, 70) + '…' : r.note) + '</div>' : '') + '</td>'
           + '<td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
           + '<td>' + esc(r.registered_at || '—') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
@@ -1087,8 +1134,9 @@
       + field('name', 'Template name', t.name, { full: true, ph: 'e.g. Community information session' })
       + field('description', 'Notes for your team (optional)', t.description, { full: true })
       + imageBlock(t.image_url)
-      + field('email_subject', 'Invitation subject', t.email_subject || 'You’re invited: {{event}}', { full: true })
-      + field('email_body', 'Invitation message', t.email_body || 'Hi {{first_name}},\n\nYou’re invited to {{event}}. Please let us know you’re coming by pressing RSVP below.\n\nWe hope to see you there.', { area: true, full: true, max: 8000, hint: PLACEHOLDER_HINT })
+      + field('email_subject', 'Invitation subject line', t.email_subject || '{{event}}', { full: true,
+          hint: 'Your own subject line. {{event}} puts in the event title and {{first_name}} the person’s first name.' })
+      + field('email_body', 'Invitation message', t.email_body || 'Hi {{first_name}},\n\nPlease let us know you’re coming to {{event}} by pressing RSVP below.\n\nWe hope to see you there.', { area: true, full: true, max: 8000, hint: PLACEHOLDER_HINT })
       + field('confirmation_message', 'Confirmation message (sent to each registrant with a copy of their answers)', t.confirmation_message || 'Thank you for registering for {{event}}. We look forward to seeing you.', { area: true, full: true })
       + field('notify_email', 'Send sign-ups and opt-outs to', t.notify_email, { type: 'email', full: true, ph: 'events@yourorganisation.ca', hint: 'Each event starts with this address and can change it.' })
       + field('branding', 'Branding (the default for events made from it)', t.branding || 'agency', { select: BRANDING, full: true, hint: BRANDING_HINT })
