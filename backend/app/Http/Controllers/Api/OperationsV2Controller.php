@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class OperationsV2Controller extends Controller
 {
+    use \App\Http\Concerns\ReportAlerts;
+
     // =========================================================
     // Closure / holiday calendar
     // =========================================================
@@ -403,8 +405,19 @@ final class OperationsV2Controller extends Controller
             'fee_amount' => $fee,
             'invoice_line_id' => $invoiceLineId,
             'notes' => $data['notes'] ?? null,
+            'logged_by_id' => $request->user()->id,
             'created_at' => now(),
         ]);
+
+        /* THE DIRECTOR AND ADMINS HEAR ABOUT IT (2026-10-06). Anthony: "when a late pick up
+           request is generated make sure an email gets sent out to director/admins". The
+           parents were told in the app; the people who bill and run the centre were not.
+           Never allowed to fail the log itself — the fee is already on the invoice. */
+        try {
+            $this->emailLatePickup($request, $centre, $child, $family, $pickup, $data, $minutesLate, $chargeable, $fee, $id, $invoice);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('late pickup alert failed', ['charge' => $id, 'error' => $e->getMessage()]);
+        }
 
         // Notify guardians
         $gids = DB::table('guardians')->where('family_id', $family->id)->pluck('user_id');
@@ -420,15 +433,49 @@ final class OperationsV2Controller extends Controller
         return response()->json(['id' => $id, 'fee' => $fee, 'minutes_late' => $minutesLate, 'chargeable' => $chargeable], 201);
     }
 
+    /** Email the centre's directors and the agency admins about a logged late pickup fee. */
+    private function emailLatePickup(Request $request, object $centre, object $child, object $family, Carbon $pickup, array $data, int $minutesLate, int $chargeable, float $fee, int $id, $invoice): void
+    {
+        $agencyId = (int) $centre->agency_id;
+        $recipients = $this->alertRecipients($agencyId, (int) $centre->id);
+        if (! $recipients) return;
+        $by = $request->user();
+        $byName = trim(($by->first_name ?? '') . ' ' . ($by->last_name ?? '')) ?: 'A staff member';
+        $childName = trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? ''));
+        $tz = \App\Support\AgencyTime::tz($agencyId);
+        // pickup_at is the wall-clock time typed on the form; "logged" is now, in the agency's zone.
+        $when = $pickup->format('D M j, Y \a\t g:i A');
+        $loggedAt = now()->setTimezone($tz)->format('M j, Y g:i A');
+        $money = '$' . number_format($fee, 2);
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
+        $line = fn ($k, $v) => $v === null || $v === '' ? '' : '<tr><td style="padding:6px 12px 6px 0;color:#64748b;font-size:13px;white-space:nowrap;">' . $k . '</td><td style="padding:6px 0;font-weight:700;color:#0f172a;font-size:13px;">' . $e($v) . '</td></tr>';
+        $rows = $line('Child', $childName) . $line('Family', $family->family_name ?? null) . $line('Centre', $centre->name ?? null)
+            . $line('Picked up', $when) . $line('Centre closed at', \Illuminate\Support\Carbon::parse($data['close_time'])->format('g:i A'))
+            . $line('Minutes late', $minutesLate . ' (' . $chargeable . ' charged after the grace period)')
+            . $line('Fee', $money) . $line('Invoice', $invoice ? ('Added to invoice ' . ($invoice->invoice_number ?? ('#' . $invoice->id))) : 'No open invoice — not yet billed')
+            . $line('Logged by', $byName) . $line('Logged at', $loggedAt) . $line('Notes', $data['notes'] ?? null);
+        $body = '<p style="margin:0 0 12px;font-size:14.5px;color:#243244;">A late pickup was just logged and a fee applied.</p>'
+            . '<table style="border-collapse:collapse;margin:8px 0 4px;">' . $rows . '</table>'
+            . '<p style="margin:14px 0 0;font-size:12.5px;color:#64748b;">See every late pickup under <strong>Late pickups</strong> in your portal.</p>';
+        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+            'eyebrow' => 'LATE PICKUP', 'title' => 'Late pickup — ' . $childName,
+            'subtitle' => $when . ' · ' . $money,
+            'preheader' => $childName . ' was picked up ' . $minutesLate . ' min late; ' . $money . ' fee logged by ' . $byName . '.',
+        ]);
+        $this->sendReportAlert($agencyId, $recipients, 'Late pickup: ' . $childName . ' — ' . $minutesLate . ' min, ' . $money, $html);
+    }
+
     public function lateHistory(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
         $rows = DB::table('late_pickup_charges as lpc')
             ->join('children as c', 'c.id', '=', 'lpc.child_id')
+            ->leftJoin('users as lb', 'lb.id', '=', 'lpc.logged_by_id')
             ->where('lpc.agency_id', $agencyId)
             ->orderByDesc('lpc.pickup_at')
             ->select('lpc.*',
-                DB::raw("CONCAT(c.first_name,' ',c.last_name) as child_name"))
+                DB::raw("CONCAT(c.first_name,' ',c.last_name) as child_name"),
+                DB::raw("TRIM(CONCAT(COALESCE(lb.first_name,''),' ',COALESCE(lb.last_name,''))) as logged_by"))
             ->limit(200)
             ->get();
         return response()->json(['data' => $rows]);

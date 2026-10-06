@@ -27,6 +27,8 @@ use Illuminate\Support\Facades\Schema;
  */
 final class LateEventController extends Controller
 {
+    use \App\Http\Concerns\ReportAlerts;
+
     private const KINDS = ['arrival', 'departure'];
 
     private function ensureTable(): void
@@ -116,8 +118,39 @@ final class LateEventController extends Controller
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-
+        // Waiting on a director or admin to decide — tell them (never fails the log).
+        try { $this->emailPending($request, $id, (int) $centreId, $data, $on); }
+        catch (\Throwable $e) { \Illuminate\Support\Facades\Log::warning('late event alert failed', ['id' => $id, 'error' => $e->getMessage()]); }
         return response()->json(['ok' => true, 'id' => $id], 201);
+    }
+
+    /** Email the centre's directors and the agency admins that a late event needs a decision. */
+    private function emailPending(Request $request, int $id, int $centreId, array $data, string $on): void
+    {
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        if (! $agencyId) return;
+        $recipients = $this->alertRecipients($agencyId, $centreId);
+        if (! $recipients) return;
+        $child = DB::table('children')->where('id', $data['child_id'])->first(['first_name', 'last_name']);
+        $childName = trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? ''));
+        $by = $request->user();
+        $byName = trim(($by->first_name ?? '') . ' ' . ($by->last_name ?? '')) ?: 'A staff member';
+        $kind = $data['kind'] === 'arrival' ? 'late arrival' : 'late pickup';
+        $tz = AgencyTime::tz($agencyId);
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES);
+        $line = fn ($k, $v) => $v === null || $v === '' ? '' : '<tr><td style="padding:6px 12px 6px 0;color:#64748b;font-size:13px;white-space:nowrap;">' . $k . '</td><td style="padding:6px 0;font-weight:700;color:#0f172a;font-size:13px;">' . $e($v) . '</td></tr>';
+        $rows = $line('Child', $childName) . $line('Centre', DB::table('centres')->where('id', $centreId)->value('name'))
+            . $line('What', ucfirst($kind)) . $line('Date', Carbon::parse($on)->format('D M j, Y')) . $line('Minutes', $data['minutes'])
+            . $line('Recorded by', $byName) . $line('Recorded at', now()->setTimezone($tz)->format('M j, Y g:i A')) . $line('Note', $data['note'] ?? null);
+        $body = '<p style="margin:0 0 12px;font-size:14.5px;color:#243244;">A ' . $kind . ' was recorded and is waiting for a decision — approve a fee, waive it, or decline.</p>'
+            . '<table style="border-collapse:collapse;margin:8px 0 4px;">' . $rows . '</table>'
+            . '<p style="margin:14px 0 0;font-size:12.5px;color:#64748b;">Decide it under <strong>Late arrivals &amp; pickups</strong> in your portal.</p>';
+        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
+            'eyebrow' => strtoupper($kind), 'title' => ucfirst($kind) . ' needs a decision — ' . $childName,
+            'subtitle' => Carbon::parse($on)->format('M j, Y') . ' · ' . $data['minutes'] . ' min',
+            'preheader' => $byName . ' recorded a ' . $kind . ' for ' . $childName . '; it needs your decision.',
+        ]);
+        $this->sendReportAlert($agencyId, $recipients, ucfirst($kind) . ' to review: ' . $childName . ' (' . $data['minutes'] . ' min)', $html);
     }
 
     /** GET /provider/late-events — the review list. */

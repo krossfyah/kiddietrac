@@ -225,6 +225,23 @@
   }
 
   // ============================ Late pickup =================================
+  /* LATE PICKUP TIMES (2026-10-06). "Picked up" is the wall-clock time typed on the form
+     (stored without a zone) — printed from its parts so nothing shifts it. "Logged" is
+     when it was recorded, a real UTC instant, shown in the agency's zone. */
+  function lpWall(s) {
+    const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if (!m) { return esc(s || '—'); }
+    const h = +m[4], ap = h >= 12 ? 'PM' : 'AM', h12 = (h % 12) || 12;
+    return (MONTHS_ABBR[+m[2] - 1] || m[2]) + ' ' + (+m[3]) + ', ' + m[1] + ' · ' + h12 + ':' + m[5] + ' ' + ap;
+  }
+  function lpLogged(s) {
+    if (!s) { return '—'; }
+    try {
+      const tz = (window.KT && KT.agencyTz && KT.agencyTz()) || undefined;
+      return sdInstant(String(s)).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: tz });
+    } catch (e) { return esc(String(s)); }
+  }
+
   async function renderLatePickup(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
@@ -237,14 +254,16 @@
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>When</th><th>Child</th><th>Minutes late</th><th>Fee</th><th>Notes</th></tr></thead>
+          <thead><tr><th>Picked up</th><th>Child</th><th>Minutes late</th><th>Fee</th><th>Logged</th><th>Logged by</th><th>Notes</th></tr></thead>
           <tbody>${(r.data || []).map(c => `<tr>
-            <td>${fmtDate(c.pickup_at)}</td>
+            <td style="white-space:nowrap">${lpWall(c.pickup_at)}</td>
             <td><strong>${esc(c.child_name)}</strong></td>
             <td><span class="kt-pill kt-pill-warning">${c.minutes_late} min</span></td>
             <td><strong>${fmtMoney(c.fee_amount)}</strong></td>
+            <td style="white-space:nowrap">${lpLogged(c.created_at)}</td>
+            <td>${esc(c.logged_by || '—')}</td>
             <td>${esc(c.notes || '')}</td>
-          </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;padding:40px;color:#64748B;">No late pickups logged.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No late pickups logged.</td></tr>'}</tbody>
         </table>
       </div>
     </div>`;
