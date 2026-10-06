@@ -321,7 +321,12 @@ final class RsvpMail
                one-click unsubscribe, which Gmail and Yahoo expect on invitation-style mail
                and show as an "Unsubscribe" link beside the sender instead of a spam report. */
             try { $m->getSymfonyMessage()->text(self::plainText($html)); } catch (\Throwable $e) {}
-            try { $m->getHeaders()->addTextHeader('X-KT-No-Track', '1'); } catch (\Throwable $e) {}
+            /* Invitations keep the open-tracking image, so the invitee list can show who
+               opened the email (Anthony chose that over the deliverability gain,
+               2026-10-05). Confirmations and sign-up notices go without it. */
+            if (empty($opts['track'])) {
+                try { $m->getHeaders()->addTextHeader('X-KT-No-Track', '1'); } catch (\Throwable $e) {}
+            }
             if (! empty($opts['unsubscribe'])) {
                 try {
                     $tok = preg_match('/[?&]o=([A-Za-z0-9]{20,48})/', (string) $opts['unsubscribe'], $mm) ? $mm[1] : null;

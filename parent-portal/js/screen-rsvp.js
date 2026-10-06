@@ -677,7 +677,7 @@
       + '<div class="rv-link"><code>' + esc(ev.public_url) + '</code>' + btn('data-copy="' + esc(ev.public_url) + '"', 'Copy link')
       + '<a class="rv-btn" data-kt-iconized="1" href="' + esc(ev.public_url) + '" target="_blank" rel="noopener">Open page</a></div></div></div>'
       + '<div class="rv-stats">' + stat(s.invited, 'Invited') + stat(s.sent, 'Sent') + stat((s.pending || 0) + (s.queued || 0), 'Waiting to send') + stat(s.not_delivered, 'Not delivered')
-      + stat(s.opened, 'Opened link') + stat(s.registered, 'Signed up') + stat(s.opted_out, 'Opted out') + stat(s.no_response, 'No response') + '</div>'
+      + stat(s.email_opened, 'Opened email') + stat(s.opened, 'Clicked link') + stat(s.registered, 'Signed up') + stat(s.opted_out, 'Opted out') + stat(s.no_response, 'No response') + '</div>'
       + (s.queued ? '<div class="rv-hint" style="margin:-4px 0 10px">' + s.queued + ' invitation(s) are going out now — they are sent within about a minute. Press Refresh to see the result.</div>' : '')
       + '<div class="rv-secs">'
       + sec('Details', btn('data-edit', 'Edit'), dl([['When', esc(ev.when || 'No date set')], ['Where', esc(ev.location || '—')],
@@ -717,9 +717,19 @@
     };
   }
 
+  /* "Email opened": the first open, and how many times when more than once. Opens come
+     from the image in the email, so they are approximate — a mail app that blocks images
+     never reports, and Apple Mail reports every message as opened. */
+  function openedCell(r) {
+    if (!r.email_opened_at) { return '—'; }
+    return esc(r.email_opened_at) + (r.email_opens > 1 ? '<div class="rv-hint">' + r.email_opens + ' times</div>' : '');
+  }
+
   function inviteTable(rows) {
     if (!rows.length) { return '<div class="kt-card" style="color:#64748B">Nobody on the list yet. Add invitees, or share the link — people who use it appear here too.</div>'; }
-    return '<div class="kt-card"><table><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th>Signed up</th><th>Opted out</th><th></th></tr></thead><tbody>'
+    return '<div class="kt-card"><table><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th>'
+      + '<th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th>'
+      + '<th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         var acts = '';
         if (r.status !== 'not_invited' && !r.registered_at && !r.opted_out_at && (r.status === 'sent' || r.status === 'failed' || r.status === 'suppressed')) {
@@ -728,7 +738,8 @@
         if (r.can_remove) { acts += '<button type="button" class="kt-btn" data-remove="' + r.id + '" title="Remove from the list">Remove</button>'; }
         return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label)
           + (r.note ? '<div class="rv-hint" title="' + esc(r.note) + '">' + esc(r.note.length > 70 ? r.note.slice(0, 70) + '…' : r.note) + '</div>' : '') + '</td>'
-          + '<td>' + esc(r.sent_at || '—') + '</td><td>' + esc(r.registered_at || '—') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
+          + '<td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
+          + '<td>' + esc(r.registered_at || '—') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
           + '<td style="text-align:center;white-space:nowrap">' + acts + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -1112,10 +1123,10 @@
     body.innerHTML = '<div class="rv-bar"><select data-ev>' + evs.map(function (e) { return '<option value="' + e.id + '"' + (e.id === state.reportEvent ? ' selected' : '') + '>' + esc(e.title) + '</option>'; }).join('') + '</select>'
       + '<button class="rv-btn" data-kt-iconized="1" data-csv title="Download this view as a CSV file">⬇ CSV</button><span class="rv-hint">Times are ' + esc(rep.tz) + '.</span></div>'
       + '<div class="rv-chips" style="margin-bottom:10px">' + VIEWS.map(function (v) { return '<button data-view="' + v[0] + '" class="' + (v[0] === state.view ? 'on' : '') + '">' + v[1] + (counts[v[0]] != null ? ' · ' + counts[v[0]] : '') + '</button>'; }).join('') + '</div>'
-      + (rows.length ? '<div class="kt-card" style="overflow:auto"><table><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th>Opened link</th><th>Signed up</th><th>Opted out</th>'
+      + (rows.length ? '<div class="kt-card" style="overflow:auto"><table><thead><tr><th>Name</th><th>Email</th><th>Invitation</th><th>Sent</th><th title="When the invitation email was first opened (from the image in the email — approximate)">Email opened</th><th title="When they opened the RSVP page from the invitation">Clicked RSVP link</th><th>Signed up</th><th>Opted out</th>'
         + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<th>' + esc(c.label) + '</th>'; }).join('') + '</tr></thead><tbody>'
         + rows.map(function (r) {
-          return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + esc(r.sent_at || '—') + '</td><td>' + esc(r.opened_at || '—') + '</td>'
+          return '<tr><td>' + esc(r.name || '—') + '</td><td>' + esc(r.email) + '</td><td>' + sendPill(r.status, r.status_label) + '</td><td>' + esc(r.sent_at || '—') + '</td><td>' + openedCell(r) + '</td><td>' + esc(r.opened_at || '—') + '</td>'
             + '<td>' + esc(r.registered_at || '—') + (r.updated_response_at ? '<div class="rv-hint">updated ' + esc(r.updated_response_at) + '</div>' : '') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
             + cols.filter(function (c) { return c.key !== 'email'; }).map(function (c) { return '<td style="white-space:pre-line;max-width:320px">' + esc(r.answers[c.key] || '') + '</td>'; }).join('') + '</tr>';
         }).join('') + '</tbody></table></div>'

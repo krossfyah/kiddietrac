@@ -786,12 +786,12 @@ class RsvpController extends Controller
         $tz = AgencyTime::tz($agencyId);
         $cell = fn ($v) => preg_match('/^[=+\-@\t\r]/', (string) $v) ? "'" . $v : $v;   // no spreadsheet formulas from public input
         $out = fopen('php://temp', 'w+');
-        $head = ['Name', 'Email', 'Source', 'Invitation', 'Queued (' . $tz . ')', 'Sent (' . $tz . ')', 'Opened link (' . $tz . ')',
+        $head = ['Name', 'Email', 'Source', 'Invitation', 'Queued (' . $tz . ')', 'Sent (' . $tz . ')', 'Email opened (' . $tz . ')', 'Times opened', 'Clicked RSVP link (' . $tz . ')',
             'Signed up (' . $tz . ')', 'Opted out (' . $tz . ')', 'Note'];
         foreach ($cols as $c) $head[] = $c['label'];
         fputcsv($out, $head);
         foreach ($rows as $r) {
-            $line = [$cell($r['name']), $cell($r['email']), $r['source'], $r['status_label'], $r['queued_at'], $r['sent_at'], $r['opened_at'],
+            $line = [$cell($r['name']), $cell($r['email']), $r['source'], $r['status_label'], $r['queued_at'], $r['sent_at'], $r['email_opened_at'], $r['email_opens'] ?: '', $r['opened_at'],
                 $r['registered_at'], $r['opted_out_at'], $cell($r['note'])];
             foreach ($cols as $c) $line[] = $cell($r['answers'][$c['key']] ?? '');
             fputcsv($out, $line);
@@ -1075,7 +1075,7 @@ class RsvpController extends Controller
 
     private function emptyStats(): array
     {
-        return ['invited' => 0, 'queued' => 0, 'sent' => 0, 'not_delivered' => 0, 'opened' => 0, 'registered' => 0, 'opted_out' => 0, 'no_response' => 0, 'pending' => 0];
+        return ['invited' => 0, 'queued' => 0, 'sent' => 0, 'not_delivered' => 0, 'opened' => 0, 'email_opened' => 0, 'registered' => 0, 'opted_out' => 0, 'no_response' => 0, 'pending' => 0];
     }
 
     /** @param int[] $ids */
@@ -1098,6 +1098,15 @@ class RsvpController extends Controller
         foreach ($rows as $r) {
             $out[(int) $r->event_id] = array_map('intval', array_diff_key((array) $r, ['event_id' => 1]));
         }
+        $opened = DB::table('rsvp_invites as i')
+            ->join('email_logs as el', function ($j) use ($agencyId) {
+                $j->on('el.id', '=', 'i.email_log_id')->where('el.agency_id', '=', $agencyId);
+            })
+            ->where('i.agency_id', $agencyId)->whereIn('i.event_id', $ids)->whereNotNull('el.opened_at')
+            ->groupBy('i.event_id')->selectRaw('i.event_id, COUNT(*) n')->pluck('n', 'event_id');
+        foreach ($out as $eid => $v) {
+            $out[$eid]['email_opened'] = (int) ($opened[$eid] ?? 0);
+        }
 
         return $out;
     }
@@ -1107,6 +1116,11 @@ class RsvpController extends Controller
         $tz = AgencyTime::tz($agencyId);
         $fmt = fn ($ts) => $ts ? AgencyTime::fmt($ts, $tz, 'Y-m-d g:i A') : '';
         $q = DB::table('rsvp_invites as i')->leftJoin('rsvp_responses as r', 'r.invite_id', '=', 'i.id')
+            /* "Email opened" is the open recorded on the invitation's own email_logs row (the
+               tracking image); "Clicked RSVP link" is i.opened_at, set by the RSVP page. */
+            ->leftJoin('email_logs as el', function ($j) use ($agencyId) {
+                $j->on('el.id', '=', 'i.email_log_id')->where('el.agency_id', '=', $agencyId);
+            })
             ->where('i.event_id', $e->id)->where('i.agency_id', $agencyId);
         match ($view) {
             'sent' => $q->where('i.send_status', 'sent'),
@@ -1117,7 +1131,7 @@ class RsvpController extends Controller
             default => null,
         };
         $list = $q->orderByRaw('COALESCE(i.registered_at, i.sent_at, i.created_at) DESC')
-            ->get(['i.*', 'r.answers', 'r.created_at as response_at', 'r.updated_at as response_updated_at']);
+            ->get(['i.*', 'r.answers', 'r.created_at as response_at', 'r.updated_at as response_updated_at', 'el.opened_at as email_opened_at', 'el.opens as email_opens']);
         $fields = json_decode((string) $e->fields, true) ?: [];
         $cols = array_map(fn ($f) => ['key' => $f['key'], 'label' => $f['label']], $fields);
         $known = array_flip(array_column($cols, 'key'));
@@ -1134,6 +1148,7 @@ class RsvpController extends Controller
                 'id' => (int) $i->id, 'name' => (string) ($i->name ?? ''), 'email' => $i->email, 'source' => $i->source,
                 'status' => $i->send_status, 'status_label' => $label[$i->send_status] ?? $i->send_status,
                 'queued_at' => $fmt($i->queued_at), 'sent_at' => $fmt($i->sent_at), 'opened_at' => $fmt($i->opened_at),
+                'email_opened_at' => $fmt($i->email_opened_at ?? null), 'email_opens' => (int) ($i->email_opens ?? 0),
                 'registered_at' => $fmt($i->registered_at), 'opted_out_at' => $fmt($i->opted_out_at),
                 'updated_response_at' => ($i->response_updated_at && $i->response_at && $i->response_updated_at > $i->response_at) ? $fmt($i->response_updated_at) : '',
                 'note' => (string) ($i->send_error ?? ''), 'answers' => $ans, 'can_remove' => $i->send_status === 'pending' && ! $i->registered_at && ! $i->opted_out_at,

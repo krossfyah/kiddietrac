@@ -73,6 +73,7 @@ class SendRsvpMail implements ShouldQueue
         [$subject, $html] = RsvpMail::invite($event, $inv);
         $r = RsvpMail::send((int) $event->agency_id, $inv->email, $inv->name, $subject, $html, [
             'reply_to' => $event->notify_email, 'unsubscribe' => RsvpMail::optOutUrl($inv->token), 'sender_id' => $event->sender_id ?? null, 'from' => RsvpMail::fromFor($event),
+            'track' => true,
         ]);
         DB::table('rsvp_invites')->where('id', $inv->id)->update([
             'send_status' => $r['status'], 'send_error' => $r['error'], 'email_log_id' => $r['log_id'],
