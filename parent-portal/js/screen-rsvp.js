@@ -450,7 +450,7 @@
   /* The values in an open event dialog, as the preview endpoint takes them. */
   function draftFrom(root, ev) {
     var v = vals(root), d = {};
-    ['title', 'description', 'location', 'image_url', 'email_subject', 'email_body', 'confirmation_message', 'notify_email', 'starts_local', 'ends_local', 'branding'].forEach(function (k) {
+    ['title', 'description', 'location', 'image_url', 'email_subject', 'email_body', 'confirmation_message', 'notify_email', 'starts_local', 'ends_local', 'branding', 'show_map', 'map_pin', 'attend_tips'].forEach(function (k) {
       if (v[k] != null) { d[k] = v[k] === '' ? null : v[k]; }
     });
     d.sender_id = v.sender_id ? +v.sender_id : null;
@@ -485,7 +485,12 @@
         + field('email_subject', 'Subject line', c.email_subject, { full: true, ph: 'e.g. Town of Mono — Engaged Citizens, October 14',
           hint: 'Your own subject line, exactly as people will see it. {{event}} puts in the event title and {{first_name}} the person’s first name — use them or leave them out.' })
         + field('email_body', 'Message', c.email_body, { area: true, full: true, max: 8000, hint: PLACEHOLDER_HINT })
-        + field('confirmation_message', 'Confirmation message (sent to each registrant)', c.confirmation_message, { area: true, full: true }))
+        + field('confirmation_message', 'Confirmation message (sent to each registrant)', c.confirmation_message, { area: true, full: true })
+        + field('attend_tips', 'Tips for attendees (confirmation email)', ev ? ev.attend_tips : '', { area: true, full: true, rows: 6, max: 4000,
+          hint: 'One tip per line. Start a line with a short heading and a colon to make it bold — e.g. “Speak up: your questions shape the evening.” A “Spread the word” line with the RSVP link is added under them.' })
+        + field('show_map', 'Map in confirmation email', (ev && ev.show_map === false) || (ev && String(ev.show_map) === '0') ? '0' : '1', { select: [['1', 'Show a map of the location, with directions'], ['0', 'No map']] })
+        + field('map_pin', 'Exact map pin (optional)', ev ? ev.map_pin : '', { ph: 'Paste a Google Maps link, or 44.0175, -80.0711',
+          hint: 'Use this when the map puts the pin in the wrong place — rural addresses often are not mapped exactly. In Google Maps, find the venue, press Share and copy the link.' }))
       + fs('Sender & branding', '<div><label>Send from</label><select data-k="sender_id">' + senderOptions(ev ? ev.sender_id : '') + '</select>'
           + '<div class="rv-hint">Which mailbox the invitations and confirmations come from. Add accounts on the Sender accounts tab.</div></div>'
         + field('notify_email', 'Send sign-ups and opt-outs to', ev ? ev.notify_email : ((src && src.notify_email) || ''), { type: 'email', ph: 'events@yourorganisation.ca',
@@ -502,6 +507,7 @@
       if (!isEmail(v.notify_email)) { throw new Error('Enter the address that should receive sign-ups.'); }
       v.capacity = v.capacity ? +v.capacity : null;
       v.sender_id = v.sender_id ? +v.sender_id : null;
+      if (v.show_map != null) { v.show_map = v.show_map === '1'; }
       ['starts_local', 'ends_local'].forEach(function (k) { if (!v[k]) { v[k] = null; } });
       if (!ev) {
         var s = String(v.start || '');
@@ -688,7 +694,7 @@
       + sec('Questions', btn('data-qs', 'Edit questions'), '<div class="rv-qchips">' + qChips(ev.fields) + '</div>')
       + sec('Email & image', btn('data-edit', 'Edit') + btn('data-preview', 'Preview'),
           '<div class="rv-mail">' + (ev.image_url ? '<img src="' + esc(ev.image_url) + '" alt="">' : '') + '<div class="tx"><b>' + esc(ev.email_subject) + '</b><p>' + esc(ev.email_body) + '</p></div></div>')
-      + sec('Sender & branding', btn('data-edit', 'Change') + btn('data-test', 'Send a test'), dl([['From', fromTxt], ['Account', snd ? esc(snd.label) : 'Agency default email'],
+      + sec('Sender & branding', btn('data-edit', 'Change') + btn('data-test', 'Test invitation') + btn('data-testconf', 'Test confirmation'), dl([['From', fromTxt], ['Account', snd ? esc(snd.label) : 'Agency default email'],
           ['Reply-To', esc(ev.notify_email)], ['Branding', ev.branding === 'none' ? 'Unbranded' : 'Agency branded']]))
       + sec('Invitees', btn('data-add', '＋ Add invitees') + btn('data-report', 'Full report'), inviteTable(rep.rows || []), true)
       + '</div>'
@@ -740,6 +746,7 @@
       else if (b.hasAttribute('data-preview')) { previewDialog({ event_id: ev.id }); }
       else if (b.hasAttribute('data-pa')) { runPrimary(main, ev, b.getAttribute('data-pa')); }
       else if (b.hasAttribute('data-test')) { sendTest(ev); }
+      else if (b.hasAttribute('data-testconf')) { sendTestConfirmation(ev); }
       else if (b.hasAttribute('data-resend')) {
         var ok = await KT.confirm({ title: 'Send the invitation again?', description: 'This sends ' + b.getAttribute('data-email') + ' another copy of the invitation.', okLabel: 'Send again' });
         if (!ok) { return; }
@@ -789,6 +796,17 @@
           + '<td>' + esc(r.registered_at || '—') + '</td><td>' + esc(r.opted_out_at || '—') + '</td>'
           + '<td style="text-align:center;white-space:nowrap">' + acts + '</td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+
+  async function sendTestConfirmation(ev) {
+    var to = await KT.prompt({ title: 'Send a test confirmation', description: 'Sends one copy of the email a registrant receives after signing up — with the map and tips — marked [Test], with sample answers. Nothing is recorded as an RSVP.', placeholder: 'you@example.com', type: 'email', okLabel: 'Send test' });
+    if (to === null) { return; }
+    to = String(to || '').trim();
+    if (!isEmail(to)) { toast('Enter an email address', 'error'); return; }
+    try {
+      var r = await Api.post('/admin/rsvp/events/' + ev.id + '/test-confirmation', { to: to });
+      toast(r.sent ? 'Test confirmation sent to ' + to : ('Not sent: ' + (r.reason || r.status)), r.sent ? 'success' : 'error');
+    } catch (err) { toast(err.message || 'Could not send', 'error'); }
   }
 
   async function sendTest(ev) {

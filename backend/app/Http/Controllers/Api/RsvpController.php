@@ -251,7 +251,13 @@ class RsvpController extends Controller
             'status' => ['required', 'in:draft,open,closed'],
             'capacity' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'branding' => ['nullable', 'in:agency,none'],
+            'show_map' => ['nullable', 'boolean'],
+            'map_pin' => ['nullable', 'string', 'max:500'],
+            'attend_tips' => ['nullable', 'string', 'max:4000'],
         ], ['notify_email.required' => 'Enter the address that should receive sign-ups.']);
+        if (! empty($data['map_pin']) && ! \App\Support\RsvpMap::parsePin($data['map_pin'])) {
+            return response()->json(['message' => 'The map pin needs a Google Maps link to the place, or coordinates like 44.0175, -80.0711.'], 422);
+        }
         $tz = AgencyTime::tz($agencyId);
         $toUtc = fn ($v) => $v ? Carbon::createFromFormat('Y-m-d\TH:i', $v, $tz)->utc()->format('Y-m-d H:i:s') : null;
         $row = [
@@ -261,6 +267,8 @@ class RsvpController extends Controller
             'status' => $data['status'], 'capacity' => $data['capacity'] ?? null,
         ];
         if (! empty($data['branding'])) $row['branding'] = $data['branding'];
+        foreach (['map_pin', 'attend_tips'] as $k) if (array_key_exists($k, $data)) $row[$k] = ($data[$k] ?? '') !== '' ? $data[$k] : null;
+        if (array_key_exists('show_map', $data) && $data['show_map'] !== null) $row['show_map'] = (bool) $data['show_map'];
         // The sender must be one of THIS agency's accounts; empty means the agency's own email.
         if (array_key_exists('sender_id', $data)) {
             $sid = (int) ($data['sender_id'] ?? 0);
@@ -440,6 +448,25 @@ class RsvpController extends Controller
         return response()->json(['queued' => $n]);
     }
 
+    /** Send one CONFIRMATION (what a registrant receives) to an address the admin names —
+        required, never defaulted. Sample answers, marked [Test]; no RSVP is recorded. */
+    public function testConfirmation(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agency($request);
+        $e = $this->ownEvent($agencyId, $id);
+        $data = $request->validate(['to' => ['required', 'email', 'max:190']]);
+        $answers = [];
+        foreach (json_decode((string) $e->fields, true) ?: [] as $f) {
+            $answers[$f['key']] = ['label' => $f['label'], 'value' => $f['type'] === 'email' ? $data['to'] : ($f['type'] === 'checkbox' ? 'Yes' : 'Sample answer')];
+        }
+        $resp = (object) ['name' => 'Test Registrant', 'answers' => json_encode($answers)];
+        [$subject, $html] = RsvpMail::confirmation($e, $resp, null);
+        $r = RsvpMail::send($agencyId, $data['to'], null, '[Test] ' . $subject, $html, ['reply_to' => $e->notify_email, 'sender_id' => $e->sender_id ?? null, 'from' => RsvpMail::fromFor($e)]);
+        $this->audit($request, $agencyId, 'rsvp.test_sent', 'rsvp_event', $id, 'Test confirmation for "' . $e->title . '" to ' . $data['to'] . ': ' . $r['status']);
+
+        return response()->json(['sent' => $r['status'] === 'sent', 'status' => $r['status'], 'reason' => $r['error']]);
+    }
+
     /** Send one invite to an address the admin names — required, never defaulted. */
     public function testInvite(Request $request, int $id): JsonResponse
     {
@@ -491,6 +518,7 @@ class RsvpController extends Controller
             'email_body' => ['nullable', 'string', 'max:8000'], 'confirmation_message' => ['nullable', 'string', 'max:4000'],
             'notify_email' => ['nullable', 'string', 'max:160'], 'sender_id' => ['nullable', 'integer'],
             'branding' => ['nullable', 'in:agency,none'],
+            'show_map' => ['nullable', 'boolean'], 'map_pin' => ['nullable', 'string', 'max:500'], 'attend_tips' => ['nullable', 'string', 'max:4000'],
         ]);
         $tz = AgencyTime::tz($agencyId);
         $base = null;
@@ -528,6 +556,9 @@ class RsvpController extends Controller
         $sid = array_key_exists('sender_id', $in) ? (int) ($in['sender_id'] ?? 0) : (int) ($base['sender_id'] ?? 0);
         $e->sender_id = $sid ?: null;
         $e->branding = $pick('branding', 'agency') === 'none' ? 'none' : 'agency';
+        $e->show_map = array_key_exists('show_map', $in) && $in['show_map'] !== null ? (bool) $in['show_map'] : (bool) ($base['show_map'] ?? true);
+        $e->map_pin = $pick('map_pin');
+        $e->attend_tips = $pick('attend_tips');
         $sample = (object) ['name' => 'Alex Sample', 'email' => 'alex.sample@example.com', 'token' => 'preview'];
         [$subject, $html] = RsvpMail::invite($e, $sample);
         $answers = [];

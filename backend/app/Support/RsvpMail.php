@@ -246,6 +246,63 @@ final class RsvpMail
     }
 
     /** The registrant's copy of what they submitted. */
+    /* WHERE IT IS, as a picture of the map with a pin, linked to directions (RsvpMap). Off
+       when the organiser turns "Map in confirmation email" off, or when there is nothing
+       to place. A map that could not be made is left out, never shown broken. */
+    private static function mapBlock(object $event): string
+    {
+        if (isset($event->show_map) && ! (bool) $event->show_map) return '';
+        if (trim((string) ($event->location ?? '')) === '' && trim((string) ($event->map_pin ?? '')) === '') return '';
+        $map = RsvpMap::forEvent($event);
+        $dir = RsvpMap::directionsUrl($event, $map);
+        $place = e(RsvpMap::clean((string) ($event->location ?? '')));
+        $btn = 'display:inline-block;padding:9px 16px;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;margin:4px 4px 0 0;';
+        $apple = $map ? 'https://maps.apple.com/?daddr=' . $map['lat'] . ',' . $map['lng'] : 'https://maps.apple.com/?daddr=' . rawurlencode(RsvpMap::clean((string) $event->location));
+
+        return '<div style="margin:18px 0 6px;border:1px solid #E2E8F0;border-radius:12px;overflow:hidden">'
+            . ($map ? '<a href="' . e($dir) . '" style="display:block;line-height:0"><img src="' . e($map['img']) . '" width="560" alt="Map showing ' . $place . '" style="display:block;width:100%;max-width:560px;height:auto;border:0"></a>' : '')
+            . '<div style="padding:12px 14px;background:#F8FAFC">'
+            . '<div style="font-size:12px;font-weight:800;color:#64748B;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px">Getting there</div>'
+            . '<div style="font-size:14px;color:#0F172A;line-height:1.5;margin-bottom:8px">' . $place . '</div>'
+            . '<a href="' . e($dir) . '" style="' . $btn . 'background:#1F6080;color:#FFFFFF">Get directions</a>'
+            . '<a href="' . e($apple) . '" style="' . $btn . 'background:#FFFFFF;color:#1F6080;border:1px solid #CBD5E1">Apple Maps</a>'
+            . '</div></div>';
+    }
+
+    /* TIPS FOR THE EVENING, one per line in the event's settings, plus a "spread the word"
+       line with the event's shareable RSVP link so a registrant can pass it on. */
+    private static function tipsBlock(object $event): string
+    {
+        $raw = trim((string) ($event->attend_tips ?? ''));
+        if ($raw === '') return '';
+        $items = '';
+        foreach (preg_split('/\R/u', $raw) as $line) {
+            $line = trim(preg_replace('/^\s*[-*•·]\s*/u', '', $line));
+            if ($line === '') continue;
+            // "Heading: the rest" shows the heading in bold.
+            if (preg_match('/^(.{2,60}?):\s+(.+)$/u', $line, $m)) {
+                $line = '<strong style="color:#0F172A">' . e($m[1]) . ':</strong> ' . e($m[2]);
+            } else {
+                $line = e($line);
+            }
+            $items .= '<tr><td style="vertical-align:top;padding:5px 10px 5px 0;color:#1F6080;font-size:15px;line-height:1.5">&#10003;</td>'
+                . '<td style="padding:5px 0;font-size:14px;color:#334155;line-height:1.5">' . $line . '</td></tr>';
+        }
+        if ($items === '') return '';
+        $share = '';
+        if (! empty($event->public_token) && $event->public_token !== 'preview') {
+            $u = self::publicUrl((string) $event->public_token);
+            $share = '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #E2E8F0;font-size:13.5px;color:#334155;line-height:1.5">'
+                . '<strong style="color:#0F172A">Spread the word.</strong> Know a neighbour who should be there? Forward this email or share the RSVP page: '
+                . '<a href="' . e($u) . '" style="color:#1F6080;font-weight:700">' . e($u) . '</a></div>';
+        }
+
+        return '<div style="margin:18px 0 6px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:12px;padding:14px 16px">'
+            . '<div style="font-size:15px;font-weight:800;color:#065F46;margin-bottom:6px">Make the most of the evening</div>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%">' . $items . '</table>'
+            . $share . '</div>';
+    }
+
     public static function confirmation(object $event, object $response, ?object $invite): array
     {
         $answers = json_decode((string) $response->answers, true) ?: [];
@@ -256,6 +313,8 @@ final class RsvpMail
             . self::heading($event, 'You’re registered: ' . $event->title)
             . self::para(self::fill('Hi {{first_name}},', $event, $response->name) . "\n\n" . self::fill($msg, $event, $response->name))
             . self::detailsBox($event)
+            . self::mapBlock($event)
+            . self::tipsBlock($event)
             . self::answersTable($answers)
             . ($invite ? '<p style="margin:14px 0 0;font-size:13px;color:#64748B;text-align:center">Need to change something? <a href="' . e(self::rsvpUrl($invite->token)) . '" style="color:#1F6080">Update your RSVP</a>.</p>' : '')
             . ($invite ? self::optOutLine($event, $invite->token) : '');
