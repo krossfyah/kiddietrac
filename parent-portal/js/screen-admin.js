@@ -2403,7 +2403,16 @@
     // Your own record only: which kinds of texts and calls you want (KT.renderContactPrefs).
     const paneContact = Dom.el('div', { style: 'display:none;' });
 
-    const _detailsTab = mkTab('Details', paneDetails);
+    /* MANAGE OPENS ON WHAT YOU CAN CHANGE (2026-10-06). Anthony: "when managing a user
+       I cannot seem to edit any of the fields ... when I hit manage I still see at a
+       glance when the fields should all be editable". Details led with the read-only
+       summary, and name / email / username were not editable anywhere. Details is now
+       the editable record; the summary has its own tab; sign-in and contact facts too. */
+    const paneGlance = Dom.el('div', { style: 'display:none;' });
+    const paneAccess = Dom.el('div', { style: 'display:none;' });
+    const _detailsTab = mkTab('✏️ Details', paneDetails);
+    mkTab('👁 At a glance', paneGlance);
+    mkTab('🔑 Sign-in & contact', paneAccess);
     mkTab('📎 Files & documents', paneFiles);
     mkTab('💵 Pay & rooms', paneStaff);
     mkTab('🛡️ Background checks', paneChecks);
@@ -2460,6 +2469,8 @@
     })();
     root.appendChild(tabBar);
     root.appendChild(paneDetails);
+    root.appendChild(paneGlance);
+    root.appendChild(paneAccess);
     root.appendChild(paneFiles);
     root.appendChild(paneStaff);
     root.appendChild(paneChecks);
@@ -2522,6 +2533,169 @@
     avatarRow.appendChild(avatarSide);
     body.appendChild(avatarRow);
 
+    // ── Account details (editable) ─────────────────────────────────────────
+    (function () {
+      var uid = user.id;
+      var st = 'width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #D1D5DB;border-radius:7px;font-size:13px;font-family:inherit;';
+      var card = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#fff;border-radius:10px;border:1px solid #E5E7EB;' });
+      card.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Account details'));
+      var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 12px;' });
+      card.appendChild(grid);
+      var F = {};
+      function fld(key, label, type, hint) {
+        var w = Dom.el('div', {});
+        w.appendChild(Dom.el('label', { style: 'display:block;font-size:12px;color:#6B7280;font-weight:600;margin-bottom:3px;' }, label));
+        var i = Dom.el('input', { type: type || 'text', style: st, autocomplete: 'off', spellcheck: 'false' });
+        i.value = user[key] == null ? '' : String(user[key]);
+        w.appendChild(i);
+        var err = Dom.el('div', { style: 'display:none;font-size:11.5px;color:#DC2626;margin-top:3px;' });
+        w.appendChild(err);
+        if (hint) w.appendChild(Dom.el('div', { style: 'font-size:11px;color:#94A3B8;margin-top:3px;line-height:1.35;' }, hint));
+        grid.appendChild(w);
+        F[key] = { input: i, err: err, orig: i.value };
+        return i;
+      }
+      fld('first_name', 'First name');
+      fld('last_name', 'Last name');
+      fld('preferred_name', 'Preferred name (optional)');
+      var em = fld('email', 'Email', 'email', 'Changing this changes the email they sign in with.');
+      fld('username', 'Username (optional)', 'text', 'Letters, numbers, dots, dashes and underscores. Needed if another account shares this email.');
+      em.style.gridColumn = '';
+      var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;' });
+      var save = Dom.el('button', { type: 'button', style: 'height:32px;padding:0 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Save account details');
+      var msg = Dom.el('span', { style: 'font-size:12px;font-weight:700;' });
+      row.appendChild(save); row.appendChild(msg); card.appendChild(row);
+      body.appendChild(card);
+
+      function setOrig() { Object.keys(F).forEach(function (k) { F[k].orig = F[k].input.value; }); }
+      // preferred_name is not in the users list payload; the summary has it.
+      Api.get('/admin/users/' + uid + '/access-summary').then(function (d) {
+        var idn = (d && d.identity) || {};
+        Object.keys(F).forEach(function (k) { if (idn[k] !== undefined && !F[k].input.matches(':focus')) F[k].input.value = idn[k] == null ? '' : String(idn[k]); });
+        setOrig();
+        renderAccess(d);
+      }).catch(function (e) { renderAccess(null, e); });
+
+      save.addEventListener('click', async function () {
+        Object.keys(F).forEach(function (k) { F[k].err.style.display = 'none'; F[k].input.style.borderColor = '#D1D5DB'; });
+        var body2 = {};
+        Object.keys(F).forEach(function (k) { var v = F[k].input.value.trim(); if (v !== F[k].orig) body2[k] = v === '' ? null : v; });
+        if (!Object.keys(body2).length) { msg.style.color = '#64748B'; msg.textContent = 'Nothing to save.'; return; }
+        if (body2.first_name === null || body2.last_name === null) { msg.style.color = '#DC2626'; msg.textContent = 'First and last name are required.'; return; }
+        if ('email' in body2 && window.KT && KT.confirm) {
+          var ok = await KT.confirm({ title: 'Change their sign-in email?', description: 'They will sign in with ' + (body2.email || '(none)') + ' from now on.', okLabel: 'Change email' });
+          if (!ok) return;
+        }
+        save.disabled = true; msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+        try {
+          await Api.patch('/admin/users/' + uid, body2);
+          Object.keys(body2).forEach(function (k) { user[k] = body2[k]; });
+          setOrig();
+          msg.style.color = '#16A34A'; msg.textContent = '✓ Saved';
+          try { fillGlance({ username: user.username, phone: user.phone }, {}, user); } catch (e) {}
+        } catch (e) {
+          var errs = (e && e.data && e.data.errors) || {};
+          var any = false;
+          Object.keys(errs).forEach(function (k) { if (F[k]) { F[k].err.textContent = [].concat(errs[k])[0]; F[k].err.style.display = ''; F[k].input.style.borderColor = '#DC2626'; any = true; } });
+          msg.style.color = '#DC2626'; msg.textContent = '✕ ' + ((e && e.data && e.data.message) || (e && e.message) || 'Could not save') + (any ? '' : '');
+        } finally { save.disabled = false; }
+      });
+
+      // ── Sign-in & contact (read-only facts) ──────────────────────────────
+      function cardEl(title, sub) {
+        var c = Dom.el('div', { style: 'margin-bottom:16px;padding:14px 16px;background:#fff;border-radius:10px;border:1px solid #E5E7EB;' });
+        c.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:' + (sub ? '2px' : '10px') + ';' }, title));
+        if (sub) c.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;line-height:1.45;' }, sub));
+        return c;
+      }
+      function pill(on, yes, no, warn) {
+        var bg = on ? (warn ? '#FEF3C7' : '#DCFCE7') : '#F1F5F9', fg = on ? (warn ? '#92400E' : '#166534') : '#475569';
+        return Dom.el('span', { style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:800;background:' + bg + ';color:' + fg + ';white-space:nowrap;' }, on ? yes : no);
+      }
+      function line(host, label, value, note) {
+        var r = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:7px 0;border-bottom:1px solid #F1F5F9;font-size:13px;' });
+        r.appendChild(Dom.el('div', { style: 'color:#475569;font-weight:600;min-width:0;' }, label));
+        var right = Dom.el('div', { style: 'text-align:right;min-width:0;word-break:break-word;' });
+        if (value && value.nodeType) right.appendChild(value); else right.appendChild(Dom.el('span', { style: 'color:#0F172A;' }, value == null || value === '' ? '—' : String(value)));
+        if (note) right.appendChild(Dom.el('div', { style: 'font-size:11px;color:#94A3B8;margin-top:2px;' }, note));
+        r.appendChild(right); host.appendChild(r);
+      }
+      function renderAccess(d, err) {
+        Dom.clear(paneAccess);
+        if (!d) {
+          paneAccess.appendChild(Dom.el('div', { style: 'padding:14px;color:#B45309;font-size:13px;' }, 'Could not load sign-in and contact details' + (err && err.message ? ' — ' + err.message : '') + '.'));
+          return;
+        }
+        var s2 = d.security || {}, c2 = d.contact || {};
+        var sec = cardEl('🔐 Sign-in & security', 'What this person uses to sign in. Times are ' + (d.tz || 'agency time') + '.');
+        var pk = s2.passkeys || {};
+        line(sec, 'Passkeys', pill(pk.count > 0, pk.count + ' set up', 'None'), pk.count ? ('Last used ' + (pk.last_used || 'never')) : null);
+        var tf = s2.two_factor || {};
+        line(sec, 'Two-factor (MFA)', pill(!!tf.enabled, 'On' + (tf.method ? ' · ' + tf.method : ''), 'Off'), tf.enabled && tf.since ? 'Since ' + tf.since : null);
+        var bio = s2.biometric || {};
+        line(sec, 'Fingerprint / Face ID', pill(bio.count > 0, 'On ' + bio.count + ' device' + (bio.count === 1 ? '' : 's'), 'None recorded'), bio.count ? ('Last set up ' + bio.last) : 'Only devices that reported it to the server are counted.');
+        line(sec, 'Quick-unlock PIN', Dom.el('span', { style: 'color:#64748B;' }, 'Not tracked'), 'Set on their own device; the server never sees it.');
+        if (s2.kiosk_pin) line(sec, 'Kiosk check-in PIN', pill(!!s2.kiosk_pin.set, 'Set', 'Not set'), s2.kiosk_pin.set_at ? 'Set ' + s2.kiosk_pin.set_at : null);
+        line(sec, 'Password last changed', s2.password_changed || 'Not recorded', s2.must_change_password ? 'Must change it at next sign-in' : null);
+        line(sec, 'Last sign-in', s2.last_login || 'Never', s2.last_login_ip ? 'From ' + s2.last_login_ip : null);
+        if (s2.last_seen) line(sec, 'Last active', s2.last_seen);
+        line(sec, 'Account status', pill(s2.status === 'active', String(s2.status || '—').replace(/_/g, ' '), String(s2.status || '—').replace(/_/g, ' ')), s2.onboarded ? 'Onboarded ' + s2.onboarded : 'Not onboarded yet');
+        if (s2.locked_minutes > 0) {
+          var lk = Dom.el('div', {});
+          lk.appendChild(pill(true, 'Locked · ' + s2.locked_minutes + ' min', '', true));
+          var ub = Dom.el('button', { type: 'button', style: 'margin-left:8px;height:28px;padding:0 10px;border:1px solid #CBD5E1;border-radius:7px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;' }, 'Unlock now');
+          ub.addEventListener('click', async function () {
+            ub.disabled = true;
+            try { await Api.post('/admin/users/' + uid + '/unlock-login', {}); ub.textContent = '✓ Unlocked'; } catch (e) { ub.disabled = false; ub.textContent = 'Failed'; }
+          });
+          lk.appendChild(ub);
+          line(sec, 'Sign-in lock', lk, 'Too many wrong passwords.');
+        }
+        var ss = s2.sessions || {};
+        line(sec, 'Signed-in sessions', String(ss.active || 0), ss.last_used ? 'Last used ' + ss.last_used : null);
+        var pd = s2.push_devices || [];
+        // device_name is often a raw browser user-agent; show "Chrome on Windows" instead.
+        var uaShort = function (n, plat) {
+          n = String(n || '');
+          if (!/Mozilla\/|AppleWebKit|Gecko/.test(n)) return n || plat || 'Device';
+          var os = /iPhone|iPad/.test(n) ? 'iPhone' : /Android/.test(n) ? 'Android' : /Windows/.test(n) ? 'Windows' : /Mac OS X/.test(n) ? 'Mac' : /CrOS/.test(n) ? 'Chromebook' : /Linux/.test(n) ? 'Linux' : '';
+          var br = /Edg\//.test(n) ? 'Edge' : /OPR\//.test(n) ? 'Opera' : /Firefox\//.test(n) ? 'Firefox' : /Chrome\//.test(n) ? 'Chrome' : /Safari\//.test(n) ? 'Safari' : 'Browser';
+          return br + (os ? ' on ' + os : '');
+        };
+        line(sec, 'Push notification devices', pd.length ? pd.length + ' device' + (pd.length === 1 ? '' : 's') : 'None',
+          pd.length ? pd.slice(0, 3).map(function (x) { return uaShort(x.name, x.platform) + (x.last_active ? ' · ' + x.last_active : ''); }).join(' / ') : null);
+        paneAccess.appendChild(sec);
+
+        var con = cardEl('💬 Contact preferences', 'What this person has agreed to. Consent to texts and calls can only be given or withdrawn by them, from their own settings.');
+        var sms = c2.sms || {};
+        line(con, 'Text messages (SMS)', pill(!!sms.opted_in, 'Opted in', sms.opted_out_at ? 'Opted out' : 'Not opted in'),
+          sms.opted_in ? ('Since ' + (sms.opted_in_at || '—') + (sms.source ? ' · ' + String(sms.source).replace(/_/g, ' ') : '') + (sms.recorded_by ? ' · recorded by ' + sms.recorded_by : ''))
+                       : (sms.opted_out_at ? 'Opted out ' + sms.opted_out_at : (sms.phone ? 'Phone on file' : 'No phone on file')));
+        var v = c2.voice || {};
+        line(con, 'Phone calls', pill(!v.opted_out, 'Allowed', 'Opted out'), v.opted_out && v.at ? 'Since ' + v.at : null);
+        var e2 = c2.email || {};
+        line(con, 'Email', pill(e2.agency_email_on !== false, 'On', 'Off for the agency'), e2.address || null);
+        line(con, 'Push notifications', pill((c2.push || {}).devices > 0, 'On ' + (c2.push || {}).devices + ' device' + ((c2.push || {}).devices === 1 ? '' : 's'), 'No devices'));
+        var np = c2.notification_prefs || [];
+        if (np.length) {
+          np.forEach(function (n) {
+            var ch = ['email', 'sms', 'voice', 'push'].filter(function (k) { return n[k]; }).map(function (k) { return k === 'sms' ? 'text' : k; });
+            line(con, 'Alerts: ' + String(n.event || '').replace(/_/g, ' '), ch.length ? ch.join(', ') : 'All off', n.updated ? 'Set ' + n.updated + ' · set by the user' : 'Set by the user');
+          });
+        } else {
+          line(con, 'Alert choices', 'Defaults', 'They have not changed any alert settings.');
+        }
+        if (c2.directory) {
+          var dd = c2.directory;
+          line(con, 'Family directory', dd.none ? 'Not listed' : (['share_email', 'share_phone', 'share_address', 'share_children_names'].filter(function (k) { return dd[k]; })
+            .map(function (k) { return { share_email: 'email', share_phone: 'phone', share_address: 'city', share_children_names: "children's first names" }[k]; }).join(', ') || 'Listed, nothing shared'),
+            dd.since ? 'Since ' + dd.since : null);
+        }
+        if (c2.rsvp_unsubscribed) line(con, 'Event invitations', pill(true, 'Unsubscribed', '', true), 'Since ' + c2.rsvp_unsubscribed);
+        paneAccess.appendChild(con);
+      }
+    })();
+
     // ── At a glance ──────────────────────────────────────────────────────
     // A read-only summary so an admin sees the whole person immediately — role,
     // status, contact, full address, DOB, emergency contact — without scrolling
@@ -2530,7 +2704,7 @@
     glance.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;' }, 'At a glance'));
     var glanceGrid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 26px;' });
     glance.appendChild(glanceGrid);
-    body.appendChild(glance);
+    paneGlance.appendChild(glance);
     function glanceItem(label, valueNode) {
       var it = Dom.el('div', {});
       it.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;color:#94A3B8;letter-spacing:.4px;text-transform:uppercase;margin-bottom:3px;' }, label));
@@ -3326,12 +3500,11 @@
       }
     }
 
-    const fields = {
-      first_name: user.first_name,
-      last_name: user.last_name,
-      email: user.email || '',
-      phone: user.phone || '',
-    };
+    /* Name, email and username are edited in "Account details" and phone in "Profile &
+       emergency contact" (2026-10-06). This block used to repeat first/last/email/phone,
+       and the footer Save sent those stale copies back, so saving the status after an
+       edit above quietly reverted the edit. Only the status select is left here. */
+    const fields = {};
     const inputs = {};
     Object.keys(fields).forEach(k => {
       const wrap = Dom.el('div', { style: 'margin-bottom: 12px;' });
@@ -3606,15 +3779,13 @@
       title: 'Manage ' + user.name,
       body: root,
       actions: [{
-        label: 'Save changes',
+        label: 'Save status', // the status select below is all it saves; each card has its own Save
         primary: true,
         onClick: async () => {
+          // Only what changed: the status select is the one field this button owns.
           const data = {};
-          Object.keys(inputs).forEach(k => { var val = inputs[k].value; data[k] = (typeof val === 'string') ? val.trim() : val; });
-          if (data.email === '') delete data.email; // never blank out the login email
-          if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) {
-            status.style.color = '#DC2626'; status.textContent = 'Enter a valid email address.'; return;
-          }
+          if (inputs.status.value !== (user.status || '')) data.status = inputs.status.value;
+          if (!Object.keys(data).length) { Shell.Modal.close(); return; }
           status.style.color = '#1F6080';
           status.textContent = 'Saving...';
           try {

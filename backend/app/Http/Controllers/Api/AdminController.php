@@ -2537,16 +2537,68 @@ final class AdminController extends Controller
             }
         }
 
+        /* A PLATFORM ADMIN'S ACCOUNT IS EDITED BY A PLATFORM ADMIN (2026-10-06). The Manage
+           dialog now edits names, email and username; an agency admin who can see the
+           owner's account in their list must not be able to rename it or change the email
+           it signs in with. */
+        if (! $self && ! \App\Support\UserRoles::has($request, 'platform_admin')) {
+            $targetIsPlatform = DB::table('role_assignments')->where('user_id', $userId)
+                ->where('role', 'platform_admin')->where('active', true)->exists();
+            $targetEmail = DB::table('users')->where('id', $userId)->value('email');
+            if ($targetIsPlatform || $this->isProtectedEmail($targetEmail)) {
+                return response()->json(['message' => 'Only a platform administrator can edit this account.'], 403);
+            }
+        }
+
         $data = $request->validate([
             'first_name' => ['sometimes', 'string', 'max:80'],
             'last_name' => ['sometimes', 'string', 'max:80'],
+            'preferred_name' => ['sometimes', 'nullable', 'string', 'max:80'],
             // Email is intentionally NOT globally unique (multi-account-per-email); validate
             // format only. Admins/directors/super-admin can correct a user's login email.
             'email' => ['sometimes', 'email', 'max:190'],
+            // Same rule as createUser: optional, unique among live accounts, simple characters.
+            'username' => ['sometimes', 'nullable', 'string', 'min:3', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/',
+                Rule::unique('users', 'username')->ignore($userId)->whereNull('deleted_at')],
             'phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'status' => ['sometimes', 'in:active,invited,not_invited,suspended,deactivated'],
+        ], [
+            'username.unique' => 'That username is already taken by another account.',
+            'username.regex' => 'A username may use letters, numbers, dots, dashes and underscores only.',
         ]);
+        if (array_key_exists('username', $data) && $data['username'] !== null) {
+            $data['username'] = trim($data['username']) === '' ? null : trim($data['username']);
+        }
 
+        $before = DB::table('users')->where('id', $userId)->first();
+        if (! $before) return response()->json(['message' => 'User not found'], 404);
+
+        /* One email, several accounts — the sign-in needs a username to tell them apart
+           (createUser enforces the same thing). Moving this account onto an address
+           another account already uses, with no username, would leave one of them unable
+           to sign in. */
+        if (isset($data['email']) && mb_strtolower(trim($data['email'])) !== mb_strtolower(trim((string) $before->email))) {
+            $shared = DB::table('users')->whereRaw('LOWER(email) = ?', [mb_strtolower(trim($data['email']))])
+                ->where('id', '!=', $userId)->whereNull('deleted_at')->exists();
+            $uname = array_key_exists('username', $data) ? $data['username'] : $before->username;
+            if ($shared && ! $uname) {
+                return response()->json(['message' => 'Another account already uses that email. Give this account a username first, so each can sign in to the right one.',
+                    'errors' => ['username' => ['Needed because another account uses this email.']]], 422);
+            }
+        }
+
+        // Only what actually changed is written and audited, as before -> after.
+        $changes = [];
+        foreach ($data as $k => $v) {
+            $old = $before->{$k} ?? null;
+            if ((string) ($old ?? '') !== (string) ($v ?? '')) {
+                $changes[$k] = ['from' => $old, 'to' => $v];
+            }
+        }
+        if (! $changes) {
+            return response()->json(['message' => 'Nothing changed']);
+        }
+        $data = array_intersect_key($data, $changes);
         $data['updated_at'] = now();
         DB::table('users')->where('id', $userId)->update($data);
 
@@ -2561,8 +2613,11 @@ final class AdminController extends Controller
             }
         }
 
-        $this->audit($request->user()->id, 'user.updated', 'user', $userId, $data);
-        return response()->json(['message' => 'User updated']);
+        $this->audit($request->user()->id, 'user.updated', 'user', $userId, [
+            'summary' => 'Updated ' . implode(', ', array_keys($changes)),
+            'changes' => $changes,
+        ]);
+        return response()->json(['message' => 'User updated', 'changed' => array_keys($changes)]);
     }
 
     /** platform_admin / agency_admin — profile extras + notes for a user. */
@@ -2731,6 +2786,19 @@ final class AdminController extends Controller
             'emergency_contact_relation' => ['sometimes', 'nullable', 'string', 'max:80'],
         ]);
 
+        // What it was, for the audit trail (it used to log an empty payload).
+        $snap = function () use ($userId) {
+            $u0 = DB::table('users')->where('id', $userId)->first(['phone', 'profile_extras']);
+            $x0 = json_decode((string) ($u0->profile_extras ?? ''), true) ?: [];
+            $p0 = DB::table('user_profiles')->where('user_id', $userId)->first();
+            $out = ['phone' => $u0->phone ?? null];
+            foreach (['direct_phone', 'home_phone', 'address_line1', 'address_line2', 'city', 'province', 'postal_code', 'emergency_contact_name', 'emergency_contact_phone'] as $k) { $out[$k] = $x0[$k] ?? null; }
+            foreach (['date_of_birth', 'emergency_contact_relation'] as $k) { $out[$k] = $p0->{$k} ?? null; }
+            if ($out['date_of_birth']) { $out['date_of_birth'] = substr((string) $out['date_of_birth'], 0, 10); }
+            return $out;
+        };
+        $profileBefore = $snap();
+
         // 1) Core phone on the user row.
         if (array_key_exists('phone', $data)) {
             DB::table('users')->where('id', $userId)->update(['phone' => $data['phone'], 'updated_at' => now()]);
@@ -2754,10 +2822,15 @@ final class AdminController extends Controller
         // 3) user_profiles — keep in sync for anything still reading it. Compose the
         //    flat address from the structured parts when those were supplied.
         $addr = $data['address'] ?? null;
-        $parts = array_filter([$data['address_line1'] ?? null, $data['address_line2'] ?? null, $data['city'] ?? null, $data['province'] ?? null, $data['postal_code'] ?? null]);
-        if ($parts) $addr = implode(', ', $parts);
+        /* From ALL the stored parts, not only the ones in this request: emptying the city
+           used to leave the old city in the flat address, because an empty request part
+           was dropped and the flat value never recomposed (found 2026-10-06). */
+        $partKeys = ['address_line1', 'address_line2', 'city', 'province', 'postal_code'];
+        $touchedParts = (bool) array_intersect($partKeys, array_keys($data));
+        $parts = array_filter(array_map(fn ($k) => $extras[$k] ?? null, $partKeys), fn ($v) => $v !== null && trim((string) $v) !== '');
+        if ($touchedParts) $addr = $parts ? implode(', ', $parts) : null;
         $up = ['user_id' => $userId, 'updated_at' => now()];
-        if ($addr !== null) $up['address'] = $addr;
+        if ($addr !== null || $touchedParts) $up['address'] = $addr;
         foreach (['date_of_birth', 'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation'] as $k) {
             if (array_key_exists($k, $data)) $up[$k] = $data[$k];
         }
@@ -2768,8 +2841,14 @@ final class AdminController extends Controller
             DB::table('user_profiles')->insert($up);
         }
 
-        $this->audit($request->user()->id, 'user.profile_updated', 'user', $userId, []);
-        return response()->json(['message' => 'Profile saved']);
+        $profileAfter = $snap();
+        $pchanges = [];
+        foreach ($profileAfter as $k => $v) {
+            if ((string) ($profileBefore[$k] ?? '') !== (string) ($v ?? '')) { $pchanges[$k] = ['from' => $profileBefore[$k] ?? null, 'to' => $v]; }
+        }
+        $this->audit($request->user()->id, 'user.profile_updated', 'user', $userId,
+            $pchanges ? ['summary' => 'Updated ' . implode(', ', array_keys($pchanges)), 'changes' => $pchanges] : ['summary' => 'Saved with no changes']);
+        return response()->json(['message' => 'Profile saved', 'changed' => array_keys($pchanges)]);
     }
 
     /** Add a timestamped note to a user. */
@@ -5789,6 +5868,108 @@ final class AdminController extends Controller
                    field that leaks the day somebody logs the response. */
                 'last_login_at' => $user->last_login_at ?? null,
             ],
+        ]);
+    }
+
+    /**
+     * GET /admin/users/{user}/access-summary — how this person signs in and how they
+     * want to be contacted, for the Manage dialog's "Sign-in & contact" tab (2026-10-06).
+     * Read-only facts, each from where the app really keeps it; anything the server does
+     * not hold is reported as such ("device_only" / null) rather than guessed.
+     * Consent (texts, calls) is shown, never changed here: it has to come from the person.
+     */
+    public function accessSummary(Request $request, int $userId): JsonResponse
+    {
+        if ($userId !== (int) $request->user()->id) {
+            $agencyId = $this->getAgencyId($request);
+            if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
+            if (! $this->userBelongsToAgency($userId, $agencyId)) return response()->json(['message' => 'User not in your agency'], 403);
+        } else {
+            $agencyId = $this->getAgencyId($request);
+        }
+        $u = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
+        if (! $u) return response()->json(['message' => 'User not found'], 404);
+        $tz = \App\Support\AgencyTime::tz($agencyId ?: null);
+        $fmt = fn ($ts) => $ts ? \App\Support\AgencyTime::fmt($ts, $tz, 'M j, Y g:i A') : null;
+        $has = fn ($t) => \Illuminate\Support\Facades\Schema::hasTable($t);
+
+        // Passkeys
+        $pk = $has('user_passkeys') ? DB::table('user_passkeys')->where('user_id', $userId)->orderByDesc('last_used_at')->get(['label', 'is_synced', 'last_used_at', 'created_at']) : collect();
+        // Biometric (server records an enrolment when the device reports one)
+        $bio = $has('biometric_enrolments') ? DB::table('biometric_enrolments')->where('user_id', $userId)->whereNull('revoked_at')->orderByDesc('enrolled_at')->get(['device', 'enrolled_at']) : collect();
+        // Two-factor
+        $mfaOn = (bool) ($u->two_factor_enabled ?? false);
+        $mfaSince = $mfaOn ? DB::table('audit_logs')->where('user_id', $userId)->where('action', 'mfa.enabled')->orderByDesc('created_at')->value('created_at') : null;
+        // Kiosk check-in PIN (guardians)
+        $kiosk = null;
+        if (\Illuminate\Support\Facades\Schema::hasColumn('guardians', 'kiosk_pin_hash')) {
+            $g = DB::table('guardians')->where('user_id', $userId)->whereNotNull('kiosk_pin_hash')->orderByDesc('kiosk_pin_set_at')->first(['kiosk_pin_set_at']);
+            $isGuardian = DB::table('guardians')->where('user_id', $userId)->exists();
+            $kiosk = $isGuardian ? ['set' => (bool) $g, 'set_at' => $fmt($g->kiosk_pin_set_at ?? null)] : null;
+        }
+        // Lockout (held by the sign-in throttle, keyed on what was typed)
+        $lockMins = 0;
+        foreach (array_filter([$u->email, $u->username]) as $ident) {
+            try { $lockMins = max($lockMins, (int) \App\Support\PasswordPolicy::lockedFor((string) $ident)); } catch (\Throwable $e) {}
+        }
+        // Sessions and devices
+        $tok = DB::table('personal_access_tokens')->where('tokenable_id', $userId)->where('tokenable_type', 'like', '%User')
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->where('name', 'not like', 'claude-debug%');
+        $sessions = ['active' => (clone $tok)->count(), 'last_used' => $fmt((clone $tok)->max('last_used_at'))];
+        $push = $has('device_tokens') ? DB::table('device_tokens')->where('user_id', $userId)->orderByDesc('last_active_at')->get(['platform', 'device_name', 'last_active_at']) : collect();
+
+        // Contact preferences
+        $recBy = $u->sms_consent_recorded_by ? DB::table('users')->where('id', $u->sms_consent_recorded_by)->value(DB::raw("TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,'')))")) : null;
+        $prefs = $has('notification_prefs') ? DB::table('notification_prefs')->where('user_id', $userId)->get(['event_key', 'email', 'sms', 'voice', 'push', 'updated_at']) : collect();
+        $dir = null;
+        if ($has('directory_optins')) {
+            $famIds = DB::table('guardians')->where('user_id', $userId)->pluck('family_id');
+            if ($famIds->count()) {
+                $d = DB::table('directory_optins')->whereIn('family_id', $famIds)->orderByDesc('updated_at')->first();
+                $dir = $d ? ['share_email' => (bool) $d->share_email, 'share_phone' => (bool) $d->share_phone, 'share_address' => (bool) $d->share_address,
+                    'share_children_names' => (bool) $d->share_children_names, 'since' => $fmt($d->opt_in_at ?? $d->updated_at)] : ['none' => true];
+            }
+        }
+        $rsvpOut = ($has('rsvp_optouts') && $agencyId && $u->email)
+            ? DB::table('rsvp_optouts')->where('agency_id', $agencyId)->where('email', strtolower(trim($u->email)))->value('created_at') : null;
+        $agencyEmailOn = $agencyId ? (($s0 = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true)) ? (($s0['notifications_enabled'] ?? true) !== false) : true) : null;
+
+        return response()->json([
+            'identity' => [
+                'first_name' => $u->first_name, 'last_name' => $u->last_name, 'preferred_name' => $u->preferred_name ?? null,
+                'email' => $u->email, 'username' => $u->username, 'phone' => $u->phone, 'status' => $u->status,
+                'email_verified' => (bool) $u->email_verified_at, 'phone_verified' => (bool) ($u->phone_verified_at ?? null),
+            ],
+            'security' => [
+                'passkeys' => ['count' => $pk->count(), 'last_used' => $fmt($pk->max('last_used_at')),
+                    'items' => $pk->map(fn ($r) => ['label' => $r->label ?: 'Passkey', 'synced' => (bool) $r->is_synced, 'added' => $fmt($r->created_at), 'last_used' => $fmt($r->last_used_at)])->values()],
+                'two_factor' => ['enabled' => $mfaOn, 'since' => $fmt($mfaSince), 'method' => $mfaOn ? 'Authenticator app' : null],
+                'biometric' => ['count' => $bio->count(), 'last' => $fmt($bio->max('enrolled_at'))],
+                'quick_unlock_pin' => 'device_only',
+                'kiosk_pin' => $kiosk,
+                'password_changed' => $fmt($u->password_changed_at ?? null),
+                'must_change_password' => (bool) ($u->must_change_password ?? false),
+                'last_login' => $fmt($u->last_login_at ?? null),
+                'last_login_ip' => $u->last_login_ip ?? null,
+                'last_seen' => $fmt($u->last_seen_at ?? null),
+                'onboarded' => $fmt($u->onboarded_at ?? null),
+                'status' => $u->status,
+                'locked_minutes' => $lockMins,
+                'sessions' => $sessions,
+                'push_devices' => $push->map(fn ($r) => ['platform' => $r->platform, 'name' => $r->device_name, 'last_active' => $fmt($r->last_active_at)])->values(),
+            ],
+            'contact' => [
+                'sms' => ['opted_in' => (int) ($u->sms_opt_in ?? 0) === 1, 'opted_in_at' => $fmt($u->sms_opt_in_at ?? null), 'opted_out_at' => $fmt($u->sms_opt_out_at ?? null),
+                    'source' => $u->sms_consent_source ?? null, 'recorded_by' => $recBy ?: null, 'phone' => $u->phone],
+                'voice' => ['opted_out' => (bool) ($u->voice_opt_out ?? false), 'at' => $fmt($u->voice_opt_out_at ?? null)],
+                'email' => ['agency_email_on' => $agencyEmailOn, 'address' => $u->email],
+                'push' => ['devices' => $push->count()],
+                'notification_prefs' => $prefs->map(fn ($r) => ['event' => $r->event_key, 'email' => (bool) $r->email, 'sms' => (bool) $r->sms, 'voice' => (bool) $r->voice, 'push' => (bool) $r->push, 'updated' => $fmt($r->updated_at)])->values(),
+                'directory' => $dir,
+                'rsvp_unsubscribed' => $fmt($rsvpOut),
+            ],
+            'tz' => $tz,
         ]);
     }
 
