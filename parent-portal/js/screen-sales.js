@@ -353,7 +353,7 @@
          screen. The server search is the better answer, so the global one goes. Same
          fix as Announcements, which had the identical clash. */
       var tbl = el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;background:#fff;border:1px solid #e6ebf1;border-radius:12px;overflow:hidden' });
-      tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#f4f6f9;text-align:left' }, ['Company / contact', 'Stage', 'Value', 'Owner', 'Follow-up'].map(function (h) { return el('th', { style: 'padding:10px 12px;font-size:12px;color:#5a7080' }, [h]); }))]));
+      tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#f4f6f9;text-align:left' }, ['Company / contact', 'Stage', 'Value', 'Owner', 'Follow-up', ''].map(function (h) { return el('th', { style: 'padding:10px 12px;font-size:12px;color:#5a7080' }, [h]); }))]));
       var tb = el('tbody');
       data.leads.forEach(function (l) {
         tb.appendChild(el('tr', { style: 'border-top:1px solid #eef1f5;cursor:pointer', onclick: function () { go('sales-lead?id=' + l.id); } }, [
@@ -362,6 +362,24 @@
           el('td', { style: 'padding:10px 12px;font-weight:700;color:#047857' }, [money(l.value)]),
           el('td', { style: 'padding:10px 12px;font-size:13px' }, [l.owner_name || '—']),
           el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (l.follow_up_date && l.follow_up_date <= todayISO() ? '#C2410C' : '#64748B') }, [l.follow_up_date ? fmtDate(l.follow_up_date) : '—']),
+          /* ROW ACTIONS (Anthony, 2026-10-06: "leads section add kebab to view, edit,
+             delete"). Plain labelled buttons in the last cell; kt-row-actions.js turns
+             them into the portal's ⋮ menu (phones keep them as buttons). stopPropagation
+             so an action does not also fire the row's open-on-click. */
+          el('td', { style: 'padding:6px 12px;text-align:center;white-space:nowrap' }, [
+            el('button', { type: 'button', title: 'View', onclick: function (ev) { ev.stopPropagation(); go('sales-lead?id=' + l.id); } }, ['👁 View']),
+            el('button', { type: 'button', title: 'Edit', onclick: function (ev) { ev.stopPropagation(); go('sales-lead?id=' + l.id + '&edit=1'); } }, ['✏️ Edit']),
+            el('button', { type: 'button', title: 'Delete', onclick: async function (ev) {
+              ev.stopPropagation();
+              var label = l.company || l.name || ('Lead #' + l.id);
+              var ok = (window.KT && KT.confirm)
+                ? await KT.confirm({ title: 'Delete this lead?', description: '“' + label + '” will be removed from the pipeline, with its activity and proposals.', okLabel: 'Delete', tone: 'danger' })
+                : false;
+              if (!ok) return;
+              try { await Api.delete('/sales/leads/' + l.id); toast('🗑', 'Deleted', label); load(); }
+              catch (er) { toast('⚠️', 'Could not delete', er.message || '', '#DC2626'); }
+            } }, ['🗑 Delete']),
+          ]),
         ]));
       });
       tbl.appendChild(tb); host.appendChild(el('div', { style: 'overflow-x:auto' }, [tbl]));
@@ -562,6 +580,12 @@
       ]),
     ], 'margin-bottom:14px'));
     attachAddressAutocomplete(e.address, { city: e.city, province: e.province, postal_code: e.postal_code, country: e.country });
+    // Opened with "Edit" from the leads list: go straight to the details form.
+    if (/[?&]edit=1\b/.test(window.location.hash)) {
+      setTimeout(function () {
+        try { e.company.scrollIntoView({ behavior: 'smooth', block: 'center' }); e.company.focus({ preventScroll: true }); } catch (er) {}
+      }, 150);
+    }
 
     // Activity + follow-up composer
     var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Activity & history'])], '');
