@@ -38,6 +38,9 @@ Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
    five minutes of its time; each is claimed before sending, so overlapping runs cannot
    send it twice. */
 Schedule::command('rsvp:send-reminders')->everyFiveMinutes()->withoutOverlapping(10);
+// Time-off approval reminders: each agency's own schedule (Settings -> Clock settings ->
+// Time-off approvals) decides when its digest is due; the run is claimed per agency per day.
+Schedule::command('timeoff:remind-approvers')->everyFifteenMinutes()->withoutOverlapping(14);
 
 /* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
    had accumulated, 281 of them already expired: full-access credentials (`["*"]`) sitting

@@ -1633,6 +1633,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/username-available', [AdminController::class, 'usernameAvailable']);
         Route::post('/users', [AdminController::class, 'createUser']);
         Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
+        Route::get('/users/{user}/access-summary', [\App\Http\Controllers\Api\AdminController::class, 'accessSummary'])->whereNumber('user');
         Route::get('/users/{user}/profile', [AdminController::class, 'userProfile']);
         Route::put('/users/{user}/profile', [AdminController::class, 'updateUserProfile']);
         Route::post('/users/{user}/notes', [AdminController::class, 'addUserNote']);
@@ -2198,6 +2199,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         Route::get  ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'show']);
         Route::post ('/admin/clock-reminders', [\App\Http\Controllers\Api\ClockRemindersController::class, 'update']);
+        // Settings -> Clock settings -> Time-off approvals (reminders to approvers).
+        Route::get  ('/admin/timeoff-reminders',         [\App\Http\Controllers\Api\TimeOffRemindersController::class, 'show']);
+        Route::post ('/admin/timeoff-reminders',         [\App\Http\Controllers\Api\TimeOffRemindersController::class, 'update']);
+        Route::post ('/admin/timeoff-reminders/preview', [\App\Http\Controllers\Api\TimeOffRemindersController::class, 'preview']);
+        Route::post ('/admin/timeoff-reminders/test',    [\App\Http\Controllers\Api\TimeOffRemindersController::class, 'test'])->middleware('throttle:6,1,toremtest');
         Route::patch('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
         // Pay schedule — drives the "Next payroll" card on the overview.
         Route::get  ('/admin/payroll-settings', [\App\Http\Controllers\Api\PayrollSettingsController::class, 'show']);

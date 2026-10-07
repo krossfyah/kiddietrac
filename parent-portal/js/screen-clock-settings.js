@@ -30,6 +30,7 @@
   var TABS = [
     { id: 'reminders', label: '🔔 Reminders' },
     { id: 'signoff', label: '⏱️ Auto sign-off' },
+    { id: 'timeoff', label: '🌴 Time-off approvals' },
   ];
   var active = 'reminders';
 
@@ -37,7 +38,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:14px 24px;max-width:900px;">'
       + '<div class="kt-page-hero"><h2>⏱️ Clock settings</h2>'
-      + '<p>When to remind people about the time clock, and when to close what they forgot. '
+      + '<p>When to remind people about the time clock, when to close what they forgot, and how often to remind approvers about pending time off. '
       + 'Times are in your agency&rsquo;s own timezone.</p></div>'
       + '<div id="cs-tabs" style="display:flex;gap:6px;margin:0 0 16px;"></div>'
       + '<div id="cs-body">Loading…</div></div>';
@@ -72,6 +73,7 @@
     body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Loading…</div>';
     try {
       if (active === 'reminders') { await paintReminders(body); }
+      else if (active === 'timeoff') { await paintTimeoff(body); }
       else { await paintSignoff(body); }
     } catch (e) {
       body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#B91C1C;">'
@@ -149,6 +151,119 @@
         msg.style.color = '#B91C1C';
         msg.textContent = (e && e.message) || 'Could not save';
       });
+    });
+  }
+
+  /* ── Time-off approvals ─────────────────────────────────────────────── */
+  /* Reminders to the people who approve time off (2026-10-06). Anthony: "have the system
+     send reminders to the admin/director to approve time off requests - configurable to
+     every day but can be configured based on how the agency wants this done or can be
+     disabled". Each approver gets ONE digest of what is waiting on them; the schedule is
+     the agency's. Agency admins only (a director sees a note, not the controls). */
+  function sel(id, opts, val) {
+    return '<select id="' + id + '" style="padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;">'
+      + opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(val) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('')
+      + '</select>';
+  }
+  function num(id, val, min, max) {
+    return '<input id="' + id + '" type="number" min="' + min + '" max="' + max + '" value="' + esc(val) + '"'
+      + ' style="width:72px;padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">';
+  }
+  async function paintTimeoff(body) {
+    var res;
+    try { res = await Api.get('/admin/timeoff-reminders'); }
+    catch (e) {
+      body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Only agency administrators can change time-off approval reminders.</div>';
+      return;
+    }
+    var s = res.settings || {};
+    var DAYS = [[1, 'Monday'], [2, 'Tuesday'], [3, 'Wednesday'], [4, 'Thursday'], [5, 'Friday'], [6, 'Saturday'], [7, 'Sunday']];
+    body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">🌴 Time-off approval reminders</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">Approvers get one email listing every request still waiting on them, with Approve and Decline buttons. '
+      + (res.pending_now ? '<b>' + res.pending_now + '</b> request' + (res.pending_now === 1 ? ' is' : 's are') + ' pending right now.' : 'Nothing is pending right now.')
+      + (res.last_sent_at ? ' Last sent ' + esc(res.last_sent_at) + '.' : '') + '</div>'
+      + row('Send reminders', 'Off means no reminders. People are still told when a request is first made.', toggle('to-on', s.enabled))
+      + row('How often', '', sel('to-freq', [['daily', 'Every day'], ['weekdays', 'Weekdays only'], ['weekly', 'Once a week'], ['every_n_days', 'Every few days']], s.frequency)
+          + '<span id="to-wd-wrap">' + sel('to-wd', DAYS, s.weekly_day) + '</span>'
+          + '<span id="to-n-wrap">every ' + num('to-n', s.every_n_days, 1, 30) + ' days</span>')
+      + row('Time of day', 'In ' + esc(res.tz || 'your agency’s timezone') + '. Checked every 15 minutes.', timeInput('to-time', s.time))
+      + row('Only requests waiting at least', 'So a request made an hour ago is not chased the same morning.', num('to-min', s.min_hours, 0, 720) + ' hours')
+      + row('Who is reminded', 'Directors only see their own centre’s requests. If a centre has no director, its requests go to the admins.',
+          sel('to-who', [['both', 'Directors and admins'], ['directors', 'Directors only'], ['admins', 'Admins only']], s.recipients))
+      + row('Send by email', '', toggle('to-email', s.email))
+      + row('Show in the app', 'A notification in their bell.', toggle('to-app', s.in_app))
+      + row('Push to phones', 'A push notification on the KiddieTrac app.', toggle('to-push', s.push))
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;">'
+      + '<button id="to-save" class="kt-btn kt-btn-primary">Save</button>'
+      + '<button id="to-prev" class="kt-btn">👁 Preview</button>'
+      + '<button id="to-test" class="kt-btn">📤 Send test…</button>'
+      + '<span id="to-msg" style="font-size:13px;"></span></div>'
+      + '</div>';
+
+    function vals() {
+      return {
+        enabled: body.querySelector('#to-on').checked,
+        frequency: body.querySelector('#to-freq').value,
+        weekly_day: +body.querySelector('#to-wd').value,
+        every_n_days: +body.querySelector('#to-n').value || 2,
+        time: body.querySelector('#to-time').value || '09:00',
+        min_hours: +body.querySelector('#to-min').value || 0,
+        recipients: body.querySelector('#to-who').value,
+        email: body.querySelector('#to-email').checked,
+        in_app: body.querySelector('#to-app').checked,
+        push: body.querySelector('#to-push').checked,
+      };
+    }
+    function syncFreq() {
+      var f = body.querySelector('#to-freq').value;
+      body.querySelector('#to-wd-wrap').style.display = f === 'weekly' ? '' : 'none';
+      body.querySelector('#to-n-wrap').style.display = f === 'every_n_days' ? '' : 'none';
+    }
+    body.querySelector('#to-freq').addEventListener('change', syncFreq);
+    syncFreq();
+    var msg = body.querySelector('#to-msg');
+    function say(t, c) { msg.style.color = c || '#64748B'; msg.textContent = t; }
+
+    body.querySelector('#to-save').addEventListener('click', function () {
+      say('Saving…');
+      Api.post('/admin/timeoff-reminders', vals())
+        .then(function () { say('✓ Saved', '#1E8E60'); })
+        .catch(function (e) { say((e && e.message) || 'Could not save', '#B91C1C'); });
+    });
+    body.querySelector('#to-prev').addEventListener('click', function () {
+      say('Building preview…');
+      Api.post('/admin/timeoff-reminders/preview', vals()).then(function (r) {
+        say('');
+        var ov = document.createElement('div');
+        ov.setAttribute('data-no-modal-guard', '1');
+        ov.className = 'kt-scrim';
+        ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:16px;';
+        ov.innerHTML = '<div style="background:#fff;border-radius:14px;width:100%;max-width:700px;height:min(88vh,900px);display:flex;flex-direction:column;overflow:hidden;">'
+          + '<div style="padding:12px 16px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:10px;">'
+          + '<div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:800;color:#64748B;letter-spacing:.5px;">PREVIEW — NOTHING IS SENT</div>'
+          + '<div style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>'
+          + '<div style="font-size:12px;color:#64748B;">' + (r.sample ? 'Nothing is pending, so this uses a sample request.' : (r.requests + ' pending request(s); ' + r.approvers + ' approver(s) would get a reminder.')) + '</div></div>'
+          + '<button type="button" class="kt-btn" data-close>Close</button></div>'
+          + '<iframe sandbox="" style="flex:1;width:100%;border:0;background:#F4F6F8;"></iframe></div>';
+        ov.querySelector('[style*="font-weight:800;font-size:14px"]').textContent = r.subject || '';
+        ov.querySelector('iframe').srcdoc = r.html || '';
+        function close() { ov.remove(); }
+        ov.querySelector('[data-close]').addEventListener('click', close);
+        ov.addEventListener('click', function (e) { if (e.target === ov) { close(); } });
+        document.body.appendChild(ov);
+      }).catch(function (e) { say((e && e.message) || 'Could not build the preview', '#B91C1C'); });
+    });
+    body.querySelector('#to-test').addEventListener('click', async function () {
+      var to = await KT.prompt({ title: 'Send a test reminder', description: 'One copy of the reminder, marked [Test], to the address you enter. Its buttons only open the portal.', placeholder: 'name@example.com', type: 'email', okLabel: 'Send test' });
+      if (to === null) { return; }
+      to = String(to || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { say('Enter an email address.', '#B91C1C'); return; }
+      say('Sending…');
+      Api.post('/admin/timeoff-reminders/test', Object.assign({ to: to }, vals())).then(function (r) {
+        if (r.sent) { say('✓ Sent to ' + to, '#1E8E60'); }
+        else { say('Not sent (' + (r.status || 'failed') + ')' + (r.reason ? ': ' + r.reason : ''), '#B45309'); }
+      }).catch(function (e) { say((e && e.message) || 'Could not send', '#B91C1C'); });
     });
   }
 
