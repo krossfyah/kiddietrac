@@ -100,14 +100,21 @@ final class TimeOffController extends Controller
         // Centre directors and agency admins are the people who can act on this, so
         // they get both a bell and an email. A bell alone waits for them to open the
         // app, and the request waits with it.
-        $approvers = DB::table('role_assignments as ra')
-            ->join('users as u', 'u.id', '=', 'ra.user_id')
-            ->where('ra.agency_id', $agencyId)
-            ->whereIn('ra.role', ['centre_director', 'agency_admin'])
-            ->where('ra.active', true)
-            ->whereNull('u.deleted_at')
-            ->select('u.id', 'u.email', 'u.first_name', 'u.last_name')
-            ->distinct()->get();
+        /* ONLY THE PEOPLE WHO CAN DECIDE IT (2026-10-06). This notified every centre
+           director in the agency, so a director at one centre was told about — and emailed
+           the details of — another centre's staff leave. A director acts only on their own
+           centre (Visibility/CentreScope), so: the agency admins, plus the director(s) of
+           the requester's centre — the same rule the approval reminders use
+           (TimeOffReminders::approvers: own centre, never yourself, admins as the fallback
+           when a centre has no director). */
+        $req = (object) ['id' => $id, 'user_id' => (int) $user->id, 'centre_id' => $data['centre_id'] ?? null];
+        $req->centre_ids = $req->centre_id ? [(int) $req->centre_id]
+            : DB::table('role_assignments')->where('user_id', $user->id)->where('agency_id', $agencyId)
+                ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+        $approvers = collect(\App\Support\TimeOffReminders::approvers($agencyId, ['recipients' => 'both'], collect([$req])))
+            ->map(fn ($o) => (object) ['id' => (int) $o['user']->user_id, 'email' => $o['user']->email,
+                'first_name' => $o['user']->first_name, 'last_name' => $o['user']->last_name])
+            ->values();
 
         // $user->name is not a thing on this model — no `name` column and no accessor for
         // it, only getFullNameAttribute. It used to be interpolated here and produced
