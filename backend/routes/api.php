@@ -1731,7 +1731,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/families/{family}/welcome-preflight', [AdminController::class, 'welcomePreflight']);
         Route::get('/email-template/provider-welcome', [AdminController::class, 'getProviderWelcomeTemplate']);
         Route::put('/email-template/provider-welcome', [AdminController::class, 'saveProviderWelcomeTemplate']);
-        Route::post('/email-template/provider-welcome/test', [AdminController::class, 'testProviderWelcomeTemplate']);
+        Route::post('/email-template/provider-welcome/test', [AdminController::class, 'testProviderWelcomeTemplate'])->middleware('throttle:10,1,ettest');
         Route::post('/email-template/provider-welcome/preview', [AdminController::class, 'previewProviderWelcomeTemplate']);
         // Generic multi-template editor (#77). provider-welcome above is a static
         // route so it wins over these {key} wildcards; the rest hit the registry.
@@ -1741,7 +1741,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/email-catalogue', [AdminController::class, 'emailCatalogue']);
         Route::get('/email-template/{key}', [AdminController::class, 'getEmailTemplate']);
         Route::put('/email-template/{key}', [AdminController::class, 'saveEmailTemplate']);
-        Route::post('/email-template/{key}/test', [AdminController::class, 'testEmailTemplate']);
+        Route::post('/email-template/{key}/test', [AdminController::class, 'testEmailTemplate'])->middleware('throttle:10,1,ettest');
         Route::post('/email-template/{key}/preview', [AdminController::class, 'previewEmailTemplate']);
         Route::post('/families/{family}/suspend', [AdminController::class, 'suspendFamily']);
         Route::post('/families/{family}/reactivate', [AdminController::class, 'reactivateFamily']);
@@ -2696,6 +2696,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/zones',                     [\App\Http\Controllers\Api\ZonesController::class, 'createZone']);
         Route::post('/zones/visit',               [\App\Http\Controllers\Api\ZonesController::class, 'logVisit']);
         Route::get ('/zones/daily-report',        [\App\Http\Controllers\Api\ZonesController::class, 'dailyReport']);
+        Route::get ('/zones/options',             [\App\Http\Controllers\Api\ZonesController::class, 'options']);
     });
     // Support tickets
     Route::get ('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'listMine']);

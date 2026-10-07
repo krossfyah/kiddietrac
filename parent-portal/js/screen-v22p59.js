@@ -854,34 +854,107 @@
   }
 
   // ============================ Activity zones ============================
+  /* WHOSE ZONES (2026-10-06). Anthony: "activity zone should show one educator selected
+     and not the others in the agency". This took /admin/centres, used whichever centre
+     came first, showed every zone and every child there, and logged a visit by typing a
+     child's ID. Now the server decides the scope (GET /zones/options): an educator sees
+     their own room(s) — those rooms' zones, the centre's shared zones, and only their
+     children; a director their centre; an admin the agency, with a centre + room picker.
+     A visit is logged by picking the child from the room's list. */
+  const zState = { centreId: null, roomId: '', opts: null };
+  const zDay = (d) => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); if (!m) return esc(d || ''); const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']; return M[+m[2] - 1] + ' ' + (+m[3]) + ', ' + m[1]; };
+  /* Icons were stored as NAMES in some rows ("book", "blocks") and printed as the word. */
+  const Z_ICONS = { blocks: '🧱', block: '🧱', book: '📚', books: '📚', reading: '📚', mask: '🎭', drama: '🎭', palette: '🎨', art: '🎨', music: '🎵', sand: '🏖️', water: '💧', sensory: '🫧', science: '🔬', outdoor: '🌳', garden: '🌱', puzzle: '🧩', kitchen: '🍳', computer: '💻', lego: '🧱', paint: '🎨', dolls: '🧸', toys: '🧸', cars: '🚗', math: '🔢' };
+  const zIcon = (i) => { const t = String(i || '').trim(); if (!t) return '🎨'; if (/^[a-z_ -]+$/i.test(t)) return Z_ICONS[t.toLowerCase()] || '🎨'; return t; };
+  const zToast = (m, t) => { try { if (window.KT && KT.toast) { KT.toast(m, t || 'info'); return; } } catch (e) {} };
+  const Z_CSS = '#appMain .zn-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}'
+    + '#appMain .zn-bar select{height:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;background:#fff;max-width:100%}'
+    + '#appMain .zn-chip{height:30px;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#334155}'
+    + '#appMain .zn-chip.on{background:#0F172A;color:#fff;border-color:#0F172A}'
+    + '#appMain .zn-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}'
+    + '#appMain .zn-card{padding:14px;border-radius:12px;text-align:center;border:2px solid #CBD5E1}'
+    + '#appMain .zn-card .zn-room{font-size:11px;color:#64748B;margin-top:2px}'
+    + '#appMain .zn-card button{margin-top:8px;height:30px;padding:0 12px;font-size:12.5px}'
+    + '.zn-ov{position:fixed;inset:0;z-index:99990;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px}'
+    + '.zn-dlg{background:#fff;border-radius:14px;width:100%;max-width:440px;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3)}'
+    + '.zn-dlg h3{margin:0;font-size:16px}.zn-dlg .zn-hd{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid #E2E8F0}'
+    + '.zn-dlg .zn-x{margin-left:auto;width:30px;height:30px;border:0;background:#F1F5F9;border-radius:8px;cursor:pointer;font-size:16px}'
+    + '.zn-dlg .zn-body{padding:12px 16px;overflow:auto}.zn-dlg input,.zn-dlg select{width:100%;height:34px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13.5px;box-sizing:border-box}'
+    + '.zn-dlg label{display:block;font-size:12px;font-weight:700;color:#475569;margin:10px 0 4px}'
+    + '.zn-kid{display:flex;align-items:center;gap:10px;width:100%;padding:8px;border:0;background:none;border-radius:10px;cursor:pointer;text-align:left;font-size:14px}'
+    + '.zn-kid:hover{background:#F1F5F9}.zn-kid img,.zn-kid .zn-av{width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none;background:#E0F2FE;color:#0369A1;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}'
+    + '.zn-dlg .zn-ft{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid #E2E8F0}';
+  function zCss() { if (document.getElementById('zn-css')) return; const s = document.createElement('style'); s.id = 'zn-css'; s.textContent = Z_CSS; document.head.appendChild(s); }
+  function zDialog(title, bodyHtml, footHtml) {
+    const ov = document.createElement('div');
+    ov.className = 'zn-ov'; ov.setAttribute('data-no-modal-guard', '1');
+    ov.innerHTML = '<div class="zn-dlg" role="dialog" aria-modal="true"><div class="zn-hd"><h3>' + esc(title) + '</h3><button type="button" class="zn-x" aria-label="Close">✕</button></div>'
+      + '<div class="zn-body">' + bodyHtml + '</div>' + (footHtml ? '<div class="zn-ft">' + footHtml + '</div>' : '') + '</div>';
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.querySelector('.zn-x').onclick = close;
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    return { el: ov, close };
+  }
+
   async function renderZones(main) {
+    zCss();
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
-    if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No centres.</div>'; return; }
-    const cid = centres[0].id;
-    const today = new Date().toISOString().slice(0, 10);
-    const [zones, report] = await Promise.all([
-      Api.get(`/zones?centre_id=${cid}`),
-      Api.get(`/zones/daily-report?centre_id=${cid}&date=${today}`),
-    ]);
-    const byZone = report.by_zone || {};
+    let opts;
+    try { opts = await Api.get('/zones/options'); } catch (e) { opts = null; }
+    if (!opts || !(opts.centres || []).length) {
+      main.innerHTML = '<div style="padding:24px;max-width:1800px;margin:0 auto;"><div class="kt-page-hero"><h2>🎨 Activity zones</h2><p>Track which play areas each child spends time in.</p></div>'
+        + '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">'
+        + (opts && opts.role === 'educator' ? 'You are not assigned to a room yet — ask your director to add you to one.' : 'No centres you can see.') + '</div></div>';
+      return;
+    }
+    zState.opts = opts;
+    const isEd = opts.role === 'educator';
+    if (!zState.centreId || !opts.centres.some(c => c.id === zState.centreId)) zState.centreId = opts.centres[0].id;
+    const roomsHere = (opts.rooms || []).filter(r => r.centre_id === zState.centreId);
+    if (zState.roomId && !roomsHere.some(r => String(r.id) === String(zState.roomId))) zState.roomId = '';
+    const cid = zState.centreId;
+    const roomQ = zState.roomId ? '&room_id=' + zState.roomId : '';
+    let zones = { data: [] }, report = { by_zone_id: {}, by_child: {}, total_visits: 0 };
+    try {
+      [zones, report] = await Promise.all([
+        Api.get(`/zones?centre_id=${cid}${roomQ}`),
+        Api.get(`/zones/daily-report?centre_id=${cid}${roomQ}&date=${opts.today}`),
+      ]);
+    } catch (e) { zToast(e.message || 'Could not load zones', 'error'); }
+    const byZoneId = report.by_zone_id || {};
     const byChild = report.by_child || {};
+    const roomName = (id) => { const r = (opts.rooms || []).find(x => x.id === id); return r ? r.name : ''; };
+    const centreName = (opts.centres.find(c => c.id === cid) || {}).name || '';
+    const scopeLine = isEd
+      ? (roomsHere.map(r => r.name).join(', ') || 'Your rooms') + ' · ' + centreName
+      : centreName + (zState.roomId ? ' · ' + roomName(+zState.roomId) : ' · All rooms');
+
+    const picker = isEd
+      ? (roomsHere.length > 1 ? '<div class="zn-bar"><button type="button" class="zn-chip' + (zState.roomId ? '' : ' on') + '" data-room="">All my rooms</button>'
+          + roomsHere.map(r => '<button type="button" class="zn-chip' + (String(zState.roomId) === String(r.id) ? ' on' : '') + '" data-room="' + r.id + '">' + esc(r.name) + '</button>').join('') + '</div>' : '')
+      : '<div class="zn-bar">'
+          + (opts.centres.length > 1 ? '<select data-zcentre aria-label="Centre">' + opts.centres.map(c => '<option value="' + c.id + '"' + (c.id === cid ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select>' : '')
+          + '<select data-zroom aria-label="Room"><option value="">All rooms</option>' + roomsHere.map(r => '<option value="' + r.id + '"' + (String(zState.roomId) === String(r.id) ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('') + '</select></div>';
+
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🎨 Activity zones</h2>
-        <p>${esc(centres[0].name)} · ${fmtDate(today)} · ${report.total_visits} visits today.</p>
+        <p>${esc(scopeLine)} · ${zDay(report.date || opts.today)} · ${report.total_visits || 0} visit${(report.total_visits === 1) ? '' : 's'} today.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="z-new">+ New zone</button></div>
       </div>
+      ${picker}
       <div class="kt-card">
         <div class="kt-card-header"><h3 class="kt-card-title">Today's activity</h3></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
-          ${(zones.data || []).map(z => `<div style="background:${esc(z.color)}22;border:2px solid ${esc(z.color)};padding:18px;border-radius:12px;text-align:center;">
-            <div style="font-size:32px;">${esc(z.icon)}</div>
-            <div style="font-weight:700;color:#0F172A;margin-top:6px;">${esc(z.name)}</div>
-            <div style="color:${esc(z.color)};font-weight:700;font-size:22px;margin-top:4px;">${byZone[z.name] || 0}</div>
-            <button class="kt-btn kt-btn-primary" data-log="${z.id}" data-name="${esc(z.name)}" style="margin-top:10px;font-size:12px;padding:6px 14px;">+ Log visit</button>
-          </div>`).join('') || '<div style="color:#64748B;padding:40px;text-align:center;grid-column:1/-1;">No zones set up.</div>'}
+        <div class="zn-grid">
+          ${(zones.data || []).map(z => `<div class="zn-card" style="background:${esc(z.color)}22;border-color:${esc(z.color)};">
+            <div style="font-size:30px;">${esc(zIcon(z.icon))}</div>
+            <div style="font-weight:700;color:#0F172A;margin-top:4px;">${esc(z.name)}</div>
+            <div class="zn-room">${z.room_id ? esc(roomName(z.room_id)) : 'Whole centre'}</div>
+            <div style="color:${esc(z.color)};font-weight:800;font-size:20px;margin-top:4px;">${byZoneId[z.id] || 0}</div>
+            <button class="kt-btn kt-btn-primary" data-log="${z.id}" data-room="${z.room_id || ''}" data-name="${esc(z.name)}">+ Log visit</button>
+          </div>`).join('') || '<div style="color:#64748B;padding:30px;text-align:center;grid-column:1/-1;">No zones here yet.</div>'}
         </div>
       </div>
       <div class="kt-card">
@@ -890,50 +963,73 @@
           <thead><tr><th>Child</th><th>Visited</th></tr></thead>
           <tbody>${Object.entries(byChild).map(([name, visits]) => `<tr>
             <td><strong>${esc(name)}</strong></td>
-            <td>${visits.map(v => `<span class="kt-pill kt-pill-info">${v.icon} ${esc(v.zone)} <span style="opacity:.7">@ ${v.time}</span></span>`).join(' ')}</td>
+            <td>${visits.map(v => `<span class="kt-pill kt-pill-info">${esc(zIcon(v.icon))} ${esc(v.zone)} <span style="opacity:.7">@ ${esc(v.time)}</span></span>`).join(' ')}</td>
           </tr>`).join('')}</tbody>
         </table>` : '<div style="color:#64748B;padding:20px;text-align:center;">No visits logged today.</div>'}
       </div>
     </div>`;
-    document.getElementById('z-new').onclick = () => openZoneModal(cid);
-    main.querySelectorAll('button[data-log]').forEach(b => b.onclick = async () => {
-      const child = await window.KT.prompt({
-        title: `Log a visit to ${b.dataset.name}`,
-        description: 'Enter the ID of the child visiting this zone.',
-        fields: [{ key: 'child', label: 'Child ID', type: 'number' }],
-        okLabel: 'Log visit',
-      });
-      if (!child) return;
-      await Api.post('/zones/visit', { child_id: +child, zone_id: +b.dataset.log });
-      renderZones(main);
-    });
+
+    const c = main.querySelector('[data-zcentre]');
+    if (c) c.onchange = () => { zState.centreId = +c.value; zState.roomId = ''; renderZones(document.getElementById('appMain') || main); };
+    const r = main.querySelector('[data-zroom]');
+    if (r) r.onchange = () => { zState.roomId = r.value; renderZones(document.getElementById('appMain') || main); };
+    main.querySelectorAll('.zn-chip[data-room]').forEach(b => b.onclick = () => { zState.roomId = b.dataset.room; renderZones(document.getElementById('appMain') || main); });
+    document.getElementById('z-new').onclick = () => openZoneModal(cid, main);
+    main.querySelectorAll('button[data-log]').forEach(b => b.onclick = () => openChildPicker(main, cid, b.dataset.log, b.dataset.name, b.dataset.room));
   }
-  function openZoneModal(centreId) {
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:440px;width:92%;">
-      <h3 style="margin:0 0 16px;">New activity zone</h3>
-      <label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Name</label>
-      <input id="z-name" placeholder="Art corner, Reading nook, Sensory…" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Icon (emoji)</label>
-      <input id="z-icon" value="🎨" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Colour</label>
-      <input id="z-color" type="color" value="#A855F7" style="width:100%;height:44px;padding:4px;border:1px solid #E2E8F0;border-radius:8px;">
-      <div style="margin-top:20px;text-align:right;">
-        <button id="z-cancel" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Cancel</button>
-        <button id="z-save" class="kt-btn kt-btn-primary" style="margin-left:8px;">Save</button>
-      </div></div>`;
-    document.body.appendChild(m);
-    m.querySelector('#z-cancel').onclick = () => m.remove();
-    m.querySelector('#z-save').onclick = async () => {
-      await Api.post('/zones', {
-        centre_id: centreId,
-        name: m.querySelector('#z-name').value,
-        icon: m.querySelector('#z-icon').value,
-        color: m.querySelector('#z-color').value,
-      });
-      m.remove();
-      renderZones(document.querySelector('main'));
+
+  /* Pick the child — from the zone's room, or (for a whole-centre zone) the rooms in view. */
+  async function openChildPicker(main, centreId, zoneId, zoneName, zoneRoom) {
+    const room = zoneRoom || zState.roomId || '';
+    let kids = [];
+    try { kids = (await Api.get(`/zones/options?centre_id=${centreId}${room ? '&room_id=' + room : ''}`)).children || []; }
+    catch (e) { zToast(e.message || 'Could not load children', 'error'); return; }
+    const d = zDialog('Log a visit to ' + zoneName,
+      '<input type="search" data-q placeholder="Search children…" aria-label="Search children" autocomplete="off">'
+      + '<div data-list style="margin-top:8px"></div>');
+    const list = d.el.querySelector('[data-list]');
+    const paint = (q) => {
+      const t = String(q || '').toLowerCase();
+      const rows = kids.filter(k => !t || (k.first_name + ' ' + k.last_name).toLowerCase().includes(t));
+      list.innerHTML = rows.map(k => '<button type="button" class="zn-kid" data-kid="' + k.id + '">'
+        + (k.photo_url ? '<img src="' + esc(k.photo_url) + '" alt="">' : '<span class="zn-av">' + esc((k.first_name || '?').charAt(0)) + '</span>')
+        + '<span>' + esc(k.first_name + ' ' + (k.last_name || '')) + '</span></button>').join('')
+        || '<div style="color:#64748B;padding:16px;text-align:center;">' + (kids.length ? 'No match.' : 'No children in this room.') + '</div>';
+    };
+    paint('');
+    const q = d.el.querySelector('[data-q]');
+    q.oninput = () => paint(q.value);
+    setTimeout(() => { try { q.focus(); } catch (e) {} }, 50);
+    list.onclick = async (e) => {
+      const b = e.target.closest('[data-kid]'); if (!b) return;
+      b.disabled = true;
+      try {
+        await Api.post('/zones/visit', { child_id: +b.dataset.kid, zone_id: +zoneId });
+        d.close(); zToast('Visit logged', 'success'); renderZones(document.getElementById('appMain') || main);
+      } catch (err) { b.disabled = false; zToast(err.message || 'Could not log the visit', 'error'); }
+    };
+  }
+
+  function openZoneModal(centreId, main) {
+    const o = zState.opts || {};
+    const rooms = (o.rooms || []).filter(r => r.centre_id === centreId);
+    const roomSel = '<select id="z-room">' + (o.can_create_whole_centre ? '<option value="">Whole centre</option>' : '')
+      + rooms.map(r => '<option value="' + r.id + '"' + (String(zState.roomId) === String(r.id) ? ' selected' : '') + '>' + esc(r.name) + '</option>').join('') + '</select>';
+    const d = zDialog('New activity zone',
+      '<label for="z-name">Name</label><input id="z-name" placeholder="Art corner, Reading nook, Sensory…" maxlength="80">'
+      + '<label for="z-room">Where</label>' + roomSel
+      + '<label for="z-icon">Icon (emoji)</label><input id="z-icon" value="🎨" maxlength="8">'
+      + '<label for="z-color">Colour</label><input id="z-color" type="color" value="#A855F7" style="height:38px;padding:3px">',
+      '<button type="button" class="kt-btn" data-cancel>Cancel</button><button type="button" class="kt-btn kt-btn-primary" data-save>Save</button>');
+    d.el.querySelector('[data-cancel]').onclick = d.close;
+    d.el.querySelector('[data-save]').onclick = async () => {
+      const name = d.el.querySelector('#z-name').value.trim();
+      if (!name) { zToast('Give the zone a name', 'error'); return; }
+      const room = d.el.querySelector('#z-room').value;
+      try {
+        await Api.post('/zones', { centre_id: centreId, room_id: room ? +room : null, name, icon: d.el.querySelector('#z-icon').value, color: d.el.querySelector('#z-color').value });
+        d.close(); zToast('Zone added', 'success'); renderZones(main || document.getElementById('appMain'));
+      } catch (e) { zToast(e.message || 'Could not add the zone', 'error'); }
     };
   }
 
