@@ -1757,9 +1757,17 @@
                 + 'padding-left:0 !important;padding-right:0 !important;max-width:680px !important;}';
               document.head.appendChild(pmCss);
             }
-            /* Into root, not main: applyEmailTabs relocates root.children, and
-               root is main.firstElementChild. A sibling of root is invisible to it. */
-            (main.firstElementChild || main).appendChild(pm);
+            /* Into root, not main: applyEmailTabs relocates root.children, and a sibling
+               of root is invisible to it. Root is the first child that is NOT the top bar
+               — the same lookup applyEmailTabs uses. main.firstElementChild is the top bar
+               now that it is mounted inside #appMain, so the whole Platform mail panel went
+               INTO the bar: the bar grew ~1500px tall, its clock and icons dropped halfway
+               down the page and the panel sat in a narrow right-hand column ("when i click
+               on email settings ... the screen doesn't display properly", 2026-10-06). */
+            var pmRoot = Array.prototype.find.call(main.children, function (c) {
+              return c.id !== 'kt-topbar' && !(c.classList && c.classList.contains('kt-topbar'));
+            });
+            (pmRoot || main).appendChild(pm);
             KT.MailSettingsScreen.render(pm);
           }
         } catch (e) { /* the rest of the screen must still tab */ }
