@@ -2381,29 +2381,13 @@ final class InvoiceController extends Controller
         $esc = function ($v) { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); };
 
         $cap = 'font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;';
-        $val = 'font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 10px;';
-        $facts = '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
-            . '<div style="' . $cap . '">Invoice</div><div style="' . $val . '">' . $esc($number) . '</div>'
-            . '<div style="' . $cap . '">Amount</div>'
-            . '<div style="font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 ' . ($due ? '10px' : '0') . ';">' . $esc($money) . '</div>'
-            . ($due ? '<div style="' . $cap . '">Was due</div><div style="font-size:15px;color:#0F172A;margin-top:2px;">' . $esc($due) . '</div>' : '')
-            . '</div></td></tr>';
-
-        $parentBody = '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
-            . '<tr><td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">'
-            . 'We are writing to let you know that the invoice below has been <strong>cancelled</strong> by '
-            . $esc($agencyName) . '.</td></tr>'
-            . $facts
-            . '<tr><td style="padding:14px 0 0;font-size:15px;line-height:1.6;color:#334155;">'
-            . '<strong>There is nothing you need to do.</strong> This amount is no longer owed and has been '
-            . 'removed from your balance. If you have already had a reminder about it, please disregard that '
-            . 'reminder, and if you were about to pay it, there is no longer any need.'
-            . '</td></tr>'
-            . '<tr><td style="padding:12px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
-            . 'If you have already paid this invoice, the amount will be returned to you or applied to another '
-            . 'invoice, and we will be in touch. If a replacement invoice is needed you will receive it '
-            . 'separately. Any questions, just reply to this email.</td></tr>'
-            . '</table>';
+        $facts = \App\Support\TemplatedEmails::invoiceFacts((string) $number, $money, $due);
+        /* The family's letter is composed by TemplatedEmails::invoiceCancelled, which
+           Settings → Email templates previews and tests (2026-10-06). */
+        $parentMail = \App\Support\TemplatedEmails::invoiceCancelled($agencyId, [
+            'number' => (string) $number, 'invoice_number' => (string) $number,
+            'money' => $money, 'amount' => $money, 'due' => $due, 'agency_name' => $agencyName,
+        ], $facts);
 
         $staffBody = '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
             . '<tr><td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">'
@@ -2425,19 +2409,14 @@ final class InvoiceController extends Controller
 
         return [
             'agency_id' => $agencyId,
-            'parent' => \App\Services\EmailTemplate::wrap($agencyId, $parentBody, [
-                'eyebrow' => 'INVOICE CANCELLED',
-                'title' => 'Invoice ' . $number . ' has been cancelled',
-                'subtitle' => $money . ' is no longer owed',
-                'preheader' => 'Invoice ' . $number . ' for ' . $money . ' has been cancelled. Nothing to do.',
-            ]),
+            'parent' => $parentMail['html'],
             'staff' => \App\Services\EmailTemplate::wrap($agencyId, $staffBody, [
                 'eyebrow' => 'INVOICE VOIDED - STAFF',
                 'title' => $number . ' voided for ' . $familyName,
                 'subtitle' => $money . ', voided by ' . ($actor ?: 'a staff member'),
                 'preheader' => $number . ' (' . $money . ') voided for ' . $familyName . '.',
             ]),
-            'subject_parent' => 'Invoice ' . $number . ' has been cancelled - nothing to do',
+            'subject_parent' => $parentMail['subject'],
             'subject_staff' => 'Invoice voided: ' . $number . ' - ' . $familyName,
         ];
     }

@@ -161,60 +161,15 @@ final class OperationsV2Controller extends Controller
     private function mailClosure(?int $agencyId, object $u, string $centreName, string $dates,
                                 string $reason, array $bcc = [], string $phase = 'upcoming'): void
     {
-        $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
-
-        /* Three tenses, because a closure can be entered at any point relative to itself.
-           `past` is deliberately worded as a record rather than a notice - telling a
-           parent about a closure that has already finished is a correction to the
-           calendar, not news, and pretending otherwise is worse than saying so. */
-        [$opening, $closing, $title, $subjectVerb] = [
-            'upcoming' => [
-                'We are letting you know that <strong>' . $e($centreName) . '</strong> will be closed.',
-                'There is nothing you need to do. Sign-in is switched off for those days, and we will see you when we reopen.',
-                $centreName . ' will be closed',
-                'is closed',
-            ],
-            'current' => [
-                '<strong>' . $e($centreName) . '</strong> is closed at the moment. Apologies for the '
-                    . 'late notice &mdash; this has only just been added to the calendar.',
-                'There is nothing you need to do. Sign-in is switched off for these days, and we will see you when we reopen.',
-                $centreName . ' is closed',
-                'is closed',
-            ],
-            'past' => [
-                'For your records: <strong>' . $e($centreName) . '</strong> was closed on the dates below. '
-                    . 'This has just been added to the calendar, so it may be the first you have heard of it.',
-                'Nothing is needed from you &mdash; this is a record of a closure that has already passed.',
-                $centreName . ' was closed',
-                'was closed',
-            ],
-        ][$phase] ?? [
-            'We are letting you know that <strong>' . $e($centreName) . '</strong> will be closed.',
-            'There is nothing you need to do. Sign-in is switched off for those days, and we will see you when we reopen.',
-            $centreName . ' will be closed',
-            'is closed',
-        ];
-
-        $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
-            . '<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
-            . $opening . '</td></tr>'
-            . '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
-            . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">When</div>'
-            . '<div style="font-size:16px;font-weight:700;color:#0F172A;margin:2px 0 10px;">' . $e($dates) . '</div>'
-            . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">Why</div>'
-            . '<div style="font-size:15px;color:#0F172A;margin-top:2px;">' . $e($reason) . '</div></div></td></tr>'
-            . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
-            . $closing . '</td></tr></table>';
-
-        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
-            'eyebrow' => 'CENTRE CLOSURE',
-            'title' => $title,
-            'subtitle' => $dates . ' · ' . $reason,
-            'preheader' => $centreName . ' closed ' . $dates . ' — ' . $reason,
-        ]);
+        /* Composed by TemplatedEmails::closureNotice — the same builder Settings → Email
+           templates previews and tests, so an agency can reword it there (2026-10-06).
+           The three tenses (upcoming / current / past) live there too. */
+        $mail = \App\Support\TemplatedEmails::closureNotice($agencyId, $centreName, $dates, $reason, $phase);
+        $html = $mail['html'];
+        $subject = $mail['subject'];
         $name = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''));
-        \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($u, $name, $centreName, $dates, $bcc, $subjectVerb) {
-            $m->to($u->email, $name ?: null)->subject($centreName . ' ' . $subjectVerb . ' ' . $dates);
+        \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($u, $name, $subject, $bcc) {
+            $m->to($u->email, $name ?: null)->subject($subject);
             // The director and agency admin see what their families were told, as it is
             // sent. The reminder path has always done this; the announcement never did.
             if ($bcc) {

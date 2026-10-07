@@ -155,43 +155,24 @@ class PaymentNotifier
 
         $name = trim((string) ($ctx['user']->preferred_name ?: $ctx['user']->first_name ?? ''));
         $inv = $ctx['invoice'];
-        $p = fn ($t) => '<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#2A3D5F;">' . $t . '</p>';
+        $hasBalance = $credited && isset($credited['balance_now']);
 
-        $rows = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:6px 0 0;font-size:14px;color:#2A3D5F;">'
-            . self::row('Amount', '<strong>' . self::money($txn->amount) . '</strong>')
-            . self::row('Paid with', e(self::how($txn)))
-            . self::row('Date', now()->format('j M Y, g:i A'))
-            . self::row('Reference', 'ZUM-' . substr((string) $txn->zum_transaction_id, 0, 8));
-        if ($inv) {
-            $rows .= self::row('Invoice', e((string) ($inv->invoice_number ?: $inv->id)));
-        }
-        if ($credited && isset($credited['balance_now'])) {
-            $rows .= self::row('Still outstanding', $credited['balance_now'] > 0.005
-                ? '<strong>' . self::money($credited['balance_now']) . '</strong>'
-                : 'Nothing — this invoice is paid in full');
-        }
-        $rows .= '</table>';
-
-        $body = $p('Hello ' . e($name) . ',')
-            . $p('Thank you — your payment has gone through. Here are the details for your records.')
-            . $rows
-            . ($credited && ($credited['balance_now'] ?? 0) > 0.005
-                ? $p('<span style="color:#92400E;">This was a part payment, so '
-                    . self::money($credited['balance_now']) . ' is still outstanding on this invoice.</span>')
-                : '')
-            . $p('You can see all your invoices and payments any time in your portal.')
-            . '<p style="margin:22px 0 0;"><a href="https://app.kiddietrac.com/dashboard.html#billing" '
-            . 'style="display:inline-block;background:#1F6FB2;color:#fff;text-decoration:none;font-weight:700;'
-            . 'font-size:15px;padding:13px 26px;border-radius:10px;">View your billing</a></p>'
-            . '<p style="margin:26px 0 0;font-size:15px;line-height:1.6;color:#2A3D5F;">Kind regards,<br>'
-            . '<strong style="color:#0B1A33;">' . e($ctx['agency_name']) . ' Team</strong></p>';
-
-        self::send($ctx['agency_id'], $to, 'Payment received — ' . self::money($txn->amount), $body, [
-            'eyebrow' => 'PAYMENT RECEIPT',
-            'title' => 'Thank you — payment received',
-            'subtitle' => self::money($txn->amount) . ' · ' . self::how($txn),
-            'preheader' => 'Your payment of ' . self::money($txn->amount) . ' has gone through.',
+        /* Composed by TemplatedEmails::paymentReceipt, which Settings → Email templates
+           also previews and tests — the agency can reword it there (2026-10-06). */
+        $mail = \App\Support\TemplatedEmails::paymentReceipt((int) $ctx['agency_id'], [
+            'name' => $name,
+            'amount' => self::money($txn->amount),
+            'how' => self::how($txn),
+            'payment_method' => self::how($txn),
+            'date' => now()->format('j M Y, g:i A'),
+            'reference' => 'ZUM-' . substr((string) $txn->zum_transaction_id, 0, 8),
+            'invoice_number' => $inv ? (string) ($inv->invoice_number ?: $inv->id) : null,
+            'balance_now' => $hasBalance ? (float) $credited['balance_now'] : null,
+            'balance_text' => $hasBalance ? self::money($credited['balance_now']) : '',
+            'agency_name' => (string) $ctx['agency_name'],
         ]);
+
+        self::sendBuilt($ctx['agency_id'], $to, $mail['subject'], $mail['html']);
     }
 
     private static function bellToOffice(object $txn, array $ctx, ?array $credited): void
@@ -226,29 +207,18 @@ class PaymentNotifier
         }
         $name = trim((string) ($ctx['user']->preferred_name ?: $ctx['user']->first_name ?? ''));
         $inv = $ctx['invoice'];
-        $p = fn ($t) => '<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#2A3D5F;">' . $t . '</p>';
 
-        $body = $p('Hello ' . e($name) . ',')
-            . $p('Your payment of <strong>' . self::money($txn->amount) . '</strong> did not go through, so '
-                . 'nothing has been taken from your ' . e(self::how($txn)) . '.')
-            . ($inv ? $p('Invoice <strong>' . e((string) ($inv->invoice_number ?: $inv->id))
-                . '</strong> is still outstanding.') : '')
-            . $p('This usually means the card has expired, has been replaced, or the bank declined it. '
-                . 'Adding a different card in your portal is the quickest fix.')
-            . '<p style="margin:22px 0 0;"><a href="https://app.kiddietrac.com/dashboard.html#billing" '
-            . 'style="display:inline-block;background:#1F6FB2;color:#fff;text-decoration:none;font-weight:700;'
-            . 'font-size:15px;padding:13px 26px;border-radius:10px;">Update your payment method</a></p>'
-            . $p('<span style="font-size:13.5px;color:#64748B;">If you think this is a mistake, please contact '
-                . e($ctx['agency_name']) . ' — we would rather sort it out with you than have it sit unpaid.</span>')
-            . '<p style="margin:26px 0 0;font-size:15px;line-height:1.6;color:#2A3D5F;">Kind regards,<br>'
-            . '<strong style="color:#0B1A33;">' . e($ctx['agency_name']) . ' Team</strong></p>';
-
-        self::send($ctx['agency_id'], $to, 'Your payment did not go through', $body, [
-            'eyebrow' => 'PAYMENT UNSUCCESSFUL',
-            'title' => 'That payment did not go through',
-            'subtitle' => self::money($txn->amount) . ' · nothing has been taken',
-            'preheader' => 'Your payment of ' . self::money($txn->amount) . ' was not completed.',
+        // Composed by TemplatedEmails::paymentFailed (editable in Settings → Email templates).
+        $mail = \App\Support\TemplatedEmails::paymentFailed((int) $ctx['agency_id'], [
+            'name' => $name,
+            'amount' => self::money($txn->amount),
+            'how' => self::how($txn),
+            'payment_method' => self::how($txn),
+            'invoice_number' => $inv ? (string) ($inv->invoice_number ?: $inv->id) : null,
+            'agency_name' => (string) $ctx['agency_name'],
         ]);
+
+        self::sendBuilt($ctx['agency_id'], $to, $mail['subject'], $mail['html']);
     }
 
     private static function failureToOffice(object $txn, array $ctx, string $why): void
@@ -301,6 +271,20 @@ class PaymentNotifier
     {
         return '<tr><td style="padding:3px 14px 3px 0;color:#64748B;white-space:nowrap;">' . e($k)
             . '</td><td style="padding:3px 0;">' . $v . '</td></tr>';
+    }
+
+    /** Send an email already composed (and wrapped) by TemplatedEmails. */
+    private static function sendBuilt(int $agencyId, string $to, string $subject, string $html): void
+    {
+        try {
+            AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject) {
+                $m->from(config('mail.from.address', 'noreply@kiddietrac.com'),
+                         config('mail.from.name', 'KiddieTrac'));
+                $m->to($to)->subject($subject);
+            });
+        } catch (\Throwable $e) {
+            Log::warning('payment email failed', ['to' => $to, 'error' => $e->getMessage()]);
+        }
     }
 
     private static function send(int $agencyId, string $to, string $subject, string $body, array $opts): void

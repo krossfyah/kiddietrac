@@ -175,7 +175,20 @@
     try { var r = await Api.get('/admin/email-templates'); list = (r && r.templates) || []; }
     catch (e) { container.querySelector('#et-body').innerHTML = '<div style="color:#B91C1C;padding:20px;">Could not load templates: ' + esc(e.message) + '</div>'; return; }
 
-    picker.innerHTML = list.map(function (t) { return '<option value="' + esc(t.key) + '">' + esc(t.label) + '</option>'; }).join('');
+    /* Grouped (Parents / Billing / Staff / Accounts), and a template the agency has
+       changed from its default says so — "● customised" — so it is clear at a glance
+       which emails no longer go out in the standard wording. */
+    var groupOrder = [], byGroup = {};
+    list.forEach(function (t) {
+      var g = t.group_label || 'Other';
+      if (!byGroup[g]) { byGroup[g] = []; groupOrder.push(g); }
+      byGroup[g].push(t);
+    });
+    picker.innerHTML = groupOrder.map(function (g) {
+      return '<optgroup label="' + esc(g) + '">' + byGroup[g].map(function (t) {
+        return '<option value="' + esc(t.key) + '">' + esc(t.label) + (t.customised ? '  ● customised' : '') + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
     function descFor(key) { var m = list.filter(function (t) { return t.key === key; })[0]; return m ? (m.description || '') : ''; }
     picker.addEventListener('change', function () { descEl.textContent = descFor(picker.value); loadTemplate(container, picker.value); });
 
@@ -240,7 +253,9 @@
       + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;padding-top:14px;border-top:1px solid #EEF2F6;">'
       + '<button id="et-save" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:11px 22px;font-weight:800;font-size:13.5px;cursor:pointer;">Save template</button>'
       + '<button id="et-preview" style="background:#fff;border:1.5px solid #1F6FB2;color:#1F6FB2;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">👁️ Preview</button>'
-      + '<button id="et-test" style="background:#fff;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;">📤 Send me a test</button>'
+      + '<button id="et-test" style="background:#fff;border:1.5px solid #CBD5E1;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;">📤 Send test…</button>'
+      + '<label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#475569;cursor:pointer;" title="Off: the test uses the wording last saved">'
+      +   '<input type="checkbox" id="et-usedraft" checked style="width:15px;height:15px;margin:0;"> use my unsaved changes</label>'
       + '<span id="et-status" style="font-size:13px;font-weight:700;"></span></div>';
 
     // Track the focused field (editor or plain input) for the toolbar + merge tags.
@@ -316,14 +331,32 @@
       try { await Api.put(url(key), savePayload()); status.style.color = '#047857'; status.textContent = '✓ Saved.'; }
       catch (e) { status.style.color = '#B91C1C'; status.textContent = '✗ ' + e.message; }
     });
+    /* SEND TEST TO A DEFINED ADDRESS (2026-10-06). The address is asked for every time —
+       never defaulted — and the answer says what the mail layer actually did: sent, held
+       back by this agency's email settings, or failed and why. */
+    var me = (window.KT && KT.Auth && KT.Auth.user && KT.Auth.user()) || {};
     body.querySelector('#et-test').addEventListener('click', async function () {
-      status.style.color = '#64748B'; status.textContent = 'Sending test…';
-      try { var r = await Api.post(url(key, '/test'), { blocks: collect() }); status.style.color = '#047857'; status.textContent = '✓ ' + (r.message || 'Test sent.'); }
-      catch (e) { status.style.color = '#B91C1C'; status.textContent = '✗ ' + e.message; }
+      var to = await KT.prompt({
+        title: 'Send a test email',
+        description: 'Sends one copy of this email, marked [Test], with sample names and figures, to the address you enter.',
+        placeholder: me.email || 'name@example.com', type: 'email', okLabel: 'Send test',
+      });
+      if (to === null) { return; }
+      to = String(to || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { status.style.color = '#B91C1C'; status.textContent = '✗ Enter a valid email address.'; return; }
+      var useDraft = body.querySelector('#et-usedraft').checked;
+      status.style.color = '#64748B'; status.textContent = 'Sending test to ' + to + '…';
+      try {
+        var payload = { to: to };
+        if (useDraft) { payload.blocks = collect(); }
+        var r = await Api.post(url(key, '/test'), payload);
+        status.style.color = r.sent ? '#047857' : '#B45309';
+        status.textContent = (r.sent ? '✓ ' : '⚠ ') + (r.message || (r.sent ? 'Test sent.' : 'Not sent.'));
+      } catch (e) { status.style.color = '#B91C1C'; status.textContent = '✗ ' + e.message; }
     });
     body.querySelector('#et-preview').addEventListener('click', async function () {
       status.style.color = '#64748B'; status.textContent = 'Building preview…';
-      try { var r = await Api.post(url(key, '/preview'), { blocks: collect() }); status.textContent = ''; openPreview(r.html || '<p>Empty.</p>'); }
+      try { var r = await Api.post(url(key, '/preview'), { blocks: collect() }); status.textContent = ''; openPreview(r.html || '<p>Empty.</p>', r); }
       catch (e) { status.style.color = '#B91C1C'; status.textContent = '✗ ' + e.message; }
     });
   }
@@ -333,25 +366,47 @@
   function btnCss() { return 'min-width:30px;height:28px;border:1px solid #CBD5E1;background:#fff;border-radius:7px;cursor:pointer;font-size:13px;color:#334155;padding:0 8px;'; }
   function selCss() { return 'height:28px;border:1px solid #CBD5E1;border-radius:7px;font-size:12px;background:#fff;color:#334155;max-width:130px;'; }
 
-  // Full-screen modal with an iframe showing the rendered email.
-  function openPreview(html) {
+  /* Full-screen preview: the envelope (subject, From), the merge tags the words use —
+     unknown ones flagged, since they would be sent literally — and the email itself in a
+     SANDBOXED srcdoc frame (no scripts, no top navigation; works in the APK WebView). */
+  function openPreview(html, meta) {
+    meta = meta || {};
     var ov = d.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:100000;display:flex;flex-direction:column;align-items:center;padding:24px 12px;overflow:auto;';
-    var bar = d.createElement('div');
-    bar.style.cssText = 'width:100%;max-width:640px;display:flex;justify-content:space-between;align-items:center;color:#fff;margin-bottom:10px;';
-    bar.innerHTML = '<div style="font-weight:800;font-size:14px;">📧 Email preview</div>';
-    var close = d.createElement('button');
-    close.textContent = '✕ Close';
-    close.style.cssText = 'background:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;color:#0F172A;';
-    close.addEventListener('click', function () { ov.remove(); });
-    bar.appendChild(close);
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.className = 'kt-scrim';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:100000;display:flex;flex-direction:column;align-items:center;padding:20px 12px;overflow:auto;';
+    var card = d.createElement('div');
+    card.style.cssText = 'width:100%;max-width:680px;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.4);display:flex;flex-direction:column;';
+    var tags = meta.tags || {};
+    var used = (tags.used || []).map(function (t) {
+      var bad = (tags.unknown || []).indexOf(t) !== -1;
+      return '<span style="font:11px ui-monospace,Menlo,monospace;background:' + (bad ? '#FEF2F2' : '#F1F5F9') + ';color:' + (bad ? '#B91C1C' : '#334155')
+        + ';border:1px solid ' + (bad ? '#FECACA' : '#E2E8F0') + ';border-radius:6px;padding:1px 6px;margin:0 4px 4px 0;display:inline-block;" title="'
+        + (bad ? 'Unknown tag — it will be sent exactly as typed' : 'Filled in for each recipient') + '">{{' + esc(t) + '}}</span>';
+    }).join('');
+    var from = meta.from || {};
+    card.innerHTML = '<div style="background:#0B2545;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:10px;">'
+      + '<div style="font-weight:800;font-size:14px;flex:1;">📧 Email preview <span style="font-weight:600;opacity:.7;font-size:12px;">— sample names and figures</span></div>'
+      + '<button type="button" class="et-pv-x" aria-label="Close" style="background:rgba(255,255,255,.15);color:#fff;border:0;border-radius:8px;width:30px;height:30px;font-size:16px;cursor:pointer;">✕</button></div>'
+      + '<div style="padding:10px 16px;border-bottom:1px solid #E5E7EB;font-size:13px;line-height:1.7;color:#334155;">'
+      +   (meta.subject ? '<div><span style="color:#94A3B8;display:inline-block;width:62px;">Subject</span><b>' + esc(meta.subject) + '</b></div>' : '')
+      +   (from.address ? '<div><span style="color:#94A3B8;display:inline-block;width:62px;">From</span>' + esc(from.name || '') + ' &lt;' + esc(from.address) + '&gt;</div>' : '')
+      +   (used ? '<div style="margin-top:4px;"><span style="color:#94A3B8;display:inline-block;width:62px;vertical-align:top;">Tags</span><span style="display:inline-block;max-width:calc(100% - 70px);">' + used + '</span></div>' : '')
+      +   ((tags.unknown || []).length ? '<div style="color:#B91C1C;font-size:12px;margin-top:2px;">⚠ ' + tags.unknown.length + ' tag(s) this email does not know will be sent exactly as typed.</div>' : '')
+      + '</div>';
     var frame = d.createElement('iframe');
-    frame.style.cssText = 'width:100%;max-width:640px;height:80vh;border:0;border-radius:12px;background:#EEF1F6;box-shadow:0 20px 50px rgba(0,0,0,.4);';
-    ov.appendChild(bar); ov.appendChild(frame);
-    ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+    frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+    frame.setAttribute('title', 'Email preview');
+    frame.style.cssText = 'width:100%;height:72vh;border:0;background:#EEF1F6;color-scheme:light;display:block;';
+    frame.srcdoc = html;
+    card.appendChild(frame);
+    ov.appendChild(card);
+    function close() { ov.remove(); d.removeEventListener('keydown', onKey, true); }
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
+    card.querySelector('.et-pv-x').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    d.addEventListener('keydown', onKey, true);
     d.body.appendChild(ov);
-    try { frame.contentWindow.document.open(); frame.contentWindow.document.write(html); frame.contentWindow.document.close(); }
-    catch (e) { frame.srcdoc = html; }
   }
 
   if (Shell && Shell.registerScreen) {

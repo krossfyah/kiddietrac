@@ -6511,10 +6511,11 @@ final class AdminController extends Controller
         if (! $agencyId) {
             return response()->json(['message' => 'No agency access'], 403);
         }
-        $to = $request->input('to') ?: $request->user()->email;
-        if (! $to) {
-            return response()->json(['message' => 'No email address to send to.'], 422);
+        $to = strtolower(trim((string) $request->input('to')));
+        if ($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['message' => 'Enter the email address to send the test to.'], 422);
         }
+        $before = (int) DB::table('email_logs')->max('id');
         /* Send the REAL email to one address rather than rebuilding the view here.
 
            This endpoint used to assemble its own copy of the template data, and the
@@ -6543,9 +6544,10 @@ final class AdminController extends Controller
             $drafts
         );
 
-        return $sent
-            ? response()->json(['message' => 'Test sent to ' . $to])
-            : response()->json(['message' => 'Send failed — see the mail log for the reason.'], 500);
+        $o = $sent ? $this->mailOutcome($before, $to) : ['status' => 'failed', 'reason' => 'The send did not complete — see the mail log for the reason.'];
+        $this->audit($request->user()->id, 'agency.email_template_test', 'agency', (int) $agencyId,
+            ['template' => 'provider-welcome', 'to' => $to, 'status' => $o['status'], 'used_draft' => ! empty($drafts)]);
+        return $this->testReply($o, $to);
     }
 
     // ── Generic multi-template editor (#77) ─────────────────────────────
@@ -6557,7 +6559,8 @@ final class AdminController extends Controller
     public function emailTemplateList(Request $request): JsonResponse
     {
         if (! $this->getAgencyId($request)) return response()->json(['message' => 'No agency access'], 403);
-        return response()->json(['templates' => \App\Support\EmailTemplates::list()]);
+        return response()->json(['templates' => \App\Support\EmailTemplates::list((int) $this->getAgencyId($request)),
+            'groups' => \App\Support\EmailTemplates::GROUPS]);
     }
 
     /** GET /admin/email-template/{key} — a registry template's editable blocks + fields. */
@@ -6610,7 +6613,43 @@ final class AdminController extends Controller
         if (! \App\Support\EmailTemplates::exists($key)) return response()->json(['message' => 'Unknown template'], 404);
         $blocks = $this->draftOrStoredBlocks($request, (int) $agencyId, $key);
         $sample = \App\Support\EmailTemplates::sample((int) $agencyId, $request->user()->first_name);
-        return response()->json(['html' => \App\Support\EmailTemplates::render((int) $agencyId, $key, $blocks, $sample)]);
+        /* The whole envelope, not just the body: the subject it goes out with, who it
+           comes from (the agency's own mailer), and which {{tags}} the words use — with
+           any the template does not know flagged, since those would be sent as-is. */
+        $mailer = \App\Services\AgencyMailer::forAgency((int) $agencyId);
+        return response()->json([
+            'html'    => \App\Support\EmailTemplates::render((int) $agencyId, $key, $blocks, $sample),
+            'subject' => \App\Support\EmailTemplates::subjectFor((int) $agencyId, $key, $blocks, $sample),
+            'from'    => ['name' => $mailer->fromName(), 'address' => $mailer->fromAddress()],
+            'tags'    => \App\Support\EmailTemplates::tagsIn($key, $blocks),
+        ]);
+    }
+
+    /* What the mail layer did with a message just handed to it, read from email_logs
+       (the same rows the MessageSent logger, the suppression listener and the failure-
+       auditing transport write). "Sent" means the mail layer accepted it — never just
+       "we called send". */
+    private function mailOutcome(int $beforeLogId, string $to): array
+    {
+        $row = DB::table('email_logs')->where('id', '>', $beforeLogId)
+            ->where('to_email', 'like', '%' . str_replace(['%', '_'], ['\%', '\_'], strtolower($to)) . '%')
+            ->orderByDesc('id')->first(['id', 'status', 'error']);
+        if (! $row) {
+            return ['status' => 'unknown', 'reason' => 'The mail layer recorded nothing for this message, so it cannot be confirmed as sent.'];
+        }
+        $status = in_array($row->status, ['sent', 'suppressed', 'failed'], true) ? $row->status : 'failed';
+        $reason = $status === 'sent' ? null : (string) ($row->error ?: ($status === 'suppressed'
+            ? 'Held back by this agency’s email settings.' : 'Delivery failed.'));
+        return ['status' => $status, 'reason' => $reason === null ? null : mb_substr($reason, 0, 300), 'log_id' => (int) $row->id];
+    }
+
+    private function testReply(array $o, string $to): JsonResponse
+    {
+        $msg = $o['status'] === 'sent' ? 'Test sent to ' . $to
+            : ($o['status'] === 'suppressed' ? 'Not sent to ' . $to . ' — ' . $o['reason']
+            : 'Not sent to ' . $to . ' — ' . $o['reason']);
+        return response()->json(['sent' => $o['status'] === 'sent', 'status' => $o['status'], 'reason' => $o['reason'], 'message' => $msg],
+            $o['status'] === 'failed' ? 502 : 200);
     }
 
     /** POST /admin/email-template/{key}/test — send the rendered draft to the admin. */
@@ -6619,22 +6658,32 @@ final class AdminController extends Controller
         $agencyId = $this->getAgencyId($request);
         if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
         if (! \App\Support\EmailTemplates::exists($key)) return response()->json(['message' => 'Unknown template'], 404);
-        $to = $request->input('to') ?: $request->user()->email;
-        if (! $to) return response()->json(['message' => 'No email address to send to.'], 422);
+        /* THE ADDRESS IS REQUIRED. It used to fall back to the admin's own email, which is
+           a recipient nobody chose; a test goes exactly where the person typed. */
+        $to = strtolower(trim((string) $request->input('to')));
+        if ($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['message' => 'Enter the email address to send the test to.'], 422);
+        }
         $blocks = $this->draftOrStoredBlocks($request, (int) $agencyId, $key);
         $sample = \App\Support\EmailTemplates::sample((int) $agencyId, $request->user()->first_name);
         $html = \App\Support\EmailTemplates::render((int) $agencyId, $key, $blocks, $sample);
-        $label = \App\Support\EmailTemplates::registry()[$key]['label'];
+        $subject = '[Test] ' . \App\Support\EmailTemplates::subjectFor((int) $agencyId, $key, $blocks, $sample);
+        $before = (int) DB::table('email_logs')->max('id');
+        /* Through the agency's own mailer — the same From and transport as the real email —
+           and WITHOUT the suppression bypass this used to add: an agency whose email is
+           switched off gets an honest "held back", not a message to an outside address. */
         try {
-            \App\Support\PlatformSettings::applyMail();
-            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $label) {
-                $m->to($to)->subject('[Test] ' . $label);
-                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            \App\Services\AgencyMailer::forAgency((int) $agencyId)->html($html, function ($m) use ($to, $subject, $agencyId) {
+                $m->to($to)->subject($subject);
+                \App\Support\MailScope::agency($m, (int) $agencyId);
             });
-            return response()->json(['message' => 'Test sent to ' . $to]);
+            $o = $this->mailOutcome($before, $to);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Send failed: ' . $e->getMessage()], 500);
+            $o = ['status' => 'failed', 'reason' => mb_substr($e->getMessage(), 0, 300)];
         }
+        $this->audit($request->user()->id, 'agency.email_template_test', 'agency', (int) $agencyId,
+            ['template' => $key, 'to' => $to, 'status' => $o['status'], 'used_draft' => $request->filled('blocks')]);
+        return $this->testReply($o, $to);
     }
 
     /**

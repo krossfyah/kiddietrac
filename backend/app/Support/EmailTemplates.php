@@ -133,7 +133,181 @@ The {{agency_name}} team",
                 ],
                 'merge_tags'  => ['agency_name', 'portal_url'],
             ],
+
+            /* ── 2026-10-06: emails that used to be composed inline, now editable. Each is
+               built by App\Support\TemplatedEmails, which the real sender and Preview/Test
+               both call; a block left at its default sends the original wording exactly. */
+            'payment-receipt' => [
+                'label'       => 'Payment received',
+                'group'       => 'billing',
+                'description' => 'Sent to the payer the moment an online card or bank payment settles. The amount, method, date, reference and any balance still owing are filled in automatically.',
+                'fields'      => [
+                    ['k' => 'subject',      'label' => 'Subject line',   'rich' => false, 'minH' => 0],
+                    ['k' => 'title',        'label' => 'Heading',        'rich' => false, 'minH' => 0],
+                    ['k' => 'greeting',     'label' => 'Greeting',       'rich' => false, 'minH' => 0],
+                    ['k' => 'intro',        'label' => 'Opening',        'rich' => false, 'minH' => 70],
+                    ['k' => 'outro',        'label' => 'After the details', 'rich' => false, 'minH' => 60],
+                    ['k' => 'button_label', 'label' => 'Button label',   'rich' => false, 'minH' => 0],
+                    ['k' => 'signoff',      'label' => 'Sign-off',       'rich' => false, 'minH' => 60],
+                ],
+                'defaults'    => [
+                    'subject'      => 'Payment received — {{amount}}',
+                    'title'        => 'Thank you — payment received',
+                    'greeting'     => 'Hello {{name}},',
+                    'intro'        => 'Thank you — your payment has gone through. Here are the details for your records.',
+                    'outro'        => 'You can see all your invoices and payments any time in your portal.',
+                    'button_label' => 'View your billing',
+                    'signoff'      => "Kind regards,\n**{{agency_name}} Team**",
+                ],
+                'merge_tags'  => ['name', 'amount', 'payment_method', 'invoice_number', 'agency_name'],
+            ],
+
+            'payment-failed' => [
+                'label'       => 'Payment did not go through',
+                'group'       => 'billing',
+                'description' => 'Sent to the payer when a card or bank payment is declined or fails. Nothing has been taken; the invoice line is added automatically when there is one.',
+                'fields'      => [
+                    ['k' => 'subject',      'label' => 'Subject line', 'rich' => false, 'minH' => 0],
+                    ['k' => 'title',        'label' => 'Heading',      'rich' => false, 'minH' => 0],
+                    ['k' => 'greeting',     'label' => 'Greeting',     'rich' => false, 'minH' => 0],
+                    ['k' => 'intro',        'label' => 'Opening',      'rich' => false, 'minH' => 70],
+                    ['k' => 'advice',       'label' => 'What to do',   'rich' => false, 'minH' => 70],
+                    ['k' => 'button_label', 'label' => 'Button label', 'rich' => false, 'minH' => 0],
+                    ['k' => 'contact',      'label' => 'If it is a mistake', 'rich' => false, 'minH' => 60],
+                    ['k' => 'signoff',      'label' => 'Sign-off',     'rich' => false, 'minH' => 60],
+                ],
+                'defaults'    => [
+                    'subject'      => 'Your payment did not go through',
+                    'title'        => 'That payment did not go through',
+                    'greeting'     => 'Hello {{name}},',
+                    'intro'        => 'Your payment of **{{amount}}** did not go through, so nothing has been taken from your {{payment_method}}.',
+                    'advice'       => 'This usually means the card has expired, has been replaced, or the bank declined it. Adding a different card in your portal is the quickest fix.',
+                    'button_label' => 'Update your payment method',
+                    'contact'      => 'If you think this is a mistake, please contact {{agency_name}} — we would rather sort it out with you than have it sit unpaid.',
+                    'signoff'      => "Kind regards,\n**{{agency_name}} Team**",
+                ],
+                'merge_tags'  => ['name', 'amount', 'payment_method', 'invoice_number', 'agency_name'],
+            ],
+
+            'invoice-cancelled' => [
+                'label'       => 'Invoice cancelled',
+                'group'       => 'billing',
+                'description' => 'Sent to the family when an invoice is voided. The invoice number, amount and due date box is added automatically. (Staff get their own separate notice.)',
+                'fields'      => [
+                    ['k' => 'subject',       'label' => 'Subject line',     'rich' => false, 'minH' => 0],
+                    ['k' => 'intro',         'label' => 'Opening',          'rich' => false, 'minH' => 60],
+                    ['k' => 'nothing_to_do', 'label' => 'What it means',    'rich' => false, 'minH' => 90],
+                    ['k' => 'already_paid',  'label' => 'If already paid',  'rich' => false, 'minH' => 90],
+                ],
+                'defaults'    => [
+                    'subject'       => 'Invoice {{invoice_number}} has been cancelled - nothing to do',
+                    'intro'         => 'We are writing to let you know that the invoice below has been **cancelled** by {{agency_name}}.',
+                    'nothing_to_do' => '**There is nothing you need to do.** This amount is no longer owed and has been removed from your balance. If you have already had a reminder about it, please disregard that reminder, and if you were about to pay it, there is no longer any need.',
+                    'already_paid'  => 'If you have already paid this invoice, the amount will be returned to you or applied to another invoice, and we will be in touch. If a replacement invoice is needed you will receive it separately. Any questions, just reply to this email.',
+                ],
+                'merge_tags'  => ['invoice_number', 'amount', 'agency_name'],
+            ],
+
+            'closure-notice' => [
+                'label'       => 'Centre closure announcement',
+                'group'       => 'parents',
+                'description' => "Sent to every family AND staff member at the centre when a closure is added. The dates and reason box is added automatically. The wording depends on whether the closure is upcoming, happening now, or already over.",
+                'fields'      => [
+                    ['k' => 'subject',          'label' => 'Subject line',                  'rich' => false, 'minH' => 0],
+                    ['k' => 'opening_upcoming', 'label' => 'Opening — upcoming closure',    'rich' => false, 'minH' => 60],
+                    ['k' => 'closing_upcoming', 'label' => 'Closing — upcoming closure',    'rich' => false, 'minH' => 60],
+                    ['k' => 'opening_current',  'label' => 'Opening — closed right now',    'rich' => false, 'minH' => 60],
+                    ['k' => 'closing_current',  'label' => 'Closing — closed right now',    'rich' => false, 'minH' => 60],
+                    ['k' => 'opening_past',     'label' => 'Opening — closure already over','rich' => false, 'minH' => 60],
+                    ['k' => 'closing_past',     'label' => 'Closing — closure already over','rich' => false, 'minH' => 60],
+                ],
+                'defaults'    => [
+                    'subject'          => '{{centre_name}} {{closed_verb}} {{dates}}',
+                    'opening_upcoming' => 'We are letting you know that **{{centre_name}}** will be closed.',
+                    'closing_upcoming' => 'There is nothing you need to do. Sign-in is switched off for those days, and we will see you when we reopen.',
+                    'opening_current'  => '**{{centre_name}}** is closed at the moment. Apologies for the late notice — this has only just been added to the calendar.',
+                    'closing_current'  => 'There is nothing you need to do. Sign-in is switched off for these days, and we will see you when we reopen.',
+                    'opening_past'     => 'For your records: **{{centre_name}}** was closed on the dates below. This has just been added to the calendar, so it may be the first you have heard of it.',
+                    'closing_past'     => 'Nothing is needed from you — this is a record of a closure that has already passed.',
+                ],
+                'merge_tags'  => ['centre_name', 'dates', 'reason', 'closed_verb'],
+            ],
         ];
+    }
+
+    /** Which group each template is listed under in the editor. */
+    public const GROUPS = ['parents' => 'Parents', 'billing' => 'Billing', 'staff' => 'Staff', 'accounts' => 'Accounts & invitations'];
+    private const GROUP_OF = [
+        'provider-welcome' => 'parents', 'parent-daily-summary' => 'parents', 'onboarding-welcome' => 'parents',
+        'announcement' => 'parents', 'staff-welcome' => 'staff', 'invite' => 'accounts',
+    ];
+
+    /** Normalised for "is this still the default?" — whitespace and markup don't count. */
+    private static function norm(string $v): string
+    {
+        $v = html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $v)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return trim(preg_replace('/\s+/u', ' ', $v));
+    }
+
+    /**
+     * The block an agency (or the editor's unsaved draft) CHANGED, as HTML — or null when
+     * it is still the default, so the caller keeps its original wording byte for byte.
+     * Plain text: merge tags filled, escaped, **bold** kept, line breaks kept.
+     */
+    public static function piece(int $agencyId, string $key, string $block, array $data = [], ?array $draft = null): ?string
+    {
+        $raw = self::changed($agencyId, $key, $block, $draft);
+        if ($raw === null) return null;
+        $t = e(self::fill($raw, $data));
+        $t = preg_replace('/\*\*(.+?)\*\*/su', '<strong>$1</strong>', $t);
+        return nl2br($t, false);
+    }
+
+    /** Same, for a one-line plain value used as a subject or heading (no markup). */
+    public static function subjectPiece(int $agencyId, string $key, string $block, array $data = [], ?array $draft = null): ?string
+    {
+        $raw = self::changed($agencyId, $key, $block, $draft);
+        if ($raw === null) return null;
+        return trim(preg_replace('/\s+/u', ' ', str_replace('**', '', self::fill($raw, $data))));
+    }
+
+    /** The changed raw value of one block, or null if it is absent or equal to the default. */
+    private static function changed(int $agencyId, string $key, string $block, ?array $draft): ?string
+    {
+        $def = self::registry()[$key]['defaults'][$block] ?? null;
+        if ($def === null) return null;
+        if ($draft !== null && array_key_exists($block, $draft)) {
+            $v = (string) $draft[$block];
+        } else {
+            $v = (string) (self::settings($agencyId)['email_templates'][$key][$block] ?? '');
+        }
+        if (trim(strip_tags($v)) === '' || self::norm($v) === self::norm((string) $def)) return null;
+        return $v;
+    }
+
+    /** True when the agency has changed any block of this template from its default. */
+    public static function isCustomised(int $agencyId, string $key): bool
+    {
+        if ($key === 'provider-welcome') {
+            $pw = self::settings($agencyId)['provider_welcome'] ?? null;
+            return is_array($pw) ? (bool) array_filter($pw, fn ($v) => trim(strip_tags((string) $v)) !== '') : ! empty($pw);
+        }
+        foreach (array_keys(self::registry()[$key]['defaults'] ?? []) as $b) {
+            if (self::changed($agencyId, $key, $b, null) !== null) return true;
+        }
+        return false;
+    }
+
+    /** {{tags}} a block set uses, and the ones this template does not know. */
+    public static function tagsIn(string $key, array $blocks): array
+    {
+        $known = self::registry()[$key]['merge_tags'] ?? [];
+        $used = [];
+        foreach ($blocks as $v) {
+            if (preg_match_all('/\{\{\s*([a-z_]+)\s*\}\}/', (string) $v, $m)) $used = array_merge($used, $m[1]);
+        }
+        $used = array_values(array_unique($used));
+        return ['used' => $used, 'unknown' => array_values(array_diff($used, $known))];
     }
 
     public static function exists(string $key): bool
@@ -142,17 +316,68 @@ The {{agency_name}} team",
     }
 
     /** Lightweight list for the picker dropdown (includes provider-welcome first). */
-    public static function list(): array
+    public static function list(?int $agencyId = null): array
     {
         $out = [[
             'key'         => 'provider-welcome',
             'label'       => 'Provider welcome',
             'description' => "Sent to parents when a provider is assigned to their child.",
+            'group'       => 'parents',
         ]];
         foreach (self::registry() as $key => $def) {
-            $out[] = ['key' => $key, 'label' => $def['label'], 'description' => $def['description']];
+            $out[] = ['key' => $key, 'label' => $def['label'], 'description' => $def['description'],
+                'group' => $def['group'] ?? (self::GROUP_OF[$key] ?? 'parents')];
         }
+        foreach ($out as &$t) {
+            $t['group_label'] = self::GROUPS[$t['group']] ?? ucfirst($t['group']);
+            $t['customised'] = $agencyId ? self::isCustomised($agencyId, $t['key']) : false;
+        }
+        unset($t);
         return $out;
+    }
+
+    /** Subject an email goes out with, for the preview header (the real one where known). */
+    public static function subjectFor(int $agencyId, string $key, array $blocks, array $data): string
+    {
+        $built = self::built($agencyId, $key, $blocks, $data);
+        if ($built) return $built['subject'];
+        return [
+            'parent-daily-summary' => ($data['child_name'] ?? 'Ava') . "'s day at " . ($data['centre_name'] ?? 'the centre'),
+            'onboarding-welcome'   => 'Welcome to ' . ($data['agency_name'] ?? 'KiddieTrac'),
+            'staff-welcome'        => 'Welcome to ' . ($data['agency_name'] ?? 'the team'),
+            'invite'               => "You're invited to " . ($data['agency_name'] ?? 'KiddieTrac'),
+            'announcement'         => self::fill((string) ($blocks['title'] ?? ''), $data) ?: 'A note from ' . ($data['agency_name'] ?? ''),
+        ][$key] ?? (self::registry()[$key]['label'] ?? 'Email');
+    }
+
+    /** The real builder's output for the templates TemplatedEmails composes, else null. */
+    private static function built(int $agencyId, string $key, array $blocks, array $data): ?array
+    {
+        $money = '$' . number_format(142.50, 2);
+        $base = ['name' => $data['parent_first_name'] ?? 'Alex', 'agency_name' => $data['agency_name'] ?? 'Your agency'];
+        switch ($key) {
+            case 'payment-receipt':
+                return TemplatedEmails::paymentReceipt($agencyId, $base + [
+                    'amount' => $money, 'how' => 'Visa ending 4242', 'payment_method' => 'Visa ending 4242',
+                    'date' => now()->format('j M Y, g:i A'), 'reference' => 'ZUM-1a2b3c4d',
+                    'invoice_number' => 'INV-1042', 'balance_now' => 0.0, 'balance_text' => '$0.00',
+                ], $blocks);
+            case 'payment-failed':
+                return TemplatedEmails::paymentFailed($agencyId, $base + [
+                    'amount' => $money, 'how' => 'Visa ending 4242', 'payment_method' => 'Visa ending 4242',
+                    'invoice_number' => 'INV-1042',
+                ], $blocks);
+            case 'invoice-cancelled':
+                $due = now()->addDays(7)->format('j F Y');
+                return TemplatedEmails::invoiceCancelled($agencyId, $base + [
+                    'number' => 'INV-1042', 'invoice_number' => 'INV-1042', 'money' => $money, 'amount' => $money, 'due' => $due,
+                ], TemplatedEmails::invoiceFacts('INV-1042', $money, $due), $blocks);
+            case 'closure-notice':
+                return TemplatedEmails::closureNotice($agencyId, (string) ($data['centre_name'] ?? 'Sunny Days'),
+                    now()->addDays(10)->format('D j M') . ' – ' . now()->addDays(11)->format('D j M Y'),
+                    'Professional development days', 'upcoming', $blocks);
+        }
+        return null;
     }
 
     /** Stored (agency-edited) blocks merged over the defaults, for editing/rendering. */
@@ -192,6 +417,12 @@ The {{agency_name}} team",
             'role_label'        => $data['role_label'] ?? 'a member of our team',
             'director_names'    => $data['director_names'] ?? 'your director',
         ];
+        // Anything else the caller supplies (amount, dates, invoice_number…) fills by name.
+        foreach ($data as $k => $v) {
+            if (is_string($k) && ! array_key_exists($k, $map) && (is_scalar($v) || $v === null)) {
+                $map[$k] = (string) $v;
+            }
+        }
         return preg_replace_callback('/\{\{\s*([a-z_]+)\s*\}\}/', function ($m) use ($map) {
             return $map[$m[1]] ?? $m[0];
         }, $text) ?? $text;
@@ -236,6 +467,12 @@ The {{agency_name}} team",
 
             case 'staff-welcome':
                 return \App\Services\StaffWelcome::renderHtml($agencyId, $blocks, $data);
+
+            case 'payment-receipt':
+            case 'payment-failed':
+            case 'invoice-cancelled':
+            case 'closure-notice':
+                return self::built($agencyId, $key, $blocks, $data)['html'];
 
             case 'invite':
                 $body = '<div style="font-size:15px;line-height:1.65;color:#334155;margin-bottom:14px;">' . $F('intro') . '</div>'
