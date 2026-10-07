@@ -5,91 +5,83 @@ order: 5
 ---
 # Roles & responsibilities
 
-KiddieTrac has six built-in roles. Each role sees a different sidebar, different screens, and different actions. Custom roles can be created on top (see [[custom-roles-and-permissions]]).
+KiddieTrac has **seven built-in roles**: Platform admin, Agency admin, Centre director, Educator, Home visitor, Parent / guardian and Auditor. Each role sees its own menu and can only open its own screens. Agencies can also create **custom roles** for their own job titles (see [[custom-roles-and-permissions]]).
 
-> **New this release:** Every data table and card list now shares the same look — a **⋮ actions menu** on each row (View / Edit / Delete, and more), a bottom **record-count bar**, and **zebra striping**. New admin/director powers, all reached from the ⋮ menu: **suspend, reactivate or inactivate a family** (blocks or restores that family's parent logins), add **internal notes to incident reports** (audit-trailed — who wrote what, when), **edit or delete staff certifications**, and **delete field trips**. **Data-retention auto-enforcement** now clears old chat messages *and* announcements nightly when you enable it (Settings → Data retention). Times display in your centre's timezone everywhere.
->
-> **Earlier:** every role has a **Tasks** experience (admins/directors assign; educators, home visitors and parents get **My tasks**), and desktop **Messages / chat** is a minimisable window with inline voice notes, pasted screenshots (Ctrl/⌘-V), and delete-your-own-message.
+**Who sees which data.** Agency admins (and auditors) see every centre in the active agency. Centre directors and educators see **only their own centre(s)** — in lists, reports, exports, finance, tasks and alerts alike. Parents see only their own family. No role ever sees another agency's data.
+
+## What's new (October 2026)
+- **Event RSVPs** (agency admins): invitations, built-in and saved templates, preview before sending, sender accounts with *Connect Gmail*, unbranded emails, scheduled and manual **reminders**, reports with Excel / PDF / CSV, bulk resend, and a **map + tips** in the confirmation email.
+- **Late pickups** are now one screen: staff log, directors and admins **approve & charge, waive or decline** — and are emailed when one is waiting.
+- **Email templates** (agency admins): preview any email and **send a test** to an address you choose.
+- **Help & guides**: admins and directors can **assign training videos** to their staff and parents, with due dates and reminders.
+- **Parents** who are missing a child's photo are asked for it when they sign in.
+- Incident timelines show your agency's time; uploads show a **please wait** popup.
 
 ## Platform admin
-You. The owner of the KiddieTrac platform. Cross-agency access:
+Runs the KiddieTrac platform itself. Everything an agency admin can do, in **any** agency (switch the active agency from the sidebar), plus:
 
-- All agencies + agency switching from the header
-- Platform overview dashboard with MRR + ARR + business metrics
-- Create / suspend / resume any agency
-- White-label branding controls (logo, colour, footer)
-- Feature flags per agency
-- All audit logs across every agency
-- Billing dashboard for Stripe Connect platform fees
+- Platform overview, all agencies, create / suspend / resume an agency
+- White-label branding and feature flags per agency
+- **Platform → Email settings** — how KiddieTrac sends email, and the **Gmail sign-in client** used by *Connect Gmail* on RSVP sender accounts
+- Platform billing and support tickets across agencies
 
 ## Agency admin
-Full control of one childcare agency:
+Runs one agency, across every centre in it:
 
-- Centres, families, children, staff at every level
-- Billing settings (late-fee config, tuition increases, payment plans)
-- Marketing campaigns + drip campaigns
-- Compliance dashboard, audit log, inspection prep
-- All XLSX exports + bulk imports
-- Stripe + QBO + Twilio + Anthropic integration config
-- Custom forms builder + custom report builder
-- Roles & permissions matrix
-- **Assign & track Tasks** for educators, home visitors and parents (Staff → Tasks)
-- **Suspend / reactivate / inactivate families** (Families → ⋮) — suspend temporarily blocks the family's parent logins; reactivate restores them; inactivate archives the family (children + history are kept)
-- **Manage staff certifications** — add, edit or delete (Certifications → ⋮)
-- **Internal incident notes** — add audit-trailed notes to any incident report
-- **Data-retention auto-enforcement** — optional nightly purge of old chat + announcements (Settings → Data retention)
+- **Overview** — agency overview, centres, daily overview, provider map, agency profile
+- **Operations** — contacts, Safe Arrival, calendar, daily log, Messenger, email client, announcements, lesson plans, observations, awards, schedule, certifications, timesheets, incidents, withdrawals, medications, immunizations
+- **Staff** — **Tasks** (assign and track work for staff and parents), time off, background checks, substitutes
+- **Home visitors** — review home-visit reports and inspection forms
+- **Finance** — **Late pickups** (approve & charge, waive, decline), invoice and payment runs, billing schedules, payment plans, refunds, tuition increases, expenses, accounting, account ledgers, donations, grants, payroll
+- **Administration** — users, families, children, custom forms, compliance, audit log, closures, room ratios, vacation holds, bus routes, room rotations, reports, CACFP, report cards, support tickets and more
+- **Engagement** — re-enrolment, NPS, signed documents, drip campaigns, curriculum, conferences, **Event RSVPs**, **Forms Manager** (upload forms, review and counter-sign)
+- **Settings** — billing, payment providers, room assignments, **Roles & permissions**, email settings, **Email templates** (preview + send test), document templates, carrier (SMS), QuickBooks, data retention, **Help & guides** (assign training)
 
 ## Centre director
-Day-to-day management of one centre:
+Runs **their own centre** — everything below is limited to it:
 
-- Family + child records at their centre
-- Schedule + time-clock + payroll for their staff
-- Observations + lesson plans + curriculum
-- Daily care logs, photos, videos
-- Approve time-off + vacation holds + reenrolment + permission slips
-- CACFP meal tracking, wellness screening review
-- Field-trip GPS monitoring, plus **plan and delete field trips** (Field trips → ⋮)
-- Marketing campaigns (no global setting changes)
-- **Assign & track Tasks** for the educators (and parents) at their centre (Staff → Tasks)
-- **Suspend / reactivate / inactivate families** at their centre (Families → ⋮)
-- **Add internal notes to incident reports** (audit-trailed) and **manage staff certifications**
+- Dashboard, children, families and staff at their centre
+- Operations — Safe Arrival, calendar, closures, daily log, Messenger, announcements, lesson plans, observations, awards, schedule, certifications, timesheets, audit log, incidents (review, add internal notes, notify parents), medications, immunizations
+- **Tasks** for their educators and their centre's parents; time clock, time off, background checks, substitutes
+- Home-visit reports and inspection forms for their centre
+- **Late pickups** — approve & charge, waive or decline; emailed when one is waiting
+- Finance for their centre — billing schedules, payment plans, tuition plans, expenses, refunds, tuition increases, accounting, grants, payroll
+- Compliance, inspections, subsidies, waitlist, invitation codes, vacation holds
+- **Help & guides** — assign training videos to their staff and parents
+- *Not available to directors:* Event RSVPs, Email templates, agency-wide settings
 
 ## Educator
-Classroom focus:
+Works in the classroom:
 
-- Today screen (sign-ins, ratios, current room)
-- Observations, lesson plans, daily logs
-- Photo + video uploads
-- Chat with parents (voice notes, pasted screenshots, delete your own messages)
-- Time clock for their own punches
-- Personal time-off requests
-- Care logs + milestone tracking
-- **My tasks** — work assigned to you by your director/admin; mark it in progress or done
-
-## Guardian / parent
-Their own family only:
-
-- Today screen for their children
-- Photos, videos, observations, milestones (their kids only)
-- Daily wellness check-in + drop-off survey
-- Chat with centre staff
-- Billing (invoices, wallet, autopay, ledger)
-- Payment plans, vacation hold requests, refund visibility
-- Pickup authorizations + family directory opt-in
-- Forms to sign + document workflows
-- Conferences + field-trip permission slips
-- Refer a friend + send feedback / NPS
-- Chat with staff (voice notes, pasted screenshots, delete your own messages)
-- **My tasks** — anything the centre has asked you to do
+- Home and **Today** (check-ins, ratios, their room)
+- **My tasks** — work assigned by a director or admin
+- Clock in / out, time off
+- Daily log, observations, lesson plans, incidents (file and sign), medications
+- **Late pickups** — log a late pickup or arrival for a director to decide
+- Messenger with parents and staff, news, parent feedback, reports
+- Forms to sign and their own documents
 
 ## Home visitor
-An agency-attached practitioner who visits families/centres and files reports:
+Visits families and centres and files reports:
 
-- Home-visit reports against any centre in the agency (view, edit drafts, branded PDF download)
-- Inspection forms (Monthly Monitoring + Ministry checklist) where enabled
-- Chat with families & staff
-- **My tasks** — work assigned to you by an admin/director
-- Notifications, settings, help
+- **New visit report** and **My reports** (drafts, edits, branded PDF)
+- Inspection forms where the agency uses them
+- **My tasks**, forms to sign, their own documents
+- Notifications, settings and help
+
+## Parent / guardian
+Sees **only their own family**:
+
+- Home, **Today**, photos & video
+- Messenger with the centre
+- **My tasks** and **forms to sign**
+- **Check-in** (including the QR code), attendance
+- **Billing** — invoices, autopay, payment plans
+- Health and immunization records, news, documents
+- Asked for a missing **child photo** at sign-in — staff use it to recognise children at pickup
+
+## Auditor
+Read-only reviewer for the agency: compliance, audit logs, children, forms and Forms Manager, and help.
 
 ## Custom roles
-Beyond these five built-in roles, agency admins can create their own custom roles with picked permissions (see [[custom-roles-and-permissions]]). Useful for assistant-director, billing-only, marketing-only, etc.
+Agency admins can create roles for their own job titles (for example *Assistant director* or *Bookkeeper*) under **Settings → Roles & permissions** — see [[custom-roles-and-permissions]].

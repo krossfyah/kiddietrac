@@ -42,6 +42,9 @@
       edocuments: 'Documents', announcements: 'Communications',
       settings: 'Agency settings', roles: 'Agency settings',
       mfa: 'Agency settings', audit: 'Agency settings',
+      tasks: 'Tasks', own_tasks: 'Tasks', late_pickups: 'Late pickups',
+      home_visits: 'Home visits', forms: 'Documents', rsvp: 'Events & RSVPs',
+      email_templates: 'Communications', help: 'Help & training',
     };
     Object.keys(catalog).forEach(function (key) {
       var prefix = key.split('.')[0];
@@ -52,8 +55,9 @@
     // Stable category order
     var order = ['Centres', 'Families & children', 'Parent scope', 'Staff', 'Rooms',
       'Invoicing & billing', 'Reports', 'Incidents', 'Medical',
-      'Observations & curriculum', 'Attendance & kiosk', 'Documents',
-      'Communications', 'Agency settings'];
+      'Observations & curriculum', 'Attendance & kiosk', 'Late pickups', 'Tasks',
+      'Home visits', 'Documents', 'Communications', 'Events & RSVPs', 'Help & training',
+      'Agency settings'];
     var sorted = [];
     order.forEach(function (n) { if (groups[n]) sorted.push({ name: n, items: groups[n] }); });
     // Append any leftover groups (defensive — keys we didn't map)

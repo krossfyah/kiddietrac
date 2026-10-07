@@ -243,6 +243,8 @@ final class RoleController extends Controller
                 'kiosk.manage',
                 'edocuments.view', 'edocuments.send',
                 'announcements.create',
+                'tasks.assign', 'late_pickups.log', 'late_pickups.decide',
+                'home_visits.review', 'help.assign',
             ]],
             'educator' => ['Educator', 'Day-to-day care staff.', [
                 'children.view',
@@ -251,12 +253,19 @@ final class RoleController extends Controller
                 'lesson_plans.view',
                 'medications.view',
                 'attendance.record',
+                'own_tasks.view', 'late_pickups.log',
             ]],
             'guardian' => ['Parent / Guardian', 'Self-serve parent portal.', [
                 'own_children.view',
                 'own_invoices.view', 'own_invoices.pay',
                 'incidents.acknowledge',
                 'edocuments.sign',
+                'own_tasks.view',
+            ]],
+            /* Home visitor: a real built-in role (nav, routes, Visibility) that the matrix
+               never listed. Descriptive like every other row here. */
+            'home_visitor' => ['Home Visitor', 'Visits families and centres; files reports and inspections.', [
+                'home_visits.file', 'own_tasks.view', 'edocuments.sign',
             ]],
             'auditor' => ['Auditor', 'Read-only access for compliance review.', [
                 'centres.view', 'families.view', 'children.view',
@@ -324,6 +333,18 @@ final class RoleController extends Controller
             'roles.manage' => 'Create + edit custom roles',
             'mfa.enforce' => 'Require MFA for other staff users',
             'audit.view' => 'View the audit log',
+            // 2026-10-06 — features added since the matrix was written.
+            'tasks.assign' => 'Assign and track tasks for staff and parents',
+            'own_tasks.view' => 'See and complete own tasks (My tasks)',
+            'late_pickups.log' => 'Log late pickups and late arrivals',
+            'late_pickups.decide' => 'Approve and charge, waive or decline late pickup fees',
+            'home_visits.file' => 'File home-visit reports and inspection forms',
+            'home_visits.review' => 'Review home-visit reports and inspection forms',
+            'forms.manage' => 'Forms Manager: upload forms, review and counter-sign',
+            'rsvp.manage' => 'Event RSVPs: events, invitations, templates, reminders, reports',
+            'rsvp.senders' => 'Connect sender accounts (Gmail) for event emails',
+            'email_templates.manage' => 'Edit email templates, preview and send tests',
+            'help.assign' => 'Assign training videos and guides to staff and parents',
         ];
     }
 }

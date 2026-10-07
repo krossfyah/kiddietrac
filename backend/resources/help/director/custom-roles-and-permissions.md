@@ -6,9 +6,9 @@ order: 20
 ---
 # Custom roles and permissions
 
-Kiddietrac ships with five built-in (system) roles: Agency admin, Centre director, Educator, Parent / Guardian, and Auditor. For most agencies these are enough — they cover the staff types most childcare operations actually have.
+KiddieTrac ships with built-in (system) roles: Agency admin, Centre director, Educator, Home visitor, Parent / Guardian, and Auditor (Platform admin sits above agencies). See [[roles-and-responsibilities]] for what each one does. For most agencies these are enough — they cover the staff types most childcare operations actually have.
 
-When you need to model staff structures that don't map cleanly to those five — say a Lead Educator who can sign lesson plans but not invoices, or a Bookkeeper who can run reports but not modify centres — you create a **custom role** with a tailored permission matrix.
+When you need to model staff structures that don't map cleanly to those — say a Lead Educator who can sign lesson plans but not invoices, or a Bookkeeper who can run reports but not modify centres — you create a **custom role** with a tailored permission matrix.
 
 ## Where to find it
 
@@ -16,7 +16,7 @@ Sidebar → **Settings → Roles & permissions**. You'll see a two-column screen
 
 ## Reading the matrix
 
-The right pane shows the currently selected role's name, description, and a grid of 45 permission keys grouped into 14 categories (Centres, Families & children, Staff, Rooms, Invoicing & billing, Reports, Incidents, Medical, Observations & curriculum, Attendance & kiosk, Documents, Communications, Agency settings).
+The right pane shows the currently selected role's name, description, and a grid of 56 permission keys grouped into categories — Centres, Families & children, Parent scope, Staff, Rooms, Invoicing & billing, Reports, Incidents, Medical, Observations & curriculum, Attendance & kiosk, Late pickups, Tasks, Home visits, Documents (incl. Forms Manager), Communications (incl. Email templates), Events & RSVPs, Help & training, and Agency settings.
 
 Each permission has a short label in monospace (e.g. `centres.edit`) and a plain-language description (e.g. "Edit centre settings and branding"). Tick the box for any permission the role should have.
 
