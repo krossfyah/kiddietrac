@@ -211,12 +211,23 @@ class ManagedFormController extends Controller
         return (bool) array_intersect($this->roles((int) $request->user()->id), ['platform_admin', 'agency_admin', 'centre_director']);
     }
 
+    /* AUDITORS READ, NOTHING ELSE (2026-10-06). The auditor's menu offers Forms Manager,
+       but every endpoint here checked isAdmin(), so an auditor got a screen of 403s - and
+       nothing said whether that was policy. Now: the READ endpoints (library, sent
+       packages, completed forms and their detail) admit an auditor; every write keeps
+       isAdmin(), which an auditor is not, so uploads, edits, deletes, assigning, sending,
+       counter-signing, returning and emailing all stay 403. Every other role is unchanged. */
+    private function canRead(Request $request): bool
+    {
+        return $this->isAdmin($request) || in_array('auditor', $this->roles((int) $request->user()->id), true);
+    }
+
     /* ───────────── ADMIN: library ───────────── */
 
     /** GET /admin/managed-forms — the agency's uploaded forms + sign-off counts. */
     public function index(Request $request): JsonResponse
     {
-        if (! $this->isAdmin($request)) {
+        if (! $this->canRead($request)) {
             return response()->json(['forms' => []], 403);
         }
         $agencyId = $this->agencyId($request);
@@ -353,6 +364,10 @@ class ManagedFormController extends Controller
      */
     public function bulkAssign(Request $request): JsonResponse
     {
+        /* NO ROLE CHECK until now: any signed-in member of an agency could assign forms to
+           other people and trigger the emails. It is only ever called from the admin
+           Forms Manager. Admin-only, like every other write here (auditors included out). */
+        abort_unless($this->isAdmin($request), 403, 'Not allowed.');
         $data = $request->validate([
             'form_ids'   => ['required', 'array', 'min:1'],
             'form_ids.*' => ['integer'],
@@ -635,6 +650,9 @@ class ManagedFormController extends Controller
     /** GET /admin/managed-forms/packages — what has been sent, newest first. */
     public function packages(Request $request): JsonResponse
     {
+        // It had no role check at all: any signed-in member of the agency could list
+        // every package sent and to whom. Admins and auditors only.
+        abort_unless($this->canRead($request), 403, 'Not allowed.');
         $agencyId = $this->agencyId($request);
         $rows = DB::table('form_package_sends')->where('agency_id', $agencyId)
             ->orderByDesc('created_at')->orderByDesc('id')->limit(300)->get();
@@ -807,7 +825,7 @@ class ManagedFormController extends Controller
      */
     public function packageDetail(Request $request, int $id): JsonResponse
     {
-        if (! $this->isAdmin($request)) {
+        if (! $this->canRead($request)) {
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
@@ -1541,7 +1559,7 @@ class ManagedFormController extends Controller
     /** GET /admin/managed-forms/signoffs — completed sign-offs for the agency. */
     public function signoffs(Request $request): JsonResponse
     {
-        if (! $this->isAdmin($request)) {
+        if (! $this->canRead($request)) {
             return response()->json(['signoffs' => []], 403);
         }
         $agencyId = $this->agencyId($request);
@@ -1890,7 +1908,7 @@ class ManagedFormController extends Controller
     /** GET /admin/managed-forms/{id}/signoff/{signoffId} — one signed record (with signature). */
     public function signoffDetail(Request $request, int $id, int $signoffId): JsonResponse
     {
-        if (! $this->isAdmin($request)) {
+        if (! $this->canRead($request)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $agencyId = $this->agencyId($request);

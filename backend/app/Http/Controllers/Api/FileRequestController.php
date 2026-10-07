@@ -56,6 +56,13 @@ final class FileRequestController extends Controller
         );
     }
 
+    /* Auditors may READ requests and download what came back (2026-10-06); creating,
+       reminding, deleting and handing out the family's upload link stay isAdmin(). */
+    private function canRead(Request $request): bool
+    {
+        return $this->isAdmin($request) || in_array('auditor', $this->roles((int) $request->user()->id), true);
+    }
+
     /**
      * Which of these accounts belong to this agency.
      *
@@ -97,7 +104,7 @@ final class FileRequestController extends Controller
     /** GET /admin/file-requests */
     public function index(Request $request): JsonResponse
     {
-        if (! $this->isAdmin($request)) {
+        if (! $this->canRead($request)) {
             return response()->json(['requests' => []], 403);
         }
         $agencyId = $this->agencyId($request);
@@ -293,7 +300,7 @@ final class FileRequestController extends Controller
     /** GET /admin/file-requests/{id} */
     public function show(Request $request, int $id): JsonResponse
     {
-        if (! $this->isAdmin($request)) {
+        if (! $this->canRead($request)) {
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
@@ -560,7 +567,7 @@ final class FileRequestController extends Controller
     /** GET /admin/file-requests/{id}/files/{doc}/download — stream one file. */
     public function download(Request $request, int $id, int $doc)
     {
-        abort_unless($this->isAdmin($request), 403);
+        abort_unless($this->canRead($request), 403);
         $agencyId = $this->agencyId($request);
 
         $req = DB::table('file_requests')->where('id', $id)->where('agency_id', $agencyId)->first(['id']);

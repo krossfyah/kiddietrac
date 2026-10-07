@@ -21,9 +21,38 @@
   function fmtDate(s) { try { return KT.Fmt ? KT.Fmt.date(s) : new Date(String(s).replace(' ', 'T') + 'Z').toLocaleString(); } catch (e) { return s || ''; } }
   function toast(icon, t, m, c) { if (KT.toast) KT.toast(icon, t, m, c || '#16A34A'); }
 
+  /* READ-ONLY FOR AUDITORS (2026-10-06). The server refuses every write for an auditor;
+     this keeps the screen from offering them. Top-level write buttons are hidden by a
+     body class (some live in sheets appended to <body>, outside this container), and
+     both row-menu builders below drop every item that is not a View/Download/Open. */
+  var FM_RO = false;
+  function fmReadOnly() {
+    try {
+      var u = (KT.Auth && KT.Auth.user && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || 'null');
+      var r = (u && KT.Shell && KT.Shell.Roles && KT.Shell.Roles.primaryRoleOf) ? KT.Shell.Roles.primaryRoleOf(u) : null;
+      return r === 'auditor';
+    } catch (e) { return false; }
+  }
+  function fmReadOnlyStyle() {
+    if (document.getElementById('kt-fm-ro-css')) { return; }
+    var st = document.createElement('style');
+    st.id = 'kt-fm-ro-css';
+    st.textContent = 'body.kt-fm-ro #pk-open,body.kt-fm-ro #fr-open,body.kt-fm-ro #fm-upload,body.kt-fm-ro #pk-upload,'
+      + 'body.kt-fm-ro #pk-send,body.kt-fm-ro #fr-send,body.kt-fm-ro #fm-sync,body.kt-fm-ro .fm-edit,body.kt-fm-ro .fm-toggle,'
+      + 'body.kt-fm-ro .fm-del,body.kt-fm-ro .pkv-again,body.kt-fm-ro .fm-upload-open,body.kt-fm-ro #cs-annotate,body.kt-fm-ro #cs-sign{display:none !important}';
+    document.head.appendChild(st);
+  }
+  function fmMenuAllowed(label) {
+    return !FM_RO || /^\s*(view|download|open)\b/i.test(String(label || ''));
+  }
+
   function render(container) {
+    FM_RO = fmReadOnly();
+    fmReadOnlyStyle();
+    try { document.body.classList.toggle('kt-fm-ro', FM_RO); } catch (e) {}
     container.innerHTML =
-      '<div style="padding:0 24px 24px;max-width:1080px;margin:0 auto;color:#0F172A;">'
+      (FM_RO ? '<div style="max-width:1080px;margin:12px auto 0;padding:0 24px;"><div style="display:inline-flex;align-items:center;gap:6px;background:#F1F5F9;border:1px solid #E2E8F0;color:#334155;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;">🔒 Read-only (auditor) — you can view and download, not change</div></div>' : '')
+      + '<div style="padding:0 24px 24px;max-width:1080px;margin:0 auto;color:#0F172A;">'
       + '<div style="display:flex;gap:8px;margin:16px 0 16px;">'
       + '<button class="fm-tab" data-t="library" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📚 Library</button>'
       + '<button class="fm-tab" data-t="package" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📦 Multiple forms</button>'
@@ -97,6 +126,7 @@
     function onDoc(ev) { if (!menu.contains(ev.target) && ev.target !== btn) { close(); } }
 
     function item(icon, label, danger, fn) {
+      if (!fmMenuAllowed(label)) { return document.createComment('read-only'); }
       var mi = document.createElement('button');
       mi.type = 'button';
       mi.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;'
@@ -1516,6 +1546,7 @@
       var openBtn = document.createElement('button');
       openBtn.type = 'button';
       openBtn.setAttribute('data-kt-iconized', '1');
+      openBtn.className = 'fm-upload-open';
       openBtn.textContent = '+ Upload a form';
       openBtn.style.cssText = 'margin-left:auto;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);'
         + 'color:#fff;border:0;border-radius:10px;padding:11px 20px;font-weight:800;font-size:13.5px;cursor:pointer;';
@@ -1915,10 +1946,10 @@
             + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(fmtStamp(f.created_at)) + '</div></td>'
             + '<td style="padding:9px 14px;font-weight:700;color:#0F172A;">' + (f.signoff_count || 0) + '</td>'
             + '<td style="padding:9px 14px;">' + (f.active ? '<span style="color:#16A34A;font-weight:700;">● Active</span>' : '<span style="color:#94A3B8;">Off</span>') + '</td>'
-            + '<td style="padding:9px 8px;text-align:right;white-space:nowrap;">'
+            + '<td style="padding:9px 8px;text-align:right;white-space:nowrap;">' + (FM_RO ? '' : (''
             + '<button class="fm-edit kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" data-d="' + esc(f.description || '') + '" title="Edit details" style="border:1px solid #BFDBFE;background:#EFF6FF;color:#1E40AF;">✏️</button>'
             + '<button class="fm-toggle kt-act-icon" data-id="' + f.id + '" data-active="' + (f.active ? 1 : 0) + '" title="' + (f.active ? 'Deactivate' : 'Activate') + '" style="border:1px solid #E5E7EB;background:#fff;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">' + (f.active ? '⏸' : '▶️') + '</button> '
-            + '<button class="fm-del kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" title="Delete" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">🗑️</button>'
+            + '<button class="fm-del kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" title="Delete" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">🗑️</button>'))
             + '</td></tr>';
         }).join('') + '</tbody></table>';
       // View it in the portal's document panel like every other document, rather
@@ -2104,6 +2135,7 @@
         var menu = document.createElement('div');
         menu.style.cssText = 'position:fixed;z-index:2147483000;background:#fff;border:1px solid #E5E7EB;border-radius:12px;box-shadow:0 12px 34px rgba(15,23,42,.18);padding:6px 0;min-width:190px;';
         function item(icon, label, danger, fn) {
+          if (!fmMenuAllowed(label)) { return document.createComment('read-only'); }
           var mi = document.createElement('button'); mi.type = 'button';
           mi.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;padding:10px 15px;font-size:13.5px;cursor:pointer;color:' + (danger ? '#B91C1C' : '#111827') + ';font-family:inherit;white-space:nowrap;';
           mi.innerHTML = '<span style="width:18px;text-align:center;">' + icon + '</span><span>' + label + '</span>';
@@ -2698,7 +2730,7 @@
   }
 
   try {
-    ['platform_admin', 'agency_admin', 'centre_director'].forEach(function (r) {
+    ['platform_admin', 'agency_admin', 'centre_director', 'auditor'].forEach(function (r) {
       if (KT.Shell && KT.Shell.registerScreen) KT.Shell.registerScreen(r + ':forms-manager', render);
     });
   } catch (e) {}
