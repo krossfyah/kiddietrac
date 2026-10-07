@@ -28,9 +28,13 @@
    content is there — measured on #immunizations after back-navigation: 3 children, 2,192
    characters of text, all at opacity 0, animation pending. Starting at .6 keeps the soft
    entrance, and a delayed start now shows the page dimmed instead of not at all. */
-@keyframes kt-screen-in { from { opacity: .6; } to { opacity: 1; } }
+/* A NAME OF ITS OWN. This was first called kt-screen-in, which kt-mobile-app.css already
+   defines (twice) as a slide from the right starting at opacity 0 — and the later sheet's
+   @keyframes wins by name. Every banner and section then started invisible and slid in
+   34px: "the hero banner ... resizes briefly" on sign-in (Anthony's video, 2026-10-06). */
+@keyframes kt-enter-soft { from { opacity: .6; } to { opacity: 1; } }
 #appMain > * {
-  animation: kt-screen-in 0.12s ease both !important;
+  animation: kt-enter-soft 0.12s ease both !important;
 }
 @media (prefers-reduced-motion: reduce) {
   #appMain > * { animation: none !important; }
@@ -44,7 +48,7 @@
    BOTH the fade-in and the shimmer. */
 #appMain .kt-banner-fx,
 #appMain > .kt-banner-fx {
-  animation: kt-screen-in 0.12s ease both, kt-hero-breathe 16s ease-in-out infinite !important;
+  animation: kt-enter-soft 0.12s ease both, kt-hero-breathe 16s ease-in-out infinite !important;
   background-size: 200% 200% !important;
 }
 .kt-banner-fx {
@@ -53,7 +57,7 @@
      was overriding the shimmer entirely (computed animation-name came out as
      kt-fade-in), which is why banners stopped shimmering. Keep the fade-in AND the
      shimmer. */
-  animation: kt-screen-in 0.28s ease-out, kt-hero-breathe 16s ease-in-out infinite !important;
+  animation: kt-enter-soft 0.28s ease-out, kt-hero-breathe 16s ease-in-out infinite !important;
 }
 /* Floating emoji art — identical to the native .kt-hero-emoji so EVERY banner's
    art is the same size / transparency / float (was 54px + opacity .85 + a
