@@ -2,6 +2,10 @@
    KIDDIETRAC v22p8.1 — Custom roles matrix editor
    Hash: #admin-roles — agency_admin only
    Backend: /api/v1/admin/{roles, permission-keys} (v22p8 Phase A)
+   Permissions step 1 (2026-10-06): built-in roles are read-only here except for the
+   platform owner; custom roles have "Based on" + "Covers" (one centre / whole agency,
+   agency only when based on Agency admin); the platform owner also sees the watch-only
+   permission check (GET /admin/permission-shadow, kill switch POST .../mode).
    ============================================================ */
 (function (window) {
   'use strict';
@@ -45,6 +49,14 @@
       tasks: 'Tasks', own_tasks: 'Tasks', late_pickups: 'Late pickups',
       home_visits: 'Home visits', forms: 'Documents', rsvp: 'Events & RSVPs',
       email_templates: 'Communications', help: 'Help & training',
+      dashboard: 'Dashboard & directory', contacts: 'Dashboard & directory', ai: 'Dashboard & directory',
+      messages: 'Communications', photos: 'Daily care', care_logs: 'Daily care', wellness: 'Daily care',
+      awards: 'Daily care', menu: 'Daily care', report_cards: 'Observations & curriculum',
+      immunizations: 'Medical', cacfp: 'Daily care', zones: 'Daily care',
+      field_trips: 'Trips & transport', bus_routes: 'Trips & transport', safe_arrival: 'Attendance & kiosk',
+      closures: 'Agency settings', integrations: 'Agency settings',
+      payroll: 'Payroll & expenses', expenses: 'Payroll & expenses', fundraising: 'Invoicing & billing',
+      marketing: 'Enrolment & marketing', waitlist: 'Enrolment & marketing',
     };
     Object.keys(catalog).forEach(function (key) {
       var prefix = key.split('.')[0];
@@ -53,11 +65,11 @@
       groups[groupName].push({ key: key, label: catalog[key] });
     });
     // Stable category order
-    var order = ['Centres', 'Families & children', 'Parent scope', 'Staff', 'Rooms',
-      'Invoicing & billing', 'Reports', 'Incidents', 'Medical',
-      'Observations & curriculum', 'Attendance & kiosk', 'Late pickups', 'Tasks',
-      'Home visits', 'Documents', 'Communications', 'Events & RSVPs', 'Help & training',
-      'Agency settings'];
+    var order = ['Dashboard & directory', 'Centres', 'Families & children', 'Parent scope', 'Staff', 'Rooms',
+      'Daily care', 'Attendance & kiosk', 'Incidents', 'Medical', 'Observations & curriculum',
+      'Late pickups', 'Tasks', 'Home visits', 'Trips & transport', 'Documents', 'Communications',
+      'Events & RSVPs', 'Enrolment & marketing', 'Invoicing & billing', 'Payroll & expenses',
+      'Reports', 'Help & training', 'Agency settings'];
     var sorted = [];
     order.forEach(function (n) { if (groups[n]) sorted.push({ name: n, items: groups[n] }); });
     // Append any leftover groups (defensive — keys we didn't map)
@@ -65,6 +77,94 @@
       if (order.indexOf(n) === -1) sorted.push({ name: n, items: groups[n] });
     });
     return sorted;
+  }
+
+  function toastErr(what, e) {
+    var msg = what + ': ' + ((e && e.message) || 'error');
+    if (Dom.toast) Dom.toast(msg, 'error'); else if (window.toast) window.toast('⚠️', what, (e && e.message) || '', '#DC2626');
+  }
+
+  function fmtWhen(s) {
+    if (!s) return '—';
+    try { return KT.fmtDateTime ? KT.fmtDateTime(s) : String(s).slice(0, 16) + ' UTC'; } catch (e) { return String(s).slice(0, 16); }
+  }
+
+  /* PERMISSION CHECK (WATCH-ONLY) — platform owner only. Where the roles matrix and what
+     really happened disagree, grouped by permission and role. Nothing is blocked. */
+  function shadowPanel(container) {
+    var card = Dom.el('div', { style: 'background:white;border-radius:14px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin:0 0 20px;' });
+    card.appendChild(Dom.el('div', { style: 'color:#6B7280;font-size:13px;' }, 'Loading the permission check…'));
+    Api.get('/admin/permission-shadow').then(function (d) {
+      Dom.clear(card);
+      var head = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;' });
+      head.appendChild(Dom.el('div', {}, [
+        Dom.el('div', { style: 'font-size:15px;font-weight:700;color:#0F172A;' }, '🔎 Permission check (watch-only)'),
+        Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:2px;' },
+          (d.mode === 'shadow' ? 'Watching' : 'Off') + (d.ends_on ? ' · the ' + d.days + '-day window ends ' + d.ends_on : '') +
+          ' · blocks nothing · first area to enforce after this: ' + (d.first_enforced_area || 'Settings & platform screens')),
+      ]));
+      var next = d.mode === 'shadow' ? 'off' : 'shadow';
+      var tog = btn(d.mode === 'shadow' ? 'Turn off' : 'Turn on watching', ghost(), async function () {
+        tog.disabled = true;
+        try { await Api.post('/admin/permission-shadow/mode', { mode: next }); renderRoles(container); }
+        catch (e) { tog.disabled = false; toastErr('Could not switch', e); }
+      });
+      tog.style.padding = '4px 12px'; tog.style.fontSize = '12px';
+      head.appendChild(tog);
+      card.appendChild(head);
+
+      var groups = d.groups || [];
+      if (!groups.length) {
+        card.appendChild(Dom.el('div', { style: 'margin-top:10px;font-size:13px;color:#047857;' }, 'No disagreements recorded: the matrix matches what people can really do.'));
+      }
+      /* Two kinds, kept apart. "Would block" = the matrix says no but the person got in:
+         enforcing would take access away, so these must be zero first. "Wider" = the matrix
+         says yes but today's checks refused: harmless while those checks stay in place. */
+      [['deny', 'Would block — must be zero before enforcing', '#B91C1C'],
+       ['allow', 'Matrix wider than today’s checks — harmless while those checks stay', '#B45309']].forEach(function (kind) {
+        var list = groups.filter(function (g) { return g.matrix_decision === kind[0] && !g.known; });
+        var known = groups.filter(function (g) { return g.matrix_decision === kind[0] && g.known; });
+        if (!groups.length) return;
+        card.appendChild(Dom.el('div', { style: 'margin-top:14px;font-size:13px;font-weight:700;color:' + kind[2] + ';' },
+          kind[1] + ' (' + list.length + ')'));
+        if (known.length) {
+          card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:2px;' },
+            '+ ' + known.length + ' expected: permissions that cover screens some of these roles can’t open today (' +
+            known.map(function (g) { return g.permission; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ') + ').'));
+        }
+        if (!list.length) return;
+        var t = Dom.el('table', { style: 'width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px;' });
+        var hr = Dom.el('tr');
+        ['Permission', 'Role(s)', 'People', 'Calls', 'First seen', 'Last seen', 'Where'].forEach(function (h) {
+          hr.appendChild(Dom.el('th', { style: 'text-align:left;padding:6px 8px;color:#64748B;font-weight:600;border-bottom:1px solid #E2E8F0;' }, h));
+        });
+        t.appendChild(Dom.el('thead', {}, [hr]));
+        var tb = Dom.el('tbody');
+        list.forEach(function (g) {
+          var tr = Dom.el('tr');
+          [g.permission, String(g.roles || '').replace(/,/g, ', '), String(g.people), String(g.hits),
+            fmtWhen(g.first_seen), fmtWhen(g.last_seen), (g.samples || []).join('\n')].forEach(function (c, ci) {
+            tr.appendChild(Dom.el('td', { style: 'padding:6px 8px;border-bottom:1px solid #F1F5F9;vertical-align:top;' + (ci === 6 ? 'white-space:pre-line;font-family:ui-monospace,monospace;font-size:11px;color:#475569;' : '') }, c));
+          });
+          tb.appendChild(tr);
+        });
+        t.appendChild(tb);
+        card.appendChild(Dom.el('div', { style: 'overflow-x:auto;' }, [t]));
+      });
+      var conf = Object.keys(d.conflicts || {});
+      if (conf.length) {
+        card.appendChild(Dom.el('div', { style: 'margin-top:10px;font-size:12px;color:#64748B;' },
+          conf.length + ' permissions cover screens that different roles reach today (to split before enforcing): ' + conf.join(', ')));
+      }
+      if (d.auditor_target) {
+        card.appendChild(Dom.el('div', { style: 'margin-top:6px;font-size:12px;color:#64748B;' },
+          'Auditors — today: ' + (d.auditor_today || []).join(', ') + '. Planned for enforcement (read-only, everything except money): ' + d.auditor_target.join(', ') + '.'));
+      }
+    }).catch(function (e) {
+      Dom.clear(card);
+      card.appendChild(Dom.el('div', { style: 'color:#DC2626;font-size:13px;' }, 'Could not load the permission check: ' + (e.message || 'error')));
+    });
+    return card;
   }
 
   function renderRoles(container) {
@@ -86,11 +186,18 @@
     ]).then(function (results) {
       var roles = results[0].roles || [];
       var catalog = results[1].catalog || {};
+      var canEditBuiltin = !!results[0].can_edit_builtin;
+      var isPlatform = !!results[0].is_platform;
+      var baseNames = {};
+      roles.forEach(function (r) { if (r.is_system) baseNames[r.key] = r.name; });
       Dom.clear(wrap);
       wrap.appendChild(Dom.el('h1', { style: 'font-size:24px;margin:0 0 6px;' }, '🛡 Roles & permissions'));
       wrap.appendChild(Dom.el('p', {
         style: 'color:#6B7280;font-size:14px;margin:0 0 20px;line-height:1.5;',
-      }, 'Configure what each role can do in your agency. System roles can be tuned but not renamed or deleted. Custom roles can be created and modified freely. Phase A: stored only — Phase B will activate the checks.'));
+      }, canEditBuiltin
+        ? 'Built-in roles show what each role can reach today. Changes to a built-in role apply to this agency. Custom roles cover one centre unless they are based on Agency admin. The permission check is watch-only for now: it compares this list with what really happens and blocks nothing.'
+        : 'Built-in roles show what each role can do today and are managed by KiddieTrac. For a different set, create a custom role (it covers one centre unless it is based on Agency admin).'));
+      if (isPlatform) wrap.appendChild(shadowPanel(container));
 
       var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;' });
 
@@ -98,17 +205,23 @@
       var listCol = Dom.el('div', { style: 'background:white;border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);position:sticky;top:20px;' });
       var listHeader = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
       listHeader.appendChild(Dom.el('h3', { style: 'margin:0;font-size:14px;font-weight:700;letter-spacing:0.5px;color:#6B7280;text-transform:uppercase;' }, 'Roles'));
-      var newBtn = btn('+ New', primary(), function () {
-        var name = window.prompt('Custom role name? (e.g. "Lead Educator")');
-        if (!name || !name.trim()) return;
-        Api.post('/admin/roles', { name: name.trim(), description: '', permissions: [] })
-          .then(function (r) { renderRoles(container); /* re-fetch + re-render, will land on new role */ })
-          .catch(function (e) { alert('Could not create: ' + (e.message || 'error')); });
-      });
+      var newBtn = btn('+ New', primary(), function () { createCustom(null); });
       newBtn.style.padding = '4px 10px';
       newBtn.style.fontSize = '12px';
       listHeader.appendChild(newBtn);
       listCol.appendChild(listHeader);
+
+      async function createCustom(base) {
+        var name = await KT.prompt({
+          title: base ? 'New role based on ' + (baseNames[base.key] || base.name) : 'New custom role',
+          description: base ? 'Starts with the same permissions; change them after. It covers one centre unless it is based on Agency admin.' : 'For example Lead Educator or Bookkeeper. It covers one centre unless you base it on Agency admin.',
+          placeholder: 'Role name', okLabel: 'Create',
+        });
+        if (!name || !String(name).trim()) return;
+        Api.post('/admin/roles', { name: String(name).trim(), description: '', permissions: [], base_role: base ? base.key : null, scope: 'centre' })
+          .then(function () { renderRoles(container); })
+          .catch(function (e) { toastErr('Could not create', e); });
+      }
 
       var listEl = Dom.el('div', { 'data-kt-list': '1' });
       roles.forEach(function (r) {
@@ -124,7 +237,7 @@
             : Dom.el('span', { style: 'font-size:9px;background:#DBEAFE;color:#1F6080;padding:1px 5px;border-radius:4px;letter-spacing:0.5px;' }, 'CUSTOM'),
         ]));
         item.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;margin-top:2px;' },
-          (r.permissions || []).length + ' permissions'));
+          (r.permissions || []).length + ' permissions' + (r.is_system ? '' : ' · ' + (r.scope === 'agency' ? 'whole agency' : 'one centre'))));
         item.addEventListener('click', function () { selectRole(r); });
         item.addEventListener('mouseenter', function () { if (!item.classList.contains('selected')) item.style.background = '#F9FAFB'; });
         item.addEventListener('mouseleave', function () { if (!item.classList.contains('selected')) item.style.background = ''; });
@@ -183,9 +296,49 @@
         titleArea.appendChild(descInput);
         header.appendChild(titleArea);
 
+        var locked = role.is_system && !canEditBuiltin;
         var saveBtn = btn('Save changes', primary());
-        header.appendChild(saveBtn);
+        if (locked) {
+          descInput.readOnly = true;
+          header.appendChild(btn('Copy as custom role', ghost(), function () { createCustom(role); }));
+        } else {
+          header.appendChild(saveBtn);
+        }
         card.appendChild(header);
+        if (locked) {
+          card.appendChild(Dom.el('div', { style: 'margin-top:8px;padding:8px 12px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;font-size:12.5px;color:#475569;' },
+            'Built-in roles are managed by KiddieTrac and show what this role can do today. To give someone a different set, copy it as a custom role.'));
+        }
+
+        // Custom roles: what they start from and how far they reach (decision 2).
+        var baseSel = null, scopeSel = null;
+        if (!role.is_system) {
+          var row = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-top:10px;font-size:13px;color:#374151;' });
+          baseSel = Dom.el('select', { style: 'height:30px;padding:0 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;' });
+          baseSel.appendChild(Dom.el('option', { value: '' }, '— none —'));
+          Object.keys(baseNames).forEach(function (k) {
+            var o = Dom.el('option', { value: k }, baseNames[k]);
+            if (role.base_role === k) o.selected = true;
+            baseSel.appendChild(o);
+          });
+          scopeSel = Dom.el('select', { style: 'height:30px;padding:0 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;' });
+          scopeSel.appendChild(Dom.el('option', { value: 'centre' }, 'One centre'));
+          scopeSel.appendChild(Dom.el('option', { value: 'agency' }, 'Whole agency'));
+          scopeSel.value = role.scope === 'agency' ? 'agency' : 'centre';
+          var scopeNote = Dom.el('span', { style: 'font-size:11.5px;color:#6B7280;' });
+          function syncScope() {
+            var agencyOk = baseSel.value === 'agency_admin';
+            scopeSel.options[1].disabled = !agencyOk;
+            if (!agencyOk && scopeSel.value === 'agency') scopeSel.value = 'centre';
+            scopeNote.textContent = agencyOk ? '' : 'Whole agency is only for roles based on Agency admin.';
+          }
+          baseSel.addEventListener('change', syncScope);
+          syncScope();
+          row.appendChild(Dom.el('label', { style: 'display:flex;gap:6px;align-items:center;' }, ['Based on', baseSel]));
+          row.appendChild(Dom.el('label', { style: 'display:flex;gap:6px;align-items:center;' }, ['Covers', scopeSel]));
+          row.appendChild(scopeNote);
+          card.appendChild(row);
+        }
 
         card.appendChild(Dom.el('hr', { style: 'border:none;border-top:1px solid #E5E7EB;margin:16px 0;' }));
 
@@ -205,7 +358,7 @@
           var toggleAll = Dom.el('a', {
             href: '#', style: 'font-size:11px;color:#1F6080;text-decoration:none;font-weight:600;',
           }, 'Toggle all');
-          gHeader.appendChild(toggleAll);
+          if (!locked) gHeader.appendChild(toggleAll);
           section.appendChild(gHeader);
 
           var grid2 = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px 16px;padding:6px 4px;' });
@@ -215,6 +368,7 @@
             });
             var cb = Dom.el('input', { type: 'checkbox' });
             cb.checked = currentPerms.has(p.key);
+            if (locked) { cb.disabled = true; label.style.cursor = 'default'; }
             cb.style.marginTop = '3px';
             checkboxes[p.key] = cb;
             label.appendChild(cb);
@@ -244,12 +398,12 @@
             Api.delete('/admin/roles/' + role.id).then(function () {
               if (Dom.toast) Dom.toast('Role archived', 'success');
               renderRoles(container);
-            }).catch(function (e) { alert('Could not delete: ' + (e.message || 'error')); });
+            }).catch(function (e) { toastErr('Could not delete', e); });
           }));
         } else {
           footer.appendChild(Dom.el('span', {
             style: 'font-size:11px;color:#6B7280;',
-          }, 'System roles cannot be deleted, only their permissions tuned.'));
+          }, canEditBuiltin ? 'Built-in roles cannot be deleted, only their permissions tuned.' : 'Built-in roles cannot be changed or deleted.'));
         }
         var permCount = Dom.el('span', { style: 'font-size:12px;color:#6B7280;' });
         function updateCount() {
@@ -275,6 +429,7 @@
           if (!role.is_system && titleArea._nameInput) {
             payload.name = titleArea._nameInput.value.trim() || role.name;
           }
+          if (baseSel) { payload.base_role = baseSel.value || null; payload.scope = scopeSel.value; }
           saveBtn.disabled = true;
           saveBtn.textContent = 'Saving…';
           Api.patch('/admin/roles/' + role.id, payload).then(function (resp) {
@@ -286,7 +441,7 @@
           }).catch(function (e) {
             saveBtn.disabled = false;
             saveBtn.textContent = 'Save changes';
-            alert('Could not save: ' + (e.message || 'error'));
+            toastErr('Could not save', e);
           });
         });
       }

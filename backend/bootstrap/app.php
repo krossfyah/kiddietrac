@@ -71,6 +71,11 @@ return Application::configure(basePath: dirname(__DIR__))
                asking about (43,967 this month). The browser reports those to
                /diag/client-error instead. See the middleware's own note. */
             \App\Http\Middleware\TrackFailedRequests::class,
+            /* Permission check, WATCH-ONLY (permissions step 1, 2026-10-06): after the
+               response is sent, compares the roles matrix with what really happened and
+               logs disagreements. Never blocks. Kill switch: platform setting
+               permissions.mode (off | shadow). */
+            \App\Http\Middleware\PermissionShadow::class,
             /* LAST, so it sees the final JSON whatever the rest of the pipeline did:
                every protected /storage URL leaving the API is replaced with a signed,
                expiring one. Uploaded files were served by Apache with no auth, no

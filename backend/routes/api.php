@@ -1672,6 +1672,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'show']);
         Route::patch('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'update']);
         Route::delete('/roles/{role}', [\App\Http\Controllers\Api\RoleController::class, 'destroy']);
+        // Permissions step 1 (2026-10-06): platform-only watch-only check + kill switch (controller checks platform_admin).
+        Route::get('/permission-shadow', [\App\Http\Controllers\Api\RoleController::class, 'shadowSummary']);
+        Route::post('/permission-shadow/mode', [\App\Http\Controllers\Api\RoleController::class, 'shadowMode']);
         Route::patch('/sibling-discounts', [\App\Http\Controllers\Api\SiblingDiscountController::class, 'update']);
         // v22p4.6: global portal search — moved out of this group in v22p42 so
         // centre_director can use the Cmd-K palette too. See director-search

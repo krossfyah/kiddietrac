@@ -9,6 +9,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\PermissionMap;
+use App\Support\Permissions;
 
 /**
  * v22p8 Phase A — custom roles CRUD.
@@ -19,6 +21,14 @@ use Illuminate\Support\Str;
  * is_system rows:  permissions editable, name/key/description editable too
  *                  but key is enforced unique-per-agency. Cannot be deleted.
  * non-system rows: fully editable + deletable when no users assigned.
+ *
+ * PERMISSIONS STEP 1 (2026-10-06):
+ *  - Built-in roles are edited by the PLATFORM OWNER only (decision 1); an agency that
+ *    needs a different set makes a custom role.
+ *  - A custom role has a scope: 'centre' (default) or 'agency', and agency is allowed only
+ *    when it is based on Agency admin (decision 2).
+ *  - The catalog and the built-in defaults come from App\Support\PermissionMap.
+ *  - Platform-only: the watch-only permission check (shadow) summary and its kill switch.
  */
 final class RoleController extends Controller
 {
@@ -35,8 +45,13 @@ final class RoleController extends Controller
             ->orderBy('name')
             ->get();
 
+        $isPlatform = $this->isPlatform($request);
         return response()->json([
             'roles' => $roles->map(fn ($r) => $this->serialize($r))->all(),
+            'can_edit_builtin' => $isPlatform,
+            'is_platform' => $isPlatform,
+            'base_roles' => array_keys(PermissionMap::DEFAULTS),
+            'permissions_mode' => Permissions::mode(),
         ]);
     }
 
@@ -76,10 +91,23 @@ final class RoleController extends Controller
             'description' => ['nullable', 'string', 'max:500'],
             'permissions' => ['present', 'array'],
             'permissions.*' => ['string', 'max:100'],
+            'base_role' => ['nullable', 'string', 'in:' . implode(',', array_keys(PermissionMap::DEFAULTS))],
+            'scope' => ['nullable', 'string', 'in:centre,agency'],
         ]);
+        $baseRole = $data['base_role'] ?? null;
+        $scope = $data['scope'] ?? 'centre';
+        if ($scope === 'agency' && $baseRole !== 'agency_admin') {
+            return response()->json(['message' => 'Only a role based on Agency admin can cover the whole agency. Other custom roles are limited to one centre.'], 422);
+        }
 
         $validKeys = array_keys($this->catalogStatic());
-        $perms = array_values(array_unique(array_intersect($data['permissions'], $validKeys)));
+        // Starting from a built-in role with no keys ticked = take that role's current set.
+        $start = $data['permissions'];
+        if (! $start && $baseRole) {
+            $baseRow = DB::table('roles')->where('agency_id', $agencyId)->where('key', $baseRole)->where('is_system', true)->whereNull('deleted_at')->value('permissions');
+            $start = $baseRow ? (json_decode((string) $baseRow, true) ?: []) : PermissionMap::DEFAULTS[$baseRole];
+        }
+        $perms = array_values(array_unique(array_intersect($start, $validKeys)));
 
         // Derive a stable key slug from the name; ensure unique per agency.
         $base = Str::slug($data['name'], '_');
@@ -96,10 +124,13 @@ final class RoleController extends Controller
             'name' => $data['name'],
             'description' => $data['description'] ?? null,
             'permissions' => json_encode($perms),
+            'scope' => $scope,
+            'base_role' => $baseRole,
             'is_system' => false,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        Permissions::bump();
 
         return response()->json([
             'role' => $this->serialize(DB::table('roles')->find($id)),
@@ -117,6 +148,10 @@ final class RoleController extends Controller
             ->whereNull('deleted_at')
             ->first();
         if (! $role) return response()->json(['message' => 'Not found'], 404);
+        // Decision 1: built-in roles are the platform's to change. Agencies use custom roles.
+        if ($role->is_system && ! $this->isPlatform($request)) {
+            return response()->json(['message' => 'Built-in roles are managed by KiddieTrac. Create a custom role to give a different set of permissions.'], 403);
+        }
 
         $rules = [
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
@@ -126,19 +161,31 @@ final class RoleController extends Controller
         // System rows: name and key are immutable (they're referenced by code).
         if (! $role->is_system) {
             $rules['name'] = ['sometimes', 'string', 'max:120'];
+            $rules['scope'] = ['sometimes', 'string', 'in:centre,agency'];
+            $rules['base_role'] = ['sometimes', 'nullable', 'string', 'in:' . implode(',', array_keys(PermissionMap::DEFAULTS))];
         }
 
         $data = $request->validate($rules);
+        if (! $role->is_system) {
+            $scope = $data['scope'] ?? ($role->scope ?? 'centre');
+            $base = array_key_exists('base_role', $data) ? $data['base_role'] : ($role->base_role ?? null);
+            if ($scope === 'agency' && $base !== 'agency_admin') {
+                return response()->json(['message' => 'Only a role based on Agency admin can cover the whole agency. Other custom roles are limited to one centre.'], 422);
+            }
+        }
 
         $update = ['updated_at' => now()];
         if (array_key_exists('name', $data)) $update['name'] = $data['name'];
         if (array_key_exists('description', $data)) $update['description'] = $data['description'];
+        if (array_key_exists('scope', $data)) $update['scope'] = $data['scope'];
+        if (array_key_exists('base_role', $data)) $update['base_role'] = $data['base_role'];
         if (array_key_exists('permissions', $data)) {
             $validKeys = array_keys($this->catalogStatic());
             $update['permissions'] = json_encode(array_values(array_unique(array_intersect($data['permissions'], $validKeys))));
         }
 
         DB::table('roles')->where('id', $roleId)->update($update);
+        Permissions::bump();
 
         return response()->json([
             'role' => $this->serialize(DB::table('roles')->find($roleId)),
@@ -162,11 +209,78 @@ final class RoleController extends Controller
             'deleted_at' => now(),
             'updated_at' => now(),
         ]);
+        Permissions::bump();
 
         return response()->json(['message' => 'Role archived']);
     }
 
+    /**
+     * GET /admin/permission-shadow — PLATFORM ONLY. The watch-only permission check:
+     * disagreements between the roles matrix and what really happened, grouped by
+     * permission and role (counts, people, first / last seen), the window end date, and
+     * the keys known to be too coarse (CONFLICTS).
+     */
+    public function shadowSummary(Request $request): JsonResponse
+    {
+        if (! $this->isPlatform($request)) return response()->json(['message' => 'Platform only'], 403);
+        $groups = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('permission_shadow_log')) {
+            $groups = DB::table('permission_shadow_log')
+                ->selectRaw('permission, roles, matrix_decision, COUNT(DISTINCT user_id) as people, SUM(hits) as hits, COUNT(DISTINCT CONCAT(method, " ", route)) as routes,
+                    MIN(first_seen) as first_seen, MAX(last_seen) as last_seen, GROUP_CONCAT(DISTINCT CONCAT(method, " /", route, " → ", actual_status) ORDER BY route SEPARATOR "\n") as samples')
+                ->groupBy('permission', 'roles', 'matrix_decision')
+                ->orderByDesc('hits')
+                ->limit(500)->get()
+                ->map(function ($g) {
+                    $g->samples = array_slice(explode("\n", (string) $g->samples), 0, 8);
+                    // Known: the key is coarser than today's gates for these roles (CONFLICTS
+                    // 'some') — expected until the key is split (B2), so shown as a count.
+                    $c = PermissionMap::CONFLICTS[$g->permission] ?? null;
+                    $rs = explode(',', (string) $g->roles);
+                    $g->known = $g->matrix_decision === 'allow' && $c && ! array_intersect($rs, $c['all']) && array_intersect($rs, $c['some']);
+                    return $g;
+                })->all();
+        }
+        return response()->json([
+            'mode' => Permissions::mode(),
+            'started_at' => Permissions::shadowStartedAt(),
+            'ends_on' => Permissions::shadowEndsOn(),
+            'days' => Permissions::SHADOW_DAYS,
+            'groups' => $groups,
+            'conflicts' => PermissionMap::CONFLICTS,
+            'auditor_target' => PermissionMap::AUDITOR_TARGET,
+            'auditor_today' => PermissionMap::DEFAULTS['auditor'] ?? [],
+            'first_enforced_area' => 'Settings & platform screens',
+        ]);
+    }
+
+    /** POST /admin/permission-shadow/mode {mode: off|shadow} — PLATFORM ONLY. Enforce is refused in this step. */
+    public function shadowMode(Request $request): JsonResponse
+    {
+        if (! $this->isPlatform($request)) return response()->json(['message' => 'Platform only'], 403);
+        $mode = (string) $request->input('mode');
+        try {
+            Permissions::setMode($mode);
+        } catch (\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 409);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+        DB::table('audit_logs')->insert([
+            'user_id' => $request->user()->id, 'agency_id' => null, 'action' => 'permissions.mode',
+            'entity_type' => 'platform_setting', 'entity_id' => null,
+            'payload' => json_encode(['mode' => $mode]), 'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 255), 'created_at' => now(),
+        ]);
+        return response()->json(['mode' => Permissions::mode(), 'ends_on' => Permissions::shadowEndsOn()]);
+    }
+
     // ───────────────────────────────────────────────────────────────────────
+
+    private function isPlatform(Request $request): bool
+    {
+        return \App\Support\UserRoles::has($request, 'platform_admin');
+    }
 
     private function resolveAgencyId(Request $request): ?int
     {
@@ -210,6 +324,8 @@ final class RoleController extends Controller
             'description' => $r->description,
             'permissions' => json_decode($r->permissions, true) ?: [],
             'is_system' => (bool) $r->is_system,
+            'scope' => $r->is_system ? null : ($r->scope ?? 'centre'),
+            'base_role' => $r->base_role ?? null,
             'created_at' => $r->created_at,
             'updated_at' => $r->updated_at,
         ];
@@ -227,53 +343,19 @@ final class RoleController extends Controller
        permissions the agency may have edited) and never another agency's. */
     private function ensureSystemRoles(int $agencyId): void
     {
-        $baseline = [
-            'agency_admin' => ['Agency Admin', 'Full access to every agency feature.', array_keys($this->catalogStatic())],
-            'centre_director' => ['Centre Director', 'Operational lead at one centre.', [
-                'centres.view', 'families.view', 'families.edit',
-                'children.view', 'children.edit', 'children.archive',
-                'staff.view', 'staff.invite', 'staff.schedule',
-                'rooms.view', 'rooms.edit',
-                'invoices.view', 'invoices.generate',
-                'reports.compliance', 'reports.attendance',
-                'incidents.view', 'incidents.review', 'incidents.notify_parent',
-                'medications.view', 'medications.authorize',
-                'observations.view', 'observations.create',
-                'lesson_plans.view', 'lesson_plans.create',
-                'kiosk.manage',
-                'edocuments.view', 'edocuments.send',
-                'announcements.create',
-                'tasks.assign', 'late_pickups.log', 'late_pickups.decide',
-                'home_visits.review', 'help.assign',
-            ]],
-            'educator' => ['Educator', 'Day-to-day care staff.', [
-                'children.view',
-                'incidents.view', 'incidents.create',
-                'observations.view', 'observations.create',
-                'lesson_plans.view',
-                'medications.view',
-                'attendance.record',
-                'own_tasks.view', 'late_pickups.log',
-            ]],
-            'guardian' => ['Parent / Guardian', 'Self-serve parent portal.', [
-                'own_children.view',
-                'own_invoices.view', 'own_invoices.pay',
-                'incidents.acknowledge',
-                'edocuments.sign',
-                'own_tasks.view',
-            ]],
-            /* Home visitor: a real built-in role (nav, routes, Visibility) that the matrix
-               never listed. Descriptive like every other row here. */
-            'home_visitor' => ['Home Visitor', 'Visits families and centres; files reports and inspections.', [
-                'home_visits.file', 'own_tasks.view', 'edocuments.sign',
-            ]],
-            'auditor' => ['Auditor', 'Read-only access for compliance review.', [
-                'centres.view', 'families.view', 'children.view',
-                'staff.view', 'rooms.view', 'invoices.view',
-                'reports.compliance', 'reports.attendance',
-                'audit.view',
-            ]],
+        // Step 1 (2026-10-06): the defaults are the real access today (PermissionMap).
+        $names = [
+            'agency_admin' => ['Agency Admin', 'Full access to every agency feature.'],
+            'centre_director' => ['Centre Director', 'Operational lead at one centre.'],
+            'educator' => ['Educator', 'Day-to-day care staff.'],
+            'guardian' => ['Parent / Guardian', 'Self-serve parent portal.'],
+            'home_visitor' => ['Home Visitor', 'Visits families and centres; files reports and inspections.'],
+            'auditor' => ['Auditor', 'Read-only access for review.'],
         ];
+        $baseline = [];
+        foreach (PermissionMap::DEFAULTS as $key => $perms) {
+            $baseline[$key] = [$names[$key][0] ?? $key, $names[$key][1] ?? null, $perms];
+        }
         $have = DB::table('roles')->where('agency_id', $agencyId)->pluck('key')->all();   // incl. soft-deleted: unique key
         foreach ($baseline as $key => [$name, $desc, $perms]) {
             if (in_array($key, $have, true)) continue;
@@ -287,64 +369,6 @@ final class RoleController extends Controller
 
     private function catalogStatic(): array
     {
-        return [
-            'centres.view' => 'View centre list and details',
-            'centres.edit' => 'Edit centre settings and branding',
-            'centres.create' => 'Create new centres in the agency',
-            'centres.delete' => 'Delete (archive) centres',
-            'families.view' => 'View all families at scoped centres',
-            'families.edit' => 'Edit family records',
-            'families.invite' => 'Send invitations to new families',
-            'children.view' => 'View all child records',
-            'children.edit' => 'Edit child records (name, medical, photo, etc.)',
-            'children.archive' => 'Archive (soft-delete) child records',
-            'own_children.view' => 'View own children only (parent scope)',
-            'staff.view' => 'View staff list',
-            'staff.invite' => 'Invite new staff',
-            'staff.schedule' => 'Create + edit staff shifts and timesheets',
-            'staff.certifications' => 'Manage staff certifications',
-            'rooms.view' => 'View room layout and rosters',
-            'rooms.edit' => 'Create / edit / archive rooms',
-            'invoices.view' => 'View invoices',
-            'invoices.generate' => 'Generate monthly invoice batches',
-            'invoices.refund' => 'Issue refunds',
-            'own_invoices.view' => 'View own invoices only (parent scope)',
-            'own_invoices.pay' => 'Pay own invoices (parent scope)',
-            'reports.compliance' => 'Run + export compliance reports',
-            'reports.attendance' => 'Run + export attendance reports',
-            'incidents.view' => 'View incident reports',
-            'incidents.create' => 'Create new incident reports',
-            'incidents.review' => 'Review submitted incidents',
-            'incidents.notify_parent' => 'Send incident reports to parents',
-            'incidents.acknowledge' => 'Acknowledge incident reports (parent scope)',
-            'medications.view' => 'View medication records',
-            'medications.authorize' => 'Authorize new medications',
-            'observations.view' => 'View child observations',
-            'observations.create' => 'Create observations',
-            'lesson_plans.view' => 'View lesson plans',
-            'lesson_plans.create' => 'Create + publish lesson plans',
-            'attendance.record' => 'Record check-in / check-out events',
-            'kiosk.manage' => 'Manage kiosk tokens + parent PINs',
-            'edocuments.view' => 'View eDocuments',
-            'edocuments.send' => 'Send eDocuments to families',
-            'edocuments.sign' => 'Sign eDocuments (parent scope)',
-            'announcements.create' => 'Create + send announcements',
-            'settings.edit' => 'Edit agency settings (branding, billing, etc.)',
-            'roles.manage' => 'Create + edit custom roles',
-            'mfa.enforce' => 'Require MFA for other staff users',
-            'audit.view' => 'View the audit log',
-            // 2026-10-06 — features added since the matrix was written.
-            'tasks.assign' => 'Assign and track tasks for staff and parents',
-            'own_tasks.view' => 'See and complete own tasks (My tasks)',
-            'late_pickups.log' => 'Log late pickups and late arrivals',
-            'late_pickups.decide' => 'Approve and charge, waive or decline late pickup fees',
-            'home_visits.file' => 'File home-visit reports and inspection forms',
-            'home_visits.review' => 'Review home-visit reports and inspection forms',
-            'forms.manage' => 'Forms Manager: upload forms, review and counter-sign',
-            'rsvp.manage' => 'Event RSVPs: events, invitations, templates, reminders, reports',
-            'rsvp.senders' => 'Connect sender accounts (Gmail) for event emails',
-            'email_templates.manage' => 'Edit email templates, preview and send tests',
-            'help.assign' => 'Assign training videos and guides to staff and parents',
-        ];
+        return PermissionMap::CATALOG;
     }
 }

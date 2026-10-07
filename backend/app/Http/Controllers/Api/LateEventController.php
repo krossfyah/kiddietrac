@@ -71,9 +71,23 @@ final class LateEventController extends Controller
             ->exists();
     }
 
+    /** Staff who log late pickups IN THIS AGENCY: educators, directors, admins (a platform
+        admin anywhere). Home visitors and auditors no longer log them (Anthony, 2026-10-06,
+        permissions step 1: "Late pickups for home visitors and auditors: remove"). */
+    private function canLog(Request $request): bool
+    {
+        $agencyId = $this->agencyId($request);
+        if (! $agencyId) return false;
+        return DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+            ->where(fn ($q) => $q->where('role', 'platform_admin')
+                ->orWhere(fn ($w) => $w->whereIn('role', ['agency_admin', 'centre_director', 'educator'])->where('agency_id', $agencyId)))
+            ->exists();
+    }
+
     /** GET /provider/late-events/options — children, centres with close times, the fee policy. */
     public function options(Request $request): JsonResponse
     {
+        abort_unless($this->canLog($request), 403, 'Late pickups are logged by educators, directors and admins.');
         $agencyId = $this->agencyId($request);
         $centreIds = $agencyId ? Visibility::centreIds($agencyId, $request->user()) : [];
         $centres = DB::table('centres')->whereIn('id', $centreIds)->orderBy('name')->get(['id', 'name', 'close_time']);
@@ -98,6 +112,7 @@ final class LateEventController extends Controller
     public function store(Request $request): JsonResponse
     {
         $this->ensureTable();
+        abort_unless($this->canLog($request), 403, 'Late pickups are logged by educators, directors and admins.');
         $data = $request->validate([
             'child_id' => ['required', 'integer'],
             'kind' => ['nullable', 'string', 'in:' . implode(',', self::KINDS)],
@@ -186,6 +201,7 @@ final class LateEventController extends Controller
     /** GET /provider/late-events — the one list. ?status=pending|approved|waived|declined|all */
     public function index(Request $request): JsonResponse
     {
+        abort_unless($this->canLog($request), 403, 'Late pickups are for educators, directors and admins.');
         $this->ensureTable();
         $centreIds = $this->centreIds($request);
         $empty = ['pending' => 0, 'approved' => 0, 'waived' => 0, 'declined' => 0, 'all' => 0];
