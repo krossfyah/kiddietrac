@@ -22,6 +22,13 @@
     if (!el || el.nodeType !== 1 || el.__ktModal) return false;
     // Not modals: the loading splash, or anything that explicitly opts out.
     if (el.id === 'kt-splash' || el.hasAttribute('data-no-modal-guard')) return false;
+    /* NOT THE REFRESH COVER (2026-10-06). __ktSnapshot appends a fixed, viewport-sized
+       picture of #appMain to <body> during a background refresh — which is exactly what
+       this guard looks for. It "enhanced" it: the screen's content wrapper got
+       max-height:90vh + overflow-y:auto (a scrollbar, the hero shrinking 15px) and a ×
+       in the hero's corner. Anthony's sign-in video: "the hero banner redraws and it has
+       a scroll bar for a brief moment". */
+    if (el.hasAttribute('data-kt-refresh-snap') || el.getAttribute('aria-hidden') === 'true' || el.inert) return false;
     var cs;
     try { cs = getComputedStyle(el); } catch (e) { return false; }
     if (cs.position !== 'fixed' && cs.position !== 'absolute') return false;

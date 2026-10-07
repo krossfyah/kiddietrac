@@ -43,7 +43,7 @@
      Carrier settings half a second later, which put it back on the Text messages
      tab and wiped the test message being typed. Reported as "when testing voice
      calls the screen keeps jumping back to text messages". */
-  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track|admin\/voice\/test-call|admin\/sms-settings\/test(-send)?\b)/i;
+  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track|admin\/voice\/test-call|admin\/sms-settings\/test(-send)?\b|\/me\/markers\b)/i;
 
   /* Screens that keep THEMSELVES fresh, and must never be torn down and rebuilt
      underneath the person using them.
@@ -60,6 +60,14 @@
      Any screen can join them by putting data-kt-self-live on an element it renders.
      (Anthony, 2026-08-26) */
   var SELF_LIVE = { 'chat': 1, 'messages': 1, 'messenger': 1 };
+
+  function ownApi(u) {
+    try {
+      var a = new URL(u, w.location.href);
+      if (!/\/api\/v1\//.test(a.pathname)) { return false; }
+      return a.origin === w.location.origin || /(^|\.)kiddietrac\.com$/i.test(a.hostname);
+    } catch (e) { return false; }
+  }
 
   function currentHash() {
     return (w.location.hash || '').replace('#', '').split('?')[0] || '';
@@ -226,6 +234,14 @@
 
         var url = String((input && input.url) || input || '');
         if (IGNORE.test(url)) { return res; }
+        /* OUR API ONLY (2026-10-06). The wrap is on window.fetch, so it also saw writes
+           that are nothing to do with KiddieTrac data - a browser extension's
+           POST /eventbus/web, analytics beacons, the payment provider - and each one
+           re-rendered the screen. Together with /me/markers (interface state, saved on
+           every sign-in) that was the redraw ~4s after signing in, under a cover the
+           modal guard then dressed as a dialog: "the hero banner redraws and it has a
+           scroll bar". Only a write to /api/v1/ on our own host is a data change. */
+        if (!ownApi(url)) { return res; }
 
         return res.then(function (r) {
           try { if (r && r.ok) { dataChanged(url); } } catch (e) {}

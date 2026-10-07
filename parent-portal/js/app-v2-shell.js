@@ -1709,6 +1709,8 @@
          position with !important and would otherwise move it. */
       snap.id = 'appMain';
       snap.setAttribute('data-kt-refresh-snap', '1');
+      // Not a dialog: the modal guard must not give it a scroll box and a × (see kt-modal-guard).
+      snap.setAttribute('data-no-modal-guard', '1');
       snap.setAttribute('aria-hidden', 'true');
       try { snap.inert = true; } catch (e) {}
       snap.removeAttribute('data-kt-pretty');
@@ -1730,6 +1732,12 @@
         snap.style.setProperty(p[0], p[1], 'important');
       });
       document.body.appendChild(snap);
+      /* A PICTURE DOES NOT ANIMATE IN (2026-10-06). The clone is a new node, so every
+         entrance fade on it (#appMain > *, the banners) replayed from .6 the moment it
+         went up: the "frozen" screen visibly flashed pale over the live one during each
+         background refresh. Pinned exactly as the live screen is - entrance fades already
+         over, the banner shimmer at the same point in its loop. */
+      try { __ktPinAnimations(snap); } catch (e) {}
       /* THE PICTURE OF THE BAR GOES WHERE THE BAR IS (2026-10-06). The bar is
          position:sticky, and inside the clone it sticks to the CLONE (an overflow:hidden
          box), not to the page — so it sat 6px off the live bar and moved when the cover
