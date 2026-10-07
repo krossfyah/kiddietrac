@@ -1743,6 +1743,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // The full inventory — everything the system sends, not just the four that
         // are editable. Read-only; the editor routes below still own changes.
         Route::get('/email-catalogue', [AdminController::class, 'emailCatalogue']);
+        // Every email, previewable and (nearly all) editable — the popups on Settings →
+        // Email templates (2026-10-06). The registry templates keep /email-template/{key}.
+        Route::get('/email-library', [\App\Http\Controllers\Api\EmailLibraryController::class, 'index']);
+        Route::get('/email-library/{key}', [\App\Http\Controllers\Api\EmailLibraryController::class, 'show'])->where('key', '[a-z0-9-]+');
+        Route::put('/email-library/{key}', [\App\Http\Controllers\Api\EmailLibraryController::class, 'save'])->where('key', '[a-z0-9-]+');
+        Route::post('/email-library/{key}/preview', [\App\Http\Controllers\Api\EmailLibraryController::class, 'preview'])->where('key', '[a-z0-9-]+')->middleware('throttle:60,1,etpreview');
+        Route::post('/email-library/{key}/test', [\App\Http\Controllers\Api\EmailLibraryController::class, 'test'])->where('key', '[a-z0-9-]+')->middleware('throttle:10,1,ettest');
         Route::get('/email-template/{key}', [AdminController::class, 'getEmailTemplate']);
         Route::put('/email-template/{key}', [AdminController::class, 'saveEmailTemplate']);
         Route::post('/email-template/{key}/test', [AdminController::class, 'testEmailTemplate'])->middleware('throttle:10,1,ettest');

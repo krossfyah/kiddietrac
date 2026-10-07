@@ -40,7 +40,7 @@ final class AgencyHtmlNotice extends Mailable
      * @param string      $bodyHtml     the finished message body
      * @param string      $subjectLine  subject as the caller composed it
      * @param int|null    $agencyId     names the sending tenant for the suppression gate
-     * @param string|null $bccList      single address, or a comma-separated list
+     * @param string|array|null $bccList  single address, a comma-separated list, or a list
      * @param bool        $accountNotice
      *   Carries X-KT-Account-Notice. The de-enrolment notice is sent moments before the
      *   family's logins are closed, and a closed account is exactly what the mail gate
@@ -57,7 +57,13 @@ final class AgencyHtmlNotice extends Mailable
         public readonly string $bodyHtml,
         public readonly string $subjectLine,
         public readonly ?int $agencyId = null,
-        public readonly ?string $bccList = null,
+        /* A list as well as a string (2026-10-06). The de-enrolment notice passes
+           MailOversight::bccFor(), which returns an ARRAY, into a `?string`: the
+           constructor threw a TypeError, the caller's catch logged "De-enrolment notice
+           could not be sent", and the family never got it — family 39 on 28 Sep and both
+           guardians of family 137 on 5 Oct. Found by the email-template preview harness
+           running the real sender. Accepting both keeps every caller valid. */
+        public readonly string|array|null $bccList = null,
         public readonly bool $accountNotice = false,
         public readonly bool $bypassSuppression = false,
     ) {}
@@ -66,7 +72,7 @@ final class AgencyHtmlNotice extends Mailable
     {
         $bcc = array_values(array_filter(array_map(
             'trim',
-            explode(',', (string) $this->bccList)
+            is_array($this->bccList) ? array_map('strval', $this->bccList) : explode(',', (string) $this->bccList)
         )));
 
         return new Envelope(subject: $this->subjectLine, bcc: $bcc);

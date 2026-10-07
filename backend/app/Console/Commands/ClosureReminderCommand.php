@@ -354,8 +354,8 @@ class ClosureReminderCommand extends Command
         if ($closureDate !== '' && $away > 1) {
             try {
                 $when = 'on ' . Carbon::parse($closureDate)->format('l');
-            } catch (\Throwable $e) {
-                // keep the counted form
+            } catch (\Throwable $ex) {
+                // keep the counted form ($ex, not $e: $e is the escaper used below)
             }
         }
 
@@ -395,6 +395,16 @@ class ClosureReminderCommand extends Command
             ? 'There is nothing you need to do — sign-in is switched off and we will see you when we reopen.'
             : 'If you believe you are scheduled to work during the closure, speak to your director before the date.';
 
+        /* THE AGENCY'S OWN WORDING (2026-10-06, Settings → Email templates → Closure
+           reminder). Each version of each sentence is its own section — parent or staff,
+           holiday or ordinary, fees adjusted or not — so changing one cannot change another.
+           A section nobody edited returns the sentence built above exactly as it is. */
+        $say = fn (string $section, string $html) => \App\Support\EmailOverrides::say($agencyId, 'closure-reminder', $section, $html,
+            ['centre_name' => $centreName, 'when' => $when, 'reason' => $reason, 'dates' => $dates, 'provider' => $provider]);
+        $lead = $say(($isParent ? 'lead_parent' : 'lead_staff') . ($isHoliday ? '_holiday' : ''), $lead);
+        $noteHtml = $say($isParent ? ($affectsBilling ? 'fees_adjusted' : 'fees_continue') : 'note_staff', $e($note));
+        $closeHtml = $say($isParent ? 'close_parent' : 'close_staff', $e($close));
+
         /* Who they are with. Named for a parent because "your provider" is a person to
            them; an educator already knows where they work. */
         $withWhom = ($isParent && $provider !== '')
@@ -423,8 +433,8 @@ class ClosureReminderCommand extends Command
             . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748B;">Why</div>'
             . '<div style="font-size:15px;color:#0F172A;margin-top:2px;">' . $e($reason) . '</div></div></td></tr>'
             . $meaningBlock
-            . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#334155;">' . $e($note) . '</td></tr>'
-            . '<tr><td style="padding:10px 0 0;font-size:14px;line-height:1.6;color:#64748B;">' . $e($close) . '</td></tr>'
+            . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#334155;">' . $noteHtml . '</td></tr>'
+            . '<tr><td style="padding:10px 0 0;font-size:14px;line-height:1.6;color:#64748B;">' . $closeHtml . '</td></tr>'
             . '</table>';
 
         $html = EmailTemplate::wrap($agencyId, $body, [

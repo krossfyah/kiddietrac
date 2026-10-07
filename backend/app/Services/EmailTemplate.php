@@ -43,6 +43,18 @@ final class EmailTemplate
      */
     public static function wrap(?int $agencyId, string $bodyHtml, array $opts = []): string
     {
+        /* The agency's own wording for this email, if it changed any (2026-10-06,
+           App\Support\EmailOverrides). Nothing stored means nothing changes: the same body
+           and options come back, so an unedited email is byte-for-byte what it was. */
+        $ktEmailKey = null;
+        // What the caller passed, kept only while a preview is recording (see built()).
+        $ktIn = \App\Support\EmailOverrides::$seen !== null ? [$agencyId, $bodyHtml, $opts] : null;
+        try {
+            [$bodyHtml, $opts, $ktEmailKey] = \App\Support\EmailOverrides::apply($agencyId, $bodyHtml, $opts);
+        } catch (\Throwable $e) {
+            unset($opts['email']);
+        }
+
         $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
         // force_brand ('kt' | 'agency') overrides white-label detection — used to
         // preview both looks. Omit for the normal per-agency behaviour.
@@ -97,7 +109,7 @@ final class EmailTemplate
                 . '</td></tr></table></td></tr>';
         }
 
-        return ''
+        $ktHtml = ''
             . '<!DOCTYPE html><html lang="en"><head>'
             . '<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
             . '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
@@ -189,6 +201,11 @@ final class EmailTemplate
             . '</td></tr></table>'
 
             . '</body></html>';
+
+        // A preview in progress records what was built; a real send ignores this.
+        \App\Support\EmailOverrides::built($ktEmailKey, $ktHtml, $ktIn);
+
+        return $ktHtml;
     }
 
     /**

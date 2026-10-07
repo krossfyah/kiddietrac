@@ -120,6 +120,7 @@ class CheckinReminderCommand extends Command
                 $title = "🕘 Has {$name} arrived?";
                 $body = "{$name} hasn't been signed in at {$child->centre_name} today. "
                     . "Please sign in when you arrive — or let us know if they're not coming in.";
+                $mailData = ['child_name' => $name, 'centre_name' => $child->centre_name];
             } else {
                 // Evening: only chase an OPEN record (signed in, never signed out).
                 if (! $last || $last->event_type !== 'check_in') continue;
@@ -128,6 +129,7 @@ class CheckinReminderCommand extends Command
                 $title = "🕕 Please sign {$name} out";
                 $body = "{$name} was signed in at {$in} and hasn't been signed out. "
                     . "Please sign out so the day's attendance record is complete.";
+                $mailData = ['child_name' => $name, 'centre_name' => $child->centre_name, 'signed_in_at' => $in];
             }
 
             $guardians = DB::table('guardians as g')
@@ -159,7 +161,7 @@ class CheckinReminderCommand extends Command
 
                 if ($prefs['email'] && $g->email) {
                     $this->email((int) $child->agency_id, (string) $g->email,
-                        trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? '')), $title, $body, $window);
+                        trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? '')), $title, $body, $window, $mailData);
                 }
 
                 if ($prefs['sms'] && $g->phone) {
@@ -179,16 +181,21 @@ class CheckinReminderCommand extends Command
         return self::SUCCESS;
     }
 
-    private function email(int $agencyId, string $to, string $toName, string $title, string $body, string $window): void
+    private function email(int $agencyId, string $to, string $toName, string $title, string $body, string $window, array $data = []): void
     {
+        /* The agency's own wording for the EMAIL (2026-10-06). $body is also the push and
+           the text, which keep the standard words; only the email copy changes here, and a
+           section nobody edited returns exactly what was built before. */
+        $say = fn (string $section, string $html) => \App\Support\EmailOverrides::say($agencyId, 'checkin-reminder', $section, $html, $data);
         $extra = $window === 'morning'
             ? '<p style="margin:14px 0 0;font-size:13.5px;color:#475569;line-height:1.6;">'
-              . 'If your child is not coming in today, you can tell us in the app — open KiddieTrac and tap '
-              . '<strong>“Not attending today”</strong>. That lets the whole team know, and stops these reminders.</p>'
+              . $say('not_attending_tip', 'If your child is not coming in today, you can tell us in the app — open KiddieTrac and tap '
+              . '<strong>“Not attending today”</strong>. That lets the whole team know, and stops these reminders.') . '</p>'
             : '';
 
         $html = EmailTemplate::wrap($agencyId,
-            '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($body) . '</p>' . $extra,
+            '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
+            . $say($window === 'morning' ? 'message_morning' : 'message_evening', e($body)) . '</p>' . $extra,
             [
                 'eyebrow' => 'REMINDER',
                 'title' => $title,

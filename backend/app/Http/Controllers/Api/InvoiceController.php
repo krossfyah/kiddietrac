@@ -2389,10 +2389,13 @@ final class InvoiceController extends Controller
             'money' => $money, 'amount' => $money, 'due' => $due, 'agency_name' => $agencyName,
         ], $facts);
 
+        // The agency's own wording for the staff copy, where it changed it; else exactly this.
+        $say = fn (string $section, string $html) => \App\Support\EmailOverrides::say($agencyId, 'invoice-voided-staff', $section, $html,
+            ['family_name' => $familyName, 'invoice_number' => $number]);
         $staffBody = '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
             . '<tr><td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">'
-            . 'An invoice for <strong>' . $esc($familyName) . '</strong> has been voided. The family has been '
-            . 'told it is cancelled and that no payment is due.</td></tr>'
+            . $say('intro', 'An invoice for <strong>' . $esc($familyName) . '</strong> has been voided. The family has been '
+            . 'told it is cancelled and that no payment is due.') . '</td></tr>'
             . $facts
             . '<tr><td style="padding:14px 0 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;">'
             . '<div style="' . $cap . '">Voided by</div>'
@@ -2402,9 +2405,9 @@ final class InvoiceController extends Controller
             . ($reason !== '' ? $esc($reason) : '<span style="color:#94A3B8;">No reason recorded</span>')
             . '</div></div></td></tr>'
             . '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
-            . 'The invoice keeps its number and stays in Accounting marked Void, so the trail is intact. If it '
+            . $say('trail', 'The invoice keeps its number and stays in Accounting marked Void, so the trail is intact. If it '
             . 'belonged to a payment schedule, that instalment has been withdrawn and the schedule total '
-            . 'adjusted to match.</td></tr>'
+            . 'adjusted to match.') . '</td></tr>'
             . '</table>';
 
         return [

@@ -72,9 +72,14 @@ final class PasswordResetEmail extends Mailable
             ? htmlspecialchars($this->accountLabel)
             : '';
 
+        // Wording a platform admin changed (Settings → Email templates); unchanged
+        // sections return exactly the sentence written here.
+        $say = fn (string $section, string $html) => \App\Support\EmailOverrides::say(null, 'password-reset', $section, $html,
+            ['minutes' => (string) $this->expiresInMinutes]);
+
         $body = '<p style="margin:0 0 14px;">Hi ' . $first . ',</p>'
-            . '<p style="margin:0 0 16px;">We received a request to reset your Kiddietrac password. '
-            . 'Click the button below to choose a new one.</p>'
+            . '<p style="margin:0 0 16px;">' . $say('intro', 'We received a request to reset your Kiddietrac password. '
+            . 'Click the button below to choose a new one.') . '</p>'
             . ($label === '' ? '' :
                 '<p style="margin:0 0 16px;padding:11px 13px;border-radius:9px;background:#F1F5F9;'
                 . 'border-left:3px solid #159FB4;font-size:13px;color:#334155;">'
@@ -84,9 +89,9 @@ final class PasswordResetEmail extends Mailable
             . \App\Services\EmailTemplate::button('Reset my password →', $this->resetUrl)
             . '<p style="margin:16px 0 0;font-size:12px;color:#64748B;">Or paste this link into your browser:<br>'
             . '<a href="' . $safeUrl . '" style="color:#1F6080;">' . $safeUrl . '</a></p>'
-            . '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8;">This link expires in '
+            . '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8;">' . $say('expiry', 'This link expires in '
             . htmlspecialchars($this->expiresInMinutes) . ' minutes. If you didn\'t request a reset, '
-            . 'you can safely ignore this email — your password won\'t change.</p>';
+            . 'you can safely ignore this email — your password won\'t change.') . '</p>';
 
         $html = \App\Services\EmailTemplate::wrap(null, $body, [
             'eyebrow'   => 'PASSWORD RESET',

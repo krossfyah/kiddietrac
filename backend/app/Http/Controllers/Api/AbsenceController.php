@@ -246,9 +246,14 @@ class AbsenceController extends Controller
                         $isReporter ? 'info' : 'warning'
                     )
                     . '<p style="margin:14px 0 0;font-size:14px;line-height:1.6;color:#475569;">'
-                    . ($isReporter
-                        ? 'Nothing further is needed. If plans change, cancel the absence in the app and ' . e($child->centre_name) . ' will be told.'
-                        : 'If this is not right, contact ' . e($child->centre_name) . ' so it can be corrected.')
+                    // The agency's own closing line for the email (Settings → Email templates);
+                    // unchanged, it is exactly the sentence below.
+                    . \App\Support\EmailOverrides::say((int) $child->agency_id, 'absence-reported',
+                        $isReporter ? 'closing_reporter' : 'closing_other',
+                        $isReporter
+                            ? 'Nothing further is needed. If plans change, cancel the absence in the app and ' . e($child->centre_name) . ' will be told.'
+                            : 'If this is not right, contact ' . e($child->centre_name) . ' so it can be corrected.',
+                        ['child_name' => $name, 'centre_name' => (string) $child->centre_name])
                     . '</p>';
 
                 $html = EmailTemplate::wrap((int) $child->agency_id, $body, [

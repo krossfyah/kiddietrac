@@ -157,10 +157,10 @@ final class EmailCatalogue
             [
                 'key' => 'invoice', 'audience' => 'parents',
                 'name' => 'Your invoice',
-                'fires' => 'When an invoice is issued, manually or by the billing run.',
-                'to' => 'The payer on the account',
-                'subject' => 'Invoice {number}',
-                'source' => 'Console/Commands/BillingRun.php:131, Http/Controllers/Api/PayeeInvoiceController.php:351',
+                'fires' => 'When an invoice to a third-party payer (a subsidy body, an employer) is sent from Billing → Payee invoices, with the PDF attached.',
+                'to' => 'The payee\'s billing address',
+                'subject' => 'Invoice {reference} - {amount}',
+                'source' => 'Http/Controllers/Api/PayeeInvoiceController.php:353',
                 'preview' => 'none',
             ],
             [
@@ -191,11 +191,11 @@ final class EmailCatalogue
                 'preview' => 'none',
             ],
             [
-                'key' => 'billing-reminder', 'audience' => 'parents',
-                'name' => 'Payment reminder',
-                'fires' => 'On the reminder schedule set under Billing → Reminders. Master switch is OFF by default.',
-                'to' => 'Payers with an unpaid invoice',
-                'subject' => 'Invoice {number} — payment reminder',
+                'key' => 'billing-reminder', 'audience' => 'platform',
+                'name' => 'KiddieTrac invoice overdue (to the agency)',
+                'fires' => 'When a KiddieTrac subscription invoice to an agency is overdue, on the platform reminder schedule.',
+                'to' => 'The agency\'s billing contact',
+                'subject' => 'Reminder: invoice {number} is overdue',
                 'source' => 'Console/Commands/PlatformInvoiceReminders.php:127',
                 'preview' => 'none',
             ],
@@ -233,7 +233,7 @@ final class EmailCatalogue
                 'to' => 'Guardians, CC admin, director and educator',
                 'subject' => 'Welcome to {centre}',
                 'source' => 'Http/Controllers/Api/AdminController.php:4159, Support/ProviderWelcomeMailer.php:74',
-                'preview' => 'sample',
+                'preview' => 'sample', 'registry' => 'provider-welcome',
             ],
             [
                 'key' => 'family-departure', 'audience' => 'parents',
@@ -374,20 +374,20 @@ final class EmailCatalogue
             ],
             [
                 'key' => 'timeoff-decision', 'audience' => 'staff',
-                'name' => 'Time off approved / declined / withdrawn',
-                'fires' => 'When a time-off request is decided or withdrawn.',
-                'to' => 'The requester, and the rota is re-sent to affected staff',
-                'subject' => 'Approved: {name} off {date}',
-                'source' => 'Http/Controllers/Api/TimeOffController.php:585, :746, :841',
+                'name' => 'Your time off was approved / declined',
+                'fires' => 'When a director or admin decides a time-off request.',
+                'to' => 'The person who asked',
+                'subject' => 'Your time-off request was approved',
+                'source' => 'Http/Controllers/Api/TimeOffController.php:848',
                 'preview' => 'none',
             ],
             [
                 'key' => 'rota-change', 'audience' => 'staff',
-                'name' => 'Rota change',
-                'fires' => 'When approved leave changes who is on the floor.',
-                'to' => 'Staff whose shifts moved',
-                'subject' => 'Your rota has changed',
-                'source' => 'Http/Controllers/Api/TimeOffController.php:670',
+                'name' => 'Rota change — a colleague is away',
+                'fires' => 'When a colleague\'s time off is approved.',
+                'to' => 'The other educators and home visitors at the centre',
+                'subject' => '{name} is away — {dates}',
+                'source' => 'Http/Controllers/Api/TimeOffController.php:592',
                 'preview' => 'none',
             ],
             [
@@ -549,11 +549,11 @@ final class EmailCatalogue
             ],
             [
                 'key' => 'support-ticket', 'audience' => 'office',
-                'name' => 'Support ticket raised / answered',
-                'fires' => 'When a ticket is raised, and when it is answered. Bugs route to info@, everything else to the agency admins.',
+                'name' => 'Support ticket raised',
+                'fires' => 'When a ticket is raised. Bugs route to info@, everything else to the agency admins.',
                 'to' => 'Agency admins, or KiddieTrac support for bugs',
                 'subject' => 'New support ticket',
-                'source' => 'Http/Controllers/Api/SupportTicketController.php:227, :229, :490',
+                'source' => 'Http/Controllers/Api/SupportTicketController.php:258',
                 'preview' => 'none',
             ],
             [
@@ -663,7 +663,7 @@ final class EmailCatalogue
                 'fires' => 'When KiddieTrac bills an agency for its subscription.',
                 'to' => 'The agency\'s billing contact',
                 'subject' => 'KiddieTrac — invoice {number}',
-                'source' => 'Http/Controllers/Api/PlatformInvoiceController.php:291, Console/Commands/SendPlatformInvoice.php:82',
+                'source' => 'Http/Controllers/Api/PlatformInvoiceController.php:341, Console/Commands/SendPlatformInvoice.php:82, Console/Commands/BillingRun.php:131',
                 'preview' => 'none',
             ],
             // ── Added 2026-10-06: senders the catalogue had missed (email:catalogue --check) ──
@@ -847,6 +847,162 @@ final class EmailCatalogue
                 'source' => 'Console/Commands/SecurityAlerts.php:173',
                 'preview' => 'none',
             ],
+            // ── Added 2026-10-06 (email templates, worker 2): one entry per distinct email, so
+            //    each can be previewed and worded on its own. Several of these used to share
+            //    an entry with a sibling sent from the same method.
+            [
+                'key' => 'portal-access', 'audience' => 'parents',
+                'name' => 'Portal access paused / restored',
+                'fires' => 'When an admin suspends or reactivates a family.',
+                'to' => 'The family\'s guardians',
+                'subject' => 'Your portal access has been paused',
+                'source' => 'Http/Controllers/Api/AdminController.php:5242',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'immunization-reminder-parent', 'audience' => 'parents',
+                'name' => 'Immunization record needed (to parents)',
+                'fires' => 'On the immunization reminder schedule, when a child is overdue or coming up and the office does not already hold a record.',
+                'to' => 'The child\'s guardians, with the centre\'s staff blind-copied',
+                'subject' => 'Immunization record for {child}',
+                'source' => 'Console/Commands/ImmunizationRemindersCommand.php:199',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'team-chat-unread', 'audience' => 'staff',
+                'name' => 'Unread team chat',
+                'fires' => 'When team-chat messages have sat unread for a while — one email per person per run.',
+                'to' => 'Each staff member with unread messages',
+                'subject' => 'New message from {sender}',
+                'source' => 'Console/Commands/EmailMissedMessagesCommand.php:493',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'safe-arrival-staff', 'audience' => 'office',
+                'name' => 'Safe Arrival: child not arrived (staff copy)',
+                'fires' => 'When an expected child has not arrived and no absence was reported.',
+                'to' => 'The centre\'s staff',
+                'subject' => '{child} has not arrived',
+                'source' => 'Console/Commands/SafeArrivalCommand.php:218',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'timeoff-reminders', 'audience' => 'office',
+                'name' => 'Time off waiting for approval (reminder)',
+                'fires' => 'On the agency\'s reminder schedule while requests are still undecided (Settings → Clock settings).',
+                'to' => 'The people who can approve them',
+                'subject' => 'Time off waiting for approval',
+                'source' => 'Support/TimeOffReminders.php:225',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'forms-to-sign', 'audience' => 'parents',
+                'name' => 'Forms to sign',
+                'fires' => 'When forms are sent to someone to complete from Forms Manager.',
+                'to' => 'The person asked to sign',
+                'subject' => 'A form needs your signature',
+                'source' => 'Http/Controllers/Api/ManagedFormController.php:1424',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'form-correction', 'audience' => 'parents',
+                'name' => 'Please correct and resubmit a form',
+                'fires' => 'When a reviewer sends a submitted form back for changes.',
+                'to' => 'The person who submitted it',
+                'subject' => 'Please correct and resubmit: {form}',
+                'source' => 'Http/Controllers/Api/ManagedFormController.php:1845',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'form-countersigned', 'audience' => 'parents',
+                'name' => 'Your form was counter-signed',
+                'fires' => 'When the office counter-signs a form, with the signed copy.',
+                'to' => 'The person who signed it first',
+                'subject' => '{form} — counter-signed',
+                'source' => 'Http/Controllers/Api/ManagedFormController.php:2678',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'absence-reported-office', 'audience' => 'office',
+                'name' => 'Absence reported (to the centre)',
+                'fires' => 'When a parent reports an absence in the app.',
+                'to' => 'The child\'s educators and the centre\'s directors',
+                'subject' => '{child} will be absent — {date}',
+                'source' => 'Http/Controllers/Api/AbsenceController.php:359',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'incident-review', 'audience' => 'office',
+                'name' => 'Incident awaiting review',
+                'fires' => 'When an incident report is filed and needs a director\'s review.',
+                'to' => 'The centre\'s directors',
+                'subject' => 'Incident awaiting review — {child}',
+                'source' => 'Http/Controllers/Api/IncidentController.php:994',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'timeoff-closure-parents', 'audience' => 'parents',
+                'name' => 'We will be closed (a provider\'s time off)',
+                'fires' => 'When approved time off leaves a home-care centre with nobody to open it.',
+                'to' => 'The centre\'s families',
+                'subject' => 'We will be closed on {dates}',
+                'source' => 'Http/Controllers/Api/TimeOffController.php:592',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'timeoff-approved-office', 'audience' => 'office',
+                'name' => 'Time off approved (record for the office)',
+                'fires' => 'When a time-off request is approved.',
+                'to' => 'Agency admins and directors',
+                'subject' => 'Approved: {name} off {dates}',
+                'source' => 'Http/Controllers/Api/TimeOffController.php:592',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'timeoff-withdrawn', 'audience' => 'staff',
+                'name' => 'Time off withdrawn — back in after all',
+                'fires' => 'When approved time off is withdrawn.',
+                'to' => 'The colleagues and office who were told it was approved',
+                'subject' => '{name} will be in after all — {dates}',
+                'source' => 'Http/Controllers/Api/TimeOffController.php:753',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'support-ticket-reply', 'audience' => 'staff',
+                'name' => 'New reply on your support ticket',
+                'fires' => 'When someone replies on a support ticket.',
+                'to' => 'The other side of the ticket',
+                'subject' => 'New reply on your ticket #{id}',
+                'source' => 'Http/Controllers/Api/SupportTicketController.php:435',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'support-ticket-resolved', 'audience' => 'staff',
+                'name' => 'Your support request was resolved',
+                'fires' => 'When a ticket is resolved or closed.',
+                'to' => 'The person who raised it',
+                'subject' => 'Your request has been resolved — ticket #{id}',
+                'source' => 'Http/Controllers/Api/SupportTicketController.php:617',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'website-support-ack', 'audience' => 'platform',
+                'name' => 'Website support request received (to the person asking)',
+                'fires' => 'When someone asks for help on the public website.',
+                'to' => 'The person asking',
+                'subject' => 'KiddieTrac support request #{id} received',
+                'source' => 'Http/Controllers/Api/WebsiteSupportController.php:113',
+                'preview' => 'none',
+            ],
+            [
+                'key' => 'website-voicemail', 'audience' => 'platform',
+                'name' => 'New voicemail',
+                'fires' => 'When a caller leaves a voicemail on the support line.',
+                'to' => 'KiddieTrac support',
+                'subject' => 'Voicemail from {caller}',
+                'source' => 'Http/Controllers/Api/WebsiteSupportController.php:181',
+                'preview' => 'none',
+            ],
             [
                 'key' => 'website-support', 'audience' => 'platform',
                 'name' => 'Website support request / voicemail',
@@ -857,6 +1013,105 @@ final class EmailCatalogue
                 'preview' => 'none',
             ],
         ];
+    }
+
+    /**
+     * Emails worded once for every agency, by a platform admin: KiddieTrac's own mail
+     * (password reset, its invoices, legal notices, the public website) rather than an
+     * agency's. An agency admin can preview these but not change them.
+     */
+    public const PLATFORM_KEYS = [
+        'password-reset', 'platform-welcome', 'platform-invoice', 'billing-reminder', 'legal-notice',
+        'security-alerts', 'sign-in-alert', 'password-expiry', 'account-deletion',
+        'website-booking-confirmation', 'website-booking-sales', 'website-support', 'website-support-ack',
+        'website-voicemail',
+    ];
+
+    /** Shown with Preview only, and why. Everything else can be worded. */
+    public const PREVIEW_ONLY = [
+        'weekly-summary' => 'A QA harness run by hand on the server; families never receive it on a schedule.',
+        'rsvp-sender-test' => 'A connection test for an event\'s sender account: it has no wording of its own.',
+        'drip' => 'Each drip email IS the campaign\'s content — word it on the campaign in Marketing.',
+        'website-booking-sales' => 'An internal note to the KiddieTrac sales inbox, not built on the email layout.',
+    ];
+
+    /** Listed per event, edited in Event RSVPs. */
+    public const PER_EVENT = ['rsvp-emails' => '#event-rsvps'];
+
+    /** The editor's groups, in order. */
+    public const GROUPS = [
+        'parents' => 'Parents',
+        'billing' => 'Billing',
+        'staff' => 'Staff',
+        'accounts' => 'Accounts & invitations',
+        'admin' => 'Admin alerts',
+        'platform' => 'Platform (KiddieTrac-wide)',
+    ];
+
+    private const GROUP_OF = [
+        'payment-receipt' => 'billing', 'payment-failed-parent' => 'billing', 'invoice' => 'billing',
+        'account-statement' => 'billing', 'invoice-copy' => 'billing', 'payment-receipt-pdf' => 'billing',
+        'invoice-cancelled' => 'billing', 'invoice-voided-staff' => 'billing', 'payment-failed-office' => 'billing',
+        'payslip' => 'billing', 'donation-receipt' => 'billing', 'donation-pledge' => 'billing',
+        'invite' => 'accounts', 'onboarding-welcome' => 'accounts', 'onboarding-reminder' => 'accounts',
+        'portal-access' => 'accounts', 'sms-consent-invite' => 'accounts', 'sms-consent-receipt' => 'accounts',
+    ];
+
+    public static function groupOf(array $e): string
+    {
+        if (in_array($e['key'], self::PLATFORM_KEYS, true)) {
+            return 'platform';
+        }
+        if (isset(self::GROUP_OF[$e['key']])) {
+            return self::GROUP_OF[$e['key']];
+        }
+
+        return ['parents' => 'parents', 'staff' => 'staff', 'office' => 'admin', 'platform' => 'platform'][$e['audience']] ?? 'parents';
+    }
+
+    /**
+     * How an email is edited:
+     *   'sections'  — the full section editor of the registry (App\Support\EmailTemplates)
+     *   'basic'     — subject, heading, opening and closing (+ any named sections)
+     *                 through App\Support\EmailOverrides
+     *   'per-event' — worded on each event
+     *   'none'      — preview only (see PREVIEW_ONLY)
+     */
+    public static function editMode(string $key): string
+    {
+        static $byKey = null;
+        if ($byKey === null) {
+            $byKey = [];
+            foreach (self::all() as $e) {
+                $byKey[$e['key']] = $e;
+            }
+        }
+        $e = $byKey[$key] ?? null;
+        if ($e === null) {
+            return 'none';
+        }
+        if (! empty($e['registry'])) {
+            return 'sections';
+        }
+        if (isset(self::PER_EVENT[$key])) {
+            return 'per-event';
+        }
+        if (isset(self::PREVIEW_ONLY[$key])) {
+            return 'none';
+        }
+
+        return 'basic';
+    }
+
+    public static function find(string $key): ?array
+    {
+        foreach (self::all() as $e) {
+            if ($e['key'] === $key) {
+                return $e;
+            }
+        }
+
+        return null;
     }
 
     /** Grouped for the screen, in audience order. */

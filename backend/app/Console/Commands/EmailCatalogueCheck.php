@@ -105,6 +105,29 @@ final class EmailCatalogueCheck extends Command
             }
         }
 
+        /* EVERY WRAP SITE NAMES ITS EMAIL (2026-10-06). An email can only be worded in
+           Settings → Email templates if EmailTemplate::wrap() can tell which email is being
+           built, and it learns that from the calling method (EmailOverrides::SITES). A new
+           sender that is not listed there still sends, unchanged, but its wording cannot be
+           edited — so it is reported here, method by method. */
+        $unmapped = [];
+        foreach (array_keys($found) as $rel) {
+            if (in_array($rel, self::NOT_SENDERS, true) || $rel === 'Support/TemplatedEmails.php') {
+                continue;
+            }
+            foreach (self::wrapMethods(base_path('app/' . $rel)) as $site) {
+                if (! array_key_exists($site, \App\Support\EmailOverrides::SITES)) {
+                    $unmapped[] = $rel . ' → ' . $site;
+                }
+            }
+        }
+        if ($unmapped) {
+            $this->warn('These senders are not mapped in App\Support\EmailOverrides::SITES, so their wording cannot be edited:');
+            foreach (array_unique($unmapped) as $u) {
+                $this->line('  ' . $u);
+            }
+        }
+
         if ($uncovered) {
             $this->error('The catalogue does not cover these files — an email was added without being listed:');
             foreach ($uncovered as $rel => $n) {
@@ -119,6 +142,53 @@ final class EmailCatalogueCheck extends Command
         $this->info(sprintf('Catalogue covers all %d files that compose email (%d entries, %d wrap sites).',
             count($found), count($entries), array_sum($found)));
 
-        return self::SUCCESS;
+        return $unmapped ? self::FAILURE : self::SUCCESS;
+    }
+
+    /** "Class@method" for every named method in $path that calls EmailTemplate::wrap. */
+    private static function wrapMethods(string $path): array
+    {
+        $src = (string) @file_get_contents($path);
+        $toks = token_get_all($src);
+        $out = [];
+        $class = '';
+        $stack = [];
+        $pending = null;
+        $n = count($toks);
+        for ($i = 0; $i < $n; $i++) {
+            $t = $toks[$i];
+            if (is_array($t)) {
+                if ($t[0] === T_CLASS && $class === '') {
+                    for ($j = $i + 1; $j < $n; $j++) {
+                        if (is_array($toks[$j]) && $toks[$j][0] === T_STRING) { $class = $toks[$j][1]; break; }
+                    }
+                }
+                if ($t[0] === T_FUNCTION) {
+                    for ($j = $i + 1; $j < $n; $j++) {
+                        if (is_array($toks[$j]) && $toks[$j][0] === T_STRING) { $pending = $toks[$j][1]; break; }
+                        if ($toks[$j] === '(') { break; }
+                    }
+                }
+                if (in_array($t[0], [T_CURLY_OPEN, T_DOLLAR_OPEN_CURLY_BRACES], true)) {
+                    $stack[] = null;
+                    continue;
+                }
+                if (in_array($t[0], [T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED], true)
+                    && substr($t[1], -13) === 'EmailTemplate'
+                    && isset($toks[$i + 1], $toks[$i + 2]) && is_array($toks[$i + 1]) && $toks[$i + 1][0] === T_DOUBLE_COLON
+                    && is_array($toks[$i + 2]) && $toks[$i + 2][1] === 'wrap') {
+                    foreach (array_reverse($stack) as $fn) {
+                        if ($fn !== null) { $out[] = $class . '@' . $fn; break; }
+                    }
+                }
+            } elseif ($t === '{') {
+                $stack[] = $pending;
+                $pending = null;
+            } elseif ($t === '}') {
+                array_pop($stack);
+            }
+        }
+
+        return array_values(array_unique($out));
     }
 }

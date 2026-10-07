@@ -134,6 +134,14 @@ class AppServiceProvider extends ServiceProvider
         // send), so EVERY path is covered — controllers, queued closures, scheduled
         // commands — and no future call site has to remember to check.
         // Configured by MAIL_SUPPRESS_AGENCIES in .env.
+        //
+        // An agency's own subject line for an email goes on FIRST (2026-10-06), so the
+        // suppression log records the subject the message would actually have had. It
+        // returns nothing, which lets the kill-switch below run as before.
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\EmailSubjectOverride::class, 'handle']
+        );
         Event::listen(
             \Illuminate\Mail\Events\MessageSending::class,
             [\App\Listeners\SuppressAgencyMail::class, 'handle']

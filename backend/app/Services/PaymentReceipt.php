@@ -119,16 +119,18 @@ final class PaymentReceipt
         $f = self::facts($paymentId);
         if (! $f) { return null; }
 
+        // The agency's own wording, where it changed a sentence; otherwise exactly this.
+        $say = fn (string $section, string $html) => \App\Support\EmailOverrides::say((int) $f['agency_id'], 'payment-receipt-pdf', $section, $html);
         $body = '<table width="100%" cellpadding="0" cellspacing="0" border="0">'
             . '<tr><td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">'
-            . 'Thank you — we have received your payment.</td></tr>'
+            . $say('thanks', 'Thank you — we have received your payment.') . '</td></tr>'
             . '<tr><td style="padding:0 0 14px;font-size:15px;line-height:1.6;color:#334155;">'
-            . 'Your receipt is <strong>attached as a PDF</strong>. It shows the amount, how it was '
+            . $say('attached', 'Your receipt is <strong>attached as a PDF</strong>. It shows the amount, how it was '
             . 'paid and what is left on the account. We keep those details out of the email itself '
-            . 'so they are not sitting in an inbox or a message preview.</td></tr>'
+            . 'so they are not sitting in an inbox or a message preview.') . '</td></tr>'
             . '<tr><td style="padding:2px 0 0;font-size:13px;line-height:1.6;color:#64748B;">'
-            . 'Please keep it for your records. It is a payment receipt, not a childcare tax '
-            . 'receipt — your tax receipt is issued separately at the end of the year.</td></tr>'
+            . $say('keep', 'Please keep it for your records. It is a payment receipt, not a childcare tax '
+            . 'receipt — your tax receipt is issued separately at the end of the year.') . '</td></tr>'
             . '</table>';
 
         return [
