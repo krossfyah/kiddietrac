@@ -127,9 +127,11 @@ final class SignedFormFiler
     {
         $ids = collect($docs)->filter(fn ($d) => ($d->source_type ?? null) === self::SOURCE)
             ->pluck('source_id')->map(fn ($v) => (int) $v)->all();
-        $rows = $ids ? DB::table('managed_form_signoffs')->whereIn('id', $ids)->get([
-            'id', 'countersigned_at', 'countersigner_name', 'countersigner_role', 'countersign_note',
-            'correction_requested_at', 'correction_requested_by_name', 'correction_note', 'corrected_at',
+        $rows = $ids ? DB::table('managed_form_signoffs as s')->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->whereIn('s.id', $ids)->get([
+            's.id', 's.countersigned_at', 's.countersigner_name', 's.countersigner_role', 's.countersign_note',
+            's.correction_requested_at', 's.correction_requested_by_name', 's.correction_note', 's.corrected_at',
+            'f.requires_countersign',
         ])->keyBy('id') : collect();
 
         return collect($docs)->map(function ($d) use ($rows) {
@@ -145,7 +147,8 @@ final class SignedFormFiler
                     $d->review = ['state' => 'corrected', 'by' => $s->correction_requested_by_name,
                         'at' => $s->corrected_at, 'note' => null];
                 } else {
-                    $d->review = ['state' => 'pending'];
+                    // A form set to need no counter-signature says so, rather than "not yet".
+                    $d->review = ['state' => ((int) ($s->requires_countersign ?? 1)) ? 'pending' : 'not_required'];
                 }
             }
             unset($d->source_type, $d->source_id);

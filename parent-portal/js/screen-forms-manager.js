@@ -1419,6 +1419,16 @@
       + '<span style="display:block;font-size:12.5px;color:#64748B;line-height:1.5;margin-top:2px;">'
       + 'Keeps the form available after it is submitted, so staff can complete it again — once per child, or week after week. '
       + 'Each submission is kept as its own record.</span></span></label>'
+      /* COUNTER-SIGNED OR NOT (2026-10-09: "add option to multiforms and forms library
+         when adding new forms for counter signing option or not"). On by default — the
+         behaviour every form had until now. Off: the form is complete once signed; no
+         "Awaiting review", no counter-sign step, and the signer's Documents say so. */
+      + '<label id="fm-countersign-wrap" style="display:flex;gap:11px;align-items:flex-start;border:1.5px solid #1F6FB2;background:#EFF6FF;border-radius:12px;padding:13px 15px;margin-bottom:16px;cursor:pointer;">'
+      + '<input id="fm-countersign" type="checkbox" checked style="width:18px;height:18px;flex:0 0 auto;margin-top:1px;accent-color:#1F6FB2;">'
+      + '<span><span style="display:block;font-weight:800;font-size:13.5px;color:#0F172A;">Requires counter-signature</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;line-height:1.5;margin-top:2px;">'
+      + 'An admin or director reviews and counter-signs each completed copy. Turn off for forms that are complete once signed (notices, daily charts).'
+      + '</span></span></label>'
       // Optional: where a completed copy goes. Often a compliance inbox or a
       // director, so a signed form does not only live in the Completed tab.
       + '<div><label for="fm-notify" style="' + LBL + '">Email completed forms to <span style="color:#CBD5E1;font-weight:600;text-transform:none;letter-spacing:0;">(optional)</span></label>'
@@ -1441,7 +1451,7 @@
       }
       cb.addEventListener('change', sync); sync();
     });
-    [['#fm-fillable', '#fm-fillable-wrap'], ['#fm-reusable', '#fm-reusable-wrap']].forEach(function (pair) {
+    [['#fm-fillable', '#fm-fillable-wrap'], ['#fm-reusable', '#fm-reusable-wrap'], ['#fm-countersign', '#fm-countersign-wrap']].forEach(function (pair) {
       var cb = fq(pair[0]), wrap = fq(pair[1]);
       if (!cb || !wrap) return;
       var sync = function () {
@@ -1487,6 +1497,7 @@
       fd.append('title', title); fd.append('description', desc);
       fd.append('fillable', fq('#fm-fillable').checked ? '1' : '0');
       fd.append('reusable', fq('#fm-reusable').checked ? '1' : '0');
+      fd.append('requires_countersign', fq('#fm-countersign').checked ? '1' : '0');
       var notify = (fq('#fm-notify').value || '').trim();
       if (notify) fd.append('notify_email', notify);
       if (people.length) fd.append('recipient_ids', JSON.stringify(people.map(Number)));
@@ -1843,6 +1854,9 @@
           'Turn on for a PDF with real form fields. A read-and-sign notice should stay read-and-sign.', !!form.fillable)
       + toggleCardHtml('fe-reusable', 'Reusable form',
           'Stays on the list after signing, so it can be filled again for the next child or week.', !!form.reusable)
+      + toggleCardHtml('fe-countersign', 'Requires counter-signature',
+          'An admin or director reviews and counter-signs each completed copy. Off: complete once signed.',
+          form.requires_countersign === undefined || form.requires_countersign === null ? true : !!Number(form.requires_countersign))
       + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:4px 0 6px;">Email completed forms to (optional)</div>'
       + '<input id="fe-notify" type="email" placeholder="e.g. compliance@youragency.com" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;margin-bottom:6px;">'
       + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:14px;">Each signature emails the completed PDF here. Clear it to stop sending.</div>'
@@ -1857,7 +1871,7 @@
     ov.querySelector('#fe-notify').value = form.notify_email || '';
 
     // Same live border feedback the upload dialog gives its toggles.
-    ['fe-fillable', 'fe-reusable'].forEach(function (id) {
+    ['fe-fillable', 'fe-reusable', 'fe-countersign'].forEach(function (id) {
       var cb = ov.querySelector('#' + id), wrap = ov.querySelector('#' + id + '-wrap');
       cb.addEventListener('change', function () { wrap.style.borderColor = cb.checked ? '#1F6FB2' : '#E2E8F0'; });
     });
@@ -1905,6 +1919,7 @@
         recipient_ids: people,
         fillable: ov.querySelector('#fe-fillable').checked,
         reusable: ov.querySelector('#fe-reusable').checked,
+        requires_countersign: ov.querySelector('#fe-countersign').checked,
         notify_email: ov.querySelector('#fe-notify').value.trim(),
       })
         .then(function () { toast('✏️', 'Form updated', '', '#16A34A'); close(); loadList(el); })
@@ -2038,7 +2053,9 @@
                 r.countersigned_at
                   ? '<span style="color:#16A34A;font-weight:700;">\u2713 ' + esc(fmtStamp(r.countersigned_at)) + '</span>'
                     + (r.countersigner_name ? '<div style="font-size:11px;color:#94A3B8;">' + esc(r.countersigner_name) + '</div>' : '')
-                  : '<span style="font-size:11px;font-weight:800;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:999px;padding:2px 9px;">Awaiting review</span>'
+                  : (r.requires_countersign !== undefined && r.requires_countersign !== null && !Number(r.requires_countersign))
+                    ? '<span style="font-size:11.5px;color:#94A3B8;">Not required</span>'
+                    : '<span style="font-size:11px;font-weight:800;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:999px;padding:2px 9px;">Awaiting review</span>'
               ) + '</td>'
             /* SYNCED — is this form actually ON the signer's record?
 
@@ -2158,7 +2175,8 @@
            Offered only while there is nothing to see yet: counter-signing twice would
            mean two agency signatures on one agreement, and the server refuses it with a
            409 anyway. Once it is done the entry becomes the finished document. */
-        if (!r.countersigned_at) {
+        var _csOff = r.requires_countersign !== undefined && r.requires_countersign !== null && !Number(r.requires_countersign);
+        if (!r.countersigned_at && !_csOff) {   // a form set to need none offers no counter-sign
           menu.appendChild(item('\u270D\uFE0F', 'Review & counter-sign', false, function () {
             /* RE-FIND THE HOST, DO NOT REUSE THE CAPTURED ONE.
 

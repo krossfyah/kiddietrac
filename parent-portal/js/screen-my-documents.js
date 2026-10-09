@@ -183,6 +183,7 @@
       returned:      ['#FFFBEB', '#B45309', '↩️ Sent back for correction'],
       corrected:     ['#F1F5F9', '#475569', '🔁 Replaced by a corrected copy'],
       pending:       ['#F8FAFC', '#64748B', '⏳ Not counter-signed yet'],
+      not_required:  ['#F8FAFC', '#94A3B8', 'No counter-signature needed'],
     }[r.state] || ['#F8FAFC', '#64748B', r.state];
     cell.appendChild(Dom.el('div', {
       style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-weight:700;font-size:12px;'

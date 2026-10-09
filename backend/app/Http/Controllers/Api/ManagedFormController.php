@@ -325,6 +325,8 @@ class ManagedFormController extends Controller
             'file_url'      => '/storage/' . $path,
             'fillable'      => filter_var($request->input('fillable', false), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             'reusable'      => filter_var($request->input('reusable', false), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
+            // Counter-signed by the office, or not (2026-10-09). Absent = yes, as before.
+            'requires_countersign' => filter_var($request->input('requires_countersign', true), FILTER_VALIDATE_BOOLEAN) ? 1 : 0,
             'notify_email'  => $data['notify_email'] ?? null,
             'file_type'     => 'application/pdf',
             'file_size'     => $request->file('file')->getSize(),
@@ -1489,6 +1491,9 @@ class ManagedFormController extends Controller
         if ($request->has('reusable')) {
             $patch['reusable'] = filter_var($request->input('reusable'), FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
         }
+        if ($request->has('requires_countersign')) {
+            $patch['requires_countersign'] = filter_var($request->input('requires_countersign'), FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
+        }
         if ($request->has('notify_email')) {
             $em = trim((string) $request->input('notify_email'));
             // Clearing the field switches the notification off again.
@@ -1596,7 +1601,7 @@ class ManagedFormController extends Controller
                    only write on top of it: a completed fillable form is flattened, so
                    the fields live on the blank template, not on the copy the parent
                    returned. */
-                'f.file_url', 'f.fillable', 's.filled_file_url',
+                'f.file_url', 'f.fillable', 'f.requires_countersign', 's.filled_file_url',
                 'f.notify_email as form_notify_email', 's.notified_at', 's.notified_to',
                 /* The counter-signature state, so the Completed table can say whether a
                    form is still waiting on the agency rather than looking finished. */
@@ -2479,12 +2484,16 @@ class ManagedFormController extends Controller
                 's.id', 's.user_id', 's.signer_name', 's.signed_at', 's.filled_file_url',
                 's.countersigned_at', 's.correction_requested_at', 's.corrected_at',
                 'f.id as form_id', 'f.title', 'f.description', 'f.notify_email', 'f.agency_id',
+                'f.requires_countersign',
                 'u.email as signer_email', 'u.first_name as signer_first', 'u.last_name as signer_last',
             ])
             ->first();
 
         if (! $row) {
             return response()->json(['message' => 'Not found'], 404);
+        }
+        if (isset($row->requires_countersign) && ! (int) $row->requires_countersign) {
+            return response()->json(['message' => 'This form is set to need no counter-signature. Turn it on in the Forms Manager (Edit) first if it should be counter-signed.'], 422);
         }
         if (! $row->signed_at) {
             /* Counter-signing something nobody has signed would produce a document that
