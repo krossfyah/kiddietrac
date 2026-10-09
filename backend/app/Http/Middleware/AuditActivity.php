@@ -168,6 +168,15 @@ class AuditActivity
                 return;
             }
         }
+        /* ONE FILE, ONE ENTRY (2026-10-09: "when uploading the video to sales lead the audit
+           log has multiple entries for the same request"). A recording arrives as ~8 MB
+           pieces, one request each: a 200 MB video wrote 25 identical
+           "post:api/v1/sales/activities/48/upload" rows. SalesActivityFileController writes
+           the meaningful one (sales.activity_file_added: which file, how big) when the last
+           piece lands, so a successful piece is not audited here. A FAILED piece still is. */
+        if (preg_match('#/sales/activities/\d+/upload$#', '/' . $path) && $response->getStatusCode() < 400) {
+            return;
+        }
         if (! Schema::hasTable('audit_logs')) {
             return;
         }
