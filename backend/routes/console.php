@@ -424,3 +424,11 @@ Schedule::command('kiddietrac:safe-arrival')->everyFiveMinutes()->withoutOverlap
 /* Weekly What's new email (2026-09-29): Mondays 9am, only when there is something new,
    each person only what applies to their role. See WhatsNewDigestCommand. */
 Schedule::command('kiddietrac:whats-new-digest')->weeklyOn(1, '09:00')->timezone('America/Toronto')->withoutOverlapping(60)->onOneServer();
+
+/* GUARDS: nothing closed in anything current (2026-10-09). Closed providers got
+   Thanksgiving notices and a withdrawn child was on an immunization reminder; see
+   KtIntegrityCheck (records closed in one table, live in another) and KtLeakSweep
+   (every current endpoint + the last day's sent mail). Both email the platform admins
+   when they find anything, and run before the morning's reminders and summaries. */
+Schedule::command('kt:integrity-check')->dailyAt('05:30')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
+Schedule::command('kt:leak-sweep')->dailyAt('05:40')->timezone('America/Toronto')->withoutOverlapping(60)->onOneServer();

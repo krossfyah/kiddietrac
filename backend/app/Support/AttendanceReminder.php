@@ -45,6 +45,7 @@ class AttendanceReminder
 
         $tz = DB::table('agencies')->where('id', $agencyId)->value('timezone') ?: 'America/Toronto';
         $rows = DB::table('daily_care_logs as l')->join('children as c', 'c.id', '=', 'l.child_id')
+            ->tap(fn ($q) => \App\Support\Live::children($q, 'c'))   // never name a withdrawn child
             ->where('l.recorded_by_id', $educatorId)->whereIn('l.child_id', $childIds)
             ->where('l.created_at', '>=', now()->subMinutes($sinceMinutes))
             ->orderByDesc('l.id')->limit(8)

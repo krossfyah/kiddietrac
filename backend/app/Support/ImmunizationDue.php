@@ -80,6 +80,9 @@ final class ImmunizationDue
             ->where('c.agency_id', $agencyId)
             ->whereNull('ch.deleted_at')
             ->where('ch.enrollment_status', 'enrolled')
+            // Open centre, family still with us, and an enrolment open today (App\Support\Live).
+            ->tap(fn ($q) => \App\Support\Live::families(\App\Support\Live::centres($q, 'c'), 'f'))
+            ->whereExists(fn ($q) => \App\Support\Live::enrolments($q->from('enrollments as e')->whereColumn('e.child_id', 'ch.id'), 'e')->select(DB::raw(1)))
             ->whereNotNull('ch.date_of_birth')
             ->get(['ch.id', 'ch.first_name', 'ch.last_name', 'ch.preferred_name',
                 'ch.date_of_birth', 'ch.family_id', 'f.family_name', 'c.name as centre_name']);

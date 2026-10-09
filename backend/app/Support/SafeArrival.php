@@ -83,7 +83,10 @@ class SafeArrival
             ->join('children as c', 'c.id', '=', 'e.child_id')
             ->join('rooms as r', 'r.id', '=', 'e.room_id')
             ->join('centres as ce', 'ce.id', '=', 'r.centre_id')
+            ->join('families as fa', 'fa.id', '=', 'c.family_id')
             ->where('ce.agency_id', $agencyId)
+            // Open centre, family still with us (App\Support\Live, 2026-10-09).
+            ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families($q, 'fa'), 'ce'))
             ->whereNull('c.deleted_at')
             ->where('c.enrollment_status', 'enrolled')
             ->where(function ($q) use ($date) { $q->whereNull('e.end_date')->orWhere('e.end_date', '>=', $date); })

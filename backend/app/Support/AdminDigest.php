@@ -27,7 +27,8 @@ final class AdminDigest
     /** @return array<string,mixed> */
     public static function gather(int $agencyId, string $from, string $to): array
     {
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        // Open centres only (App\Support\Live, 2026-10-09): a closed provider has nothing to report.
+        $centreIds = \App\Support\Live::centreIds($agencyId);
         if (! $centreIds) {
             return [];
         }
@@ -61,6 +62,7 @@ final class AdminDigest
         if (! Schema::hasTable('late_events')) return null;
         $pending = DB::table('late_events as l')
             ->join('children as ch', 'ch.id', '=', 'l.child_id')
+            ->tap(fn ($q) => \App\Support\Live::children($q, 'ch'))
             ->whereIn('l.centre_id', $c['centres'])->where('l.status', 'pending')
             ->orderByDesc('l.occurred_on')->limit(8)
             ->get(['l.kind', 'l.minutes', 'l.occurred_on', 'ch.first_name', 'ch.last_name']);
@@ -139,6 +141,7 @@ final class AdminDigest
         if (! Schema::hasTable('incidents')) return null;
         $rows = DB::table('incidents as i')->join('children as ch', 'ch.id', '=', 'i.child_id')
             ->join('families as f', 'f.id', '=', 'ch.family_id')->whereIn('f.centre_id', $c['centres'])
+            ->tap(fn ($q) => \App\Support\Live::children($q, 'ch'))
             // Agency-day instants, not UTC dates — see AgencyTime::spanRange.
             ->where('i.occurred_at', '>=', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[0])
             ->where('i.occurred_at', '<', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[1])
@@ -168,7 +171,7 @@ final class AdminDigest
     {
         if (! Schema::hasTable('emergency_contacts')) return null;
 
-        $base = fn () => DB::table('families as f')
+        $base = fn () => \App\Support\Live::families(DB::table('families as f'), 'f')
             ->whereIn('f.centre_id', $c['centres'])
             ->whereNull('f.deleted_at')
             ->whereNull('f.suspended_at')
@@ -432,6 +435,8 @@ final class AdminDigest
         for ($d = $start->copy(); $d->lte($end); $d->addDay()) { $mmdd[] = $d->format('m-d'); }
         foreach (DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
             ->whereIn('f.centre_id', $c['centres'])->whereNull('ch.deleted_at')->whereNotNull('ch.date_of_birth')
+            // Enrolled children only - a withdrawn child's birthday is not this week's business.
+            ->tap(fn ($q) => \App\Support\Live::enrolledChildren($q, 'ch'))
             ->whereRaw("DATE_FORMAT(ch.date_of_birth, '%m-%d') IN ('" . implode("','", $mmdd) . "')")
             ->limit(6)->get(['ch.first_name', 'ch.last_name', 'ch.date_of_birth']) as $r) {
             $rows[] = ['who' => trim($r->first_name . ' ' . $r->last_name), 'what' => '🎂 Birthday',
@@ -516,6 +521,7 @@ final class AdminDigest
             ->where('e.occurred_at', '>=', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[0])
             ->where('e.occurred_at', '<', \App\Support\AgencyTime::spanRange($c['agency'], $c['from'], $c['to'])[1])
             ->whereNull('ch.deleted_at')
+            ->tap(fn ($q) => \App\Support\Live::children($q, 'ch'))
             ->orderBy('e.occurred_at')
             ->get(['e.child_id', 'e.event_type', 'e.occurred_at', 'ch.first_name', 'ch.last_name', 'ce.name as centre']);
 

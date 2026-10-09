@@ -145,7 +145,9 @@
       showLoading();
       var params = {};
       if (centreSelect.value) params.centre_id = centreSelect.value;
-      if (statusSelect.value) params.status = statusSelect.value;
+      // "All statuses" must SAY all: with no status the server now returns only the
+      // children still with us (2026-10-09), so an empty value would hide withdrawn ones.
+      params.status = statusSelect.value || 'all';
       if (searchInput.value.trim()) params.search = searchInput.value.trim();
       Api.get('/director/enrollments', params).then(function (data) {
         renderResults(data.children || []);
