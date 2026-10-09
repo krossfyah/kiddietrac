@@ -2220,7 +2220,10 @@
                 if (host) { renderCompleted(host.parentNode || host); }
               });
             });
-          backItem.setAttribute('data-kt-inpage', '1');
+          /* Auditors get a comment node, not a button (item() hides every action but
+             view/download for them), and a comment has no setAttribute — the ⋮ menu on
+             Completed threw for every auditor (ticket #119, 2026-10-07). */
+          if (backItem.nodeType === 1) backItem.setAttribute('data-kt-inpage', '1');
           menu.appendChild(backItem);
         }
 
