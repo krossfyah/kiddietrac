@@ -14,7 +14,7 @@
 
    Public: KT.healthEditor.open(child, opts)
      child : { id, first_name, last_name }
-     opts  : { onSaved: fn, readOnly: bool }
+     opts  : { onSaved: fn, readOnly: bool, into: element (draw inside it), onClose: fn }
    (Anthony, 2026-09-10)
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
@@ -80,14 +80,31 @@
         +   '<button class="he-save" type="button" style="padding:10px 22px;border:0;background:#1F6080;color:#fff;'
         +     'border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;">Save</button>'
         + '</div></div>';
-      document.body.appendChild(ov);
-      ov.querySelectorAll('.he-x').forEach(function (b) {
-        b.addEventListener('click', function () { ov.remove(); });
-      });
-
       var bodyEl = ov.querySelector('.he-body');
       var msgEl = ov.querySelector('.he-msg');
       var saveBtn = ov.querySelector('.he-save');
+
+      /* opts.into (2026-10-09): drawn INSIDE a container — the child record's Edit popup,
+         where Allergies & health is a subtab — rather than as its own overlay. The same
+         card, minus its frame and header (the popup has both); Cancel calls opts.onClose. */
+      var embedded = !!(opts.into && opts.into.appendChild);
+      if (embedded) {
+        var cardEl = ov.firstElementChild;
+        cardEl.style.boxShadow = 'none'; cardEl.style.maxWidth = 'none'; cardEl.style.borderRadius = '0';
+        var headEl = cardEl.firstElementChild;
+        if (headEl) { headEl.remove(); }
+        bodyEl.style.padding = '4px 0 12px'; bodyEl.style.maxHeight = 'none';
+        opts.into.appendChild(cardEl);
+        ov.querySelectorAll('.he-x').forEach(function (b) { b.remove(); });   // (none left: moved)
+        cardEl.querySelectorAll('.he-x').forEach(function (b) {
+          b.addEventListener('click', function () { if (typeof opts.onClose === 'function') { opts.onClose(); } });
+        });
+      } else {
+        document.body.appendChild(ov);
+        ov.querySelectorAll('.he-x').forEach(function (b) {
+          b.addEventListener('click', function () { ov.remove(); });
+        });
+      }
       if (opts.readOnly) { saveBtn.style.display = 'none'; }
 
       var state = { allergies: [], dietary_restrictions: [], health_alerts: [] };

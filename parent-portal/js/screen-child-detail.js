@@ -187,6 +187,39 @@
     paintPhoto();
 
     var form = Dom.el('form', {});
+
+    /* ALLERGIES & HEALTH IS A SUBTAB OF THIS POPUP (2026-10-09: "at a glance with child
+       record still showing the ability to add allergies when this should be included in
+       the edit popup as a subtab"). Details | Allergies & health — the second is the same
+       editor the Allergy alerts screen opens, drawn in here, with its own Save. */
+    var allergyPane = Dom.el('div', { style: 'display:none;' });
+    var allergyLoaded = false;
+    var subTabs = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid #E5E7EB;margin:0 0 14px;' });
+    var showPane = function (key) {
+      var details = key === 'details';
+      photoBox.style.display = details ? '' : 'none';
+      form.style.display = details ? '' : 'none';
+      allergyPane.style.display = details ? 'none' : '';
+      Array.prototype.forEach.call(subTabs.children, function (b) {
+        var on = b.getAttribute('data-pane') === key;
+        b.style.color = on ? '#1F6080' : '#6B7280';
+        b.style.borderBottom = on ? '2px solid #1F6080' : '2px solid transparent';
+      });
+      if (!details && !allergyLoaded && window.KT && KT.healthEditor) {
+        allergyLoaded = true;
+        KT.healthEditor.open(child, {
+          into: allergyPane,
+          onClose: function () { overlay.remove(); },
+          onSaved: function () { overlay.remove(); if (onSaved) onSaved(); },
+        });
+      }
+    };
+    [['details', '📝 Details'], ['allergies', '⚠️ Allergies & health']].forEach(function (t) {
+      var b = Dom.el('button', { type: 'button', 'data-pane': t[0], 'data-kt-inpage': '1', style: 'padding:8px 14px;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;background:transparent;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;' }, t[1]);
+      b.addEventListener('click', function () { showPane(t[0]); });
+      subTabs.appendChild(b);
+    });
+    modal.insertBefore(subTabs, photoBox);
     var fields = [
       { name: 'first_name', label: 'First name', value: child.first_name, type: 'text' },
       { name: 'last_name', label: 'Last name', value: child.last_name, type: 'text' },
@@ -275,6 +308,8 @@
     });
 
     modal.appendChild(form);
+    modal.appendChild(allergyPane);
+    showPane('details');
     overlay.appendChild(modal);
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) overlay.remove();
@@ -784,7 +819,8 @@
             onSaved: function () { renderChildDetail(container, opts); },
           });
         });
-        head.appendChild(edit);
+        /* Read-only on the record (2026-10-09): allergies are edited in Edit → Allergies &
+           health, not from here. */
         sec.appendChild(head);
 
         if (!anyThing) {
@@ -909,7 +945,7 @@
       var TABS = [['overview', '👤 Overview'], ['enrollment', '🏫 Enrollment'], ['daily', '📊 Daily reports'], ['incidents', '🩹 Incidents'], ['immunization', '💉 Immunization'], ['feed', '📸 Live feed'], ['attachments', '📎 Attachments'], ['history', '🗄️ Full history']];
       /* While editing, the allergies get their own tab (2026-10-09: "the allergies section
          should be added when your editing the child record as a subtab"). */
-      if (editMode) { TABS.splice(1, 0, ['allergies', '⚠️ Allergies & health']); }
+      // (Allergies & health is a subtab of the Edit popup, not of the record — 2026-10-09.)
       var activeTab = 'overview';
       /* ALL THE TABS IN VIEW (2026-10-09: "the subtabs are scrollable vs all there
          visually"): they wrap onto a second line instead of scrolling sideways. */
