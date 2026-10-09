@@ -398,6 +398,7 @@
           { hash: 'document-templates', label: 'Document templates', icon: '📄' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
           { hash: 'xero',               label: 'Xero',                icon: '📗' },
+          { hash: 'sage',               label: 'Sage',                icon: '📘' },
 
 
 
@@ -1032,6 +1033,7 @@
     'expenses': 'Suppliers, purchase orders and bills.',
     'quickbooks': 'Sync invoices and payments with QuickBooks.',
     'xero': 'Send invoices, voids and payments to your Xero organisation.',
+    'sage': 'Sync with Sage Accounting, or export import files for Sage 50.',
     'forecast': 'Projected enrolment and revenue.',
     'reports': 'Ready-made reports you can print or export.',
     'retention': 'Which families stay, and which leave.',

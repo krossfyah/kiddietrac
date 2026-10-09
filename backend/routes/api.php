@@ -2456,6 +2456,25 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/xero/log',                 [\App\Http\Controllers\Api\XeroController::class, 'log']);
     });
 
+    // ---- Sage (2026-10-09) — Settings → Sage: Sage Accounting (cloud) sync + Sage 50 (desktop) files ----
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get   ('/admin/sage-config',          [\App\Http\Controllers\Api\SageController::class, 'showConfig']);
+        Route::patch ('/admin/sage-config',          [\App\Http\Controllers\Api\SageController::class, 'saveConfig']);
+        Route::delete('/admin/sage-config',          [\App\Http\Controllers\Api\SageController::class, 'clearConfig']);
+        Route::get   ('/sage/connect',               [\App\Http\Controllers\Api\SageController::class, 'connect']);
+        Route::post  ('/sage/business',              [\App\Http\Controllers\Api\SageController::class, 'chooseBusiness']);
+        Route::post  ('/sage/disconnect',            [\App\Http\Controllers\Api\SageController::class, 'disconnect']);
+        Route::get   ('/sage/options',               [\App\Http\Controllers\Api\SageController::class, 'options']);
+        Route::post  ('/sage/sync',                  [\App\Http\Controllers\Api\SageController::class, 'syncAll']);
+        Route::post  ('/sage/sync/invoice/{id}',     [\App\Http\Controllers\Api\SageController::class, 'syncInvoice'])->where('id', '[0-9]+');
+        Route::get   ('/sage/log',                   [\App\Http\Controllers\Api\SageController::class, 'log']);
+        Route::get   ('/sage50/preview',             [\App\Http\Controllers\Api\SageController::class, 's50Preview']);
+        Route::post  ('/sage50/export',              [\App\Http\Controllers\Api\SageController::class, 's50Export']);
+        Route::get   ('/sage50/exports',             [\App\Http\Controllers\Api\SageController::class, 's50Exports']);
+        Route::get   ('/sage50/exports/{id}',        [\App\Http\Controllers\Api\SageController::class, 's50Download'])->where('id', '[0-9]+');
+        Route::get   ('/sage50/customers.csv',       [\App\Http\Controllers\Api\SageController::class, 's50Customers']);
+    });
+
     // ---- Locale ----
     Route::get ('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'current']);
     Route::post('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'set']);
@@ -2955,6 +2974,8 @@ Route::get('/public/landing/{slug}', [\App\Http\Controllers\Api\LandingControlle
 Route::get('/qbo/callback', [\App\Http\Controllers\Api\QboController::class, 'callback']);
 // Xero OAuth callback (public — a one-use, server-held state identifies the agency and admin)
 Route::get('/xero/callback', [\App\Http\Controllers\Api\XeroController::class, 'callback'])->middleware('throttle:30,1');
+// Sage Accounting OAuth callback (public — one-use, server-held state)
+Route::get('/sage/callback', [\App\Http\Controllers\Api\SageController::class, 'callback'])->middleware('throttle:30,1');
 
 // v22p51 — public locale bundles (no auth required so the login page can localize too)
 Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController::class, 'strings']);

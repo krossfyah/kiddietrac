@@ -443,3 +443,5 @@ Schedule::command('kt:text-check')->dailyAt('05:50')->timezone('America/Toronto'
 Schedule::command('xero:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
 /* QuickBooks: the same, for agencies with automatic sync on in Settings → QuickBooks. */
 Schedule::command('qbo:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
+/* Sage Accounting (cloud): the same, for agencies with automatic sync on in Settings → Sage. */
+Schedule::command('sage:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
