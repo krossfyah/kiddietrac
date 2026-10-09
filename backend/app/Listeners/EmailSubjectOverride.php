@@ -26,6 +26,10 @@ final class EmailSubjectOverride
 {
     public function handle(MessageSending $event): void
     {
+        // Raw escape codes / double-encoded entities never reach a reader (2026-10-09).
+        // First listener, so the log and the suppression gate see the repaired text.
+        try { \App\Support\MailText::repair($event->message); } catch (\Throwable $e) {}
+
         try {
             $msg = $event->message;
             $html = $msg->getHtmlBody();

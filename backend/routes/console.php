@@ -432,3 +432,7 @@ Schedule::command('kiddietrac:whats-new-digest')->weeklyOn(1, '09:00')->timezone
    when they find anything, and run before the morning's reminders and summaries. */
 Schedule::command('kt:integrity-check')->dailyAt('05:30')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 Schedule::command('kt:leak-sweep')->dailyAt('05:40')->timezone('America/Toronto')->withoutOverlapping(60)->onOneServer();
+/* Raw escape codes (\u{...}) in code strings and in the last day's email (2026-10-09:
+   "the year\u{2019}s" reached 59 inboxes). MailText repairs mail at send time; this
+   finds the source. See KtTextCheck. */
+Schedule::command('kt:text-check')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();

@@ -78,11 +78,11 @@ final class StatHolidays
         'civic-holiday' => 'A midsummer holiday kept across much of Ontario, with no obligation attached to it beyond a day off in the best part of the year.',
         'labour-day' => 'A day owed to the workers who fought for the eight-hour day, the weekend, and safe conditions — the ordinary protections that took extraordinary effort to win.',
         'truth-reconciliation' => 'A day to honour the children who never returned from residential schools, and the Survivors, families and communities still carrying that loss. It is a day for listening and remembrance, not celebration.',
-        'thanksgiving-ca' => 'A harvest holiday, and the year\u{2019}s clearest invitation to sit down with the people who matter to you and say what you are grateful for.',
-        'remembrance-day' => 'At eleven o\u{2019}clock we fall silent for those who served and those who did not come home. A day held with care rather than marked with festivity.',
+        'thanksgiving-ca' => 'A harvest holiday, and the year’s clearest invitation to sit down with the people who matter to you and say what you are grateful for.',
+        'remembrance-day' => 'At eleven o’clock we fall silent for those who served and those who did not come home. A day held with care rather than marked with festivity.',
         'christmas' => 'However your family keeps it, a day given over to being together, to generosity, and to a little more warmth than usual in the darkest part of the year.',
         'boxing-day' => 'Traditionally the day for giving to those who serve others through the year — and, more practically, a second quiet day at home.',
-        'mlk-day' => 'A day for Dr. King\u{2019}s unfinished work: the plain idea that every child deserves the same chance, and the courage it still takes to insist on it.',
+        'mlk-day' => 'A day for Dr. King’s unfinished work: the plain idea that every child deserves the same chance, and the courage it still takes to insist on it.',
         'presidents-day' => 'A day set aside to consider the office and those who have held it, and what citizens are owed by the people who serve them.',
         'memorial-day' => 'A day of remembrance for those who died in military service. Held gently, and traditionally the unofficial start of summer.',
         'juneteenth' => 'The day in 1865 when word of emancipation finally reached the last enslaved people in Texas — freedom delayed, then at last delivered, and worth marking every year since.',
@@ -90,7 +90,7 @@ final class StatHolidays
         'labor-day' => 'A day owed to the workers who won the weekend, the eight-hour day, and safe conditions — protections that were fought for, not granted.',
         'indigenous-peoples-day' => 'A day to honour Indigenous peoples, their histories, and their continuing presence in the places we all now share.',
         'veterans-day' => 'A day to thank those who served and came home, and to remember what that service asked of them and their families.',
-        'thanksgiving-us' => 'The year\u{2019}s longest table — a day for gathering, for cooking too much, and for saying out loud what you are grateful for.',
+        'thanksgiving-us' => 'The year’s longest table — a day for gathering, for cooking too much, and for saying out loud what you are grateful for.',
     ];
 
     /** Normalise the many spellings the data uses: "Canada", "CA", "ca". */
