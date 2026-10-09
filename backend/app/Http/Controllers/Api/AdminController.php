@@ -23,6 +23,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class AdminController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ClosesCentres;
+
     // ════════════════════════════════════════════════════════════════
     //   Helpers
     // ════════════════════════════════════════════════════════════════
@@ -100,6 +102,101 @@ final class AdminController extends Controller
             ->whereNull('deleted_at')
             ->pluck('id')
             ->all();
+    }
+
+    /**
+     * A CENTRE DIRECTOR MANAGES THEIR OWN CENTRE'S PEOPLE (2026-10-07).
+     *
+     * Anthony: directors may edit the details of their own centre's staff and parents
+     * — names, phone, address, profile — and nothing about how anyone signs in. So for
+     * each person this says whether a director may open and edit them, and why not.
+     *
+     * In scope only when EVERYTHING the person belongs to is inside the director's
+     * centres: every active staff assignment is at one of them, and every family they
+     * are a guardian of is at one of them. Somebody who also works at, or has a child
+     * at, another centre belongs to more than this director, so an agency admin edits
+     * them. Agency-level accounts (agency admin, auditor, platform) never are. Fails
+     * closed: no centres, a centre-less assignment or a family with no centre = no.
+     *
+     * @param  array<int,int>  $userIds
+     * @param  array<int,int>  $centreIds  the director's centres (listScope)
+     * @return array<int,?string>  user id => null when in scope, else the reason
+     */
+    private function directorScopeErrors(array $userIds, int $agencyId, array $centreIds): array
+    {
+        $userIds = array_values(array_unique(array_map('intval', $userIds)));
+        if (! $userIds) return [];
+        if (! $centreIds) return array_fill_keys($userIds, 'You have no centre to manage.');
+        $mine = array_flip(array_map('intval', $centreIds));
+        $in = []; $out = [];
+
+        $rows = DB::table('role_assignments')->whereIn('user_id', $userIds)->where('active', true)
+            ->get(['user_id', 'role', 'agency_id', 'centre_id']);
+        foreach ($rows as $r) {
+            $u = (int) $r->user_id;
+            if (in_array($r->role, ['platform_admin', 'agency_admin', 'auditor'], true)) {
+                $out[$u] = 'This is an agency-level account. Ask an agency admin.';
+                continue;
+            }
+            if ($r->role === 'guardian') continue;      // judged by their families below
+            if ((int) $r->agency_id === $agencyId && $r->centre_id !== null && isset($mine[(int) $r->centre_id])) {
+                $in[$u] = true;
+            } else {
+                $out[$u] = $out[$u] ?? 'They also work outside your centre. Ask an agency admin.';
+            }
+        }
+
+        $links = DB::table('guardians')->join('families', 'families.id', '=', 'guardians.family_id')
+            ->whereIn('guardians.user_id', $userIds)->get(['guardians.user_id', 'families.centre_id']);
+        foreach ($links as $l) {
+            $u = (int) $l->user_id;
+            if ($l->centre_id !== null && isset($mine[(int) $l->centre_id])) {
+                $in[$u] = true;
+            } else {
+                $out[$u] = $out[$u] ?? 'They also have a family at another centre. Ask an agency admin.';
+            }
+        }
+
+        $res = [];
+        foreach ($userIds as $u) {
+            $res[$u] = $out[$u] ?? (isset($in[$u]) ? null : 'They are not at your centre.');
+        }
+        return $res;
+    }
+
+    /**
+     * Who may manage $userId, for the Manage dialog's endpoints.
+     *
+     * Returns [agencyId, isDirector, refusal]. Yourself: always allowed, as before. An
+     * agency-wide caller: the agency check these endpoints always had. A centre director
+     * (no agency-wide role): directorScopeErrors(). Anyone else: refused.
+     *
+     * @return array{0:?int,1:bool,2:?JsonResponse}
+     */
+    private function manageGate(Request $request, int $userId): array
+    {
+        $self = $userId === (int) $request->user()->id;
+        $agencyId = $this->getAgencyId($request);
+        if ($agencyId) {
+            if (! $self && ! $this->userBelongsToAgency($userId, $agencyId)) {
+                return [$agencyId, false, response()->json(['message' => 'User not in your agency'], 403)];
+            }
+            return [$agencyId, false, null];
+        }
+        [$dirAgency, $centreIds, $wide] = $this->listScope($request);
+        if (! $dirAgency || $wide) {
+            return [null, false, $self ? null : response()->json(['message' => 'No agency access'], 403)];
+        }
+        if (! $self) {
+            // array_key_exists, not ??: an in-scope person is a NULL entry, and ?? read
+            // that null as "missing", which refused every director edit.
+            $errs = $this->directorScopeErrors([$userId], $dirAgency, $centreIds);
+            $why = array_key_exists($userId, $errs) ? $errs[$userId] : 'They are not at your centre.';
+            if ($why !== null) {
+                return [$dirAgency, true, response()->json(['message' => $why], 403)];
+            }
+        }
+        return [$dirAgency, true, null];
     }
 
     /**
@@ -525,7 +622,11 @@ final class AdminController extends Controller
             'address_line2' => ['sometimes', 'nullable', 'string', 'max:200'],
             'country' => ['sometimes', 'nullable', 'string', 'max:80'],
             'license_number' => ['sometimes', 'nullable', 'string', 'max:60'],
-            'license_capacity' => ['sometimes', 'integer', 'min:0', 'max:500'],
+            /* nullable (2026-10-09): the edit form sends null for a blank capacity, so any
+               centre without one could not be saved at all — Lorraine Cooper's centre kept
+               the wrong provider name because the correction was refused. The column is
+               NOT NULL DEFAULT 0, and create() already stores blank as 0; see below. */
+            'license_capacity' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:500'],
             'max_concurrent_children' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:500'],
             'address_line1' => ['sometimes', 'nullable', 'string', 'max:200'],
             'city' => ['sometimes', 'nullable', 'string', 'max:80'],
@@ -564,6 +665,10 @@ final class AdminController extends Controller
             }
         }
 
+        if (array_key_exists('license_capacity', $data) && $data['license_capacity'] === null) {
+            $data['license_capacity'] = 0;   // "not set", as on create
+        }
+
         // open_days lives inside the settings JSON, not a column — merge it in so
         // other settings keys survive, and don't pass it to the column update.
         if (array_key_exists('open_days', $data)) {
@@ -573,12 +678,39 @@ final class AdminController extends Controller
             $data['settings'] = json_encode($settings);
         }
 
+        /* Setting status to 'closed' IS closing the centre (2026-10-09): the same guard
+           as Archive (no enrolled children) and the same clean-up, or the centre is
+           "closed" while its staff, enrolments and families carry on as if it were not. */
+        $closing = ($data['status'] ?? null) === 'closed' && ($centre->status ?? null) !== 'closed';
+        if ($closing) {
+            $enrolled = DB::table('children')->join('families', 'families.id', '=', 'children.family_id')
+                ->where('families.centre_id', $centreId)->where('children.enrollment_status', 'enrolled')
+                ->whereNull('children.deleted_at')->count();
+            if ($enrolled > 0) {
+                return response()->json([
+                    'message' => $enrolled . ' ' . ($enrolled === 1 ? 'child is' : 'children are')
+                        . ' still enrolled here. Transfer or withdraw them before closing the centre.',
+                    'count' => $enrolled,
+                ], 422);
+            }
+        }
+
         $data['updated_at'] = now();
-        DB::table('centres')->where('id', $centreId)->update($data);
+        $links = null;
+        DB::transaction(function () use ($centreId, $data, $closing, &$links) {
+            DB::table('centres')->where('id', $centreId)->update($data);
+            if ($closing) {
+                $links = $this->closeCentreLinks($centreId);
+            }
+        });
 
-        $this->audit($request->user()->id, 'centre.updated', 'centre', $centreId, $data);
+        $this->audit($request->user()->id, 'centre.updated', 'centre', $centreId, $data + ($links ? ['closure' => $links] : []));
 
-        return response()->json(['message' => 'Centre updated']);
+        return response()->json(array_filter([
+            'message' => 'Centre updated',
+            'closure' => $links,
+            'warning' => $links ? $this->familiesStillOpenNote($links) : null,
+        ], fn ($v) => $v !== null));
     }
 
     /** Can this user archive/restore/delete the given centre? platform_admin →
@@ -631,11 +763,20 @@ final class AdminController extends Controller
             ], 422);
         }
 
-        DB::table('centres')->where('id', $centreId)->update(['deleted_at' => now(), 'status' => 'closed']);
+        $links = null;
+        DB::transaction(function () use ($centreId, &$links) {
+            DB::table('centres')->where('id', $centreId)->update(['deleted_at' => now(), 'status' => 'closed']);
+            $links = $this->closeCentreLinks($centreId);
+        });
         $this->audit($request->user()->id, 'centre.archived', 'centre', $centreId, [
             'name' => $centre->name ?? null,
+            'closure' => $links,
         ]);
-        return response()->json(['message' => 'Centre archived']);
+        return response()->json(array_filter([
+            'message' => 'Centre archived',
+            'closure' => $links,
+            'warning' => $this->familiesStillOpenNote($links),
+        ], fn ($v) => $v !== null));
     }
 
     public function restoreCentre(Request $request, int $centreId): JsonResponse
@@ -2168,6 +2309,21 @@ final class AdminController extends Controller
 
         $rows = $result->all();
 
+        /* A centre director sees which of these people they may open in Manage (their
+           own centre's, wholly) and why not for the rest — the same test the Manage
+           endpoints apply, so the button and the server agree. */
+        if (! $allMode && ! $wide && $rows) {
+            $why = $this->directorScopeErrors(array_column($rows, 'id'), (int) $agencyId, $centreIds);
+            $meId = (int) $request->user()->id;
+            foreach ($rows as &$row) {
+                $rid = (int) $row['id'];
+                $w = ($rid === $meId) ? null : (array_key_exists($rid, $why) ? $why[$rid] : 'They are not at your centre.');
+                $row['can_manage'] = $w === null;
+                $row['manage_block'] = $w;
+            }
+            unset($row);
+        }
+
         // v22p45: CSV export — ?format=csv streams an Excel-friendly file
         if (strtolower((string) $request->query('format', '')) === 'csv') {
             return $this->streamCsv('users', [
@@ -2523,17 +2679,21 @@ final class AdminController extends Controller
         // platform-level superadmin isn't a member of any single agency, so the
         // tenancy check below would otherwise 403 them out of their own record.
         $self = ($userId === (int) $request->user()->id);
-        if (! $self) {
-            $agencyId = $this->getAgencyId($request);
-            if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        // v22p30: the tenancy check goes through the shared helper (userBelongsToAgency,
+        // which also covers the guardian path) — now via manageGate(), which also admits
+        // a centre director for their own centre's people (2026-10-07).
+        [, $isDirector, $refusal] = $this->manageGate($request, $userId);
+        if ($refusal) return $refusal;
 
-            // v22p30: route the tenancy check through the shared helper so platform_admin
-            // gets the same cross-agency bypass as destroyUser/resetUserPassword/etc.
-            // Helper also covers the guardian path (families.centre_id), which the prior
-            // inline check missed — agency_admins can now also update guardians via this
-            // endpoint, matching the rest of the surface.
-            if (!$this->userBelongsToAgency($userId, $agencyId)) {
-                return response()->json(['message' => 'User not in your agency'], 403);
+        /* A DIRECTOR EDITS DETAILS, NOT SIGN-IN (2026-10-07). Names and phone, yes. The
+           email and username someone signs in with, and whether their account is open,
+           stay with an agency admin — refused outright rather than silently dropped, so
+           the dialog can say who to ask. */
+        if ($isDirector) {
+            $held = array_values(array_intersect(['email', 'username', 'status'], array_keys($request->all())));
+            if ($held) {
+                return response()->json(['message' => 'Only an agency admin can change the sign-in email, username or account status. Ask an agency admin.',
+                    'fields' => $held], 403);
             }
         }
 
@@ -2624,13 +2784,12 @@ final class AdminController extends Controller
     public function userProfile(Request $request, int $userId): JsonResponse
     {
         // A user may always view their own full record (self-service account view).
-        if ($userId !== (int) $request->user()->id) {
-            $agencyId = $this->getAgencyId($request);
-            if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
-            if (!$this->userBelongsToAgency($userId, $agencyId)) return response()->json(['message' => 'User not in your agency'], 403);
-        }
+        // A centre director: their own centre's people (manageGate, 2026-10-07).
+        [, $isDirector, $refusal] = $this->manageGate($request, $userId);
+        if ($refusal) return $refusal;
         $p = DB::table('user_profiles')->where('user_id', $userId)->first();
-        $notes = DB::table('user_notes')->where('user_id', $userId)->orderByDesc('created_at')->limit(200)->get();
+        // Admin notes are written by agency admins about staff; a director is not shown them.
+        $notes = $isDirector ? collect() : DB::table('user_notes')->where('user_id', $userId)->orderByDesc('created_at')->limit(200)->get();
         $u = DB::table('users')->where('id', $userId)->first();
 
         // #11 — the COMPLETE record for the detail view: core account fields +
@@ -2762,12 +2921,10 @@ final class AdminController extends Controller
     /** Upsert a user's profile extras. */
     public function updateUserProfile(Request $request, int $userId): JsonResponse
     {
-        // Self-edit is always allowed (see updateUser).
-        if ($userId !== (int) $request->user()->id) {
-            $agencyId = $this->getAgencyId($request);
-            if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
-            if (!$this->userBelongsToAgency($userId, $agencyId)) return response()->json(['message' => 'User not in your agency'], 403);
-        }
+        // Self-edit is always allowed (see updateUser). A centre director: their own
+        // centre's people (manageGate, 2026-10-07).
+        [, , $refusal] = $this->manageGate($request, $userId);
+        if ($refusal) return $refusal;
         $data = $request->validate([
             // Core phone lives on the user row.
             'phone'         => ['sometimes', 'nullable', 'string', 'max:40'],
@@ -4218,6 +4375,10 @@ final class AdminController extends Controller
         }
         if (! $family->deleted_at) {
             return response()->json(['message' => 'This family is not de-enrolled.'], 422);
+        }
+        // Restoring re-opens enrolments and logins AT this centre — not at one that has closed (2026-10-09).
+        if (! \App\Support\Live::centreOpen((int) $family->centre_id)) {
+            return response()->json(['message' => 'This family\'s centre is closed. Move the family to an open centre before restoring them.'], 422);
         }
 
         $restored = ['children' => 0, 'enrolments' => 0, 'accounts' => 0];
@@ -5880,13 +6041,10 @@ final class AdminController extends Controller
      */
     public function accessSummary(Request $request, int $userId): JsonResponse
     {
-        if ($userId !== (int) $request->user()->id) {
-            $agencyId = $this->getAgencyId($request);
-            if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
-            if (! $this->userBelongsToAgency($userId, $agencyId)) return response()->json(['message' => 'User not in your agency'], 403);
-        } else {
-            $agencyId = $this->getAgencyId($request);
-        }
+        // A centre director: their own centre's people (manageGate, 2026-10-07); the
+        // agency is then their director agency, so times read in its timezone.
+        [$agencyId, $isDirector, $refusal] = $this->manageGate($request, $userId);
+        if ($refusal) return $refusal;
         $u = DB::table('users')->where('id', $userId)->whereNull('deleted_at')->first();
         if (! $u) return response()->json(['message' => 'User not found'], 404);
         $tz = \App\Support\AgencyTime::tz($agencyId ?: null);
@@ -5951,7 +6109,7 @@ final class AdminController extends Controller
                 'password_changed' => $fmt($u->password_changed_at ?? null),
                 'must_change_password' => (bool) ($u->must_change_password ?? false),
                 'last_login' => $fmt($u->last_login_at ?? null),
-                'last_login_ip' => $u->last_login_ip ?? null,
+                'last_login_ip' => $isDirector ? null : ($u->last_login_ip ?? null),
                 'last_seen' => $fmt($u->last_seen_at ?? null),
                 'onboarded' => $fmt($u->onboarded_at ?? null),
                 'status' => $u->status,

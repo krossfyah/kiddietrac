@@ -1632,10 +1632,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Route::get('/users', -> moved to the director-capable admin group (2026-10-05)
         Route::get('/username-available', [AdminController::class, 'usernameAvailable']);
         Route::post('/users', [AdminController::class, 'createUser']);
-        Route::patch('/users/{user}', [AdminController::class, 'updateUser']);
-        Route::get('/users/{user}/access-summary', [\App\Http\Controllers\Api\AdminController::class, 'accessSummary'])->whereNumber('user');
-        Route::get('/users/{user}/profile', [AdminController::class, 'userProfile']);
-        Route::put('/users/{user}/profile', [AdminController::class, 'updateUserProfile']);
+        // PATCH /users/{user}, GET /users/{user}/access-summary and GET|PUT /users/{user}/profile
+        // -> moved to the director-capable admin group (2026-10-07)
         Route::post('/users/{user}/notes', [AdminController::class, 'addUserNote']);
         Route::post('/users/{user}/role', [AdminController::class, 'setUserRole']);
         // v22p1.2: user lifecycle
@@ -1826,6 +1824,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Duplicate-record detection for entry forms (users / children / families).
         Route::get('/duplicate-users', [AdminController::class, 'duplicateUsers']);
         Route::get('/duplicate-check', [AdminController::class, 'duplicateCheck']);
+        /* MANAGE A PERSON'S DETAILS (2026-10-07). A centre director, for their own
+           centre's staff and parents only: AdminController::manageGate() checks every
+           centre and family the person belongs to, and updateUser() refuses a director
+           any change to email, username or status. Agency admins: unchanged. */
+        Route::patch('/users/{user}', [AdminController::class, 'updateUser'])->whereNumber('user');
+        Route::get('/users/{user}/access-summary', [AdminController::class, 'accessSummary'])->whereNumber('user');
+        Route::get('/users/{user}/profile', [AdminController::class, 'userProfile'])->whereNumber('user');
+        Route::put('/users/{user}/profile', [AdminController::class, 'updateUserProfile'])->whereNumber('user');
     });
 
     // PROVIDER chat routes (educator + centre_director + agency_admin + home_visitor)

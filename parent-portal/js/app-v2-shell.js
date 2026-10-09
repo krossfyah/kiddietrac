@@ -414,6 +414,8 @@
           { hash: 'children',       label: 'Children',         icon: '🧒' },
           { hash: 'families',       label: 'Families',         icon: '👨‍👩‍👧' },
           { hash: 'staff',          label: 'Staff',            icon: '👥' },
+          // 2026-10-07: their own centre's staff and parents — Manage edits details, not sign-in.
+          { hash: 'admin-users',    label: 'User management',  icon: '🪪' },
         ]},
         // Home Visitors — directors review their agency's home-visit reports +
         // inspection forms (screens are registered for centre_director too).

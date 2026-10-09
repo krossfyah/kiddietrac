@@ -16,6 +16,18 @@
     billing: null,
   };
 
+  /* A CENTRE DIRECTOR'S VIEW OF USERS (2026-10-07). Anthony: directors may edit the
+     details of their own centre's staff and parents, not how anyone signs in. The
+     server decides who and what (AdminController::manageGate); this only keeps the
+     screen from offering what it would refuse. The active role, as the shell picks it,
+     so an admin who also directs a centre keeps the admin view. */
+  function isDirectorView() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return !!(Shell.Roles && Shell.Roles.primaryRoleOf(u) === 'centre_director');
+    } catch (e) { return false; }
+  }
+
   async function renderAdmin(main, ctx) {
     Dom.clear(main);
     const wrap = Dom.el('div', { style: 'max-width: 1800px; margin: 0 auto; padding: 24px;' });
@@ -27,6 +39,9 @@
     const isDeepLink = hash.startsWith('admin-') || hash.startsWith('admin/');
     if (hash.startsWith('admin-')) state.activeTab = hash.replace('admin-', '');
     else if (hash.startsWith('admin/')) state.activeTab = hash.replace('admin/', '');
+    // A director has the Users section only; centres, families, branding and billing
+    // here are agency-admin screens.
+    if (isDirectorView()) state.activeTab = 'users';
 
     // Header — the legacy hub title only. The per-section titles that used to live here
     // are gone with the header they fed; each section's own banner carries its name now.
@@ -245,7 +260,7 @@
     section('Provider');
     startGrid();
     var owner = [c.supervisor_first_name, c.supervisor_last_name].filter(Boolean).join(' ');
-    row('Owner / supervisor', owner);
+    row('Provider (owner)', owner);
     row('Licence number', c.license_number);
     row('Phone', (window.KT && KT.Phone) ? KT.Phone.format(c.phone) || c.phone : c.phone);
     row('Email', c.email);
@@ -638,8 +653,11 @@
     const fields = [
       { key: 'name', label: 'Centre name', required: true },
       // Inherited from the duplicate "Add centre" form on Agency overview, now retired.
-      { key: 'supervisor_first_name', label: 'Owner / supervisor first name', required: req },
-      { key: 'supervisor_last_name', label: 'Owner / supervisor last name', required: req },
+      /* The PROVIDER who owns this home childcare, shown everywhere as the centre's person.
+         Not the supervising home visitor: "Owner / supervisor" read that way, and Lorraine
+         Cooper's centre was created with her home visitor's name (2026-10-09). */
+      { key: 'supervisor_first_name', label: 'Provider (owner) first name', required: req, hint: 'The provider who runs this home, not their home visitor.' },
+      { key: 'supervisor_last_name', label: 'Provider (owner) last name', required: req },
       { key: 'license_number', label: 'License number' },
       { key: 'license_capacity', label: 'Maximum children enrolled (capacity)', type: 'number' },
       /* Deliberately the next line down: the contrast with the enrolment cap above
@@ -772,6 +790,7 @@
       // how a capacity change could be sent back as the value it already had.
       input.addEventListener('input', function () { edited[f.key] = input.value; });
       wrap.appendChild(input);
+      if (f.hint) wrap.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:var(--ink-500);margin-top:4px;' }, f.hint));
       form.appendChild(wrap);
     });
 
@@ -1318,7 +1337,9 @@
        meant reading the Status column of the whole list by eye.
 
        `opts.deactivated` is still honoured: the reactivate flow re-renders with it. */
-    const view = opts.view || (opts.deactivated ? 'deactivated' : 'all');
+    const _dir = isDirectorView();
+    const view = (_dir && (opts.view === 'deactivated' || opts.deactivated)) ? 'all'
+      : (opts.view || (opts.deactivated ? 'deactivated' : 'all'));
     const showDeactivated = view === 'deactivated';
     Dom.clear(content);
     content.appendChild(loading('Loading users...'));
@@ -1329,7 +1350,7 @@
       data = await Api.get('/admin/users' + (showDeactivated ? '?deactivated=1' : ''));
       // v22p42: presence is a best-effort enrichment — if it 403s for a non-admin
       // we still render the user list without dots.
-      try {
+      if (!_dir) try {   // agency-admin only; a director would only collect a 403
         const pres = await Api.get('/admin/presence');
         (pres.online || []).forEach(o => presenceSet.add(o.user_id));
       } catch (_) {}
@@ -1362,7 +1383,9 @@
              + ' invited but never signed in. Resend the welcome email, or delete one that '
              + 'was created by mistake — reactivating beats re-creating, so check here before '
              + 'inviting somebody a second time.')
-          : (rows.length + ' active user' + (rows.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.'),
+          : _dir
+            ? (rows.length + ' active user' + (rows.length === 1 ? '' : 's') + ' at your centre. Open Manage to update a name, phone, address or profile.')
+            : (rows.length + ' active user' + (rows.length === 1 ? '' : 's') + '. Invite admins, directors, educators, or parents — each gets their own role-tailored portal.'),
       'bear'
     ));
 
@@ -1406,11 +1429,12 @@
 
     subTabs.appendChild(subTab('all', '👥 Active users', showDeactivated ? null : allUsers.length));
     subTabs.appendChild(subTab('invited', '✉️ Invited', showDeactivated ? null : invitedUsers.length));
-    subTabs.appendChild(subTab('deactivated', '🗄️ De-boarded / deactivated', showDeactivated ? rows.length : null));
+    // Reactivating is an agency admin's call, so a director has no closed-accounts view.
+    if (!_dir) subTabs.appendChild(subTab('deactivated', '🗄️ De-boarded / deactivated', showDeactivated ? rows.length : null));
     content.appendChild(subTabs);
 
     // Possible-duplicate-accounts advisory (best-effort; only on the active list).
-    if (view === 'all') {
+    if (view === 'all' && !_dir) {   // merging accounts is an agency admin's job
       const dupHolder = Dom.el('div');
       content.appendChild(dupHolder);
       Api.get('/admin/duplicate-users').then(function (r) {
@@ -1420,7 +1444,7 @@
     }
 
     const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;' });
-    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, 'All accounts in your agency'));
+    bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' }, _dir ? 'Staff and families at your centre' : 'All accounts in your agency'));
 
     // v22p45: CSV download
     const csvBtn = Dom.el('button', { class: 'kt-act-icon kt-act-ok kt-icon-tip kt-legacy-export', title: 'Download CSV', 'data-kttip': 'Download CSV', 'aria-label': 'Download CSV' }, '📄');
@@ -1434,7 +1458,7 @@
     // job in a different idiom.
     var _barPill = 'background:#fff;color:#475569;border:1px solid #CBD5E1;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;line-height:1.1;display:inline-flex;align-items:center;box-sizing:border-box;';
 
-    if (!showDeactivated) {
+    if (!showDeactivated && !_dir) {
       const addBtn = Dom.el('button', { class: 'kt-add-btn-std', style: _barPill }, '+ Invite user');
       addBtn.addEventListener('click', () => showInviteModal(content));
       bar.appendChild(addBtn);
@@ -1450,7 +1474,7 @@
     const bulkDelete = Dom.el('button', { style: 'background: white; color: #DC2626; border: 1px solid #FCA5A5; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;' }, 'Delete');
     bulkBar.appendChild(bulkResend);
     bulkBar.appendChild(bulkDelete);
-    if (!showDeactivated) content.appendChild(bulkBar);
+    if (!showDeactivated && !_dir) content.appendChild(bulkBar);
 
     function refreshBulkBar() {
       const n = selectedIds.size;
@@ -1492,7 +1516,7 @@
     const headCheck = Dom.el('th', { style: 'padding: 12px 8px 12px 16px; width: 32px;' });
     const selectAll = Dom.el('input', { type: 'checkbox', style: 'cursor: pointer; width: 16px; height: 16px;', title: 'Select all on this page' });
     headCheck.appendChild(selectAll);
-    headRow.appendChild(headCheck);
+    if (!_dir) headRow.appendChild(headCheck);   // no bulk actions for a director
 
     ['Name', 'Username', 'Email', 'Roles', 'Status', 'Onboarding', 'Last seen', ''].forEach(h => {
       headRow.appendChild(Dom.el('th', { style: 'text-align: left; padding: 12px 16px; font-size: 12px; font-weight: 700; color: var(--ink-500); text-transform: uppercase; letter-spacing: 0.5px;' }, h));
@@ -1527,7 +1551,7 @@
         refreshBulkBar();
       });
       checkCell.appendChild(cb);
-      row.appendChild(checkCell);
+      if (!_dir) row.appendChild(checkCell);
       rowCheckboxes.push({ cb, id: u.id });
       // v22p3.2: name cell now includes a 32px avatar circle (image or initials)
       const nameCell = Dom.el('td', { style: 'padding: 14px 16px; font-weight: 600;' });
@@ -1585,6 +1609,17 @@
           b.addEventListener('click', onClick);
           return b;
         };
+        /* A director: View, and Manage for their own centre's people. The list says
+           which (can_manage, from the same test the server applies); for anyone else
+           the button stays, switched off, saying why. */
+        if (_dir) {
+          var mBtn = iconBtn('⚙️', u.can_manage ? 'Manage' : (u.manage_block || 'Ask an agency admin'), function () { if (u.can_manage) showUserModal(u, content); });
+          if (!u.can_manage) { mBtn.disabled = true; mBtn.style.opacity = '.4'; mBtn.style.cursor = 'not-allowed'; }
+          actionEl = Dom.el('div', { style: 'display:inline-flex; gap:6px; justify-content:flex-end;' }, [
+            iconBtn('ℹ️', 'View details', function () { showUserView(u, content); }),
+            mBtn,
+          ]);
+        } else
         actionEl = Dom.el('div', { style: 'display:inline-flex; gap:6px; justify-content:flex-end;' }, [
           iconBtn('ℹ️', 'View details', function () { showUserView(u, content); }),
           iconBtn('⚙️', 'Manage', function () { showUserModal(u, content); }),
@@ -2088,7 +2123,9 @@
     Shell.Modal.open({
       title: 'User details',
       body: body,
-      actions: [
+      actions: (isDirectorView() && !u.can_manage) ? [
+        { label: 'Close', primary: true, onClick: function () { Shell.Modal.close(); } },
+      ] : [
         { label: 'Manage', primary: true, onClick: function () { Shell.Modal.close(); setTimeout(function () { showUserModal(u, content); }, 60); } },
         { label: 'Close', onClick: function () { Shell.Modal.close(); } },
       ],
@@ -2410,16 +2447,23 @@
        the editable record; the summary has its own tab; sign-in and contact facts too. */
     const paneGlance = Dom.el('div', { style: 'display:none;' });
     const paneAccess = Dom.el('div', { style: 'display:none;' });
+    /* A CENTRE DIRECTOR (2026-10-07): details, the summary, and sign-in & contact —
+       the server admits them for their own centre's people. Files, pay, rooms, checks,
+       punches, the account panes and the data map stay with agency admins, so those
+       tabs are not offered (nor their data fetched) rather than shown failing. */
+    const _dirMode = isDirectorView();
     const _detailsTab = mkTab('✏️ Details', paneDetails);
     mkTab('👁 At a glance', paneGlance);
     mkTab('🔑 Sign-in & contact', paneAccess);
-    mkTab('📎 Files & documents', paneFiles);
-    mkTab('💵 Pay & rooms', paneStaff);
-    mkTab('🛡️ Background checks', paneChecks);
-    mkTab('🕓 Clock in / out', paneClock);
-    mkTab('🔐 Account & pay', paneAccount);
+    if (!_dirMode) {
+      mkTab('📎 Files & documents', paneFiles);
+      mkTab('💵 Pay & rooms', paneStaff);
+      mkTab('🛡️ Background checks', paneChecks);
+      mkTab('🕓 Clock in / out', paneClock);
+      mkTab('🔐 Account & pay', paneAccount);
+    }
     if (_isSelf) { mkTab('💬 Texts & calls', paneContact); }
-    mkTab('🗄️ Data & retention', paneData);
+    if (!_dirMode) mkTab('🗄️ Data & retention', paneData);
     if (_isSelf) { mkTab('ℹ️ About', paneAbout); }
 
     /* THIS IS YOU — said out loud, because otherwise a tab appears and disappears for
@@ -2442,11 +2486,18 @@
       youTag.title = 'About shows your build and diagnostics, so it appears only here.';
       paneDetails.appendChild(youTag);
     }
+    if (_dirMode) {
+      paneDetails.appendChild(Dom.el('div', {
+        style: 'margin:0 0 14px;padding:9px 12px;border-radius:8px;background:#F8FAFC;border:1px solid #E2E8F0;'
+             + 'color:#475569;font-size:12.5px;line-height:1.45;',
+      }, 'You can update their name, phone, address and profile. Their sign-in email, username, roles and account status are changed by an agency admin.'));
+    }
 
     /* Both panes, one subject, admin mode. They share a single read of
        /admin/users/{id}/account-profile — three panes asking the same question three
        times is three round trips for one answer. */
     (function () {
+      if (_dirMode) return;   // agency-admin panes (account-profile)
       var subject = { id: user.id, name: user.name || user.email };
       if (!(window.KT && KT.AccountPanes)) {
         paneAccount.appendChild(Dom.el('div', { style: 'padding:16px;color:#B45309;font-size:13px;' },
@@ -2527,7 +2578,7 @@
         changeBtn.disabled = false; changeBtn.textContent = 'Change avatar';
       }
     }
-    avatarSide.appendChild(changeBtn);
+    if (!_dirMode) avatarSide.appendChild(changeBtn);   // avatar upload is agency-admin only
     avatarSide.appendChild(fileInput);
     avatarSide.appendChild(avatarMsg);
     avatarRow.appendChild(avatarSide);
@@ -2561,6 +2612,20 @@
       var em = fld('email', 'Email', 'email', 'Changing this changes the email they sign in with.');
       fld('username', 'Username (optional)', 'text', 'Letters, numbers, dots, dashes and underscores. Needed if another account shares this email.');
       em.style.gridColumn = '';
+      /* A director sees how they sign in but cannot change it: shown, read-only, and
+         left out of F so it is never sent (the server refuses it too). */
+      if (_dirMode) {
+        ['email', 'username'].forEach(function (k) {
+          var f = F[k]; if (!f) return;
+          f.input.readOnly = true;
+          f.input.setAttribute('aria-readonly', 'true');
+          f.input.title = 'Ask an agency admin to change this.';
+          f.input.style.background = '#F8FAFC'; f.input.style.color = '#64748B';
+          var hint = f.input.parentNode && f.input.parentNode.lastChild;
+          if (hint && hint !== f.err && hint !== f.input) hint.textContent = 'Only an agency admin can change this. Ask an agency admin.';
+          delete F[k];
+        });
+      }
       var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;' });
       var save = Dom.el('button', { type: 'button', style: 'height:32px;padding:0 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Save account details');
       var msg = Dom.el('span', { style: 'font-size:12px;font-weight:700;' });
@@ -2648,8 +2713,8 @@
             ub.disabled = true;
             try { await Api.post('/admin/users/' + uid + '/unlock-login', {}); ub.textContent = '✓ Unlocked'; } catch (e) { ub.disabled = false; ub.textContent = 'Failed'; }
           });
-          lk.appendChild(ub);
-          line(sec, 'Sign-in lock', lk, 'Too many wrong passwords.');
+          if (!_dirMode) lk.appendChild(ub);   // unlocking stays with agency admins
+          line(sec, 'Sign-in lock', lk, 'Too many wrong passwords.' + (_dirMode ? ' An agency admin can unlock it.' : ''));
         }
         var ss = s2.sessions || {};
         line(sec, 'Signed-in sessions', String(ss.active || 0), ss.last_used ? 'Last used ' + ss.last_used : null);
@@ -2777,6 +2842,7 @@
     // mobile under Forms → My documents (/auth/me/documents).
     (function () {
       var uid = user.id;
+      if (_dirMode) return;
       var card = Dom.el('div', { style: 'background:#F9FAFB;border-radius:10px;padding:14px;margin-bottom:14px;' });
       card.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;' }, '📎 Files & documents'));
       card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' }, 'The signed Terms, Privacy & NDA is filed here automatically. Attach contracts, certificates, ID and more.'));
@@ -2928,7 +2994,7 @@
         }).catch(function () { toggleBtn.disabled = false; alert('Failed to update status'); });
       });
       statusRow.appendChild(statusLabel); statusRow.appendChild(toggleBtn);
-      statusBox.appendChild(statusRow); body.appendChild(statusBox);
+      statusBox.appendChild(statusRow); if (!_dirMode) body.appendChild(statusBox);
 
       var pf = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
       pf.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, 'Profile & emergency contact'));
@@ -2978,6 +3044,7 @@
       // answer existed only as an API nothing called.
       (function () {
         var uid = user.id;
+        if (_dirMode) return;
         var card = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F8FAFC;border-radius:10px;border:1px solid #E5E7EB;' });
         card.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;' }, '🗄️ Data & retention'));
         card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' },
@@ -3030,6 +3097,7 @@
 
       // This user's background-check records (managed on the Background checks screen).
       (function () {
+        if (_dirMode) return;
         var bc = Dom.el('div', { style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;' });
         bc.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;' }, '🛡️ Background checks'));
         var bcBody = Dom.el('div', { style: 'font-size:13px;color:#64748B;' }, 'Loading…');
@@ -3077,7 +3145,7 @@
           .then(function () { noteInput.value = ''; noteBtn.disabled = false; return Api.get('/admin/users/' + uid + '/profile'); })
           .then(function (d) { renderNotes(d.notes); }).catch(function () { noteBtn.disabled = false; alert('Failed to add note'); });
       });
-      nb.appendChild(noteInput); nb.appendChild(noteBtn); body.appendChild(nb);
+      nb.appendChild(noteInput); nb.appendChild(noteBtn); if (!_dirMode) body.appendChild(nb);   // admin notes
 
       Api.get('/admin/users/' + uid + '/profile').then(function (d) {
         var ed = d.editable || {};
@@ -3093,6 +3161,7 @@
 
     // ── Pay rate (drives the staff member's payslips) ───────────────────
     (function () {
+      if (_dirMode) return;
       var uid2 = user.id;
       var roles = user.roles || [];
       var defType = (roles.indexOf && roles.indexOf('home_visitor') > -1 && roles.indexOf('educator') < 0) ? 'per_visit' : 'hourly';
@@ -3131,6 +3200,7 @@
     // their whole centre — which is the old behaviour, and is why this control
     // spells out what is actually happening rather than showing empty checkboxes.
     (function () {
+      if (_dirMode) return;
       const roomSection = Dom.el('div', {
         style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;',
       });
@@ -3248,6 +3318,7 @@
     // The educator's punches, on their record, so a director can answer "when
     // did they actually work?" without exporting a payroll report.
     (function () {
+      if (_dirMode) return;
       const clockSection = Dom.el('div', {
         style: 'margin-bottom:18px;padding:14px 16px;background:#F9FAFB;border-radius:10px;border:1px solid #E5E7EB;',
       });
@@ -3480,7 +3551,7 @@
       style: 'font-size: 11px; color: #6B7280; margin-top: 8px; line-height: 1.4;',
     }, 'Adding a role is additive — existing roles stay active. To revoke, contact support.'));
 
-    body.appendChild(roleSection);
+    if (!_dirMode) body.appendChild(roleSection);   // roles are agency-admin only
 
     // v22p3.4: surface onboarding-wizard role_extras (RECE #, first aid expiry,
     // specialty, etc.) inline so admins can verify educator credentials.
@@ -3530,7 +3601,7 @@
     });
     inputs.status = select;
     statusWrap.appendChild(select);
-    body.appendChild(statusWrap);
+    if (!_dirMode) body.appendChild(statusWrap);
 
     const status = Dom.el('div', { style: 'min-height: 20px; color: #DC2626; font-size: 13px; margin: 8px 0;' });
     body.appendChild(status);
@@ -3773,12 +3844,13 @@
     })();
 
     danger.appendChild(actionRow);
-    body.appendChild(danger);
+    if (!_dirMode) body.appendChild(danger);   // reset, resend, off-board, delete: agency admin
 
     Shell.Modal.open({
       title: 'Manage ' + user.name,
       body: root,
-      actions: [{
+      // A director has no status to save; each card on Details has its own Save.
+      actions: _dirMode ? [{ label: 'Close', primary: true, onClick: function () { Shell.Modal.close(); } }] : [{
         label: 'Save status', // the status select below is all it saves; each card has its own Save
         primary: true,
         onClick: async () => {
@@ -8834,5 +8906,10 @@
       state.activeTab = tab;
       return renderAdmin(main, ctx);
     });
+  });
+  // Centre directors: Users only — their own centre's people (2026-10-07).
+  Shell.registerScreen('centre_director:admin-users', function (main, ctx) {
+    state.activeTab = 'users';
+    return renderAdmin(main, ctx);
   });
 })(window);
