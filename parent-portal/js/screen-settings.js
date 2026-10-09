@@ -476,8 +476,13 @@
               ['Add a mobile number to your profile to receive texts and calls.']));
           }
 
-          // Texts. Sign in/out lives in "Notify me about…" above, beside email and in-app.
-          var texts = (d.sms || []).filter(function (c) { return c.key !== 'checkin'; });
+          /* Texts — INCLUDING sign in / sign out (2026-10-09: "for SMS/texts add option for
+             parents to toggle on/off clock in/out and set this to default off"). It is the
+             same setting as the 💬 Text pill under "Notify me about…" (notification_prefs,
+             check_in_out, off unless the parent turns it on), so the two are kept in step
+             with a page event: change one and the other follows, and neither can save a
+             stale value over the other. */
+          var texts = (d.sms || []).slice();
           if (texts.length) {
             cpBody.appendChild(cpHead('Texts'));
             if (!d.sms_opted_in) {
@@ -508,9 +513,21 @@
               cpBody.appendChild(ask);
             }
             texts.forEach(function (c) {
-              cpBody.appendChild(cpRow(c.label, c.hint, c.on, function (on) {
-                return Api.put('/me/contact-prefs', { channel: 'sms', key: c.key, on: on });
-              }, !d.sms_opted_in));
+              var r = cpRow(c.label, c.hint, c.on, function (on) {
+                return Api.put('/me/contact-prefs', { channel: 'sms', key: c.key, on: on }).then(function (x) {
+                  if (c.key === 'checkin') {
+                    try { window.dispatchEvent(new CustomEvent('kt-checkin-sms', { detail: { on: on, from: 'texts' } })); } catch (e) {}
+                  }
+                  return x;
+                });
+              }, !d.sms_opted_in);
+              if (c.key === 'checkin') {
+                var sw2 = r.querySelector('[aria-pressed]');
+                window.addEventListener('kt-checkin-sms', function (ev) {
+                  if (ev.detail && ev.detail.from !== 'texts' && sw2 && sw2.kt_set) { sw2.kt_set(!!ev.detail.on); }
+                });
+              }
+              cpBody.appendChild(r);
             });
           }
 
@@ -930,6 +947,10 @@
               var savePrefs = function (revertKey) {
                 Api.put('/me/notification-prefs', {
                   key: p.key, email: state.email, push: state.push, sms: state.sms,
+                }).then(function () {
+                  if (p.key === 'check_in_out' && revertKey === 'sms') {
+                    try { window.dispatchEvent(new CustomEvent('kt-checkin-sms', { detail: { on: state.sms, from: 'notify' } })); } catch (e) {}
+                  }
                 }).catch(function () {
                   state[revertKey] = !state[revertKey]; paintChan();     // put it back
                   if (KT.toast) KT.toast('⚠️', 'Could not save', 'Please try again.', '#B91C1C');
@@ -955,7 +976,14 @@
                 savePrefs(key);
               });
               paintChan();
-              if (key === 'sms') { smsPaint = paintChan; }
+              if (key === 'sms') {
+                smsPaint = paintChan;
+                if (p.key === 'check_in_out') {
+                  window.addEventListener('kt-checkin-sms', function (ev) {
+                    if (ev.detail && ev.detail.from !== 'notify') { state.sms = !!ev.detail.on; paintChan(); }
+                  });
+                }
+              }
               chans.appendChild(b);
             });
             row.appendChild(chans);
