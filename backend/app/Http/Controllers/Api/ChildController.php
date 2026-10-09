@@ -512,6 +512,20 @@ final class ChildController extends Controller
         $openEnrolments = DB::table('enrollments')->where('child_id', $childId)
             ->whereNull('end_date')->get();
         $currentRoomIds = $openEnrolments->pluck('room_id')->filter()->map(fn ($v) => (int) $v)->all();
+
+        /* "FROM" IS WHERE THE CHILD IS ACTUALLY PLACED (2026-10-09). It was the family's
+           centre_id, which an edit or a sync could change without moving anybody — Victoria
+           (Amarachi Ihenekwe) was on Sukhman Malhi's and Natasha Satnarine's rosters while
+           the family record already said Lorraine Cooper, so her letter would have read
+           "from Lorraine Cooper to Lorraine Cooper". Named from the open placements, every
+           one of them for a split week; the family centre only when there are none. */
+        $fromNames = $currentRoomIds
+            ? DB::table('rooms as r')->join('centres as c', 'c.id', '=', 'r.centre_id')
+                ->whereIn('r.id', $currentRoomIds)->distinct()->pluck('c.name')->filter()->values()->all()
+            : [];
+        $fromLabel = $fromNames
+            ? (count($fromNames) > 1 ? implode(', ', array_slice($fromNames, 0, -1)).' and '.end($fromNames) : $fromNames[0])
+            : null;
         if (in_array((int) $toRoom->id, $currentRoomIds, true) && count($currentRoomIds) === 1) {
             return response()->json(['message' => 'This child is already with that provider.'], 422);
         }
@@ -627,13 +641,27 @@ final class ChildController extends Controller
 
                 // Carry the placement's terms forward; a move is not a re-negotiation.
                 $prev = $open->first();
+                /* Every day they attend, across ALL open placements (2026-10-09). A split
+                   week is one placement per provider — Victoria: Mon/Tue/Fri at one, Wed/Thu
+                   at another — and only the first one's days were carried, so she would have
+                   arrived booked for three days of five. Any placement with no day list means
+                   "every day", and so does the move. */
+                $days = [];
+                $allWeek = false;
+                foreach ($open as $o) {
+                    $d = \App\Support\CareSchedule::daysOf($o->schedule);
+                    if (! $d || count($d) === 7) { $allWeek = true; }   // no day list = every day
+                    $days = array_merge($days, $d);
+                }
+                $days = array_values(array_intersect(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], array_unique($days)));
+                $carrySchedule = ($allWeek || ! $days) ? null : json_encode($days);
                 \App\Http\Controllers\Concerns\EnrolmentGuard::assert((int) $cid, (int) $destRoomId);   // never into a closed centre, never a child who has left
                 DB::table('enrollments')->insert([
                     'child_id' => $cid,
                     'room_id' => $destRoomId,
                     'start_date' => $effective,
                     'end_date' => null,
-                    'schedule' => $prev->schedule ?? null,
+                    'schedule' => $carrySchedule,
                     'monthly_fee' => $prev->monthly_fee ?? 0,
                     'cwelcc_eligible' => $prev->cwelcc_eligible ?? 1,
                     'created_at' => now(),
@@ -682,7 +710,7 @@ final class ChildController extends Controller
             }
             foreach (array_unique($newEducators) as $uid) {
                 $rows[] = ['user_id' => $uid, 'type' => 'transfer', 'title' => '👋 Joining you',
-                    'body' => $names.' transferred from '.$fromCentre->name.', effective '.$effFmt
+                    'body' => $names.' transferred from '.($fromLabel ?: $fromCentre->name).', effective '.$effFmt
                         .'. They are on your roster now.',
                     'data' => json_encode(['link' => '#today']), 'created_at' => now()];
             }
@@ -701,7 +729,7 @@ final class ChildController extends Controller
                 ->whereNull('deleted_at')->pluck('email')->all();
             $this->mailTransfer(
                 (int) $toCentre->agency_id, $addresses, $names,
-                $fromCentre->name, $toCentre->name, $effFmt, $data['reason'] ?? null
+                $fromLabel ?: $fromCentre->name, $toCentre->name, $effFmt, $data['reason'] ?? null
             );
         } catch (\Throwable $e) {
             Log::warning('Transfer notifications failed', ['child' => $childId, 'error' => $e->getMessage()]);
@@ -714,7 +742,7 @@ final class ChildController extends Controller
             'entity_type' => 'child',
             'entity_id' => $childId,
             'payload' => json_encode([
-                'summary' => $names.' transferred from '.$fromCentre->name.' to '.$toCentre->name
+                'summary' => $names.' transferred from '.($fromLabel ?: $fromCentre->name).' to '.$toCentre->name
                     .' effective '.$effFmt,
                 'children' => $movingIds,
                 'from_centre' => (int) $fromCentre->id,
@@ -731,7 +759,7 @@ final class ChildController extends Controller
         return response()->json([
             'message' => $names.' transferred to '.$toCentre->name.', effective '.$effFmt.'.',
             'children_moved' => count($movingIds),
-            'from_centre' => $fromCentre->name,
+            'from_centre' => $fromLabel ?: $fromCentre->name,
             'to_centre' => $toCentre->name,
             'effective_date' => $effective,
             'places_used' => $occupied + count($movingIds),

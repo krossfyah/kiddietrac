@@ -203,6 +203,18 @@ class IntegrationController extends Controller
         $attrs['country'] = $attrs['country'] ?? 'Canada';
         $attrs['status'] = $attrs['status'] ?? 'active';
 
+        /* NEW PROVIDERS ARE PAUSED TOO (2026-10-09, Anthony: "remove the sync from ilearn
+           to kiddie on new users/providers - pause this sync"). Families, children and
+           parent logins were already behind this switch; providers were not, and that is
+           how a second "Lorraine Cooper" (c#55, no staff) appeared beside the one created
+           here by hand (c#47, her login, no room). A provider KiddieTrac already has keeps
+           taking updates; a new one is declined and recorded. */
+        if ($created && ! $this->inboundCreateAllowed($agencyId, $source, 'centre', $data['external_id'], [
+            'name' => $data['name'] ?? null,
+        ])) {
+            return $this->declinedCreate('centre', $data['external_id']);
+        }
+
         if ($created) {
             $attrs['slug'] = $this->uniqueSlug($data['name']);
             $centre = Centre::create($attrs);
@@ -384,6 +396,40 @@ class IntegrationController extends Controller
         }
     }
 
+    /** One alert per family and destination: the sync runs daily, a nag every morning gets ignored. */
+    private function alertHeldProviderChange(Request $request, int $agencyId, $family, $centre, string $source): void
+    {
+        try {
+            $already = \Illuminate\Support\Facades\DB::table('audit_logs')
+                ->where('action', 'integration.provider_change_held')
+                ->where('entity_type', 'family')->where('entity_id', (int) $family->id)
+                ->where('payload', 'like', '%"to_centre":' . (int) $centre->id . ',%')->exists();
+            if ($already) { return; }
+            $fromName = (string) \Illuminate\Support\Facades\DB::table('centres')->where('id', (int) $family->centre_id)->value('name');
+            $summary = 'The ' . $source . ' sync now has ' . ($family->family_name ?: 'this family') . ' with '
+                . $centre->name . ', but KiddieTrac has them with ' . ($fromName ?: 'another provider')
+                . '. Nothing was moved. If ' . $centre->name . ' is right, use Families → ⋮ → Move to another provider.';
+            \App\Support\Audit::write([
+                'user_id' => optional($request->user())->id, 'agency_id' => $agencyId,
+                'action' => 'integration.provider_change_held', 'entity_type' => 'family', 'entity_id' => (int) $family->id,
+                'payload' => json_encode(['summary' => $summary, 'from_centre' => (int) $family->centre_id,
+                    'to_centre' => (int) $centre->id, 'source' => $source]),
+                'created_at' => now(),
+            ]);
+            $admins = \Illuminate\Support\Facades\DB::table('role_assignments')
+                ->where('agency_id', $agencyId)->where('role', 'agency_admin')->where('active', 1)
+                ->pluck('user_id')->unique()->all();
+            $rows = [];
+            foreach ($admins as $uid) {
+                $rows[] = ['user_id' => (int) $uid, 'type' => 'transfer', 'title' => '⚠️ Provider change waiting: ' . ($family->family_name ?: 'family'),
+                    'body' => $summary, 'data' => json_encode(['link' => '#admin-families']), 'created_at' => now()];
+            }
+            if ($rows) { \App\Support\Notify::write($rows); }
+        } catch (\Throwable $e) {
+            // An alert must never fail the sync.
+        }
+    }
+
     /** POST /integration/families — upsert a family by external_id, linked to a centre. */
     public function upsertFamily(Request $request): JsonResponse
     {
@@ -447,6 +493,22 @@ class IntegrationController extends Controller
             return $this->declinedCreate('family', $data['external_id']);
         }
 
+        /* A PROVIDER CHANGE FROM THE SYNC IS HELD, NOT APPLIED (2026-10-09, Anthony: "hold
+           and alert admins"). Writing centre_id here moved the family's label and nobody
+           else: Victoria (Amarachi Ihenekwe) stayed enrolled at Sukhman Malhi and Natasha
+           Satnarine, on their rosters and check-in, while the family record and provider
+           history disagreed. Once a child in the family is enrolled, a move is
+           Families → ⋮ → Move to another provider (rooms, parent letter, both educators,
+           history). So the family keeps its provider, and the agency's admins get one
+           alert per family and new provider, saying what iLearn now says. */
+        $held = null;
+        if (! $created && (int) $family->centre_id !== (int) $centre->id
+            && \App\Http\Controllers\Api\AdminController::familyHasEnrolment((int) $family->id)) {
+            $held = ['from' => (int) $family->centre_id, 'to' => (int) $centre->id];
+            unset($attrs['centre_id']);
+            $this->alertHeldProviderChange($request, $agencyId, $family, $centre, $source);
+        }
+
         if ($created) {
             $family = Family::create($attrs);
         } else {
@@ -455,7 +517,8 @@ class IntegrationController extends Controller
 
         return response()->json([
             'ok' => true, 'entity' => 'family', 'created' => $created,
-            'id' => $family->id, 'external_id' => $family->external_id, 'centre_id' => $centre->id,
+            'id' => $family->id, 'external_id' => $family->external_id, 'centre_id' => (int) $family->centre_id,
+            'provider_change_held' => $held,
         ], $created ? 201 : 200);
     }
 
@@ -1664,7 +1727,7 @@ class IntegrationController extends Controller
                     'entity'      => $entity,
                     'source'      => $source,
                     'external_id' => $externalId,
-                    'reason'      => 'KiddieTrac is the source of record for new families, '
+                    'reason'      => 'KiddieTrac is the source of record for new providers, families, '
                         . 'children and parent logins. Inbound creation is closed; updates '
                         . 'to records that already exist still apply. '
                         . 'Set INTEGRATION_INBOUND_CREATE=true to reopen.',
@@ -1693,7 +1756,7 @@ class IntegrationController extends Controller
             'created'     => false,
             'skipped'     => 'inbound_create_disabled',
             'external_id' => $externalId,
-            'message'     => 'KiddieTrac is the source of record for new families, children '
+            'message'     => 'KiddieTrac is the source of record for new providers, families, children '
                 . 'and parent logins. This record does not exist here and was not created; '
                 . 'updates to existing records are still applied.',
         ], 200);
