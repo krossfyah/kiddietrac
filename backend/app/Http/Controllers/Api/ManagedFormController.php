@@ -1953,7 +1953,7 @@ class ManagedFormController extends Controller
         $history = DB::table('managed_form_signoffs')->where('user_id', $uid)
             ->whereNotNull('signed_at')
             ->orderByDesc('signed_at')->orderByDesc('id')
-            ->get(['id', 'managed_form_id', 'field_values', 'correction_requested_at', 'correction_note', 'corrected_at']);
+            ->get(['id', 'managed_form_id', 'field_values', 'correction_requested_at', 'correction_note', 'corrected_at', 'signed_at']);
 
         $latest = [];
         foreach ($history as $h) {
@@ -1971,9 +1971,33 @@ class ManagedFormController extends Controller
                 $signed[] = (int) $fid;
             }
         }
-        // A REUSABLE form is never "done" — an educator fills it again for the next
-        // child or the next week — so signing it must not remove it from the list.
-        $reusableIds = DB::table('managed_forms')->where('reusable', 1)->pluck('id')->all();
+        /* A REUSABLE FORM IS DONE ONCE IT IS DONE FOR NOW (2026-10-09).
+
+           Reusable meant "never done": signing kept it in the list so an educator could
+           fill the Sleep Chart again tomorrow. But parents' enrolment paperwork is marked
+           reusable too (so a family with two children can file one per child), and for
+           them it simply never left "Forms to sign" — Samantha Kicks signed seven forms
+           eleven times and Lina Marcotullio seventeen, still told each time it was pending.
+
+           Now a reusable form the person has signed is DONE — for a form addressed only to
+           educators, done for today (it is due again tomorrow); for anyone else, done once
+           signed. It is still offered, but in `again`, not in the pending list or the
+           count: "already signed — fill again only if you need to". */
+        $reusable = DB::table('managed_forms')->where('reusable', 1)->get(['id', 'audiences'])->keyBy('id');
+        $tz = \App\Support\AgencyTime::tz((int) $agencyId) ?: 'America/Toronto';
+        $todayStart = \Illuminate\Support\Carbon::now($tz)->startOfDay()->utc()->toDateTimeString();
+        $signedAt = [];
+        foreach ($latest as $fid => $h) { $signedAt[(int) $fid] = (string) $h->signed_at; }
+        $doneAgain = [];   // form_id => last signed_at
+        foreach ($signed as $fid) {
+            if (! isset($reusable[$fid])) continue;
+            $aud = json_decode((string) ($reusable[$fid]->audiences ?? ''), true) ?: [];
+            $staffOnly = $aud && ! array_diff($aud, ['educator', 'centre_director', 'home_visitor', 'agency_admin']);
+            $at = $signedAt[$fid] ?? null;
+            if (! $at) continue;
+            if (! $staffOnly || (string) $at >= $todayStart) { $doneAgain[$fid] = (string) $at; }
+        }
+        $reusableIds = $reusable->keys()->map(fn ($v) => (int) $v)->all();
         $signed = array_values(array_diff($signed, $reusableIds));
         $drafts = DB::table('managed_form_signoffs')->where('user_id', $uid)
             ->whereNull('signed_at')->pluck('field_values', 'managed_form_id')->all();
@@ -1995,9 +2019,12 @@ class ManagedFormController extends Controller
                role") is what let a form addressed to one parent stay visible to
                every guardian in the agency. */
             ->pipe(fn ($rows) => collect(\App\Support\FormAudience::filter($rows, $uid, $roles)))
-            ->map(function ($f) use ($drafts, $pending) {
+            ->map(function ($f) use ($drafts, $pending, $doneAgain) {
                 $raw = $drafts[$f->id] ?? null;
                 return [
+                    // Signed already (a reusable form): offered again, not pending.
+                    'done' => isset($doneAgain[(int) $f->id]) && ! isset($drafts[$f->id]),
+                    'last_signed_at' => $doneAgain[(int) $f->id] ?? null,
                     'id' => $f->id, 'title' => $f->title, 'description' => $f->description,
                     'file_url' => $f->file_url, 'fillable' => (bool) ($f->fillable ?? false),
                     'reusable' => (bool) ($f->reusable ?? false),
@@ -2010,7 +2037,11 @@ class ManagedFormController extends Controller
                 ];
             })
             ->values();
-        return response()->json(['forms' => $forms, 'count' => $forms->count()]);
+        // `forms` and `count` are what is still to do; `again` is signed and fill-again.
+        $todo = $forms->filter(fn ($f) => empty($f['done']))->values();
+        $again = $forms->filter(fn ($f) => ! empty($f['done']))->values();
+
+        return response()->json(['forms' => $todo, 'count' => $todo->count(), 'again' => $again]);
     }
 
     /**

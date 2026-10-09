@@ -232,16 +232,35 @@
     ]).then(function (both) {
       var d = both[0];
       var forms = (d && d.forms) || [];
+      /* SIGNED, AND OFFERED AGAIN (2026-10-09). A reusable form you have signed is no
+         longer "to sign" — it sits below, plainly marked, in case it is needed again (a
+         second child, next week's chart). It used to stay in the list as if never
+         signed, and parents signed the same paperwork over and over. */
+      var again = (d && d.again) || [];
+      var all = forms.concat(again);
+      var againHtml = again.length
+        ? '<div style="margin:18px 0 8px;font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;">Already signed — fill again only if you need to</div>'
+          + again.map(function (f) { return card(f, true); }).join('')
+        : '';
       if (!forms.length) {
         /* Caught up means caught up. With a consent still to answer the cheerful
            banner would be contradicting the task sitting directly above it. */
-        el.innerHTML = consentCard() + (_consent ? '' : '<div style="padding:32px 20px;text-align:center;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;font-weight:600;">🎉 You’re all caught up — nothing to sign right now.</div>');
+        el.innerHTML = consentCard() + (_consent ? '' : '<div style="padding:32px 20px;text-align:center;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;font-weight:600;">🎉 You’re all caught up — nothing to sign right now.'
+          + (again.length ? '<div style="font-weight:500;font-size:13px;margin-top:6px;">Your signed copies are in <a href="#my-documents" style="font-weight:800;color:#166534;">Documents</a>.</div>' : '')
+          + '</div>') + againHtml;
         wireConsent(el);
+        wireCards(el, all);
         return;
       }
-      el.innerHTML = consentCard() + forms.map(function (f) {
+      el.innerHTML = consentCard() + forms.map(function (f) { return card(f, false); }).join('') + againHtml;
+      wireConsent(el);
+      wireCards(el, all);
+    }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
+
+    function card(f, isAgain) {
         return '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(15,23,42,.05);">'
           + '<div style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(f.title) + '</div>'
+          + (isAgain ? '<div style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;font-weight:800;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:999px;padding:3px 10px;">✓ Signed' + (f.last_signed_at ? ' · ' + esc(fmtWhen(f.last_signed_at)) : '') + '</div>' : '')
           + (f.description ? '<div style="font-size:13px;color:#64748B;margin-top:3px;line-height:1.5;">' + esc(f.description) + '</div>' : '')
           /* SAY WHY IT IS BACK.
 
@@ -262,11 +281,12 @@
           + '<button class="mf-view" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:10px;padding:10px 16px;font-weight:700;font-size:13px;cursor:pointer;">📄 Read the form</button>'
           + (f.fillable
               // Fillable: typing and signing are one journey, so one primary action.
-              ? '<button class="mf-fill" data-id="' + f.id + '" data-t="' + esc(f.title) + '" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">📝 Fill &amp; sign</button>'
-              : '<button class="mf-sign" data-id="' + f.id + '" data-t="' + esc(f.title) + '" type="button" style="background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">✍️ Sign</button>')
+              ? '<button class="mf-fill" data-id="' + f.id + '" data-t="' + esc(f.title) + '" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" style="' + (isAgain ? 'background:#fff;color:#0F766E;border:1px solid #99F6E4;' : 'background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;border:0;') + 'border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">' + (isAgain ? '📝 Fill again' : '📝 Fill &amp; sign') + '</button>'
+              : '<button class="mf-sign" data-id="' + f.id + '" data-t="' + esc(f.title) + '" type="button" style="' + (isAgain ? 'background:#fff;color:#15803D;border:1px solid #BBF7D0;' : 'background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:0;') + 'border-radius:10px;padding:10px 18px;font-weight:800;font-size:13px;cursor:pointer;">' + (isAgain ? '✍️ Sign again' : '✍️ Sign') + '</button>')
           + '</div></div>';
-      }).join('');
-      wireConsent(el);
+    }
+
+    function wireCards(el, forms) {
       el.querySelectorAll('.mf-view').forEach(function (b) { b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); }); });
       el.querySelectorAll('.mf-sign').forEach(function (b) { b.addEventListener('click', function () { signForm(b.getAttribute('data-id'), b.getAttribute('data-t'), el); }); });
       el.querySelectorAll('.mf-fill').forEach(function (b) {
@@ -291,7 +311,7 @@
           });
         });
       });
-    }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
+    }
   }
 
   function signForm(id, title, el) {
