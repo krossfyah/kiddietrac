@@ -623,9 +623,11 @@
    be collapsed, and 150px + three fields + a button does not fit a phone. */
       row.style.cssText = 'display:grid;gap:8px;align-items:center;margin-bottom:8px;';
       row.innerHTML =
+        /* Blank first (2026-10-09): no role is chosen for anyone until somebody picks one. */
         '<select data-tk="role" style="' + inputStyle() + 'background:white;padding:9px 10px;">' +
+          '<option value=""' + (!pre.role ? ' selected' : '') + '>Choose a role…</option>' +
           '<option value="centre_director"' + (pre.role === 'centre_director' ? ' selected' : '') + '>Centre director</option>' +
-          '<option value="educator"' + (!pre.role || pre.role === 'educator' ? ' selected' : '') + '>Educator</option>' +
+          '<option value="educator"' + (pre.role === 'educator' ? ' selected' : '') + '>Educator</option>' +
         '</select>' +
         '<input data-tk="first_name" placeholder="First name" value="' + esc(pre.first_name || '') + '" style="' + inputStyle() + 'padding:9px 10px;">' +
         '<input data-tk="last_name" placeholder="Last name" value="' + esc(pre.last_name || '') + '" style="' + inputStyle() + 'padding:9px 10px;">' +
@@ -850,7 +852,7 @@
       var first = get('[data-tk="first_name"]');
       if (!email && !first) return; // skip empty rows
       rows.push({
-        role: get('[data-tk="role"]') || 'educator',
+        role: get('[data-tk="role"]'),   // no silent default: an unpicked role is caught on Next
         first_name: first,
         last_name: get('[data-tk="last_name"]'),
         email: email,
@@ -1232,6 +1234,22 @@
     var msg = container.querySelector('#kt-step-msg');
     var body = container.querySelector('#kt-step-body');
     var id = state.steps[state.step].id;
+    // Team invites: a filled-in person must have a role picked (the list starts blank).
+    if (id === 'team') {
+      var noRole = null;
+      body.querySelectorAll('[data-team-row]').forEach(function (row) {
+        var g = function (sel) { var el = row.querySelector(sel); return el ? el.value.trim() : ''; };
+        var sel = row.querySelector('[data-tk="role"]');
+        if ((g('[data-tk="email"]') || g('[data-tk="first_name"]')) && sel && !sel.value) {
+          sel.style.borderColor = '#DC2626'; if (!noRole) noRole = sel;
+        } else if (sel) { sel.style.borderColor = ''; }
+      });
+      if (noRole) {
+        msg.textContent = 'Choose a role for each person you are inviting.'; msg.style.color = '#DC2626';
+        try { noRole.focus(); } catch (e) {}
+        return false;
+      }
+    }
     var missing = [];
     var firstBad = null;
     body.querySelectorAll('[data-req]').forEach(function (el) {
