@@ -2188,18 +2188,25 @@ class ManagedFormController extends Controller
                 'ip_address'  => substr((string) $request->ip(), 0, 45),
                 'updated_at'  => now(),
         ];
+        /* Closing the loop. The new submission is a NEW row (or a finished draft) - the
+           original stays as filed, with its own PDF - so the pending return has to be
+           marked resolved on the OLD row or the form stays "sent back" for ever.
+
+           For BOTH paths (2026-10-09). This used to run only when there was no draft, so
+           a parent who saved a draft of the corrected form before signing it left the
+           original marked "sent back" although she had fixed it (Samantha's Parent
+           Agreement, returned 16:03, re-signed 16:41). A draft is never the returned row
+           itself: that one is signed, and the draft lookup is whereNull('signed_at'). */
+        DB::table('managed_form_signoffs')
+            ->where('managed_form_id', $id)->where('user_id', $uid)
+            ->whereNotNull('signed_at')
+            ->whereNotNull('correction_requested_at')->whereNull('corrected_at')
+            ->update(['corrected_at' => now(), 'updated_at' => now()]);
+
         if ($open) {
             DB::table('managed_form_signoffs')->where('id', $open->id)->update($row);
             $signoffId = (int) $open->id;
         } else {
-            /* Closing the loop. The new submission is a NEW row - the original stays
-               as filed, with its own PDF - so the pending return has to be marked
-               resolved on the OLD row or the form stays outstanding for ever. */
-            DB::table('managed_form_signoffs')
-                ->where('managed_form_id', $id)->where('user_id', $uid)
-                ->whereNotNull('correction_requested_at')->whereNull('corrected_at')
-                ->update(['corrected_at' => now(), 'updated_at' => now()]);
-
             $signoffId = (int) DB::table('managed_form_signoffs')->insertGetId($row + [
                 'managed_form_id' => $id, 'user_id' => $uid, 'created_at' => now(),
             ]);
