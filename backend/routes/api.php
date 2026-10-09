@@ -2436,6 +2436,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/qbo/status',                 [\App\Http\Controllers\Api\QboController::class, 'status']);
         Route::post('/qbo/disconnect',             [\App\Http\Controllers\Api\QboController::class, 'disconnect']);
         Route::post('/qbo/sync/invoice/{id}',      [\App\Http\Controllers\Api\QboController::class, 'syncInvoice']);
+        // Rebuilt 2026-10-09 (see QboController): mapping options, Sync now, sync log.
+        Route::get ('/qbo/options',                [\App\Http\Controllers\Api\QboController::class, 'options']);
+        Route::post('/qbo/sync',                   [\App\Http\Controllers\Api\QboController::class, 'syncAll']);
+        Route::get ('/qbo/log',                    [\App\Http\Controllers\Api\QboController::class, 'log']);
     });
 
     // ---- Xero (2026-10-09) — Settings → Xero; agency admins of the active agency (checked in the controller too) ----

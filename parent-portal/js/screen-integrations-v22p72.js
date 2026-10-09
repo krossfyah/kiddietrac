@@ -1718,7 +1718,7 @@
   function reg() {
     if (!(window.KT && window.KT.Shell && window.KT.Shell.registerScreen)) { setTimeout(reg, 200); return; }
     ['agency_admin', 'platform_admin', 'centre_director'].forEach(function (r) {
-      window.KT.Shell.registerScreen(r + ':quickbooks', renderQuickbooks);
+      // #quickbooks moved to screen-quickbooks.js (rebuilt 2026-10-09); renderQuickbooks below is no longer registered.
       window.KT.Shell.registerScreen(r + ':sms-settings', renderSmsSettings);
       // Wrapped rather than folded into renderEmailSettings: the tabs are a layer over
       // whatever that function rendered, and keeping them separate means the render path
