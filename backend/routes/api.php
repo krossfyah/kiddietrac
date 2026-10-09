@@ -2438,6 +2438,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/qbo/sync/invoice/{id}',      [\App\Http\Controllers\Api\QboController::class, 'syncInvoice']);
     });
 
+    // ---- Xero (2026-10-09) — Settings → Xero; agency admins of the active agency (checked in the controller too) ----
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get   ('/admin/xero-config',        [\App\Http\Controllers\Api\XeroController::class, 'showConfig']);
+        Route::patch ('/admin/xero-config',        [\App\Http\Controllers\Api\XeroController::class, 'saveConfig']);
+        Route::delete('/admin/xero-config',        [\App\Http\Controllers\Api\XeroController::class, 'clearConfig']);
+        Route::get   ('/xero/connect',             [\App\Http\Controllers\Api\XeroController::class, 'connect']);
+        Route::post  ('/xero/tenant',              [\App\Http\Controllers\Api\XeroController::class, 'chooseTenant']);
+        Route::post  ('/xero/disconnect',          [\App\Http\Controllers\Api\XeroController::class, 'disconnect']);
+        Route::get   ('/xero/options',             [\App\Http\Controllers\Api\XeroController::class, 'options']);
+        Route::post  ('/xero/sync',                [\App\Http\Controllers\Api\XeroController::class, 'syncAll']);
+        Route::post  ('/xero/sync/invoice/{id}',   [\App\Http\Controllers\Api\XeroController::class, 'syncInvoice'])->where('id', '[0-9]+');
+        Route::get   ('/xero/log',                 [\App\Http\Controllers\Api\XeroController::class, 'log']);
+    });
+
     // ---- Locale ----
     Route::get ('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'current']);
     Route::post('/locale',                  [\App\Http\Controllers\Api\LocaleController::class, 'set']);
@@ -2935,6 +2949,8 @@ Route::get('/public/landing/{slug}', [\App\Http\Controllers\Api\LandingControlle
 
 // v22p51 — QBO OAuth callback (no auth — state cookie identifies agency)
 Route::get('/qbo/callback', [\App\Http\Controllers\Api\QboController::class, 'callback']);
+// Xero OAuth callback (public — a one-use, server-held state identifies the agency and admin)
+Route::get('/xero/callback', [\App\Http\Controllers\Api\XeroController::class, 'callback'])->middleware('throttle:30,1');
 
 // v22p51 — public locale bundles (no auth required so the login page can localize too)
 Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController::class, 'strings']);

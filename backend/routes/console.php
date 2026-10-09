@@ -439,3 +439,5 @@ Schedule::command('kt:leak-sweep')->dailyAt('05:40')->timezone('America/Toronto'
    "the year\u{2019}s" reached 59 inboxes). MailText repairs mail at send time; this
    finds the source. See KtTextCheck. */
 Schedule::command('kt:text-check')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
+/* Xero: agencies that turned on automatic sync in Settings → Xero (off by default). */
+Schedule::command('xero:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();

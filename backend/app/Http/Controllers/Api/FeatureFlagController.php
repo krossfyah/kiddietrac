@@ -105,8 +105,8 @@ final class FeatureFlagController extends Controller
             'hashes' => ['payment-providers']],
         'expenses'          => ['label' => 'Expenses, suppliers & POs',    'plan_min' => 'growth',     'group' => 'Billing & payments',
             'hashes' => ['expenses']],
-        'accounting_sync'   => ['label' => 'Accounting export & QuickBooks', 'plan_min' => 'growth',   'group' => 'Billing & payments',
-            'hashes' => ['external-billing', 'quickbooks']],
+        'accounting_sync'   => ['label' => 'Accounting export, QuickBooks & Xero', 'plan_min' => 'growth',   'group' => 'Billing & payments',
+            'hashes' => ['external-billing', 'quickbooks', 'xero']],
         'white_label'       => ['label' => 'White-label branding & site',  'plan_min' => 'growth',     'group' => 'Billing & payments',
             'hashes' => ['admin-branding', 'marketing-site']],
 

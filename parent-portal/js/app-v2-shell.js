@@ -397,6 +397,7 @@
           ...(isPlatformAdmin_v22p34 ? [{ hash: 'email-seasons', label: 'Seasonal email headers', icon: '🎨' }] : []),   // 2026-10-09
           { hash: 'document-templates', label: 'Document templates', icon: '📄' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
+          { hash: 'xero',               label: 'Xero',                icon: '📗' },
 
 
 
@@ -1030,6 +1031,7 @@
     'vacation-holds': 'Places held while a family is away.',
     'expenses': 'Suppliers, purchase orders and bills.',
     'quickbooks': 'Sync invoices and payments with QuickBooks.',
+    'xero': 'Send invoices, voids and payments to your Xero organisation.',
     'forecast': 'Projected enrolment and revenue.',
     'reports': 'Ready-made reports you can print or export.',
     'retention': 'Which families stay, and which leave.',
