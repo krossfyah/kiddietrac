@@ -522,6 +522,22 @@ final class CareController extends Controller
         $centreId = $this->resolveCentreId($request->user());
         if (!$centreId) return response()->json(['message' => 'No centre assigned'], 422);
 
+        /* A DOUBLE TAP IS ONE PRESS (2026-10-09). The clock is a toggle, so a second tap
+           seconds after the first clocked straight back out (or in): Sukhman 13:17:33 in,
+           13:17:36 out, 13:17:43 in again; Amna clocked out and two more taps made two
+           2-second "shifts". Each showed on the timesheet as an extra 0h row. A press within
+           20 seconds of this person's last clock-in or clock-out answers with that same
+           result and records nothing new. */
+        $last = DB::table('time_punches')->where('user_id', $userId)->orderByDesc('id')->first(['id', 'punched_in_at', 'punched_out_at']);
+        if ($last) {
+            $lastAt = \Illuminate\Support\Carbon::parse($last->punched_out_at ?: $last->punched_in_at);
+            if (abs(now()->diffInSeconds($lastAt)) < 20) {
+                return response()->json($last->punched_out_at
+                    ? ['action' => 'out', 'minutes_worked' => 0, 'message' => 'Already clocked out a moment ago', 'repeat' => true]
+                    : ['action' => 'in', 'id' => (int) $last->id, 'message' => 'Already clocked in a moment ago', 'repeat' => true]);
+            }
+        }
+
         // The centre is shut — there is no shift to start.
         //
         // This guard was written onto StaffController::clockIn, which serves /clock-in, and

@@ -793,26 +793,37 @@ final class SchedulingController extends Controller
      * Export-ready timesheet rows. CSV is generated client-side from this JSON.
      */
     /** Centres this person can pull a timesheet for, when they did not name one. */
+    /**
+     * "All centres" = every OPEN centre of the agency being viewed, for its admins (and a
+     * platform admin); a director's own open centres IN THAT AGENCY.
+     *
+     * 2026-10-09 (Anthony: "timesheet section pulling up all centres shows duplicate records
+     * with no info"). This took ANY centre the person held a role at, in any agency, before
+     * looking at the agency at all — so Anthony, who also holds test roles in Test Agency,
+     * got Test Agency's centres and staff on iLearn's sheet. Closed centres were included too.
+     */
     private function timesheetCentreIds(Request $request): array
     {
         $uid = (int) $request->user()->id;
-        $own = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
-            ->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($i) => (int) $i)->all();
-        if ($own) {
-            return $own;                       // a director sees their own centre(s)
-        }
-
-        // Agency-level roles have no centre of their own, so they get the agency's.
         $agencyId = $this->resolveAgencyId($request);
         if (! $agencyId) {
             return [];
         }
-        $isWide = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
-            ->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
+        $open = fn () => \App\Support\Live::centres(DB::table('centres'), 'centres')->where('agency_id', $agencyId);
 
-        return $isWide
-            ? DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->map(fn ($i) => (int) $i)->all()
-            : [];
+        $isWide = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            ->where(fn ($q) => $q->where('role', 'platform_admin')
+                ->orWhere(fn ($w) => $w->where('role', 'agency_admin')->where('agency_id', $agencyId)))
+            ->exists();
+        if ($isWide) {
+            return $open()->pluck('id')->map(fn ($i) => (int) $i)->all();
+        }
+
+        // A director: their own centres, in this agency, still open.
+        $mine = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            ->where('role', 'centre_director')->whereNotNull('centre_id')->pluck('centre_id')->all();
+
+        return $mine ? $open()->whereIn('id', $mine)->pluck('id')->map(fn ($i) => (int) $i)->all() : [];
     }
 
     public function timesheets(Request $request): JsonResponse
@@ -854,6 +865,11 @@ final class SchedulingController extends Controller
             // no clock-out is precisely the one payroll needs to see before it is paid —
             // silently omitting it makes the sheet look complete when it is short.
 
+            /* A finished "shift" under a minute is a double tap on the clock, not work
+               (2026-10-09) — 2- and 3-second rows sat beside the real shift as duplicates.
+               Kept in the table; just not listed. Open punches always show. */
+            ->where(fn ($q) => $q->whereNull('time_punches.punched_out_at')
+                ->orWhereRaw('TIMESTAMPDIFF(SECOND, time_punches.punched_in_at, time_punches.punched_out_at) >= 60'))
             ->orderBy('users.last_name')
             ->orderBy('time_punches.punched_in_at')
             ->select(
@@ -956,11 +972,18 @@ final class SchedulingController extends Controller
             && ! $centreId
             && count($centreIds) >= DB::table('centres')->whereIn('agency_id', $agencyIds)->count();
 
+        /* ONLY PEOPLE WHO WORK SHIFTS (2026-10-09). The zero rows listed every non-parent
+           role — admins, auditors and the integration account included — none of whom
+           clock in, so the sheet filled with "— Name — — 0h" rows nobody could act on.
+           A zero row is for somebody who should have hours. */
         $missing = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.active', true)
-            ->where('ra.role', '!=', 'guardian')
+            ->whereIn('ra.role', ['educator', 'centre_director', 'home_visitor'])
             ->whereNull('u.deleted_at')
+            ->where('u.email', 'not like', '%integration+%')
+            ->where('u.email', 'not like', 'noreply@%')
+            ->where('u.email', 'not like', 'no-reply@%')
             // Agency-level roles (an admin has no centre_id) are only pulled in when the
             // whole agency is being asked for. Naming ONE centre and still listing every
             // agency-level person put the entire agency's staff on a single provider's
