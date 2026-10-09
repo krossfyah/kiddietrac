@@ -314,6 +314,16 @@
      * (Anthony, 2026-08-27)
      */
     async function renderFeedbackPanel(host) {
+      /* ASK ONLY IF IT IS YOURS TO SEE (2026-10-09). The 403 below was harmless to the
+         page, but every educator, parent and home visitor who opened Help left a
+         "get:api/v1/help/analytics (failed)" row in the audit log (Lloydene's home-visitor
+         account, twice) — noise that reads like a fault. The shell puts the resolved role
+         on <body>; only the roles the endpoint serves make the request. */
+      const b = document.body && document.body.classList;
+      if (!b || !(b.contains('role-agency-admin') || b.contains('role-centre-director') || b.contains('role-platform-admin'))) {
+        host.remove();
+        return;
+      }
       let d;
       try { d = await Api.get('/help/analytics'); }
       catch (e) { host.remove(); return; }
