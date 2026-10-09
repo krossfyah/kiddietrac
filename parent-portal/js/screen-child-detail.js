@@ -395,6 +395,10 @@
        you were working through - and coming back to the top of it. `opts.params` lets a
        caller hand the id (and archived flag) straight in; with no opts this behaves
        exactly as it always has, so the #child-detail route is untouched. */
+    /* Every redraw passes `opts` on (2026-10-09). Edit / Done / Save inside the POPUP called
+       renderChildDetail(container) with no opts, so the redraw read the id from the page
+       address — the Children list, which has none — and showed "Missing child id. Go back
+       to the children list." the moment Edit was pressed. */
     var params = (opts && opts.params) ? opts.params : parseQuery(window.location.hash);
     var childId = params.id;
     if (String(childId) !== String(editModeFor)) {
@@ -512,16 +516,16 @@
            row of disabled buttons nobody can act on. */
       } else if (editMode) {
         headerActions.appendChild(btn('📝 Edit details…', btnSecondary(), function () {
-          showEditModal(child, function () { renderChildDetail(container); });
+          showEditModal(child, function () { renderChildDetail(container, opts); });
         }));
         headerActions.appendChild(btn('✓ Done', btnPrimary(), function () {
           editMode = false;
-          renderChildDetail(container);
+          renderChildDetail(container, opts);
         }));
       } else {
         headerActions.appendChild(btn('✏️ Edit', btnPrimary(), function () {
           editMode = true;
-          renderChildDetail(container);
+          renderChildDetail(container, opts);
           /* Straight into the field they came for: opening the details modal on entry
              would be presumptuous when the thing they want may be on a tab. */
         }));
@@ -713,7 +717,7 @@
           if (!(window.KT && KT.healthEditor)) { return; }
           KT.healthEditor.open(child, {
             // Same refresh the edit modal uses — renderChildDetail takes the container.
-            onSaved: function () { renderChildDetail(container); },
+            onSaved: function () { renderChildDetail(container, opts); },
           });
         });
         head.appendChild(edit);
