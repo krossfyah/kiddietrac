@@ -277,6 +277,9 @@ class ProspectNdaController extends Controller
             . '<tr><td><strong>Business (legal name)</strong></td><td>' . $e($d['business_name']) . '</td></tr>'
             . '<tr><td><strong>Legal business address</strong></td><td>' . nl2br($e($d['business_address'])) . '</td></tr>'
             . '<tr><td><strong>Signed by</strong></td><td>' . $e($d['signer_name']) . '</td></tr>'
+            // The signer may correct the name or sign for someone else; keep who it was sent to.
+            . (mb_strtolower(trim((string) $d['signer_name'])) !== mb_strtolower(trim((string) $r->name))
+                ? '<tr><td><strong>Sent to</strong></td><td>' . $e($r->name) . '</td></tr>' : '')
             . '<tr><td><strong>Role in the company</strong></td><td>' . $e($d['role_title']) . '</td></tr>'
             . '<tr><td><strong>Email</strong></td><td>' . $e($r->email) . '</td></tr></table></div>'
             . AgreementController::agreementBodyHtml()

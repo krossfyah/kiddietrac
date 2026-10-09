@@ -62,13 +62,17 @@
           + '<p><a href="' + API + '/public/nda/' + token + '/pdf">Download your signed copy (PDF)</a></p>');
         return;
       }
-      sub.textContent = 'For ' + j.name + (j.company ? ' · ' + j.company : '') + ' — version ' + j.version;
+      sub.textContent = 'Prepared for ' + j.name + (j.company ? ' · ' + j.company : '') + ' — version ' + j.version;
       main.innerHTML = '<div class="card"><div style="font-size:14px;color:#475569;margin-bottom:10px;">Please read the agreement, then add your business details and sign below.</div>'
         + '<div class="doc">' + (j.agreement_html || '') + '</div></div>'
         + '<div class="card">'
         + '<label for="bn">Business legal name</label><input id="bn" autocomplete="organization" value="' + esc(j.company || '') + '">'
         + '<label for="ba">Full legal business address</label><textarea id="ba" rows="3" autocomplete="street-address" placeholder="Street, city, province/state, postal code, country"></textarea>'
-        + '<div class="row"><div><label for="sn">Your full name</label><input id="sn" autocomplete="name" value="' + esc(j.name || '') + '"></div>'
+        /* The name is the signer's to correct (2026-10-09, Anthony: "if they need to change their
+           name on the NDA to be signed it can be allowed") — a spelling, a legal name, or a
+           different person signing for the business. The signed copy records both names. */
+        + '<div class="row"><div><label for="sn">Your full name</label><input id="sn" autocomplete="name" value="' + esc(j.name || '') + '">'
+        + '<div style="font-size:12px;color:#64748B;margin-top:5px;line-height:1.45;">Pre-filled from our invitation — correct it if needed, or enter the name of the person signing for the business.</div></div>'
         + '<div><label for="rt">Your role in the company</label><input id="rt" autocomplete="organization-title" placeholder="e.g. Owner, Director"></div></div>'
         + '<label>Signature</label><canvas id="pad"></canvas><button type="button" class="link" id="clr">Clear signature</button>'
         + '<label class="agree"><input type="checkbox" id="ag"> <span>I have read and agree to the KiddieTrac Non-Disclosure Agreement on behalf of the business named above, and I am authorised to sign for it.</span></label>'
