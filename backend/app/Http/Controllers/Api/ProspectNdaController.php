@@ -144,6 +144,23 @@ class ProspectNdaController extends Controller
             'Content-Disposition' => 'inline; filename="' . $this->fileName($r) . '"']);
     }
 
+    /** GET /admin/prospect-ndas/{id}/preview — the NDA as sent, before it is signed. */
+    public function preview(Request $request, int $id)
+    {
+        $this->assertSender($request);
+        $r = DB::table('prospect_ndas')->find($id);
+        abort_unless($r, 404);
+        if ($r->status === 'signed' && $r->pdf_path && Storage::disk('local')->exists($r->pdf_path)) {
+            return $this->pdf($request, $id);
+        }
+        $blank = '(to be completed by the prospect)';
+        $pdf = $this->renderPdf($r, ['business_name' => $r->company ? $r->company . ' ' . $blank : $blank, 'business_address' => $blank,
+            'signer_name' => $r->name, 'role_title' => $blank], 'not yet signed', null,
+            hash('sha256', AgreementController::AGREEMENT_VERSION . '|' . AgreementController::agreementBodyHtml()));
+
+        return response($pdf, 200, ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="KiddieTrac-NDA-preview.pdf"']);
+    }
+
     // ── public: the prospect's side ───────────────────────────────────────────
 
     private function byToken(string $token): ?object
@@ -212,8 +229,9 @@ class ProspectNdaController extends Controller
         $r = DB::table('prospect_ndas')->find($r->id);
 
         $mail = $this->mailSigned($r, $human);
-        $this->logOnLead($r, (int) ($r->sent_by_id ?: 0), 'note', 'NDA signed by ' . $r->signer_name . ' (' . $r->role_title . ') for '
+        $actId = $this->logOnLead($r, (int) ($r->sent_by_id ?: 0), 'note', 'NDA signed by ' . $r->signer_name . ' (' . $r->role_title . ') for '
             . $r->business_name . ', ' . preg_replace('/\s+/', ' ', (string) $r->business_address) . ' — ' . $human . '. Signed copy emailed to them and ' . self::SALES_COPY . '.');
+        $this->fileOnLead($r, $actId);
         try {
             \App\Support\Audit::write(['user_id' => null, 'agency_id' => null, 'action' => 'prospect_nda.signed', 'entity_type' => 'prospect_nda', 'entity_id' => (int) $r->id,
                 'payload' => json_encode(['summary' => 'NDA signed by ' . $r->signer_name . ' (' . $r->role_title . ', ' . $r->business_name . ') <' . $r->email . '>; copies: ' . $mail]),
@@ -243,7 +261,7 @@ class ProspectNdaController extends Controller
         return 'KiddieTrac-NDA-' . trim($b, '-') . '.pdf';
     }
 
-    private function renderPdf(object $r, array $d, string $human, string $sig, string $hash): string
+    private function renderPdf(object $r, array $d, string $human, ?string $sig, string $hash): string
     {
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $html = '<!doctype html><html><head><meta charset="utf-8"><style>'
@@ -263,7 +281,7 @@ class ProspectNdaController extends Controller
             . '<tr><td><strong>Email</strong></td><td>' . $e($r->email) . '</td></tr></table></div>'
             . AgreementController::agreementBodyHtml()
             . '<div class="box"><h2 style="margin-top:0">Signature</h2>'
-            . '<img class="sig" src="' . $sig . '" alt="Signature">'
+            . ($sig ? '<img class="sig" src="' . $sig . '" alt="Signature">' : '<div style="height:46px;border-bottom:1px solid #94A3B8;max-width:280px;"></div>')
             . '<p><strong>Signed by:</strong> ' . $e($d['signer_name']) . ', ' . $e($d['role_title']) . '<br>'
             . '<strong>For:</strong> ' . $e($d['business_name']) . '<br>'
             . '<strong>Date and time:</strong> ' . $e($human) . '<br>'
@@ -332,14 +350,32 @@ class ProspectNdaController extends Controller
         return 'prospect ' . $toThem . ', sales ' . $toSales;
     }
 
-    private function logOnLead(object $r, int $userId, string $type, string $body): void
+    private function logOnLead(object $r, int $userId, string $type, string $body): ?int
     {
-        if (! $r->lead_id) return;
+        if (! $r->lead_id) return null;
         try {
-            DB::table('sales_activities')->insert(['lead_id' => (int) $r->lead_id, 'user_id' => $userId ?: null, 'type' => $type,
+            $id = DB::table('sales_activities')->insertGetId(['lead_id' => (int) $r->lead_id, 'user_id' => $userId ?: null, 'type' => $type,
                 'body' => $body, 'done' => 1, 'done_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
             DB::table('sales_leads')->where('id', $r->lead_id)->update(['last_activity_at' => now()]);
-        } catch (\Throwable $e) { Log::warning('prospect NDA lead log failed', ['error' => $e->getMessage()]); }
+            return (int) $id;
+        } catch (\Throwable $e) { Log::warning('prospect NDA lead log failed', ['error' => $e->getMessage()]); return null; }
+    }
+
+    /* THE SIGNED NDA BELONGS ON THE LEAD (2026-10-09, Anthony: "make sure its also attached
+       to the lead record and filed away in documents once signed"). A copy goes beside the
+       lead's other files (sales-activity/{lead}), attached to the "NDA signed" entry, so it
+       shows in Activity & history and on the lead's Documents tab. */
+    private function fileOnLead(object $r, ?int $activityId): void
+    {
+        if (! $r->lead_id || ! $activityId || ! $r->pdf_path) return;
+        try {
+            $bytes = Storage::disk('local')->get($r->pdf_path);
+            $rel = 'sales-activity/' . (int) $r->lead_id . '/' . Str::uuid() . '.pdf';
+            Storage::disk('public')->put($rel, $bytes);
+            DB::table('sales_activity_files')->insert(['activity_id' => $activityId, 'lead_id' => (int) $r->lead_id, 'kind' => 'document',
+                'original_name' => $this->fileName($r), 'file_url' => '/storage/' . $rel, 'mime' => 'application/pdf', 'size' => strlen($bytes),
+                'uploaded_by_id' => $r->sent_by_id ?: null, 'created_at' => now(), 'updated_at' => now()]);
+        } catch (\Throwable $e) { Log::warning('prospect NDA lead filing failed', ['error' => $e->getMessage()]); }
     }
 
     private function audit(Request $request, string $action, int $id, string $summary): void

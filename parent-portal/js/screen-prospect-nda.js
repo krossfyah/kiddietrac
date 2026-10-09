@@ -21,6 +21,20 @@
     expired: ['#FFFBEB', '#B45309', 'Link expired'], cancelled: ['#F1F5F9', '#64748B', 'Cancelled'],
   };
 
+  /* Open an NDA PDF in the portal's viewer: the signed copy, or a preview of what was sent. */
+  async function openNdaPdf(r, kind) {
+    try {
+      var res = await fetch((KT.API_BASE || 'https://api.kiddietrac.com/api/v1') + '/admin/prospect-ndas/' + r.id + '/' + kind,
+        { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '') } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      var blob = await res.blob();
+      var title = (kind === 'preview' && r.status !== 'signed' ? 'NDA preview — ' : 'Signed NDA — ') + (r.business_name || r.company || r.name);
+      if (KT.viewBlob) KT.viewBlob(blob, { title: title, label: kind === 'preview' ? 'NDA preview' : 'Signed NDA' });
+      else window.open(URL.createObjectURL(blob), '_blank');
+    } catch (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open the NDA', 'error'); }
+  }
+  KT.openNdaPdf = openNdaPdf;
+
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:14px 24px;max-width:1100px;"><div id="pn-body" style="color:#64748B;">Loading…</div></div>';
@@ -45,7 +59,8 @@
             + '<td style="padding:10px 14px;white-space:nowrap;font-size:12.5px;color:#475569;">' + esc(when(r.sent_at)) + (r.sent_by ? '<div style="color:#94A3B8;">by ' + esc(r.sent_by) + '</div>' : '') + '</td>'
             + '<td style="padding:10px 14px;white-space:nowrap;font-size:12.5px;color:#475569;">' + esc(when(r.signed_at)) + '</td>'
             + '<td style="padding:10px 14px;text-align:right;white-space:nowrap;">'
-            + (r.has_pdf ? '<button type="button" class="kt-btn" data-pdf="' + i + '" data-kttip="View signed PDF">📄 View signed PDF</button>' : '')
+            + (r.has_pdf ? '<button type="button" class="kt-btn" data-pdf="' + i + '" data-kttip="View signed PDF">📄 View signed PDF</button>'
+                : '<button type="button" class="kt-btn" data-preview="' + i + '" data-kttip="Preview NDA">👁 Preview NDA</button>')
             + (r.status !== 'signed' && r.status !== 'cancelled' ? '<button type="button" class="kt-btn" data-resend="' + i + '" data-kttip="Resend link">📤 Resend link</button><button type="button" class="kt-btn" data-cancel="' + i + '" data-kttip="Cancel">✖ Cancel</button>' : '')
             + (r.status === 'expired' ? '<button type="button" class="kt-btn" data-resend="' + i + '" data-kttip="Send a new link">📤 Send a new link</button>' : '')
             + '</td></tr>';
@@ -54,16 +69,10 @@
 
     body.querySelector('#pn-new').addEventListener('click', function () { openSend(data.leads || [], function () { render(main); }); });
     body.querySelectorAll('[data-pdf]').forEach(function (b) {
-      b.addEventListener('click', async function () {
-        var r = rows[+b.getAttribute('data-pdf')];
-        try {
-          var res = await fetch((KT.API_BASE || 'https://api.kiddietrac.com/api/v1') + '/admin/prospect-ndas/' + r.id + '/pdf', { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '') } });
-          if (!res.ok) throw new Error('HTTP ' + res.status);
-          var blob = await res.blob();
-          if (KT.viewBlob) KT.viewBlob(blob, { title: 'NDA — ' + (r.business_name || r.name), label: 'Signed NDA' });
-          else window.open(URL.createObjectURL(blob), '_blank');
-        } catch (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open the PDF', 'error'); }
-      });
+      b.addEventListener('click', function () { openNdaPdf(rows[+b.getAttribute('data-pdf')], 'pdf'); });
+    });
+    body.querySelectorAll('[data-preview]').forEach(function (b) {
+      b.addEventListener('click', function () { openNdaPdf(rows[+b.getAttribute('data-preview')], 'preview'); });
     });
     body.querySelectorAll('[data-resend]').forEach(function (b) {
       b.addEventListener('click', function () {

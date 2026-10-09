@@ -2241,6 +2241,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'store'])->middleware('throttle:20,1,ndasend');
         Route::post  ('/admin/prospect-ndas/{id}/resend',  [\App\Http\Controllers\Api\ProspectNdaController::class, 'resend'])->where('id', '[0-9]+');
         Route::delete('/admin/prospect-ndas/{id}',         [\App\Http\Controllers\Api\ProspectNdaController::class, 'cancel'])->where('id', '[0-9]+');
+        Route::get   ('/admin/prospect-ndas/{id}/preview', [\App\Http\Controllers\Api\ProspectNdaController::class, 'preview'])->where('id', '[0-9]+');
         Route::get   ('/admin/prospect-ndas/{id}/pdf',     [\App\Http\Controllers\Api\ProspectNdaController::class, 'pdf'])->where('id', '[0-9]+');
         // Seasonal email header banners (platform admins; checked in the controller).
         Route::get   ('/admin/email-header-seasons',          [\App\Http\Controllers\Api\EmailHeaderSeasonsController::class, 'index']);

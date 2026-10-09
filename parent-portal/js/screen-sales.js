@@ -591,6 +591,65 @@
       } catch (e) { if (UP && job) { UP.done(job, false); } throw e; }
     }
   }
+  /* THE LEAD'S DOCUMENTS (2026-10-09, Anthony: "make sure its also attached to the lead
+     record and filed away in documents once signed. add preview to the kebab"). One place
+     for everything filed on this lead: its NDAs (status, preview, the signed copy) and every
+     file attached to its activities (transcripts, recordings, the signed NDA PDF). */
+  function leadFiles(lead) {
+    var out = [];
+    (lead.activities || []).forEach(function (a) { (a.files || []).forEach(function (f) { out.push({ f: f, a: a }); }); });
+    return out;
+  }
+  function renderLeadDocuments(id, lead) {
+    var box = el('div', { style: 'display:flex;flex-direction:column;gap:14px' });
+    var ndaBox = el('div', {}, [el('div', { style: 'font-weight:800;margin-bottom:6px' }, ['🤝 NDAs']), el('div', { style: 'color:#94A3B8;font-size:13px' }, ['Loading…'])]);
+    box.appendChild(ndaBox);
+    Api.get('/admin/prospect-ndas').then(function (d) {
+      var list = (d.ndas || []).filter(function (n) { return +n.lead_id === +id; });
+      clear(ndaBox);
+      ndaBox.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px' }, [
+        el('div', { style: 'font-weight:800' }, ['🤝 NDAs']),
+        el('a', { href: '#prospect-ndas', style: 'margin-left:auto;font-size:13px;font-weight:700;color:#1F6080;text-decoration:none' }, ['Send an NDA →'])]));
+      if (!list.length) { ndaBox.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No NDA sent for this lead yet.'])); return; }
+      list.forEach(function (n) {
+        var tone = n.status === 'signed' ? ['#ECFDF5', '#047857', '✅ Signed'] : n.status === 'expired' ? ['#FFFBEB', '#B45309', 'Link expired'] : n.status === 'cancelled' ? ['#F1F5F9', '#64748B', 'Cancelled'] : ['#EFF6FF', '#1D4ED8', 'Waiting for signature'];
+        var row = el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;background:#FAFBFD;display:flex;align-items:center;gap:10px;flex-wrap:wrap' }, [
+          el('div', { style: 'flex:1;min-width:220px' }, [
+            el('div', { style: 'font-weight:700;color:#0F172A' }, ['KiddieTrac NDA — ' + (n.business_name || n.company || n.name)]),
+            el('div', { style: 'font-size:12.5px;color:#64748B' }, [(n.signer_name ? 'Signed by ' + n.signer_name + (n.role_title ? ', ' + n.role_title : '') : 'Sent to ' + n.name + ' <' + n.email + '>')
+              + (n.business_address ? ' · ' + String(n.business_address).replace(/\s+/g, ' ') : '')])]),
+          el('span', { style: 'padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;background:' + tone[0] + ';color:' + tone[1] }, [tone[2]]),
+        ]);
+        row.appendChild(chip(n.status === 'signed' ? '📄 View signed PDF' : '👁 Preview NDA', function () {
+          if (KT.openNdaPdf) KT.openNdaPdf(n, n.status === 'signed' ? 'pdf' : 'preview'); else location.hash = '#prospect-ndas';
+        }));
+        ndaBox.appendChild(row);
+      });
+    }).catch(function () { clear(ndaBox); ndaBox.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['NDAs could not be loaded.'])); });
+
+    var files = leadFiles(lead);
+    var fileBox = el('div', {}, [el('div', { style: 'font-weight:800;margin-bottom:6px' }, ['📎 Files on this lead'])]);
+    if (!files.length) fileBox.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No files yet. Files attached to an activity (transcripts, recordings, signed NDAs) are listed here.']));
+    files.forEach(function (x) {
+      var f = x.f;
+      var row = el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;background:#FAFBFD;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px' }, [
+        el('span', { style: 'font-weight:700;color:#0F172A' }, [fileIcon(f.name) + ' ' + (f.kind === 'transcript' ? 'Transcript' : f.kind === 'video' ? 'Recording' : f.kind === 'audio' ? 'Audio' : f.kind === 'document' ? 'Document' : 'File')]),
+        el('span', { style: 'color:#475569;overflow-wrap:anywhere' }, [f.name]),
+        el('span', { style: 'color:#94A3B8' }, [fmtBytes(f.size)]),
+      ]);
+      if (f.url) {
+        row.appendChild(chip('👁 View', function () { window.open(f.url, '_blank', 'noopener'); }));
+        row.appendChild(chip('⬇️ Download', function () {
+          var a2 = document.createElement('a'); a2.href = f.url; a2.target = '_blank'; a2.rel = 'noopener'; a2.download = f.name;
+          document.body.appendChild(a2); a2.click(); a2.remove();
+        }));
+      }
+      fileBox.appendChild(row);
+    });
+    box.appendChild(fileBox);
+    return box;
+  }
+
   function activityFilesNode(a, refresh) {
     var files = a.files || [];
     if (!files.length) return null;
@@ -598,7 +657,7 @@
     files.forEach(function (f) {
       var row = el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;background:#FAFBFD' });
       var head = el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px' }, [
-        el('span', { style: 'font-weight:700;color:#0F172A' }, [fileIcon(f.name) + ' ' + (f.kind === 'transcript' ? 'Transcript' : f.kind === 'video' ? 'Recording' : f.kind === 'audio' ? 'Audio' : 'File')]),
+        el('span', { style: 'font-weight:700;color:#0F172A' }, [fileIcon(f.name) + ' ' + (f.kind === 'transcript' ? 'Transcript' : f.kind === 'video' ? 'Recording' : f.kind === 'audio' ? 'Audio' : f.kind === 'document' ? 'Document' : 'File')]),
         el('span', { style: 'color:#475569;overflow-wrap:anywhere' }, [f.name]),
         el('span', { style: 'color:#94A3B8' }, [fmtBytes(f.size)]),
       ]);
@@ -888,6 +947,7 @@
       { key: 'details', label: '📋 Details', node: left },
       { key: 'activity', label: '🕒 Activity & history', count: (lead.activities || []).length, node: acWrap },
       { key: 'proposals', label: '📄 Proposals', count: (lead.quotes || []).length, node: renderQuotesPanel(id, lead, container, ctx) },
+      { key: 'documents', label: '📁 Documents', count: leadFiles(lead).length || null, node: renderLeadDocuments(id, lead) },
     ];
     var want = ((window.location.hash.match(/[?&]tab=([a-z]+)/) || [])[1])
       || (function () { try { return sessionStorage.getItem('kt_lead_tab') || ''; } catch (e) { return ''; } })();
