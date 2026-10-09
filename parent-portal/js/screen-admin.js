@@ -6802,10 +6802,13 @@
     }
 
     function renderGuardians() {
-      pane.appendChild(editTabAddBtn('＋ Add guardian', function () {
-        showAddGuardian(f, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
-      }));
+      /* Clear FIRST, then the add button (2026-10-09). It was added and then wiped by
+         the innerHTML reset on the next line, so these tabs never offered "＋ Add" —
+         and it named `f`, which only exists inside renderFamily. */
       pane.innerHTML = '';
+      pane.appendChild(editTabAddBtn('＋ Add guardian', function () {
+        showAddGuardian(DATA.family, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
+      }));
       (DATA.guardians || []).forEach(function (g) {
         var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
         card.appendChild(Dom.el('div', { style: 'font-weight:700;color:#1F6080;font-size:13px;margin-bottom:10px;' }, ((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? ' ★ primary' : '')));
@@ -6824,16 +6827,54 @@
           catch (e) { setMsg(e.message || 'Save failed'); }
           save.disabled = false;
         });
-        card.appendChild(save); pane.appendChild(card);
+        card.appendChild(save);
+        /* Kiosk PIN and Remove — these were only on the family record, behind its edit
+           mode; with Edit now opening this form in one click, they live here. */
+        var gx = Dom.el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;' });
+        if (g.can_pickup !== false && g.id) {
+          var pinB = Dom.el('button', { type: 'button', style: 'padding:7px 12px;background:#fff;color:#1F6080;border:1px solid #1F6080;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;' }, '🔐 Set kiosk PIN');
+          pinB.addEventListener('click', async function () {
+            var who = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
+            var pin = await window.KT.prompt({ title: 'Set kiosk PIN for ' + who,
+              description: 'A 4–6 digit PIN lets them sign children in and out at the centre kiosk. Share it with the guardian in person or by text.',
+              fields: [{ key: 'pin', label: 'PIN (4–6 digits)', type: 'text' }], okLabel: 'Save PIN' });
+            if (pin == null) { return; }
+            if (!/^[0-9]{4,6}$/.test(pin)) { setMsg('PIN must be 4–6 digits.'); return; }
+            pinB.disabled = true;
+            try { await Api.post('/director/guardians/' + g.id + '/kiosk-pin', { pin: pin }); setMsg('✓ Kiosk PIN set for ' + who, true); pinB.textContent = '🔐 Update PIN'; }
+            catch (e) { setMsg(e.message || 'Could not set the PIN'); }
+            pinB.disabled = false;
+          });
+          gx.appendChild(pinB);
+        }
+        if (g.id) {
+          var rmB = Dom.el('button', { type: 'button', style: 'padding:7px 12px;background:#fff;color:#B91C1C;border:1px solid #FCA5A5;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;' }, 'Remove from family');
+          rmB.addEventListener('click', async function () {
+            var who = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
+            var ok = !(window.KT && KT.confirm) || await KT.confirm({ title: 'Remove ' + who + ' from this family?',
+              description: 'They stop being a guardian here and lose access to these children. Their account stays — this does not delete the person.',
+              okLabel: 'Remove' });
+            if (!ok) { return; }
+            rmB.disabled = true;
+            try {
+              await Api.delete('/admin/families/' + DATA.family.id + '/guardians/' + g.id);
+              if (Dom.toast) { Dom.toast(who + ' removed from this family', 'success'); }
+              Shell.Modal.close(); showFamilyEditTabs(family, centres, content); refreshList();
+            } catch (e) { rmB.disabled = false; setMsg(e.message || 'Could not remove'); }
+          });
+          gx.appendChild(rmB);
+        }
+        card.appendChild(gx);
+        pane.appendChild(card);
       });
       if (!(DATA.guardians || []).length) pane.appendChild(Dom.el('div', { style: 'color:#64748B;' }, 'No guardians.'));
     }
 
     function renderChildren() {
-      pane.appendChild(editTabAddBtn('＋ Add child', function () {
-        showAddChildToFamily(f, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
-      }));
       pane.innerHTML = '';
+      pane.appendChild(editTabAddBtn('＋ Add child', function () {
+        showAddChildToFamily(DATA.family, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
+      }));
       pane.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:12px;' }, 'Open a child’s record to edit health, enrolment and details.'));
       (DATA.children || []).forEach(function (c) {
         var row = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;' });
@@ -6877,10 +6918,8 @@
       return card;
     }
     function renderEmergency() {
-      pane.appendChild(editTabAddBtn('＋ Add contact', function () {
-        showAddEmergencyContact(f, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
-      }));
       pane.innerHTML = '';
+      // Adding is the inline "+ Add emergency contact" card below (one add button, not two).
       (DATA.emergency_contacts || []).forEach(function (e) { pane.appendChild(ecCard(e)); });
       var add = Dom.el('button', { style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add emergency contact');
       add.addEventListener('click', function () { pane.insertBefore(ecCard({ __new: true, name: '', relationship: '', phone: '', alt_phone: '', can_pickup: false }), add); });
@@ -7850,27 +7889,17 @@
       /* Archived: no actions at all. Sending a welcome to closed accounts, or offering to
          edit history, are both meaningless — and showing the buttons implied otherwise. */
       if (!data.is_archived) {
-        var _toggle = Dom.el('button', {
-          style: 'padding:8px 14px;border-radius:8px;font-weight:700;font-size:13px;'
-               + 'cursor:pointer;flex:0 0 auto;border:'
-               + (_canEdit ? 'none;background:#166534;color:#fff;'
-                           : '1.5px solid #1F6080;background:#fff;color:#1F6080;'),
-        }, _canEdit ? '\u2713 Done editing' : '\u270f\ufe0f Edit');
-        _toggle.addEventListener('click', function () {
-          famEditFor = _canEdit ? null : familyId;
-          Shell.Modal.close();
-          setTimeout(function () { showFamilyDetail(familyId, archived); }, 60);
-        });
-
-        if (_canEdit) {
-          // The field-level form for the family's own details. Only offered once they
-          // have said they are editing, so View stays a single, quiet screen.
-          _edit.textContent = '\u270f\ufe0f Edit details\u2026';
-          _btns.appendChild(_edit);
-        } else {
-          _btns.appendChild(_resend);
-        }
-        _btns.appendChild(_toggle);
+        /* ONE CLICK TO EDIT (2026-10-09: "when using the kebab to view the family record,
+           and then hit edit, it asks you to hit edit twice"). "Edit" only switched this
+           record into an edit mode, which then offered "Edit details…" — a second press
+           for the form. Edit now opens the form straight away; it has Family, Guardians,
+           Children and Emergency tabs, which is everything the edit mode unlocked here.
+           The record itself stays a read-only view. */
+        famEditFor = null;
+        _edit.textContent = '\u270f\ufe0f Edit';
+        _edit.style.background = '#fff'; _edit.style.color = '#1F6080'; _edit.style.border = '1.5px solid #1F6080';
+        _btns.appendChild(_resend);
+        _btns.appendChild(_edit);
       }
 
       _hd.appendChild(_btns);

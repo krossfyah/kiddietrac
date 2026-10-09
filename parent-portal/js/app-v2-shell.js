@@ -2703,24 +2703,41 @@
   }
 
   // ──────────────── Modal system ───────────────────────────────
+  /* The page's own overflow, captured when the FIRST popup opens. A popup opened over
+     (in place of) another one must not record "hidden" as the value to go back to, or
+     the page stays unscrollable after the last popup closes. */
+  let _modalBaseOverflow = null;
+
   const Modal = {
     open({ title, body, actions = [], onClose = null, large = false }) {
       const root = Dom.$('#modalRoot');
+      const _htmlEl = document.documentElement;
+      if (!root.firstChild || _modalBaseOverflow === null) { _modalBaseOverflow = _htmlEl.style.overflow; }
       Dom.clear(root);
       // a11y: remember what had focus so we can restore it when the modal closes.
       const prevFocus = document.activeElement;
 
       // Lock the page behind the modal so a mouse-wheel scroll inside the dialog
       // doesn't scroll the whole window — it stays focused on the popup.
-      const _htmlEl = document.documentElement;
-      const _prevOverflow = _htmlEl.style.overflow;
       _htmlEl.style.overflow = 'hidden';
 
+      /* A POPUP ONLY CLOSES ITSELF (2026-10-09: "it asks you to hit edit twice - full
+         sweep to remove this type of behaviour throughout the portal"). There is one
+         #modalRoot, and a popup opened from inside another (View -> Edit) replaces it.
+         The old one's close() then still ran - a footer action closes its popup after
+         its handler returns, Esc was still wired to it - and cleared #modalRoot, wiping
+         the popup that had just opened. The first press looked like it did nothing, so
+         people pressed again. A popup that has been replaced now leaves #modalRoot
+         alone; it only unhooks itself. */
       const close = () => {
         document.removeEventListener('keydown', onKeyDown, true);
-        _htmlEl.style.overflow = _prevOverflow;
-        Dom.clear(root);
-        try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
+        const mine = backdrop && backdrop.isConnected && root.contains(backdrop);
+        if (mine) {
+          _htmlEl.style.overflow = _modalBaseOverflow || '';
+          _modalBaseOverflow = null;
+          Dom.clear(root);
+          try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
+        }
         if (onClose) onClose();
       };
 
@@ -2842,7 +2859,8 @@
       const root = Dom.$('#modalRoot');
       if (root) Dom.clear(root);
       // Release the background scroll lock set in open().
-      try { document.documentElement.style.overflow = ''; } catch (e) {}
+      try { document.documentElement.style.overflow = _modalBaseOverflow || ''; } catch (e) {}
+      _modalBaseOverflow = null;
     },
 
     /* A CONFIRM BELONGS TO THE SCREEN THAT ASKED IT (2026-10-02).
