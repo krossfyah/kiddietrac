@@ -151,6 +151,7 @@
   }
 
   async function render(main) {
+    Dom = (window.KT && window.KT.Dom) || Dom || window.Dom;   // read at call time, like api()
     Dom.clear(main);
     var wrap = Dom.el('div', { style: 'padding:20px 16px 90px;max-width:820px;margin:0 auto;' });
     main.appendChild(wrap);
@@ -297,6 +298,14 @@
   }
 
   KT.renderMyDocuments = render;
+  /* THE SCREEN NEVER REGISTERED (2026-10-09: "I still don't see the signed files under
+     Samantha Kicks parent view under Documents"). `var Shell = window.Shell` — but the
+     shell is published as window.KT.Shell and there is no window.Shell, so this block
+     was skipped for every role. #my-documents then fell through to the role's home
+     screen under a "Documents" banner: a parent saw "Today with <child>", and a parent
+     with no children (Samantha) saw nothing at all, while every signed form sat filed
+     on the server. Resolved from window.KT here, at registration. */
+  Shell = (window.KT && window.KT.Shell) || Shell;
   if (Shell && Shell.registerScreen) {
     /* EVERY role, not only guardians. The screen used to be parent-only because its one
        source was parent-only; now that it also shows the person's own filed documents,
