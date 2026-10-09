@@ -2626,6 +2626,34 @@
           delete F[k];
         });
       }
+      /* NOT ON THE STAFF ROTA (2026-10-09). For a supervisor placed in rooms for access:
+         the nightly rota never schedules them and nothing expects them to clock in.
+         Agency admins only; saved the moment it is ticked. */
+      var rotaBox = null, rotaMsg = null;
+      if (!_dirMode) {
+        var rotaRow = Dom.el('label', { style: 'display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:13px;color:#334155;cursor:pointer;' });
+        rotaBox = Dom.el('input', { type: 'checkbox', style: 'margin-top:2px;' });
+        rotaRow.appendChild(rotaBox);
+        rotaRow.appendChild(Dom.el('span', {}, [
+          Dom.el('strong', {}, 'Not on the staff rota'),
+          Dom.el('span', { style: 'display:block;font-size:11.5px;color:#94A3B8;line-height:1.35;' },
+            'For a supervisor or floater placed in rooms for access. The rota auto-fill skips them, they are never listed as expected, and they get no clock-in reminders.')
+        ]));
+        rotaMsg = Dom.el('span', { style: 'font-size:12px;font-weight:700;margin-left:6px;' });
+        rotaRow.appendChild(rotaMsg);
+        card.appendChild(rotaRow);
+        rotaBox.addEventListener('change', async function () {
+          var want = rotaBox.checked;
+          rotaBox.disabled = true; rotaMsg.style.color = '#64748B'; rotaMsg.textContent = 'Saving…';
+          try {
+            await Api.patch('/admin/users/' + uid, { rota_exempt: want });
+            rotaMsg.style.color = '#16A34A'; rotaMsg.textContent = '✓ Saved';
+          } catch (e) {
+            rotaBox.checked = !want;
+            rotaMsg.style.color = '#DC2626'; rotaMsg.textContent = '✕ ' + ((e && e.data && e.data.message) || (e && e.message) || 'Could not save');
+          } finally { rotaBox.disabled = false; }
+        });
+      }
       var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;' });
       var save = Dom.el('button', { type: 'button', style: 'height:32px;padding:0 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;' }, 'Save account details');
       var msg = Dom.el('span', { style: 'font-size:12px;font-weight:700;' });
@@ -2637,6 +2665,7 @@
       Api.get('/admin/users/' + uid + '/access-summary').then(function (d) {
         var idn = (d && d.identity) || {};
         Object.keys(F).forEach(function (k) { if (idn[k] !== undefined && !F[k].input.matches(':focus')) F[k].input.value = idn[k] == null ? '' : String(idn[k]); });
+        if (rotaBox) rotaBox.checked = !!idn.rota_exempt;
         setOrig();
         renderAccess(d);
       }).catch(function (e) { renderAccess(null, e); });

@@ -58,6 +58,17 @@ class KtIntegrityCheck extends Command
             from children ch join families f on f.id=ch.family_id left join centres c on c.id=f.centre_id
             where ch.enrollment_status='enrolled' and ch.deleted_at is null
               and (f.deleted_at is not null or f.departure_applied_at is not null)",
+        'Future shift in a CLOSED centre' => "
+            select s.id, concat(u.first_name,' ',u.last_name) name, c.agency_id agency, c.id centre,
+                   concat('shift #', s.id, ' on ', date(s.starts_at), ' in ', c.name) detail
+            from shifts s join rooms r on r.id=s.room_id join centres c on c.id=r.centre_id left join users u on u.id=s.user_id
+            where s.starts_at >= curdate() /* wall-clock (agency) time: compare whole dates */
+              and (c.deleted_at is not null or c.status in ('closed','archived','inactive','deleted'))",
+        'Future shift for someone marked Not on the staff rota' => "
+            select s.id, concat(u.first_name,' ',u.last_name) name, c.agency_id agency, c.id centre,
+                   concat('shift #', s.id, ' on ', date(s.starts_at)) detail
+            from shifts s join users u on u.id=s.user_id join rooms r on r.id=s.room_id join centres c on c.id=r.centre_id
+            where s.starts_at >= curdate() /* wall-clock (agency) time: compare whole dates */ and u.rota_exempt = 1",
         'Active guardian login on a departed family only' => "
             select u.id, concat(u.first_name,' ',u.last_name) name, c.agency_id agency, f.centre_id centre,
                    concat('family #', f.id) detail

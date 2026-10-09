@@ -2690,7 +2690,7 @@ final class AdminController extends Controller
            stay with an agency admin — refused outright rather than silently dropped, so
            the dialog can say who to ask. */
         if ($isDirector) {
-            $held = array_values(array_intersect(['email', 'username', 'status'], array_keys($request->all())));
+            $held = array_values(array_intersect(['email', 'username', 'status', 'rota_exempt'], array_keys($request->all())));
             if ($held) {
                 return response()->json(['message' => 'Only an agency admin can change the sign-in email, username or account status. Ask an agency admin.',
                     'fields' => $held], 403);
@@ -2722,12 +2722,17 @@ final class AdminController extends Controller
                 Rule::unique('users', 'username')->ignore($userId)->whereNull('deleted_at')],
             'phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'status' => ['sometimes', 'in:active,invited,not_invited,suspended,deactivated'],
+            // Not on the staff rota: never auto-scheduled, never "expected", never told to clock in.
+            'rota_exempt' => ['sometimes', 'boolean'],
         ], [
             'username.unique' => 'That username is already taken by another account.',
             'username.regex' => 'A username may use letters, numbers, dots, dashes and underscores only.',
         ]);
         if (array_key_exists('username', $data) && $data['username'] !== null) {
             $data['username'] = trim($data['username']) === '' ? null : trim($data['username']);
+        }
+        if (array_key_exists('rota_exempt', $data)) {
+            $data['rota_exempt'] = $data['rota_exempt'] ? 1 : 0;
         }
 
         $before = DB::table('users')->where('id', $userId)->first();
@@ -6098,6 +6103,7 @@ final class AdminController extends Controller
                 'first_name' => $u->first_name, 'last_name' => $u->last_name, 'preferred_name' => $u->preferred_name ?? null,
                 'email' => $u->email, 'username' => $u->username, 'phone' => $u->phone, 'status' => $u->status,
                 'email_verified' => (bool) $u->email_verified_at, 'phone_verified' => (bool) ($u->phone_verified_at ?? null),
+                'rota_exempt' => (bool) ($u->rota_exempt ?? false),
             ],
             'security' => [
                 'passkeys' => ['count' => $pk->count(), 'last_used' => $fmt($pk->max('last_used_at')),

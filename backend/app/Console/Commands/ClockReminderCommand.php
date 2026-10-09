@@ -225,6 +225,7 @@ final class ClockReminderCommand extends Command
             ->whereIn('ra.role', ['educator', 'centre_director'])
             ->where('ra.active', true)->whereNotNull('ra.centre_id')
             ->whereNotNull('u.email')->whereNull('u.deleted_at')
+            ->where('u.rota_exempt', false)   // not on the staff rota: never expected in (2026-10-09)
             ->select('ra.user_id', 'ra.centre_id', 'u.email', 'u.first_name')
             ->distinct()
             ->get();

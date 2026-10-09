@@ -58,7 +58,8 @@ class ScheduleAutofillCommand extends Command
         $start = $today->copy();
         $end = $today->copy()->addDays($days);
 
-        $centres = DB::table('centres')->whereNull('deleted_at')
+        // Open centres only (App\Support\Live, 2026-10-09): it wrote shifts for closed providers.
+        $centres = \App\Support\Live::centres(DB::table('centres'))
             ->when($this->option('centre'), fn ($q) => $q->where('id', (int) $this->option('centre')))
             ->when($this->option('agency'), fn ($q) => $q->where('agency_id', (int) $this->option('agency')))
             ->orderBy('agency_id')->orderBy('id')
@@ -238,6 +239,7 @@ class ScheduleAutofillCommand extends Command
                 ->where('ra.centre_id', $centre->id)->where('ra.active', true)
                 ->whereNull('u.deleted_at')
                 ->whereNotIn('u.status', AccountStatus::CLOSED)
+                ->where('u.rota_exempt', false)
                 ->whereRaw('LOWER(TRIM(u.first_name)) = ?', [mb_strtolower($first)])
                 ->whereRaw('LOWER(TRIM(u.last_name)) = ?', [mb_strtolower($last)])
                 ->distinct()->pluck('u.id');
@@ -252,6 +254,10 @@ class ScheduleAutofillCommand extends Command
             ->where('ra.centre_id', $centre->id)
             ->whereNull('u.deleted_at')
             ->whereNotIn('u.status', AccountStatus::CLOSED)
+            /* NOT ON THE ROTA (2026-10-09). A supervisor placed in every room for access
+               (Safia Ali) is not staff of each centre: when a centre's provider name did
+               not match an account, this fallback rostered her there daily. */
+            ->where('u.rota_exempt', false)
             ->pluck('u.id')->unique()->map(fn ($i) => (int) $i)->values()->all();
     }
 
