@@ -589,6 +589,7 @@
           { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
           { hash: 'sales-new',       label: 'New lead',        icon: '➕', sub: true },
           { hash: 'sales-followups', label: 'Follow-ups',      icon: '⏰' },
+          { hash: 'prospect-ndas',   label: 'Prospect NDAs',   icon: '🤝' },   // 2026-10-09
           { hash: 'sales-demo',      label: 'Launch demo',     icon: '🚀' },
         ]},
         { label: 'Account', items: [

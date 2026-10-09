@@ -405,6 +405,12 @@ class AgreementController extends Controller
      * NOTE: this is a solid general-purpose draft, not legal advice. Have counsel
      * review it, and bump AGREEMENT_VERSION whenever a word of it changes.
      */
+    /** The agreement body, for the prospect NDA (ProspectNdaController) — same words, one source. */
+    public static function agreementBodyHtml(): string
+    {
+        return (new self())->agreementHtml();
+    }
+
     private function agreementHtml(): string
     {
         return <<<'HTML'

@@ -620,6 +620,10 @@ Route::post('/time-off/act/{id}', [\App\Http\Controllers\Api\TimeOffController::
 Route::get('/public/give/{slug}', [\App\Http\Controllers\Api\DonationController::class, 'publicCampaign'])->where('slug', '[a-z0-9-]+')->middleware('throttle:60,1,give');
 Route::post('/public/give/{slug}', [\App\Http\Controllers\Api\DonationController::class, 'publicPledge'])->where('slug', '[a-z0-9-]+')->middleware('throttle:6,60,givepledge');
 // Event RSVPs: public pages (2026-10-05). Tokens only; each route has its own throttle prefix.
+// Prospect NDA (2026-10-09): a prospect with no account reads and signs ONE NDA from a private link.
+Route::get ('/public/nda/{token}',      [\App\Http\Controllers\Api\ProspectNdaController::class, 'publicShow'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:60,1,ndav');
+Route::post('/public/nda/{token}/sign', [\App\Http\Controllers\Api\ProspectNdaController::class, 'publicSign'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:8,10,ndas');
+Route::get ('/public/nda/{token}/pdf',  [\App\Http\Controllers\Api\ProspectNdaController::class, 'publicPdf'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:30,1,ndap');
 Route::get ('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'publicEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpget');
 Route::post('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'submitEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsub');
 Route::get ('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'publicInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpgeti');
@@ -2232,6 +2236,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/countersign-reminders',         [\App\Http\Controllers\Api\CountersignRemindersController::class, 'update']);
         Route::post ('/admin/countersign-reminders/preview', [\App\Http\Controllers\Api\CountersignRemindersController::class, 'preview']);
         Route::post ('/admin/countersign-reminders/test',    [\App\Http\Controllers\Api\CountersignRemindersController::class, 'test'])->middleware('throttle:6,1,csremtest');
+        // Prospect NDAs (platform admins + sales reps; checked in the controller).
+        Route::get   ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'index']);
+        Route::post  ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'store'])->middleware('throttle:20,1,ndasend');
+        Route::post  ('/admin/prospect-ndas/{id}/resend',  [\App\Http\Controllers\Api\ProspectNdaController::class, 'resend'])->where('id', '[0-9]+');
+        Route::delete('/admin/prospect-ndas/{id}',         [\App\Http\Controllers\Api\ProspectNdaController::class, 'cancel'])->where('id', '[0-9]+');
+        Route::get   ('/admin/prospect-ndas/{id}/pdf',     [\App\Http\Controllers\Api\ProspectNdaController::class, 'pdf'])->where('id', '[0-9]+');
         Route::patch('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
         // Pay schedule — drives the "Next payroll" card on the overview.
         Route::get  ('/admin/payroll-settings', [\App\Http\Controllers\Api\PayrollSettingsController::class, 'show']);

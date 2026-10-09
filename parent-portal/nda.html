@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KiddieTrac — Non-Disclosure Agreement</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#081C41">
+  <!-- Prospect NDA (2026-10-09). ?t=<token> from the email a KiddieTrac team member sent.
+       The prospect has no account: this page reads and signs exactly one NDA. -->
+  <style>
+    *{box-sizing:border-box} body{margin:0;font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#F4F6F8;color:#0F172A}
+    .wrap{max-width:820px;margin:0 auto;padding:24px 16px 60px}
+    .hero{background:linear-gradient(135deg,#081C41,#1F6080);color:#fff;border-radius:18px;padding:24px 26px;margin-bottom:16px}
+    .hero h1{margin:4px 0 4px;font-size:24px} .hero p{margin:0;opacity:.88;font-size:14px}
+    .eyebrow{font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;opacity:.8}
+    .card{background:#fff;border-radius:16px;box-shadow:0 1px 4px rgba(15,23,42,.06);padding:22px 24px;margin-bottom:16px}
+    .doc{max-height:52vh;overflow-y:auto;border:1px solid #E2E8F0;border-radius:12px;padding:16px 18px;font-size:13.5px;line-height:1.6;background:#FCFDFE}
+    .doc h2{font-size:15px;margin:16px 0 6px} .doc h3{font-size:14px;margin:12px 0 4px}
+    label{display:block;font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px}
+    input,textarea{width:100%;padding:11px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;font-family:inherit}
+    input:focus,textarea:focus{outline:none;border-color:#1F6080}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:600px){.row{grid-template-columns:1fr}}
+    canvas{width:100%;height:170px;border:1.5px dashed #94A3B8;border-radius:12px;background:#fff;touch-action:none;display:block}
+    .btn{display:inline-block;padding:13px 22px;border-radius:12px;border:0;background:linear-gradient(135deg,#081C41,#1F6080);color:#fff;font-weight:800;font-size:15px;cursor:pointer}
+    .btn[disabled]{opacity:.5;cursor:not-allowed} .link{background:none;border:0;color:#1F6080;font-weight:700;cursor:pointer;font-size:13px}
+    .msg{font-size:14px;margin-top:12px} .err{color:#B91C1C} .ok{color:#047857}
+    .agree{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin-top:14px;text-transform:none;letter-spacing:0;font-weight:600;color:#334155}
+    .agree input{width:18px;height:18px;margin-top:2px;flex:0 0 auto}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="eyebrow">KiddieTrac</div>
+    <h1>Non-Disclosure Agreement</h1>
+    <p id="sub">Loading…</p>
+  </div>
+  <div id="main"></div>
+</div>
+<script>
+(function () {
+  var API = 'https://api.kiddietrac.com/api/v1';
+  var token = (new URLSearchParams(location.search)).get('t') || '';
+  var main = document.getElementById('main'), sub = document.getElementById('sub');
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function card(html) { main.innerHTML = '<div class="card">' + html + '</div>'; }
+  if (!/^[A-Za-z0-9]{20,64}$/.test(token)) { sub.textContent = ''; card('<p>This link is incomplete. Please use the button in your email.</p>'); return; }
+
+  fetch(API + '/public/nda/' + token, { headers: { Accept: 'application/json' } })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (x) {
+      var j = x.j || {};
+      if (!x.ok) { sub.textContent = ''; card('<p>' + esc(j.message || 'This link is not valid.') + '</p>'); return; }
+      if (j.status === 'signed') {
+        sub.textContent = 'Signed — thank you.';
+        card('<p class="ok"><strong>This NDA has been signed' + (j.name ? ' by ' + esc(j.name) : '') + (j.business_name ? ' for ' + esc(j.business_name) : '') + '.</strong></p>'
+          + '<p><a href="' + API + '/public/nda/' + token + '/pdf">Download your signed copy (PDF)</a></p>');
+        return;
+      }
+      sub.textContent = 'For ' + j.name + (j.company ? ' · ' + j.company : '') + ' — version ' + j.version;
+      main.innerHTML = '<div class="card"><div style="font-size:14px;color:#475569;margin-bottom:10px;">Please read the agreement, then add your business details and sign below.</div>'
+        + '<div class="doc">' + (j.agreement_html || '') + '</div></div>'
+        + '<div class="card">'
+        + '<label for="bn">Business legal name</label><input id="bn" autocomplete="organization" value="' + esc(j.company || '') + '">'
+        + '<label for="ba">Full legal business address</label><textarea id="ba" rows="3" autocomplete="street-address" placeholder="Street, city, province/state, postal code, country"></textarea>'
+        + '<div class="row"><div><label for="sn">Your full name</label><input id="sn" autocomplete="name" value="' + esc(j.name || '') + '"></div>'
+        + '<div><label for="rt">Your role in the company</label><input id="rt" autocomplete="organization-title" placeholder="e.g. Owner, Director"></div></div>'
+        + '<label>Signature</label><canvas id="pad"></canvas><button type="button" class="link" id="clr">Clear signature</button>'
+        + '<label class="agree"><input type="checkbox" id="ag"> <span>I have read and agree to the KiddieTrac Non-Disclosure Agreement on behalf of the business named above, and I am authorised to sign for it.</span></label>'
+        + '<div style="margin-top:18px;"><button class="btn" id="go">Sign the NDA</button></div><div class="msg" id="m"></div></div>';
+      wire();
+    })
+    .catch(function () { sub.textContent = ''; card('<p>We could not load this right now. Please try again in a moment.</p>'); });
+
+  function wire() {
+    var c = document.getElementById('pad'), ctx, drawing = false, inked = false;
+    function size() { var r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1; c.width = r.width * d; c.height = r.height * d; ctx = c.getContext('2d'); ctx.scale(d, d); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.strokeStyle = '#0F172A'; inked = false; }
+    size();
+    function pos(e) { var r = c.getBoundingClientRect(), t = e.touches ? e.touches[0] : e; return [t.clientX - r.left, t.clientY - r.top]; }
+    function start(e) { e.preventDefault(); drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]); }
+    function move(e) { if (!drawing) return; e.preventDefault(); var p = pos(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); inked = true; }
+    function end() { drawing = false; }
+    c.addEventListener('mousedown', start); c.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+    c.addEventListener('touchstart', start, { passive: false }); c.addEventListener('touchmove', move, { passive: false }); c.addEventListener('touchend', end);
+    document.getElementById('clr').onclick = size;
+    var m = document.getElementById('m'), go = document.getElementById('go');
+    function v(id) { return document.getElementById(id).value.trim(); }
+    go.onclick = function () {
+      var miss = [];
+      if (v('bn').length < 2) miss.push('business legal name');
+      if (v('ba').length < 8) miss.push('full legal business address');
+      if (v('sn').length < 2) miss.push('your name');
+      if (v('rt').length < 2) miss.push('your role');
+      if (!inked) miss.push('your signature');
+      if (!document.getElementById('ag').checked) miss.push('the agreement checkbox');
+      if (miss.length) { m.className = 'msg err'; m.textContent = 'Please add: ' + miss.join(', ') + '.'; return; }
+      go.disabled = true; m.className = 'msg'; m.textContent = 'Signing…';
+      fetch(API + '/public/nda/' + token + '/sign', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ business_name: v('bn'), business_address: v('ba'), signer_name: v('sn'), role_title: v('rt'), signature: c.toDataURL('image/png'), agree: true }) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (x) {
+          if (!x.ok) { go.disabled = false; m.className = 'msg err'; m.textContent = (x.j && x.j.message) || 'That did not go through. Please try again.'; return; }
+          sub.textContent = 'Signed — thank you.';
+          card('<p class="ok"><strong>' + esc(x.j.message || 'Thank you — signed.') + '</strong></p><p>Signed ' + esc(x.j.signed_at || '') + '.</p>'
+            + '<p><a href="' + API + '/public/nda/' + token + '/pdf">Download your signed copy (PDF)</a></p>');
+          window.scrollTo(0, 0);
+        })
+        .catch(function () { go.disabled = false; m.className = 'msg err'; m.textContent = 'Network problem. Please try again.'; });
+    };
+  }
+})();
+</script>
+</body>
+</html>

@@ -58,6 +58,11 @@
       + '<button class="fm-tab" data-t="package" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📦 Multiple forms</button>'
       + '<button class="fm-tab" data-t="files" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📥 Request files</button>'
       + '<button class="fm-tab" data-t="completed" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">✅ Completed</button>'
+      /* Our NDA to a prospect (2026-10-09): the KiddieTrac team only — platform admins
+         and sales reps. It opens its own screen, because a prospect is not in any agency. */
+      + ((function () { try { var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+            return sessionStorage.getItem('kt_is_platform_admin') === '1' || (u.roles || []).indexOf('sales_rep') !== -1; } catch (e) { return false; } })()
+          ? '<a href="#prospect-ndas" style="margin-left:auto;align-self:center;border:1px solid #1F6080;color:#1F6080;border-radius:9px;padding:8px 14px;font-size:13.5px;font-weight:700;text-decoration:none;">🤝 Send NDA to a prospect</a>' : '')
       + '</div><div id="fm-body"></div></div>';
     var body = container.querySelector('#fm-body');
     var tabs = container.querySelectorAll('.fm-tab');
