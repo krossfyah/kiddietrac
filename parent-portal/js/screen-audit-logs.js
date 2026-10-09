@@ -316,11 +316,14 @@
   // Email log (hosted here as a subtab). Everyone else just gets the audit log.
   function render(container) {
     Dom.clear(container);
-    var isPlatform = false;
+    var isPlatform = false, isAgencyAdmin = false;
     try {
       var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
       isPlatform = (u.roles && u.roles.indexOf('platform_admin') > -1) || sessionStorage.getItem('kt_is_platform_admin') === '1';
+      isAgencyAdmin = !!(u.roles && u.roles.indexOf('agency_admin') > -1);
     } catch (e) {}
+    // Chat conversations: platform and agency admins only (the server enforces the same).
+    var hasChats = isPlatform || isAgencyAdmin;
     /* The bar used to appear only for platform admins, because the email log was the
        only other tab and only they can load it. Payment integrations is for whoever
        runs the agency's money, so the bar now appears whenever there is more than one
@@ -338,7 +341,9 @@
     // knowing to set the Email log's status filter, so a bounce nobody went looking
     // for was indistinguishable from a message that was never sent.
     var tX = mkTab('⚠️ Email errors');
+    var tC = mkTab('💬 Chat conversations');
     var activate = function (which) {
+      tC.style.borderBottomColor = which === 'chats' ? '#7C3AED' : 'transparent'; tC.style.color = which === 'chats' ? '#7C3AED' : '#64748B';
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
       tP.style.borderBottomColor = which === 'payments' ? '#12805F' : 'transparent'; tP.style.color = which === 'payments' ? '#12805F' : '#64748B';
       tE.style.borderBottomColor = which === 'email' ? '#1F6080' : 'transparent'; tE.style.color = which === 'email' ? '#1F6080' : '#64748B';
@@ -373,6 +378,7 @@
         KT.EmailLog.render(eBody);
       }
       else if (which === 'payments') { renderAudit(pane, { channel: 'payments' }); }
+      else if (which === 'chats') { renderChats(pane); }
       else { renderAudit(pane); }
 
       // Re-run the banner normaliser by hand. It observes #appMain with
@@ -395,8 +401,10 @@
     tP.addEventListener('click', function () { pick('payments'); });
     tE.addEventListener('click', function () { pick('email'); });
     tX.addEventListener('click', function () { pick('errors'); });
+    tC.addEventListener('click', function () { pick('chats'); });
     tabsRow.appendChild(tA);
     tabsRow.appendChild(tP);
+    if (hasChats) { tabsRow.appendChild(tC); }
     // The email tabs read /platform/* and would 403 for anybody else, so they are
     // only built for the people who can actually load them.
     if (hasEmail) { tabsRow.appendChild(tE); tabsRow.appendChild(tX); }
@@ -421,7 +429,167 @@
     // Never trust it blindly — a stored value from an older build, or one whose tab
     // this user cannot see, must fall back rather than render nothing.
     if (! hasEmail && /^(email|errors)$/.test(remembered)) { remembered = ''; }
-    activate(/^(audit|payments|email|errors)$/.test(remembered) ? remembered : 'audit');
+    if (! hasChats && remembered === 'chats') { remembered = ''; }
+    activate(/^(audit|payments|email|errors|chats)$/.test(remembered) ? remembered : 'audit');
+  }
+
+  /* CHAT CONVERSATIONS (2026-10-09, Anthony: "add to audit log a subtab for chat
+     conversations that tracks all conversations with users etc"). Every conversation in
+     the active agency — family (parent <-> staff) and staff-to-staff — newest activity
+     first, searchable by person, family, centre or anything said. Opening one shows the
+     whole transcript, deleted and edited messages flagged; that read is itself written to
+     the audit log (chat.transcript_viewed). Platform and agency admins only. */
+  var chatState = { kind: '', q: '', since: '', until: '', offset: 0, limit: 50 };
+  function renderChats(container) {
+    Dom.clear(container);
+    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    container.appendChild(wrap);
+    var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1E1B4B 0%,#5B21B6 60%,#7C3AED 100%);' });
+    hero.innerHTML = '<div class="kt-hero-greet">💬 ADMIN</div><h1>Chat conversations</h1>'
+      + '<div class="kt-hero-sub">Every conversation in your agency — families with staff, and staff with each other — '
+      + 'with the full transcript, including messages that were deleted or edited. Opening a transcript is recorded in the '
+      + 'audit log. Times are in your agency timezone (' + auditTz() + ').</div>';
+    wrap.appendChild(hero);
+
+    var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
+    wrap.appendChild(toolbar);
+    var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+    wrap.appendChild(listWrap);
+    var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
+    wrap.appendChild(pager);
+
+    var kindWrap = Dom.el('div');
+    kindWrap.appendChild(Dom.el('label', { style: lblStyle() }, 'Type'));
+    var kindSel = Dom.el('select', { style: inputStyle() });
+    [['', 'All conversations'], ['family', 'Families ↔ staff'], ['staff', 'Staff ↔ staff']].forEach(function (o) {
+      var op = Dom.el('option', { value: o[0] }, o[1]); if (o[0] === chatState.kind) op.selected = true; kindSel.appendChild(op);
+    });
+    kindSel.addEventListener('change', function () { chatState.kind = kindSel.value; chatState.offset = 0; load(); });
+    kindWrap.appendChild(kindSel);
+    toolbar.appendChild(kindWrap);
+    toolbar.appendChild(filterInput('Search', chatState.q, 'text', function (v) { chatState.q = v; chatState.offset = 0; load(); }));
+    toolbar.appendChild(filterInput('Active from', chatState.since, 'date', function (v) { chatState.since = v; chatState.offset = 0; load(); }));
+    toolbar.appendChild(filterInput('Started by', chatState.until, 'date', function (v) { chatState.until = v; chatState.offset = 0; load(); }));
+
+    function load() {
+      var h = listWrap.offsetHeight; if (h) listWrap.style.minHeight = h + 'px';
+      Dom.clear(listWrap);
+      listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#94A3B8;font-size:13px;' }, 'Loading…'));
+      var qs = new URLSearchParams();
+      ['kind', 'q', 'since', 'until'].forEach(function (k) { if (chatState[k]) qs.set(k, chatState[k]); });
+      qs.set('limit', chatState.limit); qs.set('offset', chatState.offset);
+      Api.get('/admin/chat-audit?' + qs.toString()).then(function (d) {
+        listWrap.style.minHeight = '';
+        drawList(d.conversations || [], d.total || 0);
+      }).catch(function (e) {
+        listWrap.style.minHeight = '';
+        Dom.clear(listWrap);
+        listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#B91C1C;font-size:13px;' }, (e && e.message) || 'Could not load conversations.'));
+      });
+    }
+
+    function drawList(rows, total) {
+      Dom.clear(listWrap); Dom.clear(pager);
+      if (!rows.length) {
+        listWrap.appendChild(Dom.el('div', { style: 'padding:28px;text-align:center;color:#94A3B8;font-size:13px;' }, 'No conversations match.'));
+        return;
+      }
+      var html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        + '<thead><tr style="background:#F8FAFC;text-align:left;color:#475569;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;">'
+        + '<th style="padding:10px 12px;">Conversation</th><th style="padding:10px 12px;">Type</th><th style="padding:10px 12px;">People</th>'
+        + '<th style="padding:10px 12px;text-align:right;">Messages</th><th style="padding:10px 12px;">Last message</th><th style="padding:10px 12px;"></th></tr></thead><tbody>';
+      rows.forEach(function (r, i) {
+        var type = r.kind === 'family' ? 'Family' : (r.channel === 'group' ? 'Staff group' : 'Staff direct');
+        var people = (r.people || []);
+        html += '<tr data-i="' + i + '" style="border-top:1px solid #EEF2F6;cursor:pointer;">'
+          + '<td style="padding:9px 12px;"><div style="font-weight:700;color:#0F172A;">' + esc(r.title) + (r.closed ? ' <span style="color:#94A3B8;font-weight:600;">(closed)</span>' : '') + '</div>'
+          +   '<div style="color:#64748B;font-size:12px;">' + esc([r.centre, r.subject, r.channel === 'sms' ? 'SMS' : ''].filter(Boolean).join(' · ')) + '</div></td>'
+          + '<td style="padding:9px 12px;"><span class="kt-pill">' + esc(type) + '</span></td>'
+          + '<td style="padding:9px 12px;color:#334155;max-width:360px;">' + esc(people.slice(0, 4).join(', ') + (people.length > 4 ? ' +' + (people.length - 4) + ' more' : '')) + '</td>'
+          + '<td style="padding:9px 12px;text-align:right;white-space:nowrap;">' + r.messages + (r.deleted ? ' <span style="color:#B91C1C;font-size:11.5px;">(' + r.deleted + ' deleted)</span>' : '') + '</td>'
+          + '<td style="padding:9px 12px;white-space:nowrap;color:#475569;">' + esc(r.last_message_at ? fmtTime(r.last_message_at).replace(/\.\d{3}/, '') : '—') + '</td>'
+          + '<td style="padding:9px 12px;text-align:right;"><button type="button" class="kt-btn" data-open="' + i + '" style="padding:4px 10px;font-size:12.5px;">View transcript</button></td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+      listWrap.innerHTML = html;
+      listWrap.querySelectorAll('tr[data-i]').forEach(function (tr) {
+        tr.addEventListener('click', function () { openTranscript(rows[+tr.getAttribute('data-i')]); });
+      });
+
+      var from = chatState.offset + 1, to = chatState.offset + rows.length;
+      pager.appendChild(Dom.el('div', {}, 'Showing ' + from + '–' + to + ' of ' + total));
+      var nav = Dom.el('div', { style: 'display:flex;gap:6px;' });
+      var prev = Dom.el('button', { type: 'button', class: 'kt-btn' }, '‹ Previous');
+      var next = Dom.el('button', { type: 'button', class: 'kt-btn' }, 'Next ›');
+      prev.disabled = chatState.offset === 0; next.disabled = to >= total;
+      prev.addEventListener('click', function () { chatState.offset = Math.max(0, chatState.offset - chatState.limit); load(); });
+      next.addEventListener('click', function () { chatState.offset += chatState.limit; load(); });
+      nav.appendChild(prev); nav.appendChild(next); pager.appendChild(nav);
+    }
+
+    load();
+  }
+
+  function openTranscript(r) {
+    var M = window.KT && KT.Shell && KT.Shell.Modal;
+    var body = Dom.el('div', { style: 'height:min(62vh,640px);overflow:auto;background:#F8FAFC;border-radius:10px;padding:12px;' });
+    body.appendChild(Dom.el('div', { style: 'color:#94A3B8;font-size:13px;padding:12px;' }, 'Loading transcript…'));
+    var data = null;
+    function asText() {
+      if (!data) return '';
+      return data.title + '\n' + (data.messages || []).map(function (m) {
+        return '[' + fmtTime(m.created_at).replace(/\.\d{3}/, '') + '] ' + m.sender
+          + (m.deleted_at ? ' (deleted)' : '') + (m.edited_at ? ' (edited)' : '') + ': ' + m.body
+          + (m.attachments && m.attachments.length ? '  [attachments: ' + m.attachments.join(', ') + ']' : '');
+      }).join('\n') + '\n';
+    }
+    if (M) {
+      M.open({ title: '💬 ' + r.title, body: body, large: true, actions: [
+        { label: '⬇️ Download transcript', handler: function () {
+            if (!data) return false;
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([asText()], { type: 'text/plain;charset=utf-8' }));
+            a.download = ('chat-' + r.kind + '-' + r.id + '-' + String(r.title).replace(/[^A-Za-z0-9]+/g, '-')).slice(0, 80) + '.txt';
+            document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+            return false;
+          } },
+        { label: 'Close', primary: true },
+      ] });
+    }
+    Api.get('/admin/chat-audit/' + r.kind + '/' + r.id).then(function (d) {
+      data = d;
+      Dom.clear(body);
+      var msgs = d.messages || [];
+      if (!msgs.length) { body.appendChild(Dom.el('div', { style: 'color:#94A3B8;font-size:13px;padding:12px;' }, 'No messages in this conversation.')); return; }
+      var lastDay = '';
+      msgs.forEach(function (m) {
+        var when = fmtTime(m.created_at).replace(/\.\d{3}/, '');
+        var day = when.replace(/,?\s*\d{1,2}:\d{2}.*$/, '');
+        if (day !== lastDay) {
+          lastDay = day;
+          body.appendChild(Dom.el('div', { style: 'text-align:center;color:#94A3B8;font-size:11.5px;font-weight:700;margin:10px 0 6px;' }, day));
+        }
+        var tone = m.side === 'family' ? ['#ECFEFF', '#A5F3FC', '#0E7490'] : m.side === 'system' ? ['#F1F5F9', '#E2E8F0', '#64748B'] : ['#F5F3FF', '#DDD6FE', '#6D28D9'];
+        var card = Dom.el('div', { style: 'background:' + (m.deleted_at ? '#FEF2F2' : tone[0]) + ';border:1px solid ' + (m.deleted_at ? '#FECACA' : tone[1])
+          + ';border-radius:10px;padding:8px 11px;margin:0 0 6px;' });
+        card.innerHTML = '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12px;">'
+          + '<strong style="color:' + tone[2] + ';">' + esc(m.sender) + '</strong>'
+          + '<span style="color:#94A3B8;">' + esc(m.side === 'family' ? 'Family' : m.side === 'system' ? 'System' : 'Staff') + '</span>'
+          + (m.via && m.via !== 'app' && m.via !== 'chat' ? '<span style="color:#94A3B8;">via ' + esc(m.via) + '</span>' : '')
+          + '<span style="margin-left:auto;color:#94A3B8;">' + esc(when) + '</span></div>'
+          + '<div style="white-space:pre-wrap;overflow-wrap:anywhere;color:#0F172A;font-size:13.5px;margin-top:3px;' + (m.deleted_at ? 'text-decoration:line-through;color:#7F1D1D;' : '') + '">' + esc(m.body || (m.attachments && m.attachments.length ? '' : '(empty)')) + '</div>'
+          + (m.attachments && m.attachments.length ? '<div style="font-size:12px;color:#475569;margin-top:4px;">📎 ' + esc(m.attachments.join(', ')) + '</div>' : '')
+          + (m.deleted_at || m.edited_at ? '<div style="font-size:11.5px;color:#B91C1C;margin-top:4px;">'
+              + (m.deleted_at ? 'Deleted ' + esc(fmtTime(m.deleted_at).replace(/\.\d{3}/, '')) : '')
+              + (m.deleted_at && m.edited_at ? ' · ' : '')
+              + (m.edited_at ? 'Edited ' + esc(fmtTime(m.edited_at).replace(/\.\d{3}/, '')) : '') + '</div>' : '');
+        body.appendChild(card);
+      });
+    }).catch(function (e) {
+      Dom.clear(body);
+      body.appendChild(Dom.el('div', { style: 'color:#B91C1C;font-size:13px;padding:12px;' }, (e && e.message) || 'Could not load the transcript.'));
+    });
   }
 
   /* One renderer, two views. The payments channel is the same table with a different

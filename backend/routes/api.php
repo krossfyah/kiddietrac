@@ -1828,6 +1828,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
         // v22p47: audit trail — agency admins (whole agency) + directors (their centre)
         Route::get('/audit-logs', [AdminController::class, 'auditLogs']);
+        // Chat conversations subtab (2026-10-09): agency/platform admins only, enforced in the controller.
+        Route::get('/chat-audit', [\App\Http\Controllers\Api\ChatAuditController::class, 'index']);
+        Route::get('/chat-audit/{kind}/{id}', [\App\Http\Controllers\Api\ChatAuditController::class, 'show'])->where(['kind' => 'family|staff', 'id' => '[0-9]+']);
         // Top-bar notification / activity feed (agency-isolated; platform_admin sees all).
         Route::get('/activity-feed', [AgencyController::class, 'activityFeed']);
         // Race/ethnicity + device-type breakdown for the agency (onboarding analytics).
