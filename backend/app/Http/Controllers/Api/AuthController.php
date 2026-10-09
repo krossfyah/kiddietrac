@@ -1164,6 +1164,27 @@ final class AuthController extends Controller
             'sex' => $user->sex ?? null,
             // Their own date of birth: the onboarding wizard pre-fills it (required for educators).
             'date_of_birth' => $user->date_of_birth ? substr((string) $user->date_of_birth, 0, 10) : null,
+            /* THEIR OWN PROVIDER'S ADDRESS (2026-10-09). A home-childcare provider's address
+               is on the provider record (often synced from iLearn) and nowhere on their own
+               profile, so onboarding asked them to type it again and Lorraine Cooper finished
+               with it blank. Offered to the wizard as a starting point only when the provider
+               record is THEIRS (same email, or they are its named owner) — staff working at
+               someone else's home are never given that person's address. */
+            'provider_address' => (function () use ($user) {
+                try {
+                    $mine = trim(mb_strtolower((string) $user->email));
+                    $name = trim(mb_strtolower(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')));
+                    $c = DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')
+                        ->where('ra.user_id', $user->id)->where('ra.active', 1)->whereNull('c.deleted_at')->whereNotNull('c.address_line1')
+                        ->get(['c.address_line1', 'c.address_line2', 'c.city', 'c.province', 'c.postal_code', 'c.email', 'c.supervisor_first_name', 'c.supervisor_last_name'])
+                        ->first(fn ($c) => ($c->email && trim(mb_strtolower($c->email)) === $mine)
+                            || ($name !== '' && trim(mb_strtolower(($c->supervisor_first_name ?? '') . ' ' . ($c->supervisor_last_name ?? ''))) === $name));
+                    if (! $c) { return null; }
+                    $pv = ['Ontario' => 'ON', 'Quebec' => 'QC', 'British Columbia' => 'BC', 'Alberta' => 'AB', 'Manitoba' => 'MB', 'Saskatchewan' => 'SK', 'Nova Scotia' => 'NS', 'New Brunswick' => 'NB'];
+                    return ['address_line1' => $c->address_line1, 'address_line2' => $c->address_line2, 'city' => $c->city,
+                        'province' => $pv[$c->province] ?? $c->province, 'postal_code' => $c->postal_code];
+                } catch (\Throwable $e) { return null; }
+            })(),
             'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')),
             'preferred_name' => $user->preferred_name ?? null,
             'phone' => $user->phone ?? null,

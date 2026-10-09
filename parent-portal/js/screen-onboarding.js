@@ -262,6 +262,13 @@
       role_extras: (user.profile_extras && user.profile_extras.role_extras) || {},
       address: (function () {
         var pe = user.profile_extras || {};
+        /* Nothing on their profile yet, but their own provider record has an address:
+           start from it so they confirm it rather than retype it (2026-10-09). */
+        var pa = user.provider_address || null;
+        if (pa && !pe.address_line1) {
+          pe = Object.assign({}, pe, { address_line1: pa.address_line1 || '', address_line2: pa.address_line2 || '',
+            city: pa.city || '', province: pa.province || '', postal_code: pa.postal_code || '' });
+        }
         return {
           address_line1: pe.address_line1 || '',
           address_line2: pe.address_line2 || '',
