@@ -49,6 +49,7 @@ final class SignedFormFiler
                 ->whereNotNull('s.signed_at')
                 ->first([
                     's.id', 's.user_id', 's.signed_at', 's.filled_file_url',
+                    's.countersigned_at', 's.countersigned_file_url', 's.countersigner_name', 's.countersign_note',
                     'f.title', 'f.file_url', 'f.file_type', 'f.file_size',
                 ]);
 
@@ -61,10 +62,32 @@ final class SignedFormFiler
                person read and signed. Either way the row points at what they actually
                put their name to, which is the whole point of keeping it. */
             $url = $s->filled_file_url ?: $s->file_url;
+
+            /* THE COUNTER-SIGNED COPY WINS (2026-10-09). Once the office counter-signs, the
+               copy the signer keeps is the approved one. countersign() updated this row in
+               place, but file() then wrote the signer's own copy back over it every time it
+               ran again -- and the nightly forms:sync-documents re-files EVERY sign-off, so
+               each approved copy reverted to the unapproved one overnight (Samantha's
+               "Consent For Non Prescription Creams", counter-signed 09-22, was the one we
+               found). The approved copy is now part of what "filed" means. */
+            $countersigned = $s->countersigned_at && $s->countersigned_file_url;
+            if ($countersigned) {
+                $url = $s->countersigned_file_url;
+            }
             if (! $url) {
                 return;
             }
             $isFilled = (bool) $s->filled_file_url;
+            $size = $isFilled ? null : $s->file_size;
+            $signedAt = $s->signed_at;
+            $notes = null;
+            if ($countersigned) {
+                $abs = \Illuminate\Support\Facades\Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $url));
+                $size = is_file($abs) ? (int) filesize($abs) : null;
+                $signedAt = $s->countersigned_at;
+                $notes = mb_substr('Counter-signed by ' . ($s->countersigner_name ?: 'the office')
+                    . ($s->countersign_note ? ' — ' . mb_substr((string) $s->countersign_note, 0, 300) : ''), 0, 1000);
+            }
 
             DB::table('documents')->updateOrInsert(
                 ['source_type' => self::SOURCE, 'source_id' => (int) $s->id],
@@ -78,8 +101,9 @@ final class SignedFormFiler
                     'file_type'      => mb_substr((string) ($s->file_type ?: 'application/pdf'), 0, 20),
                     // The filled copy is a different file, so the library's byte count
                     // would be a lie about it. Better absent than wrong.
-                    'file_size'      => $isFilled ? null : $s->file_size,
-                    'signed_at'      => $s->signed_at,
+                    'file_size'      => $size,
+                    'signed_at'      => $signedAt,
+                    'notes'          => $notes,
                     'signed_by_id'   => (int) $s->user_id,
                     'uploaded_by_id' => (int) $s->user_id,
                     // Filed when it was signed, not when this code happened to run --
@@ -148,7 +172,10 @@ final class SignedFormFiler
                 $j->on('d.source_id', '=', 's.id')->where('d.source_type', '=', self::SOURCE);
             })
             ->whereNotNull('s.signed_at')
-            ->whereNull('d.id')
+            /* Unfiled, OR filed without the approved copy it should now carry. */
+            ->where(fn ($w) => $w->whereNull('d.id')->orWhere(fn ($c) => $c
+                ->whereNotNull('s.countersigned_at')->whereNotNull('s.countersigned_file_url')
+                ->whereRaw('BINARY d.file_url <> BINARY s.countersigned_file_url')))   // two collations: compare bytes
             ->when($agencyId, fn ($q) => $q->where('f.agency_id', $agencyId))
             ->count();
     }

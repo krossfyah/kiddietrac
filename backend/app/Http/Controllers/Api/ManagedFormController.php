@@ -2574,26 +2574,11 @@ class ManagedFormController extends Controller
            should be the counter-signed one, or the family's record and the agency's
            disagree about the same document. Same row, updated in place: two rows would
            drift the moment one is deleted. */
+        /* SignedFormFiler now knows a counter-signed sign-off files its approved copy, so
+           this is one call, not a second copy of the rule -- and it FILES the form if no
+           row existed yet, where the old in-place update silently did nothing. */
         if ($storedUrl) {
-            try {
-                $doc = DB::table('documents')
-                    ->where('source_type', \App\Support\SignedFormFiler::SOURCE)
-                    ->where('source_id', (int) $row->id)
-                    ->first(['id', 'title']);
-                if ($doc) {
-                    DB::table('documents')->where('id', $doc->id)->update([
-                        'file_url' => $storedUrl,
-                        'file_size' => (int) (@filesize(Storage::disk('public')->path(preg_replace('#^/storage/#', '', $storedUrl))) ?: 0),
-                        'signed_at' => now(),
-                        'notes' => 'Counter-signed by ' . $counterName
-                            . (($data['note'] ?? null) ? ' — ' . mb_substr((string) $data['note'], 0, 300) : ''),
-                    ]);
-                }
-            } catch (\Throwable $e) {
-                /* Never worth failing the counter-signature over: it is recorded, the
-                   PDF exists, and the email still goes. */
-                Log::warning('countersign: could not refresh the filed document', ['err' => $e->getMessage()]);
-            }
+            \App\Support\SignedFormFiler::file((int) $row->id);
         }
 
         $sent = [];
