@@ -72,7 +72,7 @@ final class WeeklyDigestCommand extends Command
 
     private function stats(object $agency, Carbon $start, Carbon $end): array
     {
-        $centreIds = DB::table('centres')->where('agency_id', $agency->id)->whereNull('deleted_at')->pluck('id')->all();
+        $centreIds = \App\Support\Live::centreIds((int) $agency->id);
         if (empty($centreIds)) return [
             'new_enrolments' => 0, 'withdrawn' => 0,
             'billed' => 0.0, 'paid' => 0.0,
@@ -153,7 +153,7 @@ final class WeeklyDigestCommand extends Command
 
     private function recipients(object $agency): array
     {
-        $centreIds = DB::table('centres')->where('agency_id', $agency->id)->whereNull('deleted_at')->pluck('id')->all();
+        $centreIds = \App\Support\Live::centreIds((int) $agency->id);
         return DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
             ->whereIn('ra.role', ['agency_admin', 'centre_director'])->where('ra.active', true)
             ->where(function ($q) use ($agency, $centreIds) {

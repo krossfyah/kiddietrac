@@ -88,7 +88,8 @@ class BirthdayEmailCommand extends Command
         $mmdd = $target->format('m-d');
         $when = BirthdayGreetings::whenPhrase((int) $cfg['days_ahead'], $target);
         $year = (int) $target->format('Y');
-        $centreIds = DB::table('centres')->where('agency_id', $agency->id)->pluck('id');
+        // Open centres only (App\Support\Live).
+        $centreIds = collect(\App\Support\Live::centreIds((int) $agency->id));
         if ($centreIds->isEmpty()) return 0;
 
         $sent = 0;
@@ -98,6 +99,7 @@ class BirthdayEmailCommand extends Command
             $children = DB::table('children as ch')
                 ->join('families as f', 'f.id', '=', 'ch.family_id')
                 ->whereIn('f.centre_id', $centreIds)
+                ->tap(fn ($q) => \App\Support\Live::families($q, 'f'))
                 ->where('ch.enrollment_status', 'enrolled')
                 ->whereNull('ch.deleted_at')
                 ->whereNotNull('ch.date_of_birth')

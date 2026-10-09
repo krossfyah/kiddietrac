@@ -219,6 +219,9 @@ final class ClockReminderCommand extends Command
 
         $staff = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
+            // Staff of an OPEN centre only, and never a switched-off account (App\Support\Live).
+            ->join('centres as lc', 'lc.id', '=', 'ra.centre_id')
+            ->tap(fn ($q) => \App\Support\Audience::excludeOff(\App\Support\Live::centres($q, 'lc'), 'u'))
             ->whereIn('ra.role', ['educator', 'centre_director'])
             ->where('ra.active', true)->whereNotNull('ra.centre_id')
             ->whereNotNull('u.email')->whereNull('u.deleted_at')

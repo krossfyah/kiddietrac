@@ -285,6 +285,10 @@ class IntegrationController extends Controller
             if (! $child) {
                 return null;
             }
+            // Not a child who has left, not a closed centre's room (2026-10-09).
+            if (\App\Http\Controllers\Concerns\EnrolmentGuard::refusal($childId, $roomId) !== null) {
+                return null;
+            }
 
             if (! $child->primary_room_id) {
                 \Illuminate\Support\Facades\DB::table('children')->where('id', $childId)

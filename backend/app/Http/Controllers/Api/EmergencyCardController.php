@@ -173,9 +173,10 @@ final class EmergencyCardController extends Controller
 
         $cards = [];
         if (! empty($childIds)) {
-            $children = DB::table('children')
+            // Enrolled children only: an enrolment row left open after a withdrawal put a
+            // withdrawn child's card in this room's pack (2026-10-09).
+            $children = \App\Support\Live::enrolledChildren(DB::table('children'))
                 ->whereIn('id', $childIds)
-                ->whereNull('deleted_at')
                 ->orderBy('first_name')
                 ->get();
             foreach ($children as $child) {

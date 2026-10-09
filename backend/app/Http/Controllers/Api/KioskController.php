@@ -116,7 +116,8 @@ final class KioskController extends Controller
             ->join('families', 'families.id', '=', 'children.family_id')
             ->where('children.id', $data['child_id'])
             ->where('families.centre_id', $centre->id)
-            ->whereNull('children.deleted_at')
+            // A child who has left cannot be checked in (2026-10-09).
+            ->where(fn ($q) => \App\Support\Live::enrolledChildren($q, 'children'))
             ->first(['children.id', 'children.family_id']);
 
         if (! $child) {

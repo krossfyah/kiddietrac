@@ -29,6 +29,7 @@ final class CentreOffboardController extends Controller
     use \App\Http\Controllers\Concerns\AuthorizesTenantAccess;
 
     use ResolvesCentreContext;
+    use \App\Http\Controllers\Concerns\ClosesCentres;
 
     /**
      * Closing a provider produced no notice of its own.
@@ -394,9 +395,14 @@ final class CentreOffboardController extends Controller
             if ($stillEnrolled > 0) {
                 $archiveMessage = $stillEnrolled.' child(ren) are still enrolled, so the centre was left open.';
             } else {
-                DB::table('centres')->where('id', $centreId)->update(['deleted_at' => now(), 'status' => 'closed']);
+                $links = null;
+                DB::transaction(function () use ($centreId, $effective, &$links) {
+                    DB::table('centres')->where('id', $centreId)->update(['deleted_at' => now(), 'status' => 'closed']);
+                    $links = $this->closeCentreLinks($centreId, $effective);
+                });
+                $report['closure'] = $links;
                 $archived = true;
-                $archiveMessage = 'Centre archived.';
+                $archiveMessage = trim('Centre archived. ' . ($this->familiesStillOpenNote($links) ?? ''));
             }
         }
 

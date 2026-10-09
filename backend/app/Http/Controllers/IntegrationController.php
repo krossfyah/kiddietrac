@@ -126,9 +126,15 @@ class IntegrationController extends Controller
                 ]);
             }
             // Enroll any of this centre's children who aren't in a room yet.
-            $unenrolled = \Illuminate\Support\Facades\DB::table('children as c')
+            /* Enrolled children only, at an open centre (2026-10-09): this placed EVERY
+               child of the centre with no enrolment row — withdrawn ones included — which
+               put children who had left back on rosters and reminders. */
+            if (! \App\Support\Live::centreOpen((int) $centre->id)) {
+                return;
+            }
+            $unenrolled = \App\Support\Live::enrolledChildren(\Illuminate\Support\Facades\DB::table('children as c'), 'c')
                 ->join('families as f', 'f.id', '=', 'c.family_id')
-                ->where('f.centre_id', $centre->id)->whereNull('c.deleted_at')
+                ->where('f.centre_id', $centre->id)
                 ->whereNotExists(function ($q) {
                     $q->select(\Illuminate\Support\Facades\DB::raw(1))->from('enrollments')->whereColumn('enrollments.child_id', 'c.id');
                 })

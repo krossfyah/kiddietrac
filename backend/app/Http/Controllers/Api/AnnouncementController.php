@@ -713,9 +713,22 @@ final class AnnouncementController extends Controller
                 $this->staffUserIds($scopeType, $scopeId, $audience))));
         }
 
+        /* PARENTS WHO ARE STILL HERE (2026-10-09). A family counts only if it has not
+           left AND still has a child with us (enrolled or waitlisted), at an OPEN centre.
+           "Every family row on the centre" reached a parent whose only child had been
+           withdrawn, on a provider that had closed. */
+        $liveFamilies = function (array $familyIds): array {
+            if (! $familyIds) return [];
+            return \App\Support\Live::families(DB::table('families as f'), 'f')
+                ->whereIn('f.id', $familyIds)
+                ->whereExists(fn ($q) => \App\Support\Live::children($q->from('children as lc')->whereColumn('lc.family_id', 'f.id'), 'lc'))
+                ->pluck('f.id')->all();
+        };
+
         // Find all guardian user_ids in the scope
         if ($scopeType === 'centre') {
-            $familyIds = DB::table('families')->where('centre_id', $scopeId)->whereNull('deleted_at')->pluck('id')->all();
+            if (! \App\Support\Live::centreOpen((int) $scopeId)) return [];
+            $familyIds = $liveFamilies(DB::table('families')->where('centre_id', $scopeId)->pluck('id')->all());
             if (empty($familyIds)) return [];
             return DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id')->unique()->all();
         }
@@ -727,13 +740,13 @@ final class AnnouncementController extends Controller
                 })
                 ->pluck('child_id')->unique()->all();
             if (empty($childIds)) return [];
-            $familyIds = DB::table('children')->whereIn('id', $childIds)->whereNull('deleted_at')->pluck('family_id')->unique()->all();
+            $familyIds = $liveFamilies(\App\Support\Live::children(DB::table('children'))->whereIn('id', $childIds)->pluck('family_id')->unique()->all());
             return DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id')->unique()->all();
         }
         if ($scopeType === 'agency') {
-            $centreIds = DB::table('centres')->where('agency_id', $scopeId)->whereNull('deleted_at')->pluck('id')->all();
+            $centreIds = \App\Support\Live::centreIds((int) $scopeId);
             if (empty($centreIds)) return [];
-            $familyIds = DB::table('families')->whereIn('centre_id', $centreIds)->whereNull('deleted_at')->pluck('id')->all();
+            $familyIds = $liveFamilies(DB::table('families')->whereIn('centre_id', $centreIds)->pluck('id')->all());
             return DB::table('guardians')->whereIn('family_id', $familyIds)->pluck('user_id')->unique()->all();
         }
         return [];

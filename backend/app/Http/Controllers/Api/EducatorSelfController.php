@@ -89,7 +89,8 @@ class EducatorSelfController extends Controller
             ->join('rooms as r', 'r.id', '=', 'er.room_id')
             ->where('er.user_id', $userId)
             ->pluck('r.centre_id')->map(fn ($v) => (int) $v)->all();
-        $centreIds = array_values(array_unique(array_filter(array_merge($centreIds, $roomCentreIds))));
+        // Open centres only (2026-10-09).
+        $centreIds = \App\Support\Live::onlyOpenCentres(array_merge($centreIds, $roomCentreIds));
         if (empty($centreIds)) {
             return response()->json(['children' => []]);
         }
@@ -106,7 +107,9 @@ class EducatorSelfController extends Controller
                 ->whereColumn('families.id', '=', 'c.family_id')
                 ->whereNotNull('families.suspended_at'))
             ->whereNull('e.end_date')
-            ->whereNull('c.deleted_at')
+            // The child's own status as well as the enrolment row: a row left open after a
+            // withdrawal must not put a child who has left on an educator's roster (2026-10-09).
+            ->where(fn ($q) => \App\Support\Live::enrolledChildren($q, 'c'))
             ->distinct()
             ->orderBy('c.first_name')
             ->select('c.id', 'c.first_name', 'c.last_name', 'c.preferred_name', 'c.photo_url', 'ce.name as centre_name')

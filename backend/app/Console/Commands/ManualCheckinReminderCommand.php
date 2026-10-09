@@ -60,7 +60,7 @@ class ManualCheckinReminderCommand extends Command
                 ->where('active', 1)
                 ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'home_visitor'])
                 ->where(function ($q) use ($ag) {
-                    $centreIds = DB::table('centres')->where('agency_id', $ag->id)->pluck('id')->all();
+                    $centreIds = \App\Support\Live::centreIds((int) $ag->id);
                     $q->where('agency_id', $ag->id);
                     if ($centreIds) $q->orWhereIn('centre_id', $centreIds);
                 })
@@ -79,6 +79,10 @@ class ManualCheckinReminderCommand extends Command
             // Per-family manual count over the trailing 7 days (staff-performed only).
             $rows = DB::table('check_events as ce')
                 ->join('children as c', 'c.id', '=', 'ce.child_id')
+                // A family that has left, or a withdrawn child, is not reminded (App\Support\Live).
+                ->join('families as lf', 'lf.id', '=', 'c.family_id')
+                ->join('centres as lce', 'lce.id', '=', 'lf.centre_id')
+                ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families(\App\Support\Live::enrolledChildren($q, 'c'), 'lf'), 'lce'))
                 ->whereIn('ce.by_user_id', $staffIds)
                 ->where('ce.occurred_at', '>=', $weekAgo)
                 ->whereNull('c.deleted_at')

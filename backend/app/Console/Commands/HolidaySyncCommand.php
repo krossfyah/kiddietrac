@@ -82,7 +82,8 @@ class HolidaySyncCommand extends Command
                 $wanted[$when] = $h['name'] . (! empty($h['moved']) ? ' (observed)' : '');
             }
 
-            $centres = DB::table('centres')->where('agency_id', $agency->id)->whereNull('deleted_at')
+            // Open centres only (App\Support\Live): a closed provider gets no new holidays.
+            $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agency->id)
                 ->get(['id', 'name', 'settings']);
 
             $this->line(sprintf('%s (%s, %d holidays, %d centres)',

@@ -29,6 +29,7 @@ final class BirthdayCommand extends Command
         $children = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families($q, 'f'), 'c'))
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->whereRaw("DATE_FORMAT(ch.date_of_birth, '%m-%d') = ?", [$mmdd])

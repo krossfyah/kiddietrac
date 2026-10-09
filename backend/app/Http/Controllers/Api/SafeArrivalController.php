@@ -74,7 +74,7 @@ class SafeArrivalController extends Controller
         if ($pick === null && $rooms !== null) {
             $pick = DB::table('rooms')->whereIn('id', $rooms ?: [0])->pluck('centre_id')->map(fn ($x) => (int) $x)->unique()->values()->all();
         }
-        $centreList = DB::table('centres')->where('agency_id', $agencyId)
+        $centreList = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)
             ->when($pick !== null && ! $request->filled('centre_id'), fn ($q) => $q->whereIn('id', $pick ?: [0]))
             ->orderBy('name')->get(['id', 'name']);
 
@@ -196,10 +196,12 @@ class SafeArrivalController extends Controller
         $ra = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->get(['role', 'agency_id', 'centre_id']);
         if ($ra->contains(fn ($r) => $r->role === 'platform_admin'
             || ($r->role === 'agency_admin' && (int) $r->agency_id === $agencyId))) {
-            return [null, null, 'admin'];
+            /* The agency's OPEN centres, not "everything" (null): a closed provider's
+               children and centre name were on the admin's Safe Arrival (2026-10-09). */
+            return [\App\Support\Live::centreIds($agencyId) ?: [0], null, 'admin'];
         }
-        $centres = $ra->filter(fn ($r) => $r->role === 'centre_director' && (int) $r->agency_id === $agencyId && $r->centre_id)
-            ->pluck('centre_id')->map(fn ($x) => (int) $x)->unique()->values()->all();
+        $centres = \App\Support\Live::onlyOpenCentres($ra->filter(fn ($r) => $r->role === 'centre_director' && (int) $r->agency_id === $agencyId && $r->centre_id)
+            ->pluck('centre_id')->map(fn ($x) => (int) $x)->unique()->values()->all());
         if ($centres) {
             return [$centres, null, 'director'];
         }

@@ -91,7 +91,7 @@ final class DailyDigestCommand extends Command
 
     private function statsForAgency(object $agency, Carbon $today, Carbon $tomorrow): array
     {
-        $centreIds = DB::table('centres')->where('agency_id', $agency->id)->whereNull('deleted_at')->pluck('id')->all();
+        $centreIds = \App\Support\Live::centreIds((int) $agency->id);
         if (empty($centreIds)) return [
             'enrolled' => 0, 'checked_in' => 0, 'checked_pct' => 0,
             'open_invoices' => 0, 'open_balance' => 0.0,
@@ -240,7 +240,7 @@ final class DailyDigestCommand extends Command
 
     private function recipientsForAgency(object $agency): array
     {
-        $centreIds = DB::table('centres')->where('agency_id', $agency->id)->whereNull('deleted_at')->pluck('id')->all();
+        $centreIds = \App\Support\Live::centreIds((int) $agency->id);
         return DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->whereIn('ra.role', ['agency_admin', 'centre_director'])

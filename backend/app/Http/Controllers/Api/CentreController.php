@@ -497,7 +497,10 @@ HTML;
         $user = $request->user();
         if (!$user) return response()->json(['centres' => []]);
 
-        $q = \Illuminate\Support\Facades\DB::table('centres')
+        /* Open centres only (2026-10-09). This feeds the centre picker of every
+           /director/centres-driven screen (schedule, rosters, staff); it listed the
+           closed, deleted providers because it never filtered them at all. */
+        $q = \App\Support\Live::centres(\Illuminate\Support\Facades\DB::table('centres'))
             ->select('id', 'name', 'address_line1 as address', 'city', 'province')
             ->orderBy('name');
 

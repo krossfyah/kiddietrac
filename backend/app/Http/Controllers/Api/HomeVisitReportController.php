@@ -61,7 +61,9 @@ class HomeVisitReportController extends Controller
         if (! $agencyId) {
             return response()->json(['centres' => []]);
         }
-        $centres = DB::table('centres')->where('agency_id', $agencyId)
+        // The picker for a NEW visit: open providers only (2026-10-09). Past reports
+        // on a closed provider still list and open — index() does not filter them.
+        $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)
             ->orderBy('name')->get(['id', 'name', 'city', 'province']);
         return response()->json(['centres' => $centres]);
     }

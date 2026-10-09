@@ -122,7 +122,7 @@ class AdminDigestCommand extends Command
         if ($test) {
             return [(object) ['email' => $test, 'first_name' => 'Test', 'last_name' => 'Recipient']];
         }
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
+        $centreIds = collect(\App\Support\Live::centreIds($agencyId));
         return DB::table('users as u')
             ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
             ->where('ra.active', 1)

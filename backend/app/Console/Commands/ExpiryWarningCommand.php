@@ -27,7 +27,9 @@ final class ExpiryWarningCommand extends Command
         $now = Carbon::now();
         $weekKey = Carbon::now()->format('o-W');
 
+        // Only people still with us: a closed account is not chased for paperwork.
         $rows = DB::table('background_checks')
+            ->whereIn('user_id', fn ($q) => \App\Support\Audience::excludeOff($q->from('users as u')->whereNull('u.deleted_at'), 'u')->select('u.id'))
             ->where('expires_at', '<=', $cutoff)
             ->where('expires_at', '>=', $now->subDays(30))
             ->get();

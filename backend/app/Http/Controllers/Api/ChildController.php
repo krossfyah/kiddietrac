@@ -31,6 +31,14 @@ final class ChildController extends Controller
         $isAgencyLevel = DB::table('role_assignments')->where('user_id', $user->id)
             ->where('active', 1)->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
 
+        /* CURRENT BY DEFAULT (2026-10-09). With no status this returned every child ever
+           enrolled — withdrawn ones and the closed providers' too — to every caller that
+           did not think to filter (immunizations, director lists, search). Now: no status
+           = children still with us at open centres; status=withdrawn or status=all are the
+           explicit, historical asks (the Children screen's status filter sends them). */
+        $statusParam = (string) $request->input('status', '');
+        $historical = in_array($statusParam, ['all', 'withdrawn'], true);
+
         if ($requestedCentre && $this->authorizeCentreAccess($user, $requestedCentre)) {
             $centreIds = [$requestedCentre];
         } elseif ($isAgencyLevel) {
@@ -38,7 +46,9 @@ final class ChildController extends Controller
             // raw X-Active-Agency-Id header, or an admin of one agency could list
             // another agency's children by forging it.
             $agencyId = $this->resolveAgencyId($request);
-            $centreIds = $agencyId ? DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() : [];
+            $centreIds = $agencyId
+                ? ($historical ? DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() : \App\Support\Live::centreIds($agencyId))
+                : [];
         } else {
             $cid = $this->resolveCentreId($user);
             $centreIds = $cid ? [$cid] : [];
@@ -97,8 +107,10 @@ final class ChildController extends Controller
                 ->where('fe.room_id', $roomId));
         }
 
-        if ($status = $request->input('status')) {
-            $q->where('children.enrollment_status', $status);
+        if ($statusParam !== '' && $statusParam !== 'all') {
+            $q->where('children.enrollment_status', $statusParam);
+        } elseif ($statusParam === '') {
+            $q->where(fn ($w) => \App\Support\Live::children($w, 'children'));
         }
 
         $search = $request->input('search');
@@ -334,6 +346,9 @@ final class ChildController extends Controller
         if (! $room || (int) $room->centre_id !== $centreId) {
             return response()->json(['message' => 'Room not found in your centre'], 422);
         }
+        if (! \App\Support\Live::centreOpen((int) $room->centre_id)) {
+            return response()->json(['message' => 'That room belongs to a centre that is closed.'], 422);
+        }
 
         $childId = DB::transaction(function () use ($data) {
             $cid = DB::table('children')->insertGetId([
@@ -413,6 +428,14 @@ final class ChildController extends Controller
             if (! $room || (int) $room->centre_id !== (int) $familyCentreId) {
                 return response()->json(['message' => 'Room not found in this child\'s centre'], 422);
             }
+        }
+
+        /* Re-opening an ended enrolment (end_date cleared or pushed past today) or moving it
+           to another room is a placement: the same refusal as creating one (2026-10-09). */
+        $reopening = array_key_exists('end_date', $data) && $enrollment->end_date !== null
+            && ($data['end_date'] === null || $data['end_date'] > now()->toDateString());
+        if ($reopening || array_key_exists('room_id', $data)) {
+            \App\Http\Controllers\Concerns\EnrolmentGuard::assert((int) $enrollment->child_id, (int) ($data['room_id'] ?? $enrollment->room_id));
         }
 
         DB::table('enrollments')->where('id', $enrollmentId)->update($data);
@@ -604,6 +627,7 @@ final class ChildController extends Controller
 
                 // Carry the placement's terms forward; a move is not a re-negotiation.
                 $prev = $open->first();
+                \App\Http\Controllers\Concerns\EnrolmentGuard::assert((int) $cid, (int) $destRoomId);   // never into a closed centre, never a child who has left
                 DB::table('enrollments')->insert([
                     'child_id' => $cid,
                     'room_id' => $destRoomId,
@@ -973,8 +997,21 @@ final class ChildController extends Controller
             return response()->json(["message" => "No changes"], 200);
         }
 
+        /* LEAVING IS MORE THAN A STATUS (2026-10-09). Setting withdrawn/graduated here
+           changed the one column and left the enrolment open — and an open enrolment is
+           what put a withdrawn child back on reminders, emergency cards and lists. */
+        $leaving = isset($data["enrollment_status"]) && in_array($data["enrollment_status"], ["withdrawn", "graduated"], true)
+            && ! in_array($child->enrollment_status ?? null, ["withdrawn", "graduated"], true);
         $data["updated_at"] = now();
-        DB::table("children")->where("id", $childId)->update($data);
+        DB::transaction(function () use ($childId, $data, $leaving) {
+            if ($leaving) {
+                $endDate = now()->toDateString();
+                $data["withdrawn_at"] = $data["withdrawn_at"] ?? $endDate;
+                DB::table("enrollments")->where("child_id", $childId)->whereNull("end_date")
+                    ->update(["end_date" => $endDate]);
+            }
+            DB::table("children")->where("id", $childId)->update($data);
+        });
 
         return response()->json(["message" => "Child updated", "id" => $childId]);
     }

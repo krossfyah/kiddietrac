@@ -112,6 +112,9 @@ final class WaitlistController extends Controller
         if ($room->centre_id != $family->centre_id) {
             return response()->json(['message' => 'Room does not belong to this child\'s centre'], 422);
         }
+        if (! \App\Support\Live::centreOpen((int) $room->centre_id)) {
+            return response()->json(['message' => 'That room belongs to a centre that is closed.'], 422);
+        }
 
         if (! $this->hasCentreAccess($request->user()->id, $family->centre_id)) {
             return response()->json(['message' => 'Forbidden'], 403);
@@ -194,12 +197,17 @@ final class WaitlistController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        DB::table('children')->where('id', $childId)->update([
-            'enrollment_status' => 'withdrawn',
-            'withdrawn_at' => now()->toDateString(),
-            'waitlist_position' => null,
-            'updated_at' => now(),
-        ]);
+        DB::transaction(function () use ($childId) {
+            // Any planned placement goes too — an open enrolment is what lists a child (2026-10-09).
+            DB::table('enrollments')->where('child_id', $childId)->whereNull('end_date')
+                ->update(['end_date' => now()->toDateString()]);
+            DB::table('children')->where('id', $childId)->update([
+                'enrollment_status' => 'withdrawn',
+                'withdrawn_at' => now()->toDateString(),
+                'waitlist_position' => null,
+                'updated_at' => now(),
+            ]);
+        });
 
         $this->reindexWaitlist($family->centre_id);
 

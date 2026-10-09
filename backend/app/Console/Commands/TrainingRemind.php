@@ -33,6 +33,9 @@ class TrainingRemind extends Command
 
         $open = DB::table('training_assignments as ta')
             ->join('training_videos as v', 'v.id', '=', 'ta.video_id')
+            // Only people still with us (a closed account is not reminded).
+            ->join('users as tu', 'tu.id', '=', 'ta.user_id')->whereNull('tu.deleted_at')
+            ->tap(fn ($q) => \App\Support\Audience::excludeOff($q, 'tu'))
             ->leftJoin('training_progress as p', function ($j) { $j->on('p.video_id', '=', 'ta.video_id')->on('p.user_id', '=', 'ta.user_id'); })
             ->whereNull('ta.cancelled_at')->whereNotNull('ta.due_on')->whereNull('p.completed_at')->where('v.status', 'published')
             ->get(['ta.id', 'ta.agency_id', 'ta.user_id', 'ta.due_on', 'ta.reminded_due_at', 'ta.reminded_overdue_at', 'v.title']);

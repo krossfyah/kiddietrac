@@ -45,7 +45,8 @@ final class CalendarOverlayController extends Controller
 
         /* Same rule. This overlay carries children's names and birthdays, and a
            centre-18 director was seeing centre-16 children on it. */
-        $centreIds = \App\Support\Visibility::centreIds((int) $agencyId, $request->user());
+        // Open centres only — a closed provider's closures and birthdays are not "this month" (2026-10-09).
+        $centreIds = \App\Support\Live::onlyOpenCentres(\App\Support\Visibility::centreIds((int) $agencyId, $request->user()));
         if (! $centreIds) {
             return response()->json(['events' => []]);
         }

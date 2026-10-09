@@ -78,11 +78,14 @@ class DigestStatusController extends Controller
             }
             $scopeCentreIds = [(int) $centreId];
         } else {
-            $scopeCentreIds = array_map('intval', $visibleCentreIds);
+            $scopeCentreIds = \App\Support\Live::onlyOpenCentres(array_map('intval', $visibleCentreIds));
         }
 
         $childrenQuery = Child::query()
             ->select(['children.id', 'children.first_name', 'children.last_name'])
+            // Enrolled only: an enrolment left open after a withdrawal listed a withdrawn
+            // child as "no digest sent" (2026-10-09).
+            ->where(fn ($q) => \App\Support\Live::enrolledChildren($q, 'children'))
             ->orderBy('children.last_name')
             ->whereHas('currentEnrollment.room', function ($q) use ($scopeCentreIds) {
                 $q->whereIn('centre_id', $scopeCentreIds ?: [0]);

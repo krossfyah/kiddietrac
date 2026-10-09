@@ -29,14 +29,14 @@ final class AgencyController extends Controller
         if ($allMode) {
             $agencyId = null;
             $agency = null;
-            $centres = DB::table("centres")->whereNull("deleted_at")->get();
+            $centres = \App\Support\Live::centres(DB::table("centres"))->get();   // open only, not just undeleted (2026-10-09)
         } else {
             $agencyId = $this->activeAgencyId($request);
             if (!$agencyId) {
                 return response()->json(["message" => "No agency access"], 403);
             }
             $agency = DB::table("agencies")->where("id", $agencyId)->first();
-            $centres = DB::table("centres")->where("agency_id", $agencyId)->whereNull("deleted_at")->get();
+            $centres = \App\Support\Live::centres(DB::table("centres"))->where("agency_id", $agencyId)->get();
         }
 
         $centreStats = [];

@@ -48,6 +48,8 @@ class CheckinReminderCommand extends Command
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
             ->join('agencies as a', 'a.id', '=', 'ce.agency_id')
+            // Open centre, family still with us (App\Support\Live, 2026-10-09).
+            ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families($q, 'f'), 'ce'))
             ->whereNull('c.deleted_at')
             ->where('c.enrollment_status', 'enrolled')
             ->select([

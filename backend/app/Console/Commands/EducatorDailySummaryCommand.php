@@ -55,6 +55,7 @@ class EducatorDailySummaryCommand extends Command
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->join('centres as ce', 'ce.id', '=', 'ra.centre_id')
             ->join('agencies as a', 'a.id', '=', 'ce.agency_id')
+            ->tap(fn ($q) => \App\Support\Live::centres($q, 'ce'))   // open centres only
             ->where('ra.role', 'educator')->where('ra.active', 1)
             ->whereNotNull('u.email')->whereNull('u.deleted_at')
             ->when($onlyUser, fn ($q) => $q->where('u.id', $onlyUser))

@@ -291,12 +291,13 @@ final class OperationsV2Controller extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         if (! $agencyId) return response()->json(['centres' => [], 'children' => []]);
-        $centres = DB::table('centres')->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name']);
-        $children = DB::table('children as c')
+        /* Open centres and enrolled children only (2026-10-09: the picker offered the two
+           closed providers and every withdrawn child — App\Support\Live is the one rule). */
+        $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name']);
+        $children = \App\Support\Live::enrolledChildren(DB::table('children as c'), 'c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->whereIn('f.centre_id', $centres->pluck('id'))
-            ->whereNull('c.deleted_at')
-            ->orderBy('c.first_name')->get(['c.id', 'c.first_name', 'c.last_name']);
+            ->orderBy('c.first_name')->get(['c.id', 'c.first_name', 'c.last_name', 'f.centre_id']);
         return response()->json(['centres' => $centres, 'children' => $children]);
     }
 
@@ -319,9 +320,10 @@ final class OperationsV2Controller extends Controller
         ]);
         $this->assertCentreAccess($request, (int) $data['centre_id']);
         $centre = DB::table('centres')->where('id', $data['centre_id'])->first();
-        $child = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+        abort_unless($centre && \App\Support\Live::centreOpen((int) $centre->id), 422, 'That centre is closed.');
+        $child = \App\Support\Live::enrolledChildren(DB::table('children as c'), 'c')->join('families as f', 'f.id', '=', 'c.family_id')
             ->where('c.id', $data['child_id'])->where('f.centre_id', $centre->id)->first(['c.id']);
-        abort_unless($child, 404, 'Child not found at that centre');
+        abort_unless($child, 404, 'Child not found at that centre (or no longer enrolled)');
         $policy = \App\Support\LatePickups::policy((int) $centre->agency_id);
 
         $pickup = Carbon::parse($data['pickup_at']);
@@ -381,6 +383,7 @@ final class OperationsV2Controller extends Controller
         $rooms = DB::table('rooms as r')
             ->join('centres as c', 'c.id', '=', 'r.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->where(fn ($q) => \App\Support\Live::centres($q, 'c'))
             ->select('r.id', 'r.name', 'r.centre_id', 'c.name as centre_name', 'r.capacity as licensed_capacity')
             ->get();
 
@@ -397,7 +400,7 @@ final class OperationsV2Controller extends Controller
                 ->count();
             // Pick the standard for the youngest child in this room
             $oldestMonths = DB::table('children')->where('primary_room_id', $room->id)
-                ->whereNull('deleted_at')
+                ->whereNull('deleted_at')->where('enrollment_status', 'enrolled')
                 ->select(DB::raw('MIN(TIMESTAMPDIFF(MONTH, date_of_birth, NOW())) as min_age'))
                 ->value('min_age');
             $oldestMonths = (int) $oldestMonths;
@@ -512,6 +515,7 @@ final class OperationsV2Controller extends Controller
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->where(fn ($q) => \App\Support\Live::centres($q, 'c'))
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth',
@@ -619,7 +623,7 @@ final class OperationsV2Controller extends Controller
         }
         abort_unless($agencyId, 403);
 
-        $centres = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')
+        $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)
             ->orderBy('name')->get(['id', 'name']);
         $centreIds = $centres->pluck('id')->all();
         if (! $centreIds) {

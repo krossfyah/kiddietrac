@@ -100,7 +100,8 @@ class HccFormController extends Controller
     {
         $agencyId = $this->agencyId($request);
         if (! $agencyId) return response()->json(['centres' => []]);
-        $centres = DB::table('centres')->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name', 'city', 'province']);
+        // The picker for a NEW form: open providers only (2026-10-09); past forms still list.
+        $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name', 'city', 'province']);
         return response()->json(['centres' => $centres]);
     }
 

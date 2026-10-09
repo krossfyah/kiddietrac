@@ -59,6 +59,7 @@ class EducatorRoomController extends Controller
             ->join('centres as c', 'c.id', '=', 'r.centre_id')
             ->where('c.agency_id', $agencyId)
             ->when($scope !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
+            ->where(fn ($q) => \App\Support\Live::centres($q, 'c'))   // closed providers' rooms are not assignable (2026-10-09)
             ->where(function ($q) { $q->where('r.active', 1)->orWhereNull('r.active'); })
             ->orderBy('c.name')->orderBy('r.name')
             ->get(['r.id', 'r.name', 'r.age_group', 'c.id as centre_id', 'c.name as centre_name']);
@@ -84,6 +85,8 @@ class EducatorRoomController extends Controller
             ->whereIn('ra.role', ['educator', 'home_visitor'])
             ->when($scope !== null, fn ($q) => $q->whereIn('ra.centre_id', $scope ?: [0]))
             ->whereNull('u.deleted_at')
+            // A role row on a closed centre is not a posting (2026-10-09).
+            ->where(fn ($q) => $q->whereNull('ra.centre_id')->orWhere(fn ($w) => \App\Support\Live::centres($w, 'c')))
             ->orderBy('u.first_name')
             ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'ra.role',
                    'ra.centre_id', 'c.name as centre_name']);

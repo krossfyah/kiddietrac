@@ -166,7 +166,7 @@ final class SendCampaignEmailsCommand extends Command
     private function resolveAudience(object $c): array
     {
         $centreScope = $c->centre_id ? [(int) $c->centre_id]
-            : DB::table('centres')->where('agency_id', $c->agency_id)->whereNull('deleted_at')->pluck('id')->all();
+            : \App\Support\Live::centreIds((int) $c->agency_id);
 
         if ($c->audience === 'staff') {
             return DB::table('role_assignments as ra')

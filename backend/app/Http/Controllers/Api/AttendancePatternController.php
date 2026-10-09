@@ -231,6 +231,10 @@ final class AttendancePatternController extends Controller
             ->when($agencyId !== null, fn ($q) => $q->where('c.agency_id', $agencyId))
             ->when($childIds !== null, fn ($q) => $q->whereIn('ch.id', $childIds))
             ->whereNull('ch.deleted_at')
+            /* Waitlisted / starting-soon children stay (see below); WITHDRAWN children and
+               closed centres do not (2026-10-09 — both were on this overview). */
+            ->where(fn ($q) => \App\Support\Live::children($q, 'ch'))
+            ->where(fn ($q) => \App\Support\Live::centres($q, 'c'))
             // EVERY child in the agency, not only those whose status is exactly
             // 'enrolled'. Dropping the others is why this screen "did not pick up
             // all the kids": a child starting next month, on hold or waitlisted

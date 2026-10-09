@@ -56,8 +56,13 @@ class ClosureReminderCommand extends Command
         $dry = (bool) $this->option('dry-run');
         $sent = 0;
 
-        foreach (DB::table('centre_closures as cc')
-            ->join('centres as c', 'c.id', '=', 'cc.centre_id')
+        /* OPEN CENTRES ONLY (2026-10-09). Holidays are generated a year ahead for every
+           centre, so a provider that closes keeps its future closure rows — and on
+           Thanksgiving both closed providers (Priscilla Abankwa, Chearstine Fitzpatrick)
+           announced they were "closed on Monday" to the office and to a parent. A closed
+           centre has nobody to tell. App\Support\Live is the one definition of open. */
+        foreach (\App\Support\Live::centres(DB::table('centre_closures as cc')
+            ->join('centres as c', 'c.id', '=', 'cc.centre_id'), 'c')
             ->whereDate('cc.closure_date', '>=', now()->subDay()->toDateString())
             ->get(['cc.*', 'c.name as centre_name', 'c.agency_id']) as $row) {
 
@@ -173,7 +178,15 @@ class ClosureReminderCommand extends Command
         $provider = $this->providerNameFor($centreId);
 
         // Families at the centre, and the staff who work there.
-        $familyIds = DB::table('families')->where('centre_id', $centreId)->whereNull('deleted_at')->pluck('id');
+        /* Families still WITH the centre: not departed, and with at least one child who
+           has not been withdrawn. Family 87 had departed in all but name (its only child
+           withdrawn 2026-09-12) and its parent was still told about a closed provider's
+           holiday. */
+        $familyIds = \App\Support\Live::families(DB::table('families as f'), 'f')
+            ->where('f.centre_id', $centreId)
+            ->whereExists(fn ($q) => \App\Support\Live::children($q->from('children as ch'), 'ch')
+                ->whereColumn('ch.family_id', 'f.id')->select(DB::raw(1)))
+            ->pluck('f.id');
         // Deborah Black is deactivated and was still on this list — a switched-off
         // account is not soft-deleted, so deleted_at alone does not catch it.
         $parents = \App\Support\Audience::excludeOff(

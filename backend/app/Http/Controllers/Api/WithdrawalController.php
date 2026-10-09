@@ -195,8 +195,9 @@ final class WithdrawalController extends Controller
         DB::transaction(function () use ($child, $effective, $id) {
             DB::table('enrollments')->where('child_id', $child->id)->whereNull('end_date')
                 ->update(['end_date' => $effective]);
+            // withdrawn_at too: readers and reports date the departure from it (2026-10-09).
             DB::table('children')->where('id', $child->id)
-                ->update(['enrollment_status' => 'withdrawn', 'updated_at' => now()]);
+                ->update(['enrollment_status' => 'withdrawn', 'withdrawn_at' => $effective, 'updated_at' => now()]);
 
             // No enrolled children left in the family → deactivate the guardian users.
             $remaining = DB::table('children')->where('family_id', $child->family_id)

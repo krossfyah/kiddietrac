@@ -31,6 +31,7 @@ final class YearEndPortfolioCommand extends Command
         $children = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families($q, 'f'), 'c'))
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ch.family_id',

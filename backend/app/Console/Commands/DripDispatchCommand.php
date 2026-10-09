@@ -96,6 +96,7 @@ final class DripDispatchCommand extends Command
                     ->join('families as f', 'f.id', '=', 'ch.family_id')
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->where('c.agency_id', $c->agency_id)
+                    ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families(\App\Support\Live::enrolledChildren($q, 'ch'), 'f'), 'c'))
                     ->whereDate('ch.enrolled_at', '=', $cutoff->toDateString())
                     ->select('ch.id', 'f.primary_email as email', DB::raw('NULL as user_id'), DB::raw("'enrollment' as type"))
                     ->get()->toArray() ?: [];
@@ -104,6 +105,7 @@ final class DripDispatchCommand extends Command
                     ->join('families as f', 'f.id', '=', 'ch.family_id')
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->where('c.agency_id', $c->agency_id)
+                    ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families(\App\Support\Live::enrolledChildren($q, 'ch'), 'f'), 'c'))
                     ->whereRaw('DATE_FORMAT(ch.date_of_birth, "%m-%d") = ?', [$cutoff->format('m-d')])
                     ->select('ch.id', 'f.primary_email as email', DB::raw('NULL as user_id'), DB::raw("'birthday' as type"))
                     ->get()->toArray() ?: [];

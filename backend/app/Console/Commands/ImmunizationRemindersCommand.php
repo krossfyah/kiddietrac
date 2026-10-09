@@ -61,7 +61,7 @@ class ImmunizationRemindersCommand extends Command
                 continue;
             }
 
-            $outstanding = Cfg::outstanding((int) $agency->id, $cfg);
+            $outstanding = self::onlyLive(Cfg::outstanding((int) $agency->id, $cfg));
             if ($outstanding['count'] === 0) {
                 /* Nothing outstanding means nothing to say. A reminder that arrives
                    every week to report zero is the fastest way to teach a team to
@@ -400,6 +400,40 @@ class ImmunizationRemindersCommand extends Command
 
        @return array<int,object{email:string,user_id:int,centreIds:int[]}>
      */
+    /**
+     * STILL HERE, CHECKED AT THE SENDER (2026-10-09). The outstanding list came from open
+     * enrolments alone, and an enrolment re-opened for a withdrawn child (Sullivan Black,
+     * withdrawn 31 Aug) put her on the 7 Oct reminder to the office and to her former
+     * provider. Whatever the list's source says, a reminder only names a child who is
+     * enrolled today, in an open enrolment, at an open centre.
+     */
+    private static function onlyLive(array $outstanding): array
+    {
+        $ids = array_values(array_unique(array_map(fn ($c) => (int) ($c['id'] ?? 0), $outstanding['children'] ?? [])));
+        if (! $ids) {
+            return $outstanding;
+        }
+        $q = DB::table('children as ch')
+            ->join('enrollments as e', 'e.child_id', '=', 'ch.id')
+            ->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->join('centres as c', 'c.id', '=', 'r.centre_id')
+            ->whereIn('ch.id', $ids);
+        \App\Support\Live::enrolledChildren($q, 'ch');
+        \App\Support\Live::enrolments($q, 'e');
+        \App\Support\Live::centres($q, 'c');
+        $live = array_flip($q->distinct()->pluck('ch.id')->map(fn ($v) => (int) $v)->all());
+
+        $kept = array_values(array_filter($outstanding['children'], fn ($c) => isset($live[(int) ($c['id'] ?? 0)])));
+        $dropped = count($outstanding['children']) - count($kept);
+        if ($dropped > 0) {
+            Log::warning('Immunization reminder: dropped children who are no longer enrolled', ['count' => $dropped]);
+        }
+        $outstanding['children'] = $kept;
+        $outstanding['count'] = count($kept);
+
+        return $outstanding;
+    }
+
     private function audience(int $agencyId, array $cfg): array
     {
         $roles = [];
@@ -416,8 +450,7 @@ class ImmunizationRemindersCommand extends Command
             return [];
         }
 
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)
-            ->whereNull('deleted_at')->pluck('id');
+        $centreIds = collect(\App\Support\Live::centreIds($agencyId));
 
         $people = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')

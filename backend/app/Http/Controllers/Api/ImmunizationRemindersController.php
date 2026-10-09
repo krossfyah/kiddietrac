@@ -204,8 +204,7 @@ final class ImmunizationRemindersController extends Controller
         $this->assertAccess($request);
         $agencyId = $this->resolveAgencyId($request);
 
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)
-            ->whereNull('deleted_at')->pluck('id');
+        $centreIds = collect(\App\Support\Live::centreIds($agencyId));
         if ($centreIds->isEmpty()) {
             return response()->json(['records' => [], 'outstanding' => 0]);
         }
@@ -217,7 +216,11 @@ final class ImmunizationRemindersController extends Controller
             ->join('enrollments as e', 'e.child_id', '=', 'ch.id')
             ->join('rooms as r', 'r.id', '=', 'e.room_id')
             ->whereIn('r.centre_id', $centreIds)
-            ->whereNull('ch.deleted_at')
+            /* Children still enrolled, through an enrolment that is still open — an open
+               enrolment alone is not enough: withdrawals that left one open put a withdrawn
+               child back on the list (2026-10-09). */
+            ->where(fn ($q) => \App\Support\Live::enrolments($q, 'e'))
+            ->where(fn ($q) => \App\Support\Live::enrolledChildren($q, 'ch'))
             ->distinct()->pluck('ch.id')->all();
 
         $records = ParentImmunizationRecordController::recordsFor($childIds);
@@ -256,8 +259,7 @@ final class ImmunizationRemindersController extends Controller
      */
     public static function outstanding(int $agencyId, array $cfg): array
     {
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)
-            ->whereNull('deleted_at')->pluck('id');
+        $centreIds = collect(\App\Support\Live::centreIds($agencyId));
         if ($centreIds->isEmpty()) {
             return ['count' => 0, 'children' => []];
         }
@@ -268,7 +270,9 @@ final class ImmunizationRemindersController extends Controller
             ->join('centres as c', 'c.id', '=', 'r.centre_id')
             ->whereIn('c.id', $centreIds)
             ->whereNull('e.end_date')
-            ->whereNull('ch.deleted_at')
+            // Sullivan Black, withdrawn 31 Aug, was on the 7 Oct reminder through an
+            // enrolment left open: the child's own status decides too (2026-10-09).
+            ->where(fn ($q) => \App\Support\Live::enrolledChildren($q, 'ch'))
             ->distinct()
             ->get([
                 'ch.id', 'ch.first_name', 'ch.last_name', 'ch.preferred_name',

@@ -53,6 +53,7 @@ class IncidentRemindersCommand extends Command
             ->join('children as c', 'c.id', '=', 'i.child_id')
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::children($q, 'c'), 'ce'))
             ->whereIn('i.status', self::OPEN)
             ->whereNull('c.deleted_at')
             ->when($onlyAgency, fn ($q) => $q->where('ce.agency_id', $onlyAgency))

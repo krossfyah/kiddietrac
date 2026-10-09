@@ -202,6 +202,7 @@ class CareScheduleController extends Controller
                     DB::table('enrollments')->where('id', $existing->id)
                         ->update(['schedule' => json_encode(array_values($days))]);
                 } else {
+                    \App\Http\Controllers\Concerns\EnrolmentGuard::assert((int) $childId, (int) $roomId);
                     DB::table('enrollments')->insert([
                         'child_id' => $childId,
                         'room_id' => $roomId,
