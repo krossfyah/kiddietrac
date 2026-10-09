@@ -6723,7 +6723,23 @@
       var iBill = selEl(f.billing_split, [{ value: 'single', label: 'Single payer' }, { value: 'split_50_50', label: 'Split 50 / 50' }, { value: 'custom', label: 'Custom split' }]);
       var iNotes = Dom.el('textarea', { style: IN + 'min-height:60px;font-family:inherit;' }); iNotes.value = f.notes || '';
       pane.appendChild(fwrap('Family name *', iName));
-      pane.appendChild(fwrap('Centre', iCentre));
+      /* Locked once a child is enrolled (2026-10-09): the provider changes only through
+         ⋮ → Move to another provider, which moves the children's rooms, tells the parents
+         and both educators, and keeps the history. The server refuses it here too. */
+      if (DATA.provider_locked) {
+        iCentre.disabled = true;
+        iCentre.style.background = '#F1F5F9'; iCentre.style.color = '#64748B'; iCentre.style.cursor = 'not-allowed';
+        var cw = fwrap('Provider', iCentre);
+        var hint = Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin:-6px 0 12px;line-height:1.45;' },
+          '🔒 A child here is enrolled with this provider. To change provider, use ');
+        var mv = Dom.el('a', { href: '#', style: 'color:#1F6080;font-weight:700;' }, 'Move to another provider');
+        mv.addEventListener('click', function (ev) { ev.preventDefault(); try { Shell.Modal.close(); } catch (e) {} openFamilyTransfer(family, content); });
+        hint.appendChild(mv);
+        hint.appendChild(document.createTextNode(' — it moves the children\u2019s rooms, tells the parents and both educators, and keeps the history.'));
+        pane.appendChild(cw); pane.appendChild(hint);
+      } else {
+        pane.appendChild(fwrap('Provider', iCentre));
+      }
       var g1 = grid('1fr 1fr'); g1.appendChild(ph.wrap); g1.appendChild(fwrap('Primary email', iEmail)); pane.appendChild(g1);
       pane.appendChild(fwrap('Street address', iAddr));
       var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province', iProv)); g2.appendChild(fwrap('Postal code', iPost)); pane.appendChild(g2);
@@ -6775,7 +6791,7 @@
         if (!iName.value.trim()) { setMsg('Family name is required.'); return; }
         save.disabled = true; setMsg('Saving…', true);
         try {
-          await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, billing_split: iBill.value, notes: iNotes.value.trim() || null });
+          await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: DATA.provider_locked ? undefined : parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, billing_split: iBill.value, notes: iNotes.value.trim() || null });
           // Going back to one payer also resets the shares (the primary carries 100%).
           if (iBill.value === 'single') { try { await Api.put('/admin/families/' + f.id + '/billing-split', { mode: 'single' }); } catch (e2) {} }
           setMsg('✓ Family saved', true); refreshList();

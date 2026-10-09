@@ -3371,6 +3371,8 @@ final class AdminController extends Controller
         }
 
         return response()->json([
+            // The edit form locks its Provider field when this is true (see updateFamily).
+            'provider_locked' => self::familyHasEnrolment((int) $familyId),
             'family' => $family,
             // So the screen can say plainly that this record has left.
             'is_archived' => (bool) ($family->deleted_at ?? null),
@@ -4024,6 +4026,13 @@ final class AdminController extends Controller
     /**
      * v22p11 — agency_admin can edit any family in their agency.
      */
+    /** Has any child in this family ever been enrolled (a placement, current or past)? */
+    public static function familyHasEnrolment(int $familyId): bool
+    {
+        return DB::table('enrollments as e')->join('children as c', 'c.id', '=', 'e.child_id')
+            ->where('c.family_id', $familyId)->exists();
+    }
+
     public function updateFamily(Request $request, int $familyId): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
@@ -4050,6 +4059,25 @@ final class AdminController extends Controller
             'billing_split' => ['sometimes', 'in:single,split_50_50,custom'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
+
+        /* A PROVIDER CHANGE IS A MOVE, NOT AN EDIT (2026-10-09: "when a child was enrolled
+           to a provider initially and needs to move to a new provider dont allow the family
+           record to edit and change the provider and force this to use the new provider
+           function"). Changing families.centre_id here moved the family's label and nothing
+           else: the children stayed enrolled in the old provider's rooms (on the old roster,
+           in a room of a provider they no longer belong to — enr#66 all over again), no
+           parent letter, no notice to either educator, no placement history. Once any child
+           in the family has an enrolment, the only way to another provider is Families →
+           ⋮ → Move to another provider (ChildController::familyTransfer), which does all of
+           that in one transaction. Before the first enrolment it is still a plain setting. */
+        if (array_key_exists('centre_id', $data) && (int) $data['centre_id'] !== (int) $family->centre_id
+            && self::familyHasEnrolment((int) $familyId)) {
+            return response()->json([
+                'message' => 'This family already has a child enrolled with their provider. To change provider, use Families → ⋮ → Move to another provider, so the children move rooms, parents are told and the history is kept.',
+                'errors' => ['centre_id' => ['Use "Move to another provider" to change this family\'s provider.']],
+                'use' => 'move_to_another_provider',
+            ], 422);
+        }
 
         // If centre is being moved, verify the new centre is in this agency too.
         if (isset($data['centre_id']) && ! in_array((int) $data['centre_id'], $centreIds, true)) {
