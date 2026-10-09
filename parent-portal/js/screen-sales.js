@@ -666,11 +666,12 @@
         ta.focus();
       } }, ['✏️ Edit']) : '';
       timeline.appendChild(el('div', { style: 'border-left:2px solid ' + accent + ';padding:2px 0 2px 10px' }, [
-        el('div', { style: 'font-size:12px;color:#64748B' }, [
-          (ACT_ICON[a.type] || '•') + ' ',
-          el('span', { style: 'font-weight:700;color:#334155' }, [ACT_LABEL[a.type] || (a.type.charAt(0).toUpperCase() + a.type.slice(1))]),
-          a.user_name ? ' · ' + a.user_name : '',
-          a.created_at ? el('span', { style: 'margin-left:6px;color:#94A3B8;white-space:nowrap', title: 'Logged ' + fmtStamp(a.created_at) }, ['🕒 ' + fmtStamp(a.created_at)]) : '',
+        /* WHEN · WHO · WHAT (2026-10-09: "make the date/timestamp then user name the first
+           thing followed by activity"). */
+        el('div', { style: 'font-size:12px;color:#64748B;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 6px' }, [
+          a.created_at ? el('span', { style: 'color:#334155;font-weight:700;white-space:nowrap', title: 'Logged ' + fmtStamp(a.created_at) }, ['🕒 ' + fmtStamp(a.created_at)]) : '',
+          el('span', { style: 'color:#334155;font-weight:600' }, ['· ' + (a.user_name || 'Website / system')]),
+          el('span', { style: 'color:#64748B' }, ['· ' + (ACT_ICON[a.type] || '•') + ' ' + (ACT_LABEL[a.type] || (a.type.charAt(0).toUpperCase() + a.type.slice(1)))]),
           isFu && a.due_date ? el('span', { style: 'margin-left:6px;font-weight:700;color:' + (a.done ? '#15803D' : '#C2410C') }, [a.done ? '✓ done' : ('due ' + fmtDate(a.due_date))]) : '',
           isFu && !a.done ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: async function (ev2) { ev2.preventDefault(); try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} } }, ['mark done']) : '',
           a.edited_at ? el('span', { style: 'margin-left:6px;color:#94A3B8;font-style:italic', title: 'Edited ' + fmtStamp(a.edited_at) }, ['· edited ' + fmtStamp(a.edited_at)]) : '',

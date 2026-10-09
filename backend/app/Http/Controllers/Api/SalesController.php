@@ -776,7 +776,7 @@ class SalesController extends Controller
         $lead->last_activity_at = now();
         $lead->saveQuietly();
 
-        return SalesActivity::create([
+        $act = SalesActivity::create([
             'lead_id'  => $lead->id,
             'user_id'  => auth()->id(),
             'type'     => $type,
@@ -784,6 +784,65 @@ class SalesController extends Controller
             'due_date' => $due,
             'done'     => $type === 'followup' ? false : true,
         ]);
+
+        /* THE TEAM HEARS ABOUT IT (2026-10-09: "when a new activity is generated send email
+           out to the superadmin/sales team"). Every entry except field-change records (each
+           save of the lead's details would mail the team) and "Lead created" (the new-lead
+           email already says so). */
+        if ($type !== 'edit' && ! ($type === 'stage' && $body === 'Lead created')) {
+            $this->notifyActivity($lead, $act);
+        }
+
+        return $act;
+    }
+
+    /**
+     * Superadmins (To) and sales reps (Cc) — active roles on live, active accounts —
+     * INCLUDING whoever logged it (Anthony, 2026-10-09: "Yes, email me too": while he is
+     * the whole sales team the inbox is the record). Website enquiries, contact forms and
+     * bookings send their own emails and do not come through here. Never breaks the save.
+     */
+    private function notifyActivity(SalesLead $lead, SalesActivity $act): void
+    {
+        try {
+            $people = fn (string $role) => User::query()
+                ->whereHas('roleAssignments', fn ($q) => $q->where('role', $role)->where('active', true))
+                ->whereNull('deleted_at')->where('status', 'active')
+                ->whereNotNull('email')->where('email', '!=', '')
+                ->pluck('email')->map(fn ($e) => mb_strtolower(trim($e)))->unique()->values()->all();
+            $to = $people('platform_admin');
+            $cc = array_values(array_diff($people('sales_rep'), $to));
+            if (! $to) { $to = $cc; $cc = []; }
+            if (! $to) return;
+
+            $actor = auth()->user();
+            $who = $actor ? trim($actor->first_name . ' ' . $actor->last_name) : 'KiddieTrac';
+            $label = ['note' => '📝 Note', 'call' => '📞 Call', 'email' => '📧 Email', 'meeting' => '🤝 Meeting',
+                'followup' => '⏰ Follow-up', 'stage' => '↗️ Stage change'][$act->type] ?? ucfirst($act->type);
+            $leadName = $lead->company ?: ($lead->name ?: ('Lead #' . $lead->id));
+            $tz = 'America/Toronto';
+            $when = \Illuminate\Support\Carbon::parse($act->created_at)->setTimezone($tz)->format('D j M Y, g:i A T');
+            $due = $act->due_date ? \Illuminate\Support\Carbon::parse($act->due_date)->format('D j M Y') : null;
+
+            $html = '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0D1B2A;max-width:560px">'
+                . '<div style="font-size:12px;color:#5a7080;margin:0 0 4px">' . e($when) . ' · ' . e($who) . '</div>'
+                . '<h2 style="margin:0 0 4px;font-size:19px">' . e($label) . ' — ' . e($leadName) . '</h2>'
+                . ($lead->company && $lead->name ? '<p style="color:#5a7080;margin:0 0 12px">' . e($lead->name) . '</p>' : '')
+                . ($act->body ? '<div style="background:#F8FAFC;border-left:3px solid #7C3AED;border-radius:0 8px 8px 0;padding:10px 14px;font-size:14px;line-height:1.5;white-space:normal">' . nl2br(e($act->body)) . '</div>' : '')
+                . ($due ? '<p style="margin:10px 0 0;font-weight:700;color:#C2410C">Due ' . e($due) . '</p>' : '')
+                . '<p style="margin:18px 0 0"><a href="https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $lead->id . '&tab=activity'
+                . '" style="background:#7C3AED;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">Open lead →</a></p>'
+                . '</div>';
+            $subject = $label . ': ' . $leadName . ' — ' . $who;
+
+            Mail::html($html, function ($m) use ($to, $cc, $subject) {
+                \App\Support\MailScope::platform($m);   // sales, not tenant mail
+                $m->to($to)->subject($subject);
+                if ($cc) $m->cc($cc);
+            });
+        } catch (\Throwable $e) {
+            // an email must never block logging the activity
+        }
     }
 
     private function openFollowup(SalesLead $lead, string $due, string $body): void
