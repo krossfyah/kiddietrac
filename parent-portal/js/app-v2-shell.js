@@ -370,6 +370,8 @@
         { label: 'Settings', items: [
           { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
+          // Scheduled reminders to the agency's own reviewers (2026-10-09).
+          { hash: 'notification-settings', label: 'Notifications',         icon: '🔔' },
           { hash: 'payment-providers',  label: 'Payment providers',       icon: '💳' },
           { hash: 'learning-framework', label: 'Learning framework',      icon: '🧭' },
           /* SETTINGS, not Reseller. Backups are platform-level (one database sits behind
@@ -937,6 +939,7 @@
     'calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',
     'auto-signoff': 'Close shifts and days somebody forgot to close.',
     'clock-settings': 'Reminders about the time clock, and closing what somebody forgot.',
+    'notification-settings': 'Reminders your admins and directors get, and how often — such as forms waiting for counter-signature.',
     'payment-providers': 'Your own Zum Rails and Stripe accounts, per agency.',
     'billing-settings': 'Tax rate and other invoicing defaults.',
     'phone-voicemail': 'The toll-free greeting (voice and wording) and the voicemails callers leave.',

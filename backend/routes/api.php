@@ -2227,6 +2227,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/timeoff-reminders',         [\App\Http\Controllers\Api\TimeOffRemindersController::class, 'update']);
         Route::post ('/admin/timeoff-reminders/preview', [\App\Http\Controllers\Api\TimeOffRemindersController::class, 'preview']);
         Route::post ('/admin/timeoff-reminders/test',    [\App\Http\Controllers\Api\TimeOffRemindersController::class, 'test'])->middleware('throttle:6,1,toremtest');
+        // Settings → Notifications: reminders to counter-sign completed forms (2026-10-09).
+        Route::get  ('/admin/countersign-reminders',         [\App\Http\Controllers\Api\CountersignRemindersController::class, 'show']);
+        Route::post ('/admin/countersign-reminders',         [\App\Http\Controllers\Api\CountersignRemindersController::class, 'update']);
+        Route::post ('/admin/countersign-reminders/preview', [\App\Http\Controllers\Api\CountersignRemindersController::class, 'preview']);
+        Route::post ('/admin/countersign-reminders/test',    [\App\Http\Controllers\Api\CountersignRemindersController::class, 'test'])->middleware('throttle:6,1,csremtest');
         Route::patch('/admin/auto-signoff', [\App\Http\Controllers\Api\AutoSignOffController::class, 'update']);
         // Pay schedule — drives the "Next payroll" card on the overview.
         Route::get  ('/admin/payroll-settings', [\App\Http\Controllers\Api\PayrollSettingsController::class, 'show']);

@@ -41,6 +41,9 @@ Schedule::command('rsvp:send-reminders')->everyFiveMinutes()->withoutOverlapping
 // Time-off approval reminders: each agency's own schedule (Settings -> Clock settings ->
 // Time-off approvals) decides when its digest is due; the run is claimed per agency per day.
 Schedule::command('timeoff:remind-approvers')->everyFifteenMinutes()->withoutOverlapping(14);
+// Counter-signature reminders: one digest per admin/director of completed forms still
+// waiting for review, on each agency's schedule (Settings → Notifications). 2026-10-09.
+Schedule::command('forms:remind-countersign')->everyFifteenMinutes()->withoutOverlapping(14);
 
 /* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
    had accumulated, 281 of them already expired: full-access credentials (`["*"]`) sitting
