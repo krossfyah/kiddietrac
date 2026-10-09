@@ -389,12 +389,33 @@
      tap. Pointer events cover mouse and touch alike. */
   var PRESS = w.PointerEvent ? 'pointerdown' : 'mousedown';
 
+  /* A FINGER ARMS, THE CLICK OPENS (2026-10-09). This opened on pointerdown for every
+     pointer, so on a phone a scroll that merely STARTED on this control opened it — the
+     sheet came up and the page did not move. Anthony: "when scrolling in mobile apk
+     mode ... it selects certain functions". Measured with real touch input: a 150px drag
+     from a dropdown or date field opened the sheet and scrolled 0px, on every screen
+     tried. A press cannot tell a tap from the start of a scroll; only the click can —
+     the browser sends no click after a scroll. So a touch or pen press is still
+     swallowed (that is what keeps the OS picker away) but only arms the control, and
+     the click that follows opens it. A mouse still opens on the press, as before. */
+  var armed = null;   // { el, at } — the control a finger pressed, waiting for its click
+
   function intercept(e) {
     var el = e.target;
     if (!eligible(el)) return;
     e.preventDefault();
     e.stopPropagation();
-    if (e.type !== PRESS) return;
+    if (e.type === 'pointerdown' && e.pointerType && e.pointerType !== 'mouse') {
+      armed = { el: el, at: Date.now() };
+      return;
+    }
+    if (e.type === 'click') {
+      var tapped = armed && armed.el === el && (Date.now() - armed.at) < 1500;
+      armed = null;
+      if (!tapped) return;
+    } else if (e.type !== PRESS) {
+      return;
+    }
     try {
       // Stops the OS picker following the focus in some WebViews.
       el.blur();
