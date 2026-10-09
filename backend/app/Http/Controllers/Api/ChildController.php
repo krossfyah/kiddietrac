@@ -735,6 +735,30 @@ final class ChildController extends Controller
             Log::warning('Transfer notifications failed', ['child' => $childId, 'error' => $e->getMessage()]);
         }
 
+        /* THE NEW PROVIDER INTRODUCES THEMSELVES (2026-10-09, Anthony: "when the new child
+           was moved to the new educator did you wire up to send the new educator welcome to
+           the family?" — it did not). The change-of-provider letter says WHO and WHEN; the
+           provider welcome (ProviderWelcomeMailer, the same email a family gets at
+           enrolment) introduces them — photo, bio, how to reach them. Sent only when the
+           provider really changes: a different centre, or a room with someone new caring for
+           the child. A room shuffle under the same educator is not a new provider. Its own
+           try: a failure here must not hide that the transfer and the letter happened. */
+        $welcomeSent = 0;
+        try {
+            $newCarers = isset($newEducators) ? array_diff(array_unique($newEducators), array_unique($oldEducators ?? [])) : [];
+            if ((int) $toCentre->id !== (int) $fromCentre->id || $newCarers) {
+                $guardianRows = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                    ->where('g.family_id', $family->id)->whereNull('u.deleted_at')->whereNotNull('u.email')
+                    ->get(['u.email', 'u.first_name'])->map(fn ($u) => ['email' => $u->email, 'first_name' => $u->first_name])->all();
+                $firstNames = DB::table('children')->whereIn('id', $movingIds)->get()
+                    ->map(fn ($c) => $c->preferred_name ?: $c->first_name)->all();
+                $welcomeSent = \App\Support\ProviderWelcomeMailer::sendToFamily(
+                    (int) $toCentre->id, (int) $toCentre->agency_id, $guardianRows, $firstNames);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Transfer provider welcome failed', ['child' => $childId, 'error' => $e->getMessage()]);
+        }
+
         \App\Support\Audit::write([
             'user_id' => $userId,
             'agency_id' => (int) $toCentre->agency_id,
@@ -751,6 +775,7 @@ final class ChildController extends Controller
                 'effective_date' => $effective,
                 'moved_siblings' => $moveSiblings,
                 'reason' => $data['reason'] ?? null,
+                'provider_welcome_sent_to' => $welcomeSent,
             ]),
             'ip_address' => substr((string) $request->ip(), 0, 45),
             'created_at' => now(),
@@ -759,6 +784,7 @@ final class ChildController extends Controller
         return response()->json([
             'message' => $names.' transferred to '.$toCentre->name.', effective '.$effFmt.'.',
             'children_moved' => count($movingIds),
+            'provider_welcome_sent' => $welcomeSent > 0,
             'from_centre' => $fromLabel ?: $fromCentre->name,
             'to_centre' => $toCentre->name,
             'effective_date' => $effective,
