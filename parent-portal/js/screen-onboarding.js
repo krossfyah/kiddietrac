@@ -253,6 +253,7 @@
         photo_url:     user.photo_url || '',
         username:      user.username || '',
         provider_bio:  user.provider_bio || '',
+        date_of_birth: String(user.date_of_birth || '').slice(0, 10),
         // Preferred language → users.locale. Seed only if it's one of the offered
         // codes; the en-CA default won't match, so new users must pick one.
         locale:        (['en', 'fr', 'es', 'hi'].indexOf(user.locale) !== -1 ? user.locale : ''),
@@ -493,6 +494,12 @@
     box.appendChild(row);
     // Sex — mandatory. Drives the default avatar when no photo is uploaded.
     box.appendChild(input('Sex', 'sex', state.data.sex, 'select', null, ['Male', 'Female'], true));
+    /* DATE OF BIRTH — mandatory for educators (2026-10-09: "DOB and address info needs
+       to be mandatory for educators being onboarded including emergency contact"). The
+       server refuses to finish an educator's onboarding without it, too. */
+    if (role() === 'educator') {
+      box.appendChild(input('Date of birth', 'date_of_birth', state.data.date_of_birth, 'date', null, null, true));
+    }
     // Preferred language — mandatory. Sets the app locale (users.locale) so the
     // portal + emails speak the user's language from the first sign-in.
     var LANGS_ONB = [['en', 'English'], ['fr', 'Français'], ['es', 'Español'], ['hi', 'हिन्दी']];
@@ -700,16 +707,18 @@
   }
   function renderAddressStep(state) {
     var box = document.createElement('div');
-    box.appendChild(input('Street address',  'address_line1', state.address.address_line1));
+    // Required for educators (2026-10-09): address and one emergency contact.
+    var reqA = role() === 'educator';
+    box.appendChild(input('Street address',  'address_line1', state.address.address_line1, 'text', null, null, reqA));
     box.appendChild(input('Apt / unit (optional)', 'address_line2', state.address.address_line2));
     // City full-width, then Province + Postal side by side — the old 3-across
     // row squished the postal field on phones (it truncated "L9V1C4").
-    box.appendChild(input('City', 'city', state.address.city));
+    box.appendChild(input('City', 'city', state.address.city, 'text', null, null, reqA));
     var row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
     row.appendChild(input('Province', 'province', state.address.province, 'select', null,
-      ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT']));
-    row.appendChild(input('Postal code', 'postal_code', state.address.postal_code, 'text', 'M5G 1Z4'));
+      ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT'], reqA));
+    row.appendChild(input('Postal code', 'postal_code', state.address.postal_code, 'text', 'M5G 1Z4', null, reqA));
     box.appendChild(row);
 
     // Emergency contact — a titled card. Must be someone OTHER than the user
@@ -720,13 +729,13 @@
     ecHead.innerHTML = '<div style="font-size:12px;font-weight:800;color:#334155;letter-spacing:.4px;text-transform:uppercase;margin-bottom:3px;">Emergency contact</div>'
       + '<div style="font-size:12px;color:#64748B;margin-bottom:12px;">Someone <strong>other than yourself</strong> we can reach in an emergency.</div>';
     ec.appendChild(ecHead);
-    ec.appendChild(input('Full name', 'emergency_contact_name', state.address.emergency_contact_name));
+    ec.appendChild(input('Full name', 'emergency_contact_name', state.address.emergency_contact_name, 'text', null, null, reqA));
     var ecRow = document.createElement('div');
     ecRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
-    ecRow.appendChild(input('Relationship', 'emergency_contact_relation', state.address.emergency_contact_relation, 'text', 'e.g. spouse, parent'));
+    ecRow.appendChild(input('Relationship', 'emergency_contact_relation', state.address.emergency_contact_relation, 'text', 'e.g. spouse, parent', null, reqA));
     ecRow.appendChild(input('Email', 'emergency_contact_email', state.address.emergency_contact_email, 'email', 'name@example.com'));
     ec.appendChild(ecRow);
-    ec.appendChild(phoneInput('Phone', 'emergency_contact_phone', state.address.emergency_contact_phone));
+    ec.appendChild(phoneInput('Phone', 'emergency_contact_phone', state.address.emergency_contact_phone, reqA));
     box.appendChild(ec);
 
     // Additional emergency contacts (optional) — add as many as needed.

@@ -1718,6 +1718,11 @@
     if (sessionStorage.getItem('kt_is_platform_admin') === '1') {
       inviteRoleOpts.push({ v: 'platform_admin', l: '🌐 Platform admin (cross-agency)' });
     }
+    /* A BLANK FIRST (2026-10-09: "set role for users should have a blank for the options
+       vs a set option just in case someone hits save by accident"). The list opened on
+       "Centre director", so an accidental Apply/Save granted a real role. It now opens
+       on nothing, and saving refuses until a role is chosen. */
+    roleSelect.appendChild(Dom.el('option', { value: '', selected: 'selected' }, 'Choose a role…'));
     inviteRoleOpts.forEach(r => {
       const opt = Dom.el('option', { value: r.v }, r.l);
       roleSelect.appendChild(opt);
@@ -1830,6 +1835,12 @@
         onClick: async () => {
           const data = {};
           ['first_name', 'last_name', 'email', 'phone', 'role'].forEach(k => { data[k] = inputs[k].value; });
+          if (!data.role) {
+            status.style.color = '#B45309';
+            status.textContent = 'Choose a role for this person first.';
+            try { inputs.role.focus(); } catch (e) {}
+            return false;   // keep the dialog open (undefined would close it)
+          }
           // Block until a likely-duplicate is confirmed as a genuinely new person.
           if (dupHasMatches && !dupConfirm) {
             status.style.color = '#B45309';
@@ -2453,7 +2464,9 @@
        tabs are not offered (nor their data fetched) rather than shown failing. */
     const _dirMode = isDirectorView();
     const _detailsTab = mkTab('✏️ Details', paneDetails);
-    mkTab('👁 At a glance', paneGlance);
+    /* No "At a glance" tab here (2026-10-09: "remove at a glance tab when editing a user
+       next to the details tab"). Editing opens on Details; the summary was a second,
+       read-only copy of the same facts. The pane still builds, unseen. */
     mkTab('🔑 Sign-in & contact', paneAccess);
     if (!_dirMode) {
       mkTab('📎 Files & documents', paneFiles);
@@ -2519,20 +2532,26 @@
       KT.AccountPanes.security(secHost, subject, paneMode);
     })();
     root.appendChild(tabBar);
-    root.appendChild(paneDetails);
-    root.appendChild(paneGlance);
-    root.appendChild(paneAccess);
-    root.appendChild(paneFiles);
-    root.appendChild(paneStaff);
-    root.appendChild(paneChecks);
-    root.appendChild(paneClock);
-    root.appendChild(paneAccount);
-    root.appendChild(paneData);
+    /* A STEADY WINDOW (2026-10-09: "make sure the popup window doesnt resize when
+       navigating to subtabs"). The dialog took the height of whichever tab was showing,
+       so it jumped as you moved between them. The tabs now share one fixed-height area
+       that scrolls inside itself. */
+    const paneHost = Dom.el('div', { style: 'height:min(62vh, 680px);overflow-y:auto;overflow-x:hidden;padding-right:2px;' });
+    root.appendChild(paneHost);
+    paneHost.appendChild(paneDetails);
+    paneHost.appendChild(paneGlance);
+    paneHost.appendChild(paneAccess);
+    paneHost.appendChild(paneFiles);
+    paneHost.appendChild(paneStaff);
+    paneHost.appendChild(paneChecks);
+    paneHost.appendChild(paneClock);
+    paneHost.appendChild(paneAccount);
+    paneHost.appendChild(paneData);
     if (_isSelf) {
-      root.appendChild(paneContact);
+      paneHost.appendChild(paneContact);
       if (window.KT && KT.renderContactPrefs) { KT.renderContactPrefs(paneContact); }
       else { paneContact.appendChild(Dom.el('div', { style: 'padding:16px;color:#B45309;font-size:13px;' }, 'Reload the page to see your text and call settings.')); }
-      root.appendChild(paneAbout);
+      paneHost.appendChild(paneAbout);
       if (window.KT && KT.AccountPanes && KT.AccountPanes.about) { KT.AccountPanes.about(paneAbout); }
     }
     paintTab(_detailsTab, true);
@@ -3529,6 +3548,11 @@
     if (sessionStorage.getItem('kt_is_platform_admin') === '1') {
       changeRoleOpts.push({ v: 'platform_admin', l: '🌐 Platform admin' });
     }
+    /* A BLANK FIRST (2026-10-09: "set role for users should have a blank for the options
+       vs a set option just in case someone hits save by accident"). The list opened on
+       "Centre director", so an accidental Apply/Save granted a real role. It now opens
+       on nothing, and saving refuses until a role is chosen. */
+    newRoleSelect.appendChild(Dom.el('option', { value: '', selected: 'selected' }, 'Choose a role…'));
     changeRoleOpts.forEach(function (r) {
       newRoleSelect.appendChild(Dom.el('option', { value: r.v }, r.l));
     });
@@ -3552,6 +3576,11 @@
     }, 'Apply');
     const roleStatus = Dom.el('span', { style: 'font-size: 12px; color: #6B7280; margin-left: 8px;' });
     applyRoleBtn.addEventListener('click', async function () {
+      if (!newRoleSelect.value) {
+        roleStatus.style.color = '#B45309'; roleStatus.textContent = 'Choose a role first — nothing was changed.';
+        try { newRoleSelect.focus(); } catch (e) {}
+        return;
+      }
       var payload = { role: newRoleSelect.value };
       if (newCentreSelect.value) payload.centre_id = parseInt(newCentreSelect.value, 10);
       applyRoleBtn.disabled = true;
@@ -6697,6 +6726,8 @@
     var tabBar = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:14px;' });
     var pane = Dom.el('div', {});
     var msg = Dom.el('div', { style: 'min-height:18px;font-size:13px;margin-top:10px;' });
+    // Same steady height as the user dialog, so switching tabs never resizes the popup.
+    pane.style.height = 'min(58vh, 640px)'; pane.style.overflowY = 'auto'; pane.style.overflowX = 'hidden';
     root.appendChild(tabBar); root.appendChild(pane); root.appendChild(msg);
     function setMsg(t, ok) { msg.style.color = ok ? '#16A34A' : '#DC2626'; msg.textContent = t; }
     function refreshList() { try { renderFamiliesTab(content); } catch (e) {} }

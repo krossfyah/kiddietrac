@@ -1162,6 +1162,8 @@ final class AuthController extends Controller
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
             'sex' => $user->sex ?? null,
+            // Their own date of birth: the onboarding wizard pre-fills it (required for educators).
+            'date_of_birth' => $user->date_of_birth ? substr((string) $user->date_of_birth, 0, 10) : null,
             'name' => trim(($user->first_name ?? '').' '.($user->last_name ?? '')),
             'preferred_name' => $user->preferred_name ?? null,
             'phone' => $user->phone ?? null,
@@ -1235,6 +1237,7 @@ final class AuthController extends Controller
             'phone'           => ['nullable', 'string', 'max:40'],
             'direct_phone'    => ['nullable', 'string', 'max:40'],
             'home_phone'      => ['nullable', 'string', 'max:40'],
+            'date_of_birth'   => ['nullable', 'date', 'before:today', 'after:1900-01-01'],
             'locale'          => ['nullable', 'string', 'max:10'],
             'timezone'        => ['nullable', 'string', 'max:60'],
 
@@ -1357,6 +1360,7 @@ final class AuthController extends Controller
             'phone'          => $data['phone']          ?? null,
             'locale'         => $data['locale']         ?? null,
             'timezone'       => $data['timezone']       ?? null,
+            'date_of_birth'  => ! empty($data['date_of_birth']) ? substr((string) $data['date_of_birth'], 0, 10) : null,
         ], fn ($v) => $v !== null && $v !== '');
 
         if (! empty($data['username'])) {
@@ -1408,6 +1412,36 @@ final class AuthController extends Controller
         }
         $wasOnboarded = ! empty($user->onboarded_at);
         $isCompleting = ($data['complete'] ?? true) === true;
+
+        /* AN EDUCATOR CANNOT FINISH WITHOUT THESE (2026-10-09: "DOB and address info
+           needs to be mandatory for educators being onboarded including emergency
+           contact"). Checked on the FINISH only — the wizard autosaves each step with
+           complete=false, and a half-done run must still save. Read from what is already
+           on file merged with this request, so a value given on an earlier step counts. */
+        if ($isCompleting && DB::table('role_assignments')->where('user_id', $user->id)
+                ->where('role', 'educator')->where('active', 1)->exists()) {
+            $have = $extras + ['date_of_birth' => $userUpdate['date_of_birth'] ?? $user->date_of_birth];
+            $need = [
+                'date_of_birth' => 'Date of birth',
+                'address_line1' => 'Street address',
+                'city' => 'City',
+                'province' => 'Province',
+                'postal_code' => 'Postal code',
+                'emergency_contact_name' => 'Emergency contact name',
+                'emergency_contact_relation' => 'Emergency contact relationship',
+                'emergency_contact_phone' => 'Emergency contact phone',
+            ];
+            $missing = [];
+            foreach ($need as $k => $label) {
+                if (trim((string) ($have[$k] ?? '')) === '') { $missing[$k] = [$label . ' is required.']; }
+            }
+            if ($missing) {
+                return response()->json([
+                    'message' => 'Please complete: ' . implode(', ', array_map(fn ($k) => $need[$k], array_keys($missing))) . '.',
+                    'errors' => $missing,
+                ], 422);
+            }
+        }
         // Done — drop the resume point, so that if an admin later reopens
         // onboarding the wizard starts at the beginning rather than dropping the
         // user on the final step of the run they are being asked to redo.

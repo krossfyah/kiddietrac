@@ -155,7 +155,7 @@
   <link rel="stylesheet" href="/css/kt-fullwidth.css?v=202609032022">
   <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20261009pill">
   <link rel="stylesheet" href="/css/kt-buttons.css?v=20260811actionbtn">
-  <script src="/js/kt-ios-safearea.js?v=20261009ed"></script>
+  <script src="/js/kt-ios-safearea.js?v=20261009ob"></script>
   <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20260921ios">
   <link rel="stylesheet" href="/css/kt-mobile-brand-fix.css?v=20260810restore">
   <link rel="preload" as="image" href="/login-wordmark.png">
@@ -427,114 +427,114 @@ function showReloadGate(){
 
   <div id="modalRoot"></div>
 
-  <script src="/js/app.js?v=20261009ed" defer></script>
-  <script src="/js/kt-tz.js?v=20261009ed" defer></script>
-  <script src="/js/kt-tz-global.js?v=20261009ed" defer></script>
-  <script src="/js/kt-closure-notice.js?v=20261009ed" defer></script>
-  <script src="/js/kt-back.js?v=20261009ed" defer></script>
+  <script src="/js/app.js?v=20261009ob" defer></script>
+  <script src="/js/kt-tz.js?v=20261009ob" defer></script>
+  <script src="/js/kt-tz-global.js?v=20261009ob" defer></script>
+  <script src="/js/kt-closure-notice.js?v=20261009ob" defer></script>
+  <script src="/js/kt-back.js?v=20261009ob" defer></script>
   <!-- A drag that merely ENDS on a backdrop must not close a dialog mid-edit. -->
   <!-- One way to draw a stored secret: a pill saying whether one is saved, and one
        wording for it, everywhere. Loaded before the settings screens that use it. -->
   <!-- Tells a long-lived tab when it is running yesterday's app. A single-page app
        that never navigates never re-fetches its own shell; without this, a deploy
        reaches nobody who already has the page open. -->
-  <script src="/js/kt-update-check.js?v=20261009ed" defer></script>
-  <script src="/js/kt-secret-field.js?v=20261009ed" defer></script>
-  <script src="/js/kt-modal-safety.js?v=20261009ed" defer></script>
-  <script src="/js/kt-parent-chrome.js?v=20261009ed" defer></script>
-  <script src="/js/session-timeout.js?v=20261009ed" defer></script>
-  <script src="/js/kt-illustrations.js?v=20261009ed" defer></script>
-  <script src="/js/app-v2-shell.js?v=20261009db" defer></script>
+  <script src="/js/kt-update-check.js?v=20261009ob" defer></script>
+  <script src="/js/kt-secret-field.js?v=20261009ob" defer></script>
+  <script src="/js/kt-modal-safety.js?v=20261009ob" defer></script>
+  <script src="/js/kt-parent-chrome.js?v=20261009ob" defer></script>
+  <script src="/js/session-timeout.js?v=20261009ob" defer></script>
+  <script src="/js/kt-illustrations.js?v=20261009ob" defer></script>
+  <script src="/js/app-v2-shell.js?v=20261009ob" defer></script>
   <!-- Off unless localStorage.kt_diag === "1". Records what TRIGGERED each
        re-render, how long the cover held, and which files were still writing
        afterwards. Exists because the automation browser is always document.hidden,
        which is the exact condition kt-auto-refresh skips on. -->
-  <script src="/js/kt-rerender-diag.js?v=20261009ed" defer></script>
+  <script src="/js/kt-rerender-diag.js?v=20261009ob" defer></script>
   <!-- Collapses six independent badge pollers into one request. -->
-  <script src="/js/kt-poll-coalesce.js?v=20261009ed" defer></script>
+  <script src="/js/kt-poll-coalesce.js?v=20261009ob" defer></script>
   <!-- Before the refreshers: it wraps KT.uiBusy() so a half-filled form counts as
        busy. Without it, an inspection form being filled was torn down by the next
        write-triggered re-render the moment focus left a field. -->
-  <script src="/js/kt-unsaved-guard.js?v=20261009ed" defer></script>
-  <script src="/js/kt-auto-refresh.js?v=20261009ed" defer></script>
-  <script src="/js/screen-parent.js?v=20261009ed" defer></script>
-  <script src="/js/kt-checkin-scan.js?v=20261009ed" defer></script>
-  <script src="/js/screen-role-home.js?v=20261009ed" defer></script>
+  <script src="/js/kt-unsaved-guard.js?v=20261009ob" defer></script>
+  <script src="/js/kt-auto-refresh.js?v=20261009ob" defer></script>
+  <script src="/js/screen-parent.js?v=20261009ob" defer></script>
+  <script src="/js/kt-checkin-scan.js?v=20261009ob" defer></script>
+  <script src="/js/screen-role-home.js?v=20261009ob" defer></script>
   <!-- The admin/director tile launcher. It registers agency_admin:home,
        centre_director:home and platform_admin:home, and exports KT.AdminHome, which
        kt-mobilenav asks before deciding whether to fall back to the old 94-item drawer.
        It was never listed here, so KT.AdminHome was always undefined: the phone bar
        showed the retired hamburger and #home was unregistered for those three roles.
        Listed in the SOURCE, not dashboard.html, or the next deploy regenerates it away. -->
-  <script src="/js/screen-admin-home.js?v=20261009ed" defer></script>
-  <script src="/js/kt-forms-to-sign.js?v=20261009ed" defer></script>
-  <script src="/js/kt-emoji-avatars.js?v=20261009ed" defer></script>
-  <script src="/js/kt-avatar-zoom.js?v=20261009ed" defer></script>
-  <script src="/js/kt-media-viewer.js?v=20261009ed" defer></script>
-  <script src="/js/kt-doc-viewer.js?v=20261009ed" defer></script>
-  <script src="/js/kt-live.js?v=20261009ed" defer></script>
-  <script src="/js/kt-pulse.js?v=20261009ed" defer></script>
-  <script src="/js/screen-knowledge-base.js?v=20261009ed" defer></script>
-  <script src="/js/screen-support.js?v=20261009ed" defer></script>
-  <script src="/js/kt-account-panes.js?v=20261009ed" defer></script>
-  <script src="/js/screen-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-agency-admin.js?v=20261009ed" defer></script>
-  <script src="/js/screen-dashboard-widgets.js?v=20261009ed" defer></script>
-  <script src="/js/screen-email.js?v=20261009ed" defer></script>
-  <script src="/js/screen-provider-day.js?v=20261009ed" defer></script>
-  <script src="/js/screen-external-billing.js?v=20261009ed" defer></script>
-  <script src="/js/screen-external-waitlist.js?v=20261009ed" defer></script>
-  <script src="/js/screen-director.js?v=20261009ed" defer></script>
-  <script src="/js/kt-busy.js?v=20261009ed" defer></script>
+  <script src="/js/screen-admin-home.js?v=20261009ob" defer></script>
+  <script src="/js/kt-forms-to-sign.js?v=20261009ob" defer></script>
+  <script src="/js/kt-emoji-avatars.js?v=20261009ob" defer></script>
+  <script src="/js/kt-avatar-zoom.js?v=20261009ob" defer></script>
+  <script src="/js/kt-media-viewer.js?v=20261009ob" defer></script>
+  <script src="/js/kt-doc-viewer.js?v=20261009ob" defer></script>
+  <script src="/js/kt-live.js?v=20261009ob" defer></script>
+  <script src="/js/kt-pulse.js?v=20261009ob" defer></script>
+  <script src="/js/screen-knowledge-base.js?v=20261009ob" defer></script>
+  <script src="/js/screen-support.js?v=20261009ob" defer></script>
+  <script src="/js/kt-account-panes.js?v=20261009ob" defer></script>
+  <script src="/js/screen-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-agency-admin.js?v=20261009ob" defer></script>
+  <script src="/js/screen-dashboard-widgets.js?v=20261009ob" defer></script>
+  <script src="/js/screen-email.js?v=20261009ob" defer></script>
+  <script src="/js/screen-provider-day.js?v=20261009ob" defer></script>
+  <script src="/js/screen-external-billing.js?v=20261009ob" defer></script>
+  <script src="/js/screen-external-waitlist.js?v=20261009ob" defer></script>
+  <script src="/js/screen-director.js?v=20261009ob" defer></script>
+  <script src="/js/kt-busy.js?v=20261009ob" defer></script>
   <!-- Patches fetch for FormData-with-a-file so every upload in the portal draws one
        progress bar. Loaded early: it must be in place before any screen uploads. -->
-  <script src="/js/kt-upload-progress.js?v=20261009ed" defer></script>
-  <script src="/js/kt-card-pager.js?v=20261009ed" defer></script>
-  <script src="/js/screen-educator.js?v=20261009ed" defer></script>
-  <script src="/js/screen-educator-v4.js?v=20261009ed" defer></script>
-  <script src="/js/screen-educator-me.js?v=20261009ed" defer></script>
-  <script src="/js/screen-parent-feedback.js?v=20261009ed" defer></script>
-  <script src="/js/screen-tasks.js?v=20261009ed" defer></script>
-  <script src="/js/screen-director-v5a.js?v=20261009ed" defer></script>
-  <script src="/js/screen-help-v22p68.js?v=20261009ed" defer></script>
-  <script src="/js/screen-training.js?v=20261009ed" defer></script>
-    <script src="js/kt-contextual-help.js?v=20261009ed" defer></script>
-    <script src="js/kt-onboarding-tour.js?v=20261009ed" defer></script>
-  <script src="/js/tooltips-v6.js?v=20261009ed" defer></script>
-  <script src="/js/app-v2-init.js?v=20261009ed" defer></script>
-  <script src="/js/branding-loader.js?v=20261009ed" defer></script>
-  <script src="/js/api-helpers-v10.js?v=20261009ed" defer></script>
-  <script src="/js/kt-avatar-cropper.js?v=20261009ed" defer></script>
-  <script src="/js/kt-mini-map.js?v=20261009ed" defer></script>
-  <script src="/js/screen-admin.js?v=20261009ed" defer></script>
-  <script src="/js/screen-marketing.js?v=20261009ed" defer></script>
-  <script src="/js/screen-provider-map.js?v=20261009ed" defer></script>
-  <script src="/js/screen-marketing-site.js?v=20261009ed" defer></script>
-  <script src="/js/kt-addfrom.js?v=20261009ed" defer></script>
-  <script src="/js/screen-staff-calendar.js?v=20261009ed" defer></script>
-  <script src="/js/screen-audit-logs.js?v=20261009ed" defer></script>
-  <script src="/js/screen-bulk-invoices.js?v=20261009ed" defer></script>
-  <script src="/js/screen-forms.js?v=20261009ed" defer></script>
-  <script src="/js/screen-forms-manager.js?v=20261009ed" defer></script>
-  <script src="/js/screen-fee-plans.js?v=20261009ed" defer></script>
-  <script src="/js/screen-account-ledgers.js?v=20261009ed" defer></script>
-  <script src="/js/screen-contacts.js?v=20261009ed" defer></script>
-  <script src="/js/screen-manual-payroll.js?v=20261009ed" defer></script>
-  <script src="/js/screen-expenses.js?v=20261009ed" defer></script>
-  <script src="/js/screen-billing-setup.js?v=20261009ed" defer></script>
-  <script src="/js/screen-parent-forms.js?v=20261009ed" defer></script>
+  <script src="/js/kt-upload-progress.js?v=20261009ob" defer></script>
+  <script src="/js/kt-card-pager.js?v=20261009ob" defer></script>
+  <script src="/js/screen-educator.js?v=20261009ob" defer></script>
+  <script src="/js/screen-educator-v4.js?v=20261009ob" defer></script>
+  <script src="/js/screen-educator-me.js?v=20261009ob" defer></script>
+  <script src="/js/screen-parent-feedback.js?v=20261009ob" defer></script>
+  <script src="/js/screen-tasks.js?v=20261009ob" defer></script>
+  <script src="/js/screen-director-v5a.js?v=20261009ob" defer></script>
+  <script src="/js/screen-help-v22p68.js?v=20261009ob" defer></script>
+  <script src="/js/screen-training.js?v=20261009ob" defer></script>
+    <script src="js/kt-contextual-help.js?v=20261009ob" defer></script>
+    <script src="js/kt-onboarding-tour.js?v=20261009ob" defer></script>
+  <script src="/js/tooltips-v6.js?v=20261009ob" defer></script>
+  <script src="/js/app-v2-init.js?v=20261009ob" defer></script>
+  <script src="/js/branding-loader.js?v=20261009ob" defer></script>
+  <script src="/js/api-helpers-v10.js?v=20261009ob" defer></script>
+  <script src="/js/kt-avatar-cropper.js?v=20261009ob" defer></script>
+  <script src="/js/kt-mini-map.js?v=20261009ob" defer></script>
+  <script src="/js/screen-admin.js?v=20261009ob" defer></script>
+  <script src="/js/screen-marketing.js?v=20261009ob" defer></script>
+  <script src="/js/screen-provider-map.js?v=20261009ob" defer></script>
+  <script src="/js/screen-marketing-site.js?v=20261009ob" defer></script>
+  <script src="/js/kt-addfrom.js?v=20261009ob" defer></script>
+  <script src="/js/screen-staff-calendar.js?v=20261009ob" defer></script>
+  <script src="/js/screen-audit-logs.js?v=20261009ob" defer></script>
+  <script src="/js/screen-bulk-invoices.js?v=20261009ob" defer></script>
+  <script src="/js/screen-forms.js?v=20261009ob" defer></script>
+  <script src="/js/screen-forms-manager.js?v=20261009ob" defer></script>
+  <script src="/js/screen-fee-plans.js?v=20261009ob" defer></script>
+  <script src="/js/screen-account-ledgers.js?v=20261009ob" defer></script>
+  <script src="/js/screen-contacts.js?v=20261009ob" defer></script>
+  <script src="/js/screen-manual-payroll.js?v=20261009ob" defer></script>
+  <script src="/js/screen-expenses.js?v=20261009ob" defer></script>
+  <script src="/js/screen-billing-setup.js?v=20261009ob" defer></script>
+  <script src="/js/screen-parent-forms.js?v=20261009ob" defer></script>
   <!-- The Documents screen. It has existed on disk since v23 and was never loaded:
        no script tag anywhere referenced it, so the "Documents" nav item registered
        no handler and opened nothing. Wired in 2026-09-09, when it became the place
        every role finds the forms they have signed. -->
-  <script src="/js/screen-my-documents.js?v=20261009ed" defer></script>
-  <script src="/js/screen-notifications.js?v=20261009ed" defer></script>
-  <script src="/js/screen-compliance.js?v=20261009ed" defer></script>
-  <script src="/js/screen-care.js?v=20261009ed" defer></script>
-  <script src="/js/search-palette.js?v=20261009ed" defer></script>
-  <script src="/js/role-widgets.js?v=20261009ed" defer></script>
-  <script src="/js/kt-animate.js?v=20261009ed" defer></script>
-  <script src="/js/mobile-helper-v11.js?v=20261009ed" defer></script>
+  <script src="/js/screen-my-documents.js?v=20261009ob" defer></script>
+  <script src="/js/screen-notifications.js?v=20261009ob" defer></script>
+  <script src="/js/screen-compliance.js?v=20261009ob" defer></script>
+  <script src="/js/screen-care.js?v=20261009ob" defer></script>
+  <script src="/js/search-palette.js?v=20261009ob" defer></script>
+  <script src="/js/role-widgets.js?v=20261009ob" defer></script>
+  <script src="/js/kt-animate.js?v=20261009ob" defer></script>
+  <script src="/js/mobile-helper-v11.js?v=20261009ob" defer></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function () {
@@ -589,78 +589,78 @@ function showReloadGate(){
       });
     }
   </script>
-  <script src="/js/kt-clockout-reminder.js?v=20261009ed" defer></script>
-  <script src="/js/kt-chat-dock.js?v=20261009ed" defer></script>
+  <script src="/js/kt-clockout-reminder.js?v=20261009ob" defer></script>
+  <script src="/js/kt-chat-dock.js?v=20261009ob" defer></script>
   <!-- The one voice-note recorder: level meter + review, for every composer. -->
-  <script src="/js/kt-voice-recorder.js?v=20261009ed" defer></script>
-  <script src="/js/screen-chat.js?v=20261009ed" defer></script>
-  <script src="/js/screen-team-chat.js?v=20261009ed" defer></script>
-  <script src="/js/screen-agencies.js?v=20261009ed" defer></script>
-  <script src="/js/nav-additions-v12.js?v=20261009ed" defer></script>
-  <script src="/js/screen-waitlist.js?v=20261009ed" defer></script>
-  <script src="/js/screen-announcements.js?v=20261009ed" defer></script>
-  <script src="/js/screen-autopay.js?v=20261009ed" defer></script>
-  <script src="/js/nav-additions-v13.js?v=20261009ed" defer></script>
-  <script src="/js/screen-lesson-plans.js?v=20261009ed" defer></script>
-  <script src="/js/screen-schedule.js?v=20261009ed" defer></script>
-  <script src="/js/screen-certifications.js?v=20261009ed" defer></script>
-  <script src="/js/push-client.js?v=20261009ed" defer></script>
-  <script src="/js/kt-push-nudge.js?v=20261009ed" defer></script>
-  <script src="/js/nav-additions-v14.js?v=20261009ed" defer></script>
-  <script src="/js/screen-admin-mrr.js?v=20261009ed" defer></script>
-  <script src="/js/screen-admin-features.js?v=20261009ed" defer></script>
-  <script src="/js/screen-admin-branding.js?v=20261009ed" defer></script>
-  <script src="/js/screen-lesson-plans-ai.js?v=20261009ed" defer></script>
-  <script src="/js/screen-observations.js?v=20261009ed" defer></script>
-  <script src="/js/screen-incidents.js?v=20261009ed" defer></script>
-  <script src="/js/screen-awards.js?v=20261009ed" defer></script>
-  <script src="/js/screen-child-detail.js?v=20261009ed" defer></script>
-  <script src="/js/search-widget.js?v=20261009ed" defer></script>
-  <script src="/js/screen-mfa.js?v=20261009ed" defer></script>
-  <script src="/js/screen-sibling-discounts.js?v=20261009ed" defer></script>
-  <script src="/js/screen-roles.js?v=20261009ed" defer></script>
-  <script src="/js/screen-admin-children.js?v=20261009ed" defer></script>
-  <script src="/js/agency-switcher.js?v=20261009ed" defer></script>
-  <script src="/js/screen-platform.js?v=20261009ed" defer></script>
-  <script src="/js/screen-mail-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-backups.js?v=20261009ed" defer></script>
-  <script src="/js/screen-email-template.js?v=20261009ed" defer></script>
-  <script src="/js/screen-digest-status.js?v=20261009ed" defer></script>
-  <script src="/js/nav-additions-v15.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p51.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p53.js?v=20261009ed" defer></script>
-  <script src="/js/screen-safe-arrival.js?v=20261009ed" defer></script>
-  <script src="/js/screen-learning-framework.js?v=20261009ed" defer></script>
-  <script src="/js/screen-donations.js?v=20261009ed" defer></script>
-  <script src="/js/screen-rsvp.js?v=20261009ed" defer></script>
-  <script src="/js/screen-compliance-evidence.js?v=20261009ed" defer></script>
-  <script src="/js/screen-grants.js?v=20261009ed" defer></script>
-  <script src="/js/screen-payment-run.js?v=20261009ed" defer></script>
-  <script src="/js/screen-phone-voicemail.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p54.js?v=20261009ed" defer></script>
-  <script src="/js/kt-sweep-bus.js?v=20261009ed" defer></script>
-  <script src="/js/kt-icon-buttons.js?v=20261009ed" defer></script>
-  <script src="/js/kt-switches.js?v=20261009ed" defer></script>
-  <script src="/js/kt-table-filter.js?v=20261009ed" defer></script>
-  <script src="/js/kt-polish.js?v=20261009ed" defer></script>
-  <script src="/js/kt-list-controls.js?v=20261009ed" defer></script>
-  <script src="/js/kt-mfa-nudge.js?v=20261009ed" defer></script>
-  <script src="/js/kt-mfa-gate.js?v=20261009ed" defer></script>
-  <script src="/js/kt-topbar.js?v=20261009ed" defer></script>
-  <script src="/js/kt-pin.js?v=20261009ed" defer></script>
-  <script src="/js/kt-biometric.js?v=20261009ed" defer></script>
-  <script src="/js/kt-passkeys.js?v=20261009ed" defer></script>
-  <script src="/js/kt-impersonate.js?v=20261009ed" defer></script>
-  <script src="/js/kt-crash-report.js?v=20261009ed" defer></script>
+  <script src="/js/kt-voice-recorder.js?v=20261009ob" defer></script>
+  <script src="/js/screen-chat.js?v=20261009ob" defer></script>
+  <script src="/js/screen-team-chat.js?v=20261009ob" defer></script>
+  <script src="/js/screen-agencies.js?v=20261009ob" defer></script>
+  <script src="/js/nav-additions-v12.js?v=20261009ob" defer></script>
+  <script src="/js/screen-waitlist.js?v=20261009ob" defer></script>
+  <script src="/js/screen-announcements.js?v=20261009ob" defer></script>
+  <script src="/js/screen-autopay.js?v=20261009ob" defer></script>
+  <script src="/js/nav-additions-v13.js?v=20261009ob" defer></script>
+  <script src="/js/screen-lesson-plans.js?v=20261009ob" defer></script>
+  <script src="/js/screen-schedule.js?v=20261009ob" defer></script>
+  <script src="/js/screen-certifications.js?v=20261009ob" defer></script>
+  <script src="/js/push-client.js?v=20261009ob" defer></script>
+  <script src="/js/kt-push-nudge.js?v=20261009ob" defer></script>
+  <script src="/js/nav-additions-v14.js?v=20261009ob" defer></script>
+  <script src="/js/screen-admin-mrr.js?v=20261009ob" defer></script>
+  <script src="/js/screen-admin-features.js?v=20261009ob" defer></script>
+  <script src="/js/screen-admin-branding.js?v=20261009ob" defer></script>
+  <script src="/js/screen-lesson-plans-ai.js?v=20261009ob" defer></script>
+  <script src="/js/screen-observations.js?v=20261009ob" defer></script>
+  <script src="/js/screen-incidents.js?v=20261009ob" defer></script>
+  <script src="/js/screen-awards.js?v=20261009ob" defer></script>
+  <script src="/js/screen-child-detail.js?v=20261009ob" defer></script>
+  <script src="/js/search-widget.js?v=20261009ob" defer></script>
+  <script src="/js/screen-mfa.js?v=20261009ob" defer></script>
+  <script src="/js/screen-sibling-discounts.js?v=20261009ob" defer></script>
+  <script src="/js/screen-roles.js?v=20261009ob" defer></script>
+  <script src="/js/screen-admin-children.js?v=20261009ob" defer></script>
+  <script src="/js/agency-switcher.js?v=20261009ob" defer></script>
+  <script src="/js/screen-platform.js?v=20261009ob" defer></script>
+  <script src="/js/screen-mail-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-backups.js?v=20261009ob" defer></script>
+  <script src="/js/screen-email-template.js?v=20261009ob" defer></script>
+  <script src="/js/screen-digest-status.js?v=20261009ob" defer></script>
+  <script src="/js/nav-additions-v15.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p51.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p53.js?v=20261009ob" defer></script>
+  <script src="/js/screen-safe-arrival.js?v=20261009ob" defer></script>
+  <script src="/js/screen-learning-framework.js?v=20261009ob" defer></script>
+  <script src="/js/screen-donations.js?v=20261009ob" defer></script>
+  <script src="/js/screen-rsvp.js?v=20261009ob" defer></script>
+  <script src="/js/screen-compliance-evidence.js?v=20261009ob" defer></script>
+  <script src="/js/screen-grants.js?v=20261009ob" defer></script>
+  <script src="/js/screen-payment-run.js?v=20261009ob" defer></script>
+  <script src="/js/screen-phone-voicemail.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p54.js?v=20261009ob" defer></script>
+  <script src="/js/kt-sweep-bus.js?v=20261009ob" defer></script>
+  <script src="/js/kt-icon-buttons.js?v=20261009ob" defer></script>
+  <script src="/js/kt-switches.js?v=20261009ob" defer></script>
+  <script src="/js/kt-table-filter.js?v=20261009ob" defer></script>
+  <script src="/js/kt-polish.js?v=20261009ob" defer></script>
+  <script src="/js/kt-list-controls.js?v=20261009ob" defer></script>
+  <script src="/js/kt-mfa-nudge.js?v=20261009ob" defer></script>
+  <script src="/js/kt-mfa-gate.js?v=20261009ob" defer></script>
+  <script src="/js/kt-topbar.js?v=20261009ob" defer></script>
+  <script src="/js/kt-pin.js?v=20261009ob" defer></script>
+  <script src="/js/kt-biometric.js?v=20261009ob" defer></script>
+  <script src="/js/kt-passkeys.js?v=20261009ob" defer></script>
+  <script src="/js/kt-impersonate.js?v=20261009ob" defer></script>
+  <script src="/js/kt-crash-report.js?v=20261009ob" defer></script>
   <!-- Freeze watchdog: a heartbeat that notices the main thread being blocked, and
        reports a stall through the same pipe as a crash. Must load AFTER the crash
        reporter, whose KT.reportProblem it uses. -->
-  <script src="/js/kt-freeze-watch.js?v=20261009ed" defer></script>
-  <script src="/js/kt-progress.js?v=20261009ed" defer></script>
-  <script src="/js/kt-scroll-indicator.js?v=20261009ed" defer></script>
-  <script src="/js/kt-mobilenav.js?v=20261009ed" defer></script>
-  <script src="/js/kt-clockbar.js?v=20261009ed" defer></script>
-  <script src="/js/kt-mobile-tables.js?v=20261009ed" defer></script>
+  <script src="/js/kt-freeze-watch.js?v=20261009ob" defer></script>
+  <script src="/js/kt-progress.js?v=20261009ob" defer></script>
+  <script src="/js/kt-scroll-indicator.js?v=20261009ob" defer></script>
+  <script src="/js/kt-mobilenav.js?v=20261009ob" defer></script>
+  <script src="/js/kt-clockbar.js?v=20261009ob" defer></script>
+  <script src="/js/kt-mobile-tables.js?v=20261009ob" defer></script>
   <!-- Makes an open dialog FIT A PHONE. The dialogs themselves were fine; what did
        not fit was their contents - a flex or grid child keeps min-width:auto and so
        refuses to shrink, leaving a 498px row inside a 291px box with neither wrap nor
@@ -668,95 +668,95 @@ function showReloadGate(){
        It measures each open dialog and repairs only what actually overflows, which is
        why it also covers the ~148 hand-rolled dialogs nobody will revisit. Phone only;
        loads after kt-mobilenav.js, whose dialog shape test it mirrors. -->
-  <script src="/js/kt-dialog-fit.js?v=20261009ed" defer></script>
+  <script src="/js/kt-dialog-fit.js?v=20261009ob" defer></script>
   <!-- Draws <option> lists in the page on touch devices. The native Android
        popup takes its text colour from the app theme, not from our CSS, and came
        out white-on-white in the APK. -->
   <!-- Same problem as the dropdowns, different control: Android draws the date
        picker itself from the app theme, so page CSS cannot reach it and it came
        out unreadable in the APK. Covers date, time, datetime-local and month. -->
-  <script src="/js/kt-date-sheet.js?v=20261009ed" defer></script>
-  <script src="/js/kt-select-sheet.js?v=20261009ed" defer></script>
-  <script src="/js/kt-row-actions.js?v=20261009ed" defer></script>
-  <script src="/js/kt-tooltip-global.js?v=20261009ed" defer></script>
-  <script src="/js/kt-urgent-alert.js?v=20261009ed" defer></script>
-  <script src="/js/kt-agreement.js?v=20261009ed" defer></script>
-  <script src="/js/kt-native-push.js?v=20261009ed" defer></script>
-  <script src="/js/kt-native-ui.js?v=20261009ed" defer></script>
-  <script src="/js/kt-appupdate.js?v=20261009ed" defer></script>
-  <script src="/js/kt-toasts.js?v=20261009ed" defer></script>
-  <script src="/js/kt-whatsnew.js?v=20261009ed" defer></script>
-  <script src="/js/kt-term.js?v=20261009ed" defer></script>
-  <script src="/js/kt-table-export.js?v=20261009ed" defer></script>
-  <script src="/js/kt-i18n.js?v=20261009ed" defer></script>
-  <script src="/js/kt-banner-normalize.js?v=20261009ed" defer></script>
-  <script src="/js/kt-overflow-guard.js?v=20261009ed" defer></script>
-  <script src="/js/kt-sidebar-collapse.js?v=20261009ed" defer></script>
-  <script src="/js/kt-polish-v2.js?v=20261009ed" defer></script>
-  <script src="/js/kt-polish-v3.js?v=20261009ed" defer></script>
-  <script src="/js/kt-polish-v4.js?v=20261009ed" defer></script>
-  <script src="/js/kt-mailto.js?v=20261009ed" defer></script>
-  <script src="/js/kt-hero-emoji.js?v=20261009ed" defer></script>
-  <script src="/js/kt-modal-guard.js?v=20261009ed" defer></script>
-  <script src="/js/kt-qr.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p55.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p56.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p57.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p58.js?v=20261009ed" defer></script>
-  <script src="/js/screen-withdrawals.js?v=20261009ed" defer></script>
-  <script src="/js/kt-signature-pad.js?v=20261009ed" defer></script>
-  <script src="/js/kt-form-filler.js?v=20261009ed" defer></script>
-  <script src="/js/kt-form-annotate.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p59.js?v=20261009ed" defer></script>
-    <script src="/js/fix-screen-v22p69.js?v=20261009ed" defer></script>
-  <script src="/js/kt-walk-tracker.js?v=20261009ed" defer></script>
-  <script src="/js/screen-integrations-v22p72.js?v=20261009ed" defer></script>
-  <script src="/js/kt-nav-collapse-v22p72.js?v=20261009ed" defer></script>
-  <script src="/js/kt-quickadd-v22p72.js?v=20261009ed" defer></script>
-  <script src="/js/kt-money-v22p74.js?v=20261009ed" defer></script>
-  <script src="/js/screen-v22p63.js?v=20261009ed" defer></script>
-  <script src="/js/screen-legacy-shim.js?v=20261009ed" defer></script>
-  <script src="/js/screen-reports.js?v=20261009ed" defer></script>
-  <script src="/js/screen-social-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-security-alerts.js?v=20261009ed" defer></script>
-  <script src="/js/screen-late-events.js?v=20261009ed" defer></script>
-  <script src="/js/screen-billing-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-platform-invoices.js?v=20261009ed" defer></script>
-  <script src="/js/screen-document-templates.js?v=20261009ed" defer></script>
-  <script src="/js/screen-educator-rooms.js?v=20261009ed" defer></script>
-  <script src="/js/screen-calendar-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-auto-signoff.js?v=20261009ed" defer></script>
-  <script src="/js/screen-birthday-settings.js?v=20261009ed" defer></script>
+  <script src="/js/kt-date-sheet.js?v=20261009ob" defer></script>
+  <script src="/js/kt-select-sheet.js?v=20261009ob" defer></script>
+  <script src="/js/kt-row-actions.js?v=20261009ob" defer></script>
+  <script src="/js/kt-tooltip-global.js?v=20261009ob" defer></script>
+  <script src="/js/kt-urgent-alert.js?v=20261009ob" defer></script>
+  <script src="/js/kt-agreement.js?v=20261009ob" defer></script>
+  <script src="/js/kt-native-push.js?v=20261009ob" defer></script>
+  <script src="/js/kt-native-ui.js?v=20261009ob" defer></script>
+  <script src="/js/kt-appupdate.js?v=20261009ob" defer></script>
+  <script src="/js/kt-toasts.js?v=20261009ob" defer></script>
+  <script src="/js/kt-whatsnew.js?v=20261009ob" defer></script>
+  <script src="/js/kt-term.js?v=20261009ob" defer></script>
+  <script src="/js/kt-table-export.js?v=20261009ob" defer></script>
+  <script src="/js/kt-i18n.js?v=20261009ob" defer></script>
+  <script src="/js/kt-banner-normalize.js?v=20261009ob" defer></script>
+  <script src="/js/kt-overflow-guard.js?v=20261009ob" defer></script>
+  <script src="/js/kt-sidebar-collapse.js?v=20261009ob" defer></script>
+  <script src="/js/kt-polish-v2.js?v=20261009ob" defer></script>
+  <script src="/js/kt-polish-v3.js?v=20261009ob" defer></script>
+  <script src="/js/kt-polish-v4.js?v=20261009ob" defer></script>
+  <script src="/js/kt-mailto.js?v=20261009ob" defer></script>
+  <script src="/js/kt-hero-emoji.js?v=20261009ob" defer></script>
+  <script src="/js/kt-modal-guard.js?v=20261009ob" defer></script>
+  <script src="/js/kt-qr.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p55.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p56.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p57.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p58.js?v=20261009ob" defer></script>
+  <script src="/js/screen-withdrawals.js?v=20261009ob" defer></script>
+  <script src="/js/kt-signature-pad.js?v=20261009ob" defer></script>
+  <script src="/js/kt-form-filler.js?v=20261009ob" defer></script>
+  <script src="/js/kt-form-annotate.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p59.js?v=20261009ob" defer></script>
+    <script src="/js/fix-screen-v22p69.js?v=20261009ob" defer></script>
+  <script src="/js/kt-walk-tracker.js?v=20261009ob" defer></script>
+  <script src="/js/screen-integrations-v22p72.js?v=20261009ob" defer></script>
+  <script src="/js/kt-nav-collapse-v22p72.js?v=20261009ob" defer></script>
+  <script src="/js/kt-quickadd-v22p72.js?v=20261009ob" defer></script>
+  <script src="/js/kt-money-v22p74.js?v=20261009ob" defer></script>
+  <script src="/js/screen-v22p63.js?v=20261009ob" defer></script>
+  <script src="/js/screen-legacy-shim.js?v=20261009ob" defer></script>
+  <script src="/js/screen-reports.js?v=20261009ob" defer></script>
+  <script src="/js/screen-social-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-security-alerts.js?v=20261009ob" defer></script>
+  <script src="/js/screen-late-events.js?v=20261009ob" defer></script>
+  <script src="/js/screen-billing-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-platform-invoices.js?v=20261009ob" defer></script>
+  <script src="/js/screen-document-templates.js?v=20261009ob" defer></script>
+  <script src="/js/screen-educator-rooms.js?v=20261009ob" defer></script>
+  <script src="/js/screen-calendar-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-auto-signoff.js?v=20261009ob" defer></script>
+  <script src="/js/screen-birthday-settings.js?v=20261009ob" defer></script>
   <!-- Loaded eagerly for the same reason as birthday settings: it is a TAB inside
        Email settings, not a screen with its own hash, so the lazy loader never
        fetches it and KT.ImmunizationSettings was simply never defined. -->
-  <script src="/js/screen-immunization-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-data-retention.js?v=20261009ed" defer></script>
-  <script src="/js/screen-payroll-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-clock-settings.js?v=20261009ed" defer></script>
-  <script src="/js/screen-payment-providers.js?v=20261009ed" defer></script>
-  <script src="/js/screen-medications.js?v=20261009ed" defer></script>
+  <script src="/js/screen-immunization-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-data-retention.js?v=20261009ob" defer></script>
+  <script src="/js/screen-payroll-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-clock-settings.js?v=20261009ob" defer></script>
+  <script src="/js/screen-payment-providers.js?v=20261009ob" defer></script>
+  <script src="/js/screen-medications.js?v=20261009ob" defer></script>
   <!-- One immunization panel (what is due + the records + the upload), shared by the
        parent screen, the child record and the admin immunization section. -->
-  <script src="/js/kt-immunization-panel.js?v=20261009ed" defer></script>
+  <script src="/js/kt-immunization-panel.js?v=20261009ob" defer></script>
   <!-- One editor for a child's allergies, dietary needs and health alerts, shared by the
        Allergy alerts screen and the child record. -->
-  <script src="/js/kt-health-editor.js?v=20261009ed" defer></script>
+  <script src="/js/kt-health-editor.js?v=20261009ob" defer></script>
   <!-- Read positions for the bell, what's-new and sales chat — on the account rather
        than the browser. localStorage stays as a cache; see kt-markers.js. -->
-  <script src="/js/kt-markers.js?v=20261009ed" defer></script>
-  <script src="/js/screen-immunizations.js?v=20261009ed" defer></script>
-  <script src="/js/screen-invitation-codes.js?v=20261009ed" defer></script>
-  <script src="/js/screen-edocuments.js?v=20261009ed" defer></script>
-  <script src="/js/screen-onboarding.js?v=20261009ed" defer></script>
-  <script src="/js/screen-home-visitor.js?v=20261009ed" defer></script>
-  <script src="/js/screen-sales.js?v=20261009ed" defer></script>
-  <script src="/js/screen-my-pay.js?v=20261009ed" defer></script>
-  <script src="/js/screen-hcc-forms.js?v=20261009ed" defer></script>
+  <script src="/js/kt-markers.js?v=20261009ob" defer></script>
+  <script src="/js/screen-immunizations.js?v=20261009ob" defer></script>
+  <script src="/js/screen-invitation-codes.js?v=20261009ob" defer></script>
+  <script src="/js/screen-edocuments.js?v=20261009ob" defer></script>
+  <script src="/js/screen-onboarding.js?v=20261009ob" defer></script>
+  <script src="/js/screen-home-visitor.js?v=20261009ob" defer></script>
+  <script src="/js/screen-sales.js?v=20261009ob" defer></script>
+  <script src="/js/screen-my-pay.js?v=20261009ob" defer></script>
+  <script src="/js/screen-hcc-forms.js?v=20261009ob" defer></script>
   <!-- Clock-in status glow (educators): orange border when not clocked in, green when clocked in. -->
-  <script src="/js/kt-no-autofill.js?v=20261009ed" defer></script>
-  <script src="/js/kt-spellcheck.js?v=20261009ed" defer></script>
-  <script src="/js/kt-clockglow.js?v=20261009ed" defer></script>
+  <script src="/js/kt-no-autofill.js?v=20261009ob" defer></script>
+  <script src="/js/kt-spellcheck.js?v=20261009ob" defer></script>
+  <script src="/js/kt-clockglow.js?v=20261009ob" defer></script>
 
   <!-- Diagnostics overlay (support/troubleshooting): web version, WebView CSS size,
        native flag, nav, role, etc. HIDDEN by default — enable it from
