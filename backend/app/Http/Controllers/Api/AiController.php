@@ -32,8 +32,11 @@ final class AiController extends Controller
         $win30 = $now->copy()->subDays(30);
         $win90 = $now->copy()->subDays(90);
 
-        $base = DB::table('families as f')
-            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+        /* Open providers and current families only (2026-10-09): a closed provider's
+           families are not at risk of leaving - they have left. App\Support\Live is the
+           one definition of open. */
+        $base = \App\Support\Live::families(\App\Support\Live::centres(DB::table('families as f')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id'), 'c'), 'f')
             ->where('c.agency_id', $agencyId)
             ->whereNull('f.deleted_at')
             ->select('f.id', 'f.family_name');
@@ -96,8 +99,12 @@ final class AiController extends Controller
         DB::table('churn_risk_snapshots')->where('agency_id', $agencyId)
             ->where('computed_at', '<', Carbon::now()->subDay())
             ->delete();
+        /* insertOrIgnore (2026-10-09, tickets #138-140): two loads of this screen in the
+           same second wrote the same (family, second) twice and the unique key turned the
+           second into a 500 - the screen failed instead of showing the list. The snapshot
+           is the same either way; the duplicate is simply skipped. */
         foreach ($rows as $r) {
-            DB::table('churn_risk_snapshots')->insert([
+            DB::table('churn_risk_snapshots')->insertOrIgnore([
                 'agency_id'   => $agencyId,
                 'family_id'   => $r['family_id'],
                 'risk_score'  => $r['risk_score'],

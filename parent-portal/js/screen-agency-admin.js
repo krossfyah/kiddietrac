@@ -1126,10 +1126,13 @@
         + '</table><div style="padding:14px 22px;text-align:right;">'
         + '<button data-a="close" style="background:#F1F5F9;border:0;padding:9px 18px;border-radius:8px;'
         + 'cursor:pointer;font-weight:600;color:#475569;font-size:14px;">Close</button></div></div>';
-      function close() { o.remove(); document.removeEventListener('keydown', esc); }
-      function esc2(e) { if (e.key === 'Escape') close(); }
-      var esc = esc2;
-      document.addEventListener('keydown', esc);
+      /* onEscKey, NOT `esc` (2026-10-09, ticket #141). A local `var esc` here was hoisted
+         over the file's esc() text helper, so esc(c.name) above ran while it was still
+         undefined: "esc is not a function", and Agency overview → ⋮ → View details never
+         opened. Named so it cannot shadow the helper again. */
+      function close() { o.remove(); document.removeEventListener('keydown', onEscKey); }
+      function onEscKey(e) { if (e.key === 'Escape') close(); }
+      document.addEventListener('keydown', onEscKey);
       o.addEventListener('click', function (e) { if (e.target === o) close(); });
       o.querySelector('[data-a="close"]').onclick = close;
       document.body.appendChild(o);
