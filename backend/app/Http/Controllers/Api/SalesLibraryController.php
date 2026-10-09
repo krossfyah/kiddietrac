@@ -173,7 +173,7 @@ class SalesLibraryController extends Controller
         $this->assertSuperAdmin($request);
 
         $doc = DB::table('sales_documents')->where('id', $docId)->whereNull('deleted_at')
-            ->first(['file_url', 'title', 'file_type']);
+            ->first(['file_url', 'title', 'file_type', 'file_name']);
         abort_unless($doc, 404);
 
         $rel = ltrim(str_replace('/storage/', '', (string) $doc->file_url), '/');
@@ -182,7 +182,16 @@ class SalesLibraryController extends Controller
 
         $this->audit($request, 'sales.library_downloaded', $docId, ['title' => $doc->title]);
 
-        return response()->file($disk->path($rel));
+        /* As an ATTACHMENT under the file's own name (2026-10-09, the repository's new
+           Download item). file() sent it inline with no name, so a browser either opened it
+           or saved it as "download". */
+        $name = trim((string) ($doc->file_name ?: $doc->title ?: basename($rel)));
+        if (! pathinfo($name, PATHINFO_EXTENSION) && pathinfo($rel, PATHINFO_EXTENSION)) {
+            $name .= '.' . pathinfo($rel, PATHINFO_EXTENSION);
+        }
+        $name = preg_replace('/[\\/:*?"<>|]+/', '-', $name) ?: basename($rel);
+
+        return response()->download($disk->path($rel), $name);
     }
 
     /** DELETE /sales/library/{doc} */

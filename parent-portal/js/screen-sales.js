@@ -75,6 +75,19 @@
   function toast(i, t, m, c) { try { KT.toast && KT.toast(i, t, m || '', c || ACCENT); } catch (e) {} }
   function go(hash) { window.location.hash = '#' + hash; }
   function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+  /* An instant from the server (UTC, "YYYY-MM-DD HH:MM:SS") shown with its time in the
+     AGENCY's zone — "Oct 9, 2026, 8:57 AM". (Anthony, 2026-10-09: "when adding notes to
+     leads add the timestamp to the notes as well".) */
+  function fmtStamp(raw) {
+    if (!raw) { return ''; }
+    var iso = String(raw).replace(' ', 'T');
+    if (!/(Z|[+-]\d{2}:?\d{2})$/.test(iso)) { iso += 'Z'; }
+    var dt = new Date(iso);
+    if (isNaN(dt.getTime())) { return String(raw); }
+    var o = { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+    try { var z = (window.KT && KT.tz) ? KT.tz() : null; if (z) { o.timeZone = z; } } catch (e) {}
+    try { return dt.toLocaleString('en-CA', o); } catch (e) { delete o.timeZone; return dt.toLocaleString('en-CA', o); }
+  }
   function fmtDate(s) {
     if (!s) return '';
     // A date-only value never goes through Date(): it renders a day early. Anything
@@ -503,7 +516,7 @@
     container.appendChild(hero(lead.company || lead.name || ('Lead #' + id), (lead.company && lead.name ? lead.name + ' · ' : '') + (lead.email || 'Lead details, activity and proposals.'), '🏢'));
     container.appendChild(toolbar([btn('← Pipeline', 'light', function () { go('sales'); })]));
 
-    var body = el('div');
+    var body = el('div', { class: 'kt-lead-page' });
 
     // Stage mover
     var stageSel = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), lead.stage, { style: 'width:auto;min-width:170px;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px' });
@@ -518,39 +531,56 @@
       ]),
     ], 'margin-bottom:14px'));
 
-    var grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;align-items:start' });
-    // LEFT: editable details + activities
-    var left = el('div');
+    /* THE LEAD PAGE FILLS THE SCREEN (2026-10-09: "make this look better and fill the
+       screen to utilise the space"). Two columns on a wide screen — the record on the
+       left in labelled sections, the conversation (activity, proposals) on the right —
+       and one column on a narrow one. No width cap: the page uses what it is given. */
+    ensureLeadCss();
+    var grid = el('div', { class: 'kt-lead-grid' });
+    var left = el('div', { class: 'kt-lead-main' });
     var e = {};
     left.appendChild(card([
-      el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Details']),
-      el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 14px;align-items:start' }, [
-        field('Contact', e.name = input({ value: lead.name || '' })),
-        field('Job title', e.title = input({ value: lead.title || '' })),
-        field('Company', e.company = input({ value: lead.company || '' })),
-        field('Website', e.website = input({ value: lead.website || '' })),
-        field('Email', e.email = input({ value: lead.email || '' })),
-        field('Phone', e.phone = input({ value: lead.phone || '' })),
-        field('Street address', e.address = input({ value: lead.address || '' })),
-        field('City', e.city = input({ value: lead.city || '' })),
-        field('Province / state', e.province = input({ value: lead.province || '' })),
-        field('Postal / ZIP', e.postal_code = input({ value: lead.postal_code || '' })),
-        field('Country', e.country = input({ value: lead.country || '' })),
-        field('Owner name', e.owner_name = input({ value: lead.owner_name || '', placeholder: 'Business owner' })),
-        field('Owner title', e.owner_title = input({ value: lead.owner_title || '' })),
-        field('Owner email', e.owner_email = input({ value: lead.owner_email || '' })),
-        field('Owner phone', e.owner_phone = input({ value: lead.owner_phone || '' })),
-        field('Using today', e.current_solution = input({ value: lead.current_solution || '', placeholder: 'HiMama, paper…' })),
-        field('# children', e.num_children = input({ type: 'number', min: '0', value: lead.num_children == null ? '' : lead.num_children })),
-        field('# locations', e.num_locations = input({ type: 'number', min: '0', value: lead.num_locations == null ? '' : lead.num_locations })),
-        field('Lead source', e.source = selectEl(sourceOptions(lead.source), sourceValue(lead.source))),
-        field('Owner', e.owner_id = selectEl(ownerOpts(), lead.owner_id || '')),
-        field('Est. value ($)', e.value = input({ type: 'number', step: '0.01', value: lead.value == null ? '' : lead.value })),
-        field('Expected close', e.expected_close = input({ type: 'date', value: lead.expected_close || '' })),
-        field('Next follow-up', e.follow_up_date = input({ type: 'date', value: lead.follow_up_date || '' })),
+      el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:14px' }, [
+        el('div', { style: 'font-weight:800;font-size:15px;flex:1' }, ['Lead record']),
+        el('div', { style: 'font-size:12px;color:#94A3B8' }, [lead.created_at ? 'Added ' + fmtStamp(lead.created_at) : '']),
       ]),
-      el('div', { style: 'margin-top:12px' }, [field('Notes', e.notes = textarea({ value: lead.notes || '' }))]),
-      el('div', { style: 'display:flex;gap:8px;margin-top:12px' }, [
+      el('div', { class: 'kt-lead-sections' }, [
+        formSection('Contact', '👤', [
+          field('Contact', e.name = input({ value: lead.name || '' })),
+          field('Job title', e.title = input({ value: lead.title || '' })),
+          field('Email', e.email = input({ value: lead.email || '' })),
+          field('Phone', e.phone = input({ value: lead.phone || '' })),
+        ]),
+        formSection('Company', '🏢', [
+          field('Company', e.company = input({ value: lead.company || '' })),
+          field('Website', e.website = input({ value: lead.website || '' })),
+          field('Using today', e.current_solution = input({ value: lead.current_solution || '', placeholder: 'HiMama, paper…' })),
+          field('# children', e.num_children = input({ type: 'number', min: '0', value: lead.num_children == null ? '' : lead.num_children })),
+          field('# locations', e.num_locations = input({ type: 'number', min: '0', value: lead.num_locations == null ? '' : lead.num_locations })),
+        ]),
+        formSection('Deal', '💼', [
+          field('Lead source', e.source = selectEl(sourceOptions(lead.source), sourceValue(lead.source))),
+          field('Owner', e.owner_id = selectEl(ownerOpts(), lead.owner_id || '')),
+          field('Est. value ($)', e.value = input({ type: 'number', step: '0.01', value: lead.value == null ? '' : lead.value })),
+          field('Expected close', e.expected_close = input({ type: 'date', value: lead.expected_close || '' })),
+          field('Next follow-up', e.follow_up_date = input({ type: 'date', value: lead.follow_up_date || '' })),
+        ]),
+        formSection('Business owner', '🧑‍💼', [
+          field('Owner name', e.owner_name = input({ value: lead.owner_name || '', placeholder: 'Business owner' })),
+          field('Owner title', e.owner_title = input({ value: lead.owner_title || '' })),
+          field('Owner email', e.owner_email = input({ value: lead.owner_email || '' })),
+          field('Owner phone', e.owner_phone = input({ value: lead.owner_phone || '' })),
+        ]),
+        el('div', { class: 'kt-lead-wide' }, [formSection('Address', '📍', [
+          field('Street address', e.address = input({ value: lead.address || '' })),
+          field('City', e.city = input({ value: lead.city || '' })),
+          field('Province / state', e.province = input({ value: lead.province || '' })),
+          field('Postal / ZIP', e.postal_code = input({ value: lead.postal_code || '' })),
+          field('Country', e.country = input({ value: lead.country || '' })),
+        ])]),
+        el('div', { class: 'kt-lead-wide' }, [formSection('Notes', '🗒️', [fieldWide('About this lead', e.notes = textarea({ value: lead.notes || '', rows: 4 }))])]),
+      ]),
+      el('div', { style: 'display:flex;gap:8px;margin-top:4px' }, [
         btn('Save changes', 'primary', async function (ev) {
           ev.target.disabled = true;
           try {
@@ -590,7 +620,7 @@
     // Activity + follow-up composer
     var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Activity & history'])], '');
     var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }], 'note', { style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' });
-    var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up…' });
+    var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up… (saved with the date and time)' });
     var dueIn = input({ type: 'date' }); dueIn.style.display = 'none';
     typeSel.addEventListener('change', function () { dueIn.style.display = typeSel.value === 'followup' ? 'block' : 'none'; });
     acWrap.appendChild(el('div', { style: 'display:grid;grid-template-columns:minmax(150px,180px) 1fr;gap:8px;margin-bottom:8px' }, [typeSel, dueIn]));
@@ -612,7 +642,8 @@
         el('div', { style: 'font-size:12px;color:#64748B' }, [
           (ACT_ICON[a.type] || '•') + ' ',
           el('span', { style: 'font-weight:700;color:#334155' }, [ACT_LABEL[a.type] || (a.type.charAt(0).toUpperCase() + a.type.slice(1))]),
-          a.user_name ? ' · ' + a.user_name : '', a.created_at ? ' · ' + fmtDate((a.created_at || '').slice(0, 10)) : '',
+          a.user_name ? ' · ' + a.user_name : '',
+          a.created_at ? el('span', { style: 'margin-left:6px;color:#94A3B8;white-space:nowrap', title: 'Logged ' + fmtStamp(a.created_at) }, ['🕒 ' + fmtStamp(a.created_at)]) : '',
           isFu && a.due_date ? el('span', { style: 'margin-left:6px;font-weight:700;color:' + (a.done ? '#15803D' : '#C2410C') }, [a.done ? '✓ done' : ('due ' + fmtDate(a.due_date))]) : '',
           isFu && !a.done ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: async function (ev2) { ev2.preventDefault(); try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} } }, ['mark done']) : '',
         ]),
@@ -621,13 +652,29 @@
     });
     if (!(lead.activities || []).length) timeline.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No activity yet.']));
     acWrap.appendChild(timeline);
-    left.appendChild(acWrap);
     grid.appendChild(left);
 
-    // RIGHT: quotes
-    grid.appendChild(renderQuotesPanel(id, lead, container, ctx));
+    // RIGHT: the conversation — activity first (it is what changes), then proposals.
+    var right = el('div', { class: 'kt-lead-side' }, [acWrap, el('div', { style: 'height:14px' }), renderQuotesPanel(id, lead, container, ctx)]);
+    grid.appendChild(right);
     body.appendChild(grid);
-    container.appendChild(wrap([body], 1320));
+    container.appendChild(el('div', { class: 'kt-lead-page' }, [body]));
+  }
+
+  function ensureLeadCss() {
+    if (document.getElementById('kt-lead-css')) { return; }
+    var st = document.createElement('style'); st.id = 'kt-lead-css';
+    st.textContent =
+      '.kt-lead-page{width:100%;max-width:none;padding:0 4px;box-sizing:border-box}' +
+      '.kt-lead-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(340px,1fr);gap:16px;align-items:start}' +
+      '.kt-lead-side{position:sticky;top:12px;min-width:0}' +
+      '.kt-lead-main{min-width:0}' +
+      '.kt-lead-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px;align-items:start}' +
+      '.kt-lead-sections .kt-lead-wide{grid-column:1 / -1}' +
+      '.kt-lead-sections input,.kt-lead-sections select,.kt-lead-sections textarea{max-width:none !important;width:100%}' +
+      '@media (max-width:1180px){.kt-lead-sections{grid-template-columns:minmax(0,1fr)}}' +
+      '@media (max-width:980px){.kt-lead-grid{grid-template-columns:minmax(0,1fr)}.kt-lead-side{position:static}}';
+    document.head.appendChild(st);
   }
 
   function renderQuotesPanel(id, lead, container, ctx) {
@@ -1151,6 +1198,10 @@
         /* Each carries its own glyph: kt-row-actions picks a fallback icon from the
            label, and "Move to folder" hits its view/open rule and would come out as a
            second eye beside the real View. */
+        /* DOWNLOAD (2026-10-09: "file repository - there is no option to download using the
+           kebab"). The server route existed; the menu never offered it. */
+        var dl = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'margin-left:6px;' + btnCss('#fff', '#0F172A', '#CBD5E1') }, ['⬇️ Download']);
+        dl.addEventListener('click', function (e) { e.stopPropagation(); downloadDoc(d, dl); });
         var move = el('button', { type: 'button', 'data-kt-iconized': '1', style: 'margin-left:6px;' + btnCss('#fff', '#0F172A', '#CBD5E1') }, ['📁 Move to folder']);
         move.addEventListener('click', function (e) { e.stopPropagation(); moveDoc(d); });
 
@@ -1210,7 +1261,7 @@
           td([el('div', { style: 'color:#334155' }, [st.date + (st.time ? ' · ' + st.time : '')]),
               el('div', { style: 'color:#94A3B8;font-size:11.5px;margin-top:2px' }, [d.uploaded_by || ''])],
              'white-space:nowrap', st.sort),
-          td(unfile ? [open, move, unfile, del] : [open, move, del], 'text-align:right;white-space:nowrap'),
+          td(unfile ? [open, dl, move, unfile, del] : [open, dl, move, del], 'text-align:right;white-space:nowrap'),
         ]));
       });
       tbl.appendChild(tb);
@@ -1350,6 +1401,32 @@
 
     /* Signed, bearer-free and short-lived, so it can be handed to the real browser —
        the packaged app cannot open a /storage path and cannot carry the session out. */
+    /* Signed-in fetch of /sales/library/{id}/download, saved under the file's own name.
+       The anchor+blob save is the pattern kt-doc-viewer's native net hands to the Android
+       app's downloader, so it works in the APK too. */
+    async function downloadDoc(d, button) {
+      var name = String(d.file_name || d.title || ('file-' + d.id)).replace(/[\\/:*?"<>|]+/g, '-');
+      if (d.extension && !new RegExp('\\.' + d.extension + '$', 'i').test(name)) { name += '.' + String(d.extension).toLowerCase(); }
+      var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var token = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      var agency = ''; try { agency = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+      if (button) { button.disabled = true; }
+      try {
+        var res = await fetch(base + '/sales/library/' + d.id + '/download', {
+          headers: { 'Authorization': 'Bearer ' + token, 'X-Active-Agency-Id': agency },
+        });
+        if (!res.ok) { throw new Error(res.status === 404 ? 'The file is missing from storage.' : 'HTTP ' + res.status); }
+        var blob = await res.blob();
+        var u = URL.createObjectURL(blob);
+        var a = document.createElement('a'); a.href = u; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+        toast('⬇️', 'Downloading', name);
+      } catch (e) {
+        toast('⚠️', 'Could not download', e.message || '', '#DC2626');
+      } finally { if (button) { button.disabled = false; } }
+    }
+
     function openDoc(d) {
       if (!d.open_url) { toast('⚠️', 'Unavailable', 'That file has no link.', '#DC2626'); return; }
       try {
