@@ -150,6 +150,28 @@
     }
   }
 
+  var ROLE_WORD = { centre_director: 'Director', agency_admin: 'Admin', platform_admin: 'Admin', director: 'Director', admin: 'Admin' };
+  function reviewCell(r) {
+    var cell = Dom.el('div', { 'data-kt-doc-review': r.state, style: 'flex:0 1 250px;min-width:170px;font-size:12.5px;line-height:1.4;' });
+    var tone = {
+      countersigned: ['#ECFDF5', '#047857', '✅ Counter-signed'],
+      returned:      ['#FFFBEB', '#B45309', '↩️ Sent back for correction'],
+      corrected:     ['#F1F5F9', '#475569', '🔁 Replaced by a corrected copy'],
+      pending:       ['#F8FAFC', '#64748B', '⏳ Not counter-signed yet'],
+    }[r.state] || ['#F8FAFC', '#64748B', r.state];
+    cell.appendChild(Dom.el('div', {
+      style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-weight:700;font-size:12px;'
+           + 'background:' + tone[0] + ';color:' + tone[1] + ';white-space:nowrap;',
+    }, tone[2]));
+    var who = r.by ? (r.by + (ROLE_WORD[r.role] ? ' (' + ROLE_WORD[r.role] + ')' : '')) : '';
+    var line = [who ? 'by ' + who : '', r.at ? filedOn(r.at) : ''].filter(Boolean).join(' · ');
+    if (line) { cell.appendChild(Dom.el('div', { style: 'color:var(--kt-text-muted);margin-top:3px;' }, line)); }
+    if (r.note && r.state !== 'corrected') {
+      cell.appendChild(Dom.el('div', { style: 'color:var(--kt-text-muted);margin-top:2px;font-style:italic;overflow-wrap:anywhere;' }, '“' + r.note + '”'));
+    }
+    return cell;
+  }
+
   async function render(main) {
     Dom = (window.KT && window.KT.Dom) || Dom || window.Dom;   // read at call time, like api()
     Dom.clear(main);
@@ -265,14 +287,14 @@
       var kid = [d.child && d.child.first_name, d.child && d.child.last_name].filter(Boolean).join(' ');
       var card = Dom.el('div', {
         style: 'background:var(--kt-surface);border:1px solid var(--kt-border);border-radius:14px;'
-             + 'padding:15px 16px;margin-bottom:10px;display:flex;gap:13px;align-items:center;',
+             + 'padding:15px 16px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:10px 13px;align-items:center;',
       });
       card.appendChild(Dom.el('div', {
         style: 'flex:0 0 auto;width:42px;height:42px;border-radius:11px;background:var(--kt-bg);'
              + 'display:flex;align-items:center;justify-content:center;font-size:20px;',
       }, ICON[d.category] || '📄'));
 
-      var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      var mid = Dom.el('div', { style: 'flex:1 1 220px;min-width:0;' });
       mid.appendChild(Dom.el('div', {
         style: 'font-weight:700;font-size:14.5px;color:var(--kt-text);line-height:1.35;',
       }, d.title || (LABEL[d.category] || 'Document')));
@@ -285,6 +307,13 @@
         kb(d.file_size),
       ].filter(Boolean).join('  ·  ')));
       card.appendChild(mid);
+
+      /* COUNTER-SIGNED, AND BY WHOM (2026-10-09: "it should also have a column that shows
+         counter signed as well by admin/director name"). The office's review of each
+         signed form, from the server's `review`: who counter-signed it and when, or that
+         it was sent back for correction, or that it has not been counter-signed yet. A
+         fixed-width column on a wide screen; on a phone it drops under the title. */
+      if (d.review) { card.appendChild(reviewCell(d.review)); }
 
       var btn = Dom.el('button', {
         class: 'btn btn-secondary',

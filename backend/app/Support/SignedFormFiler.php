@@ -84,7 +84,6 @@ final class SignedFormFiler
             if ($countersigned) {
                 $abs = \Illuminate\Support\Facades\Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $url));
                 $size = is_file($abs) ? (int) filesize($abs) : null;
-                $signedAt = $s->countersigned_at;
                 $notes = mb_substr('Counter-signed by ' . ($s->countersigner_name ?: 'the office')
                     . ($s->countersign_note ? ' — ' . mb_substr((string) $s->countersign_note, 0, 300) : ''), 0, 1000);
             }
@@ -114,6 +113,44 @@ final class SignedFormFiler
         } catch (\Throwable $e) {
             report($e);
         }
+    }
+
+    /**
+     * The office's review of each filed signed form, for the signer's Documents list
+     * (2026-10-09: "it should also have a column that shows counter signed as well by
+     * admin/director name"). Adds `review` to every signed-form row:
+     *   state: countersigned | returned | corrected | pending
+     *   by / role / at / note -- who counter-signed (or sent it back), and when.
+     * Rows that are not signed forms are left alone.
+     */
+    public static function withReview($docs)
+    {
+        $ids = collect($docs)->filter(fn ($d) => ($d->source_type ?? null) === self::SOURCE)
+            ->pluck('source_id')->map(fn ($v) => (int) $v)->all();
+        $rows = $ids ? DB::table('managed_form_signoffs')->whereIn('id', $ids)->get([
+            'id', 'countersigned_at', 'countersigner_name', 'countersigner_role', 'countersign_note',
+            'correction_requested_at', 'correction_requested_by_name', 'correction_note', 'corrected_at',
+        ])->keyBy('id') : collect();
+
+        return collect($docs)->map(function ($d) use ($rows) {
+            $s = (($d->source_type ?? null) === self::SOURCE) ? ($rows[(int) $d->source_id] ?? null) : null;
+            if ($s) {
+                if ($s->countersigned_at) {
+                    $d->review = ['state' => 'countersigned', 'by' => $s->countersigner_name,
+                        'role' => $s->countersigner_role, 'at' => $s->countersigned_at, 'note' => $s->countersign_note];
+                } elseif ($s->correction_requested_at && ! $s->corrected_at) {
+                    $d->review = ['state' => 'returned', 'by' => $s->correction_requested_by_name,
+                        'at' => $s->correction_requested_at, 'note' => $s->correction_note];
+                } elseif ($s->correction_requested_at) {
+                    $d->review = ['state' => 'corrected', 'by' => $s->correction_requested_by_name,
+                        'at' => $s->corrected_at, 'note' => null];
+                } else {
+                    $d->review = ['state' => 'pending'];
+                }
+            }
+            unset($d->source_type, $d->source_id);
+            return $d;
+        })->values();
     }
 
     /**

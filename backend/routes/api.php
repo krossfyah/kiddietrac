@@ -869,8 +869,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             $docs = \Illuminate\Support\Facades\DB::table('documents')
                 ->where('scope_type', 'user')->where('scope_id', $request->user()->id)
                 ->orderByDesc('created_at')
-                ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at', 'notes']);
-            return response()->json(['documents' => $docs]);
+                ->get(['id', 'title', 'category', 'file_url', 'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at', 'notes', 'source_type', 'source_id']);
+            // Each signed form says whether the office has counter-signed it, and who.
+            return response()->json(['documents' => \App\Support\SignedFormFiler::withReview($docs)]);
         });
         // Stream one of the caller's own documents through the API so the mobile
         // WebView can open it (a cross-origin /storage link + target=_blank fails there).
