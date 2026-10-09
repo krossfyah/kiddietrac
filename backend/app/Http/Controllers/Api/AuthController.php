@@ -70,6 +70,13 @@ final class AuthController extends Controller
         }
 
         $uname = ! empty($data['username']) ? mb_strtolower(trim((string) $data['username'])) : '';
+        /* THE ADDRESS IN THE USERNAME BOX IS NO USERNAME (2026-10-09). A browser that
+           autofills the optional username field with the email turned every attempt into
+           "find the account whose USERNAME is this address" — none has one — so a correct
+           sign-in failed. It adds nothing to tell accounts apart: drop it. */
+        if ($uname !== '' && $uname === mb_strtolower(trim((string) ($data['email'] ?? '')))) {
+            $uname = '';
+        }
         $user = null;
         if ($uname !== '') {
             // v22p101 — STRICT email + username. A username disambiguator was
@@ -176,6 +183,8 @@ final class AuthController extends Controller
                    neither is one with no history (46). Those stay platform-level, which
                    is the honest place for a probe or a typo from nowhere. */
             [$owner, $ownerAgency, $how] = $this->attributeRefusedLogin($request, $login, $uname);
+
+            // (A password typed into the sign-in box is masked centrally, in audit().)
 
             $this->audit($request, null, 'login_failed',
                 $owner ? 'user' : null,
@@ -572,6 +581,12 @@ final class AuthController extends Controller
         ]);
         $login = trim((string) $data['email']);
         $uname = ! empty($data['username']) ? mb_strtolower(trim((string) $data['username'])) : '';
+        /* Lorraine Cooper, 2026-10-09: her reset arrived with her address in BOTH fields,
+           was read as "the account whose username is coopey…@gmail.com", matched nothing,
+           and no email went out. An address repeated as the username is no username. */
+        if ($uname !== '' && $uname === mb_strtolower($login)) {
+            $uname = '';
+        }
         $looksLikeEmail = strpos($login, '@') !== false;
         $email = $looksLikeEmail ? $login : '';
 
@@ -1634,6 +1649,22 @@ final class AuthController extends Controller
 
     private function audit(Request $request, ?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, string|array|null $details = null, ?int $agencyId = null): void
     {
+        /* A PASSWORD TYPED INTO THE SIGN-IN BOX IS NEVER STORED (2026-10-09). Every refused
+           sign-in records what was typed as the identifier. When that matched no account and
+           could not even be a username or an address (a username is letters, digits, dot,
+           dash, underscore), it is almost always the password in the wrong box — and it was
+           written verbatim into the audit log every admin can read. Here, once, for every
+           refusal path: the first character and the length, nothing more. */
+        if ($action === 'login_failed' && is_array($details) && isset($details['login'])
+            && ($details['reason'] ?? '') !== 'wrong_password') {
+            $typed = (string) $details['login'];
+            if ($typed !== '' && ! preg_match('/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/', $typed) && ! preg_match('/^[A-Za-z0-9._-]{1,50}$/', $typed)) {   // not an address, not a username ("@mydaycare2!" contains an @ and is neither)
+                $masked = mb_substr($typed, 0, 1) . '… (hidden: ' . mb_strlen($typed) . ' characters, not a valid username, possibly a password)';
+                foreach ($details as $k => $v) {
+                    if (is_string($v) && str_contains($v, $typed)) { $details[$k] = str_replace($typed, $masked, $v); }
+                }
+            }
+        }
         try {
             \App\Support\Audit::write([
                 'user_id' => $userId,
