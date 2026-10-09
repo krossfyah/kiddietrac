@@ -1855,8 +1855,10 @@
 
       var form = document.createElement('div');
       form.innerHTML =
-        field('File', 'PDF, deck, sheet or image — up to 25 MB',
-              '<input type="file" class="sl-file" style="' + INPUT + 'padding:8px 10px;">')
+        field('Files', 'PDF, deck, sheet or image — up to 25 MB each. Pick several at once with Ctrl / Shift (⌘ on a Mac).',
+              '<input type="file" multiple class="sl-file" style="' + INPUT + 'padding:8px 10px;">')
+        + '<div class="sl-picked" style="display:none;margin-top:8px;border:1px solid #E2E8F0;border-radius:9px;'
+        +   'background:#FAFBFD;max-height:150px;overflow:auto;font-size:12.5px;"></div>'
         + '<div style="height:14px"></div>'
         + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;">'
         +   field('Folder', 'Where it lives', '<select class="sl-folder" style="' + INPUT + '">' + folderOpts + '</select>')
@@ -1883,13 +1885,49 @@
          hand, choosing a different file must not throw that away. The extension is left
          off, because it is already shown beside the name and a title reading
          "x.pdf.pdf" is the kind of thing nobody notices until it is everywhere. */
+      /* SEVERAL FILES AT ONCE (2026-10-09, Anthony: "for file repository add ability to
+         select multiple files for upload"). With more than one chosen, each keeps its own
+         name as its title (one typed title cannot fit them all), while folder, category and
+         notes apply to every file. They go up one after another; any that fail stay in the
+         list with the reason, so "Add" again retries just those. */
       var titleEl = form.querySelector('.sl-title');
       var titleTouched = false;
+      var pending = [];          // [{ file, error }]
+      var pickedBox = form.querySelector('.sl-picked');
+      function baseName(n) { return String(n || '').replace(/\.[a-z0-9]{1,8}$/i, ''); }
+      function drawPicked() {
+        pickedBox.innerHTML = '';
+        pickedBox.style.display = pending.length ? '' : 'none';
+        pending.forEach(function (p, i) {
+          var big = p.file.size > 25 * 1024 * 1024;
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 10px;border-top:' + (i ? '1px solid #EEF2F6' : '0');
+          row.innerHTML = '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0F172A;">'
+            + esc(fileIcon(p.file.name) + ' ' + p.file.name) + '</span>'
+            + '<span style="color:' + (big ? '#B91C1C' : '#94A3B8') + ';">' + esc(big ? 'over 25 MB' : fmtBytes(p.file.size)) + '</span>'
+            + (p.error ? '<span style="color:#B91C1C;max-width:45%;">' + esc(p.error) + '</span>' : '')
+            + '<button type="button" data-rm="' + i + '" aria-label="Remove" style="border:0;background:none;color:#94A3B8;cursor:pointer;font-size:15px;line-height:1;padding:0 2px;">×</button>';
+          pickedBox.appendChild(row);
+        });
+        pickedBox.querySelectorAll('[data-rm]').forEach(function (b) {
+          b.addEventListener('click', function () { pending.splice(+b.getAttribute('data-rm'), 1); drawPicked(); });
+        });
+        var many = pending.length > 1;
+        titleEl.disabled = many;
+        titleEl.placeholder = many ? 'Each file keeps its own name' : 'e.g. Price sheet 2026';
+        if (many) { titleEl.value = ''; }
+        else if (pending.length === 1 && !titleTouched) { titleEl.value = baseName(pending[0].file.name); }
+      }
       titleEl.addEventListener('input', function () { titleTouched = true; });
       form.querySelector('.sl-file').addEventListener('change', function (ev) {
-        var picked = ev.target.files && ev.target.files[0];
-        if (!picked || titleTouched) { return; }
-        titleEl.value = String(picked.name || '').replace(/\.[a-z0-9]{1,8}$/i, '');
+        /* A second pick ADDS to the list (so files from two folders can go up together);
+           the same file chosen twice is kept once. */
+        Array.prototype.forEach.call(ev.target.files || [], function (f) {
+          var dup = pending.some(function (p) { return p.file.name === f.name && p.file.size === f.size && p.file.lastModified === f.lastModified; });
+          if (!dup) { pending.push({ file: f, error: '' }); }
+        });
+        ev.target.value = '';
+        drawPicked();
       });
 
       /* "New category" reveals the free-text box; everything else picks an existing one. */
@@ -1914,29 +1952,45 @@
             handler: function () {
               var err = form.querySelector('.sl-err');
               err.textContent = '';
-              var f = form.querySelector('.sl-file').files[0];
-              if (!f) { err.textContent = 'Choose a file.'; return false; }
-              if (f.size > 25 * 1024 * 1024) { err.textContent = 'That file is larger than 25 MB.'; return false; }
-
-              var fd = new FormData();
-              fd.append('file', f);
-              fd.append('title', form.querySelector('.sl-title').value || '');
+              if (!pending.length) { err.textContent = 'Choose a file.'; return false; }
+              var tooBig = pending.filter(function (p) { return p.file.size > 25 * 1024 * 1024; });
+              if (tooBig.length) {
+                err.textContent = (tooBig.length === 1 ? tooBig[0].file.name + ' is' : tooBig.length + ' files are')
+                  + ' larger than 25 MB — remove ' + (tooBig.length === 1 ? 'it' : 'them') + ' with ×.';
+                return false;
+              }
               var catSel = form.querySelector('.sl-cat-sel');
-              fd.append('category', catSel.value === '__new'
-                ? (form.querySelector('.sl-cat-new').value || '')
-                : (catSel.value || ''));
-              fd.append('notes', form.querySelector('.sl-notes').value || '');
-              fd.append('folder_id', form.querySelector('.sl-folder').value || '');
+              var category = catSel.value === '__new' ? (form.querySelector('.sl-cat-new').value || '') : (catSel.value || '');
+              var notes = form.querySelector('.sl-notes').value || '';
+              var folderId = form.querySelector('.sl-folder').value || '';
+              var single = pending.length === 1;
 
-              return KT.Api.postForm('/sales/library', fd)
-                .then(function (res) {
-                  toast('📁', 'Added', (res && res.message) || '');
-                  reload();
-                })
-                .catch(function (e) {
-                  err.textContent = (e && e.message) || 'Could not upload that file.';
-                  return false;
-                });
+              return (async function () {
+                var done = 0, failed = [];
+                for (var i = 0; i < pending.length; i++) {
+                  var p = pending[i];
+                  if (!single) { err.style.color = '#475569'; err.textContent = 'Uploading ' + (i + 1) + ' of ' + pending.length + ' — ' + p.file.name; }
+                  var fd = new FormData();
+                  fd.append('file', p.file);
+                  fd.append('title', single ? (titleEl.value || '') : '');
+                  fd.append('category', category);
+                  fd.append('notes', notes);
+                  fd.append('folder_id', folderId);
+                  try { await KT.Api.postForm('/sales/library', fd); done++; }
+                  catch (e) { p.error = (e && e.message) || 'Could not upload'; failed.push(p); }
+                }
+                err.style.color = '#B91C1C';
+                if (done) { reload(); }
+                if (!failed.length) {
+                  toast('📁', done === 1 ? 'Added' : done + ' files added', single ? pending[0].file.name : '');
+                  return;
+                }
+                pending = failed;
+                drawPicked();
+                err.textContent = (done ? done + ' added. ' : '') + failed.length + (failed.length === 1 ? ' file' : ' files')
+                  + ' could not be uploaded — shown above. Add again to retry.';
+                return false;
+              })();
             },
           },
         ],
