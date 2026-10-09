@@ -237,6 +237,22 @@ class SalesController extends Controller
             'due_date' => 'nullable|date',
             'done'     => 'nullable|boolean',
         ]);
+        /* EDITING WHAT WAS WRITTEN (2026-10-09: "allow me to edit notes that I have added to
+           leads to correct anything"). The wording of an entry is its author's — or a
+           platform admin's — to correct; anyone on the team may still tick a follow-up done.
+           System entries (stage moves, field changes) are a record, not prose: never edited. */
+        $editsWords = array_key_exists('body', $data) || array_key_exists('due_date', $data);
+        $beforeBody = $a->body; $beforeDue = optional($a->due_date)->toDateString();
+        if ($editsWords) {
+            if (! self::canEditActivity($a)) {
+                return response()->json(['message' => in_array($a->type, ['stage', 'edit'], true)
+                    ? 'This entry was recorded by the system and cannot be edited.'
+                    : 'Only the person who wrote this entry, or a platform admin, can edit it.'], 403);
+            }
+            if (array_key_exists('body', $data) && trim((string) $data['body']) === '' && $a->type !== 'followup') {
+                return response()->json(['message' => 'An entry cannot be empty.', 'errors' => ['body' => ['Write something.']]], 422);
+            }
+        }
         if (array_key_exists('body', $data)) {
             $a->body = $data['body'];
         }
@@ -247,7 +263,31 @@ class SalesController extends Controller
             $a->done = (bool) $data['done'];
             $a->done_at = $a->done ? now() : null;
         }
+        $changedWords = $editsWords && ((string) $beforeBody !== (string) $a->body
+            || (string) $beforeDue !== (string) optional($a->due_date)->toDateString());
+        if ($changedWords) {
+            $a->edited_at = now();
+            $a->edited_by_id = auth()->id();
+        }
         $a->save();
+
+        if ($changedWords) {
+            try {
+                \App\Support\Audit::write([
+                    'user_id' => auth()->id(),
+                    'agency_id' => auth()->id() ? \App\Support\AuditScope::resolve((int) auth()->id(), $r) : null,
+                    'action' => 'sales.activity_edited', 'entity_type' => 'sales_lead', 'entity_id' => $a->lead_id,
+                    'payload' => json_encode([
+                        'summary' => 'Edited a ' . $a->type . ' on lead #' . $a->lead_id,
+                        'activity_id' => $a->id,
+                        'before' => ['body' => $beforeBody, 'due_date' => $beforeDue],
+                        'after' => ['body' => $a->body, 'due_date' => optional($a->due_date)->toDateString()],
+                    ]),
+                    'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+            }
+        }
 
         // Clear the lead's quick follow-up date once its open follow-up is done.
         if ($a->type === 'followup' && $a->done && ($lead = SalesLead::find($a->lead_id))) {
@@ -259,6 +299,17 @@ class SalesController extends Controller
         }
 
         return response()->json($a->fresh('user'));
+    }
+
+    /** The author, or a platform admin; never a system entry. */
+    private static function canEditActivity(SalesActivity $a): bool
+    {
+        if (in_array($a->type, ['stage', 'edit'], true)) return false;
+        $me = auth()->user();
+        if (! $me) return false;
+        if ((int) $a->user_id === (int) $me->id) return true;
+
+        return $me->roleAssignments->where('active', true)->pluck('role')->contains('platform_admin');
     }
 
     // ---------------------------------------------------------------- Quotes
@@ -792,6 +843,8 @@ class SalesController extends Controller
                 'due_date' => optional($a->due_date)->toDateString(),
                 'done' => (bool) $a->done, 'user_name' => $a->user ? trim($a->user->first_name . ' ' . $a->user->last_name) : null,
                 'created_at' => optional($a->created_at)->toDateTimeString(),
+                'edited_at' => $a->edited_at ? \Illuminate\Support\Carbon::parse($a->edited_at)->toDateTimeString() : null,
+                'can_edit' => self::canEditActivity($a),
             ])->values(),
             'quotes' => $l->quotes->map(fn ($q) => [
                 'id' => $q->id, 'number' => $q->number, 'title' => $q->title,

@@ -638,6 +638,33 @@
     (lead.activities || []).forEach(function (a) {
       var isFu = a.type === 'followup';
       var accent = isFu && !a.done ? '#F59E0B' : (a.type === 'edit' ? '#8B5CF6' : '#e6ebf1');
+      /* EDIT WHAT YOU WROTE (2026-10-09: "allow me to edit notes that I have added to
+         leads to correct anything"). Offered on the author's own entries (and to platform
+         admins) — the server decides (can_edit) and checks again on save. The text is
+         corrected in place; the entry keeps its original time and says it was edited. */
+      var bodyHost = el('div', {}, [activityBodyNode(a)]);
+      var editLink = a.can_edit ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: function (ev3) {
+        ev3.preventDefault();
+        if (bodyHost.getAttribute('data-editing')) { return; }
+        bodyHost.setAttribute('data-editing', '1');
+        var ta = textarea({ value: a.body || '', rows: 4 });
+        ta.style.marginTop = '6px';
+        var due = isFu ? input({ type: 'date', value: a.due_date || '' }) : null;
+        var saveB = btn('Save', 'primary', async function (ev4) {
+          var b = { body: ta.value.trim() };
+          if (!b.body && !isFu) { toast('⚠️', 'Write something', '', '#DC2626'); return; }
+          if (due) { b.due_date = due.value || null; }
+          ev4.target.disabled = true;
+          try { await Api.patch('/sales/activities/' + a.id, b); toast('✅', 'Updated'); renderDetail(container, ctx); }
+          catch (er) { toast('⚠️', 'Could not save', er.message || '', '#DC2626'); ev4.target.disabled = false; }
+        });
+        var cancelB = btn('Cancel', 'light', function () { bodyHost.removeAttribute('data-editing'); clear(bodyHost); bodyHost.appendChild(activityBodyNode(a)); });
+        clear(bodyHost);
+        bodyHost.appendChild(ta);
+        if (due) { bodyHost.appendChild(el('div', { style: 'margin-top:6px;max-width:220px' }, [field('Due date', due)])); }
+        bodyHost.appendChild(el('div', { style: 'display:flex;gap:8px;margin-top:8px' }, [saveB, cancelB]));
+        ta.focus();
+      } }, ['✏️ Edit']) : '';
       timeline.appendChild(el('div', { style: 'border-left:2px solid ' + accent + ';padding:2px 0 2px 10px' }, [
         el('div', { style: 'font-size:12px;color:#64748B' }, [
           (ACT_ICON[a.type] || '•') + ' ',
@@ -646,18 +673,53 @@
           a.created_at ? el('span', { style: 'margin-left:6px;color:#94A3B8;white-space:nowrap', title: 'Logged ' + fmtStamp(a.created_at) }, ['🕒 ' + fmtStamp(a.created_at)]) : '',
           isFu && a.due_date ? el('span', { style: 'margin-left:6px;font-weight:700;color:' + (a.done ? '#15803D' : '#C2410C') }, [a.done ? '✓ done' : ('due ' + fmtDate(a.due_date))]) : '',
           isFu && !a.done ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: async function (ev2) { ev2.preventDefault(); try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} } }, ['mark done']) : '',
+          a.edited_at ? el('span', { style: 'margin-left:6px;color:#94A3B8;font-style:italic', title: 'Edited ' + fmtStamp(a.edited_at) }, ['· edited ' + fmtStamp(a.edited_at)]) : '',
+          editLink,
         ]),
-        activityBodyNode(a),
+        bodyHost,
       ]));
     });
     if (!(lead.activities || []).length) timeline.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No activity yet.']));
     acWrap.appendChild(timeline);
-    grid.appendChild(left);
 
-    // RIGHT: the conversation — activity first (it is what changes), then proposals.
-    var right = el('div', { class: 'kt-lead-side' }, [acWrap, el('div', { style: 'height:14px' }), renderQuotesPanel(id, lead, container, ctx)]);
-    grid.appendChild(right);
-    body.appendChild(grid);
+    /* SUBTABS (2026-10-09: "to clean this up better with leads add subtabs to the lead to
+       view activity and history, proposals etc"). One section at a time, full width. The
+       tab is kept in the address (&tab=) so a refresh, a save or the back button returns
+       to it, and remembered for the next lead opened in this session. */
+    var TABS = [
+      { key: 'details', label: '📋 Details', node: left },
+      { key: 'activity', label: '🕒 Activity & history', count: (lead.activities || []).length, node: acWrap },
+      { key: 'proposals', label: '📄 Proposals', count: (lead.quotes || []).length, node: renderQuotesPanel(id, lead, container, ctx) },
+    ];
+    var want = ((window.location.hash.match(/[?&]tab=([a-z]+)/) || [])[1])
+      || (function () { try { return sessionStorage.getItem('kt_lead_tab') || ''; } catch (e) { return ''; } })();
+    if (!TABS.some(function (t) { return t.key === want; })) { want = 'details'; }
+    var bar = el('div', { class: 'kt-lead-tabs', role: 'tablist' });
+    var panel = el('div', { class: 'kt-lead-panel' });
+    function show(key) {
+      TABS.forEach(function (t) {
+        var on = t.key === key;
+        t.btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.btn.classList.toggle('on', on);
+      });
+      clear(panel);
+      panel.appendChild(TABS.filter(function (t) { return t.key === key; })[0].node);
+      try { sessionStorage.setItem('kt_lead_tab', key); } catch (e) {}
+      try {
+        var h = window.location.hash.replace(/([?&])tab=[a-z]+&?/, '$1').replace(/[?&]$/, '');
+        history.replaceState(null, '', h + (h.indexOf('?') >= 0 ? '&' : '?') + 'tab=' + key);
+      } catch (e) {}
+    }
+    TABS.forEach(function (t) {
+      t.btn = el('button', { type: 'button', role: 'tab', class: 'kt-lead-tab', 'data-kt-iconized': '1', 'data-kt-inpage': '1',
+        onclick: function () { show(t.key); } }, [t.label, t.count ? el('span', { class: 'kt-lead-count' }, [String(t.count)]) : '']);
+      bar.appendChild(t.btn);
+    });
+    body.appendChild(bar);
+    body.appendChild(panel);
+    show(want);
+    // Opened with "Edit" from the leads list: the details tab, cursor in the first field.
+    if (/[?&]edit=1\b/.test(window.location.hash)) { show('details'); }
     container.appendChild(el('div', { class: 'kt-lead-page' }, [body]));
   }
 
@@ -669,10 +731,17 @@
       '.kt-lead-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(340px,1fr);gap:16px;align-items:start}' +
       '.kt-lead-side{position:sticky;top:12px;min-width:0}' +
       '.kt-lead-main{min-width:0}' +
-      '.kt-lead-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px;align-items:start}' +
+      '.kt-lead-sections{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:0 14px;align-items:start}' +
+      '.kt-lead-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;border-bottom:1px solid #E2E8F0;padding-bottom:0}' +
+      '.kt-lead-tab{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;background:transparent;color:#475569;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:-1px}' +
+      '.kt-lead-tab:hover{background:#F1F5F9}' +
+      '.kt-lead-tab.on{background:#fff;color:#0C6070;border-color:#E2E8F0;box-shadow:inset 0 3px 0 #0C6070}' +
+      '.kt-lead-count{display:inline-block;min-width:20px;padding:1px 7px;border-radius:999px;background:#E2E8F0;color:#334155;font-size:11.5px;text-align:center}' +
+      '.kt-lead-tab.on .kt-lead-count{background:#0C6070;color:#fff}' +
+      '.kt-lead-panel{min-width:0}' +
       '.kt-lead-sections .kt-lead-wide{grid-column:1 / -1}' +
       '.kt-lead-sections input,.kt-lead-sections select,.kt-lead-sections textarea{max-width:none !important;width:100%}' +
-      '@media (max-width:1180px){.kt-lead-sections{grid-template-columns:minmax(0,1fr)}}' +
+      '@media (max-width:900px){.kt-lead-sections{grid-template-columns:minmax(0,1fr)}.kt-lead-tab{flex:1 1 auto;justify-content:center;padding:0 8px}}' +
       '@media (max-width:980px){.kt-lead-grid{grid-template-columns:minmax(0,1fr)}.kt-lead-side{position:static}}';
     document.head.appendChild(st);
   }
