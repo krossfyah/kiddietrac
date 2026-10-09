@@ -1989,6 +1989,8 @@ class ManagedFormController extends Controller
         $signedAt = [];
         foreach ($latest as $fid => $h) { $signedAt[(int) $fid] = (string) $h->signed_at; }
         $doneAgain = [];   // form_id => last signed_at
+        $staffForm = [];   // form_id => true when addressed only to staff (a daily chart)
+        $signedCount = count($signed);   // for the "signed copies are in Documents" pointer
         foreach ($signed as $fid) {
             if (! isset($reusable[$fid])) continue;
             $aud = json_decode((string) ($reusable[$fid]->audiences ?? ''), true) ?: [];
@@ -1996,6 +1998,7 @@ class ManagedFormController extends Controller
             $at = $signedAt[$fid] ?? null;
             if (! $at) continue;
             if (! $staffOnly || (string) $at >= $todayStart) { $doneAgain[$fid] = (string) $at; }
+            if ($staffOnly) { $staffForm[$fid] = true; }
         }
         $reusableIds = $reusable->keys()->map(fn ($v) => (int) $v)->all();
         $signed = array_values(array_diff($signed, $reusableIds));
@@ -2039,9 +2042,15 @@ class ManagedFormController extends Controller
             ->values();
         // `forms` and `count` are what is still to do; `again` is signed and fill-again.
         $todo = $forms->filter(fn ($f) => empty($f['done']))->values();
-        $again = $forms->filter(fn ($f) => ! empty($f['done']))->values();
+        /* NO "FILL AGAIN" FOR A SIGNED PARENT FORM (2026-10-09: "when a parent signs a form why
+           does it show fill again - remove this as the admin/director will review and send
+           this back if it requires to be edited"). A signed form is simply done; if it needs
+           changing the office returns it (correction_requested_at) and it is pending again
+           with their note. Only staff daily charts — signed every day by design — are
+           offered again, so a second chart the same day stays possible. */
+        $again = $forms->filter(fn ($f) => ! empty($f['done']) && isset($staffForm[(int) $f['id']]))->values();
 
-        return response()->json(['forms' => $todo, 'count' => $todo->count(), 'again' => $again]);
+        return response()->json(['forms' => $todo, 'count' => $todo->count(), 'again' => $again, 'signed_count' => $signedCount]);
     }
 
     /**

@@ -246,7 +246,7 @@
         /* Caught up means caught up. With a consent still to answer the cheerful
            banner would be contradicting the task sitting directly above it. */
         el.innerHTML = consentCard() + (_consent ? '' : '<div style="padding:32px 20px;text-align:center;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:14px;font-weight:600;">🎉 You’re all caught up — nothing to sign right now.'
-          + (again.length ? '<div style="font-weight:500;font-size:13px;margin-top:6px;">Your signed copies are in <a href="#my-documents" style="font-weight:800;color:#166534;">Documents</a>.</div>' : '')
+          + ((again.length || (d && d.signed_count)) ? '<div style="font-weight:500;font-size:13px;margin-top:6px;">Your signed copies are in <a href="#my-documents" style="font-weight:800;color:#166534;">Documents</a>.</div>' : '')
           + '</div>') + againHtml;
         wireConsent(el);
         wireCards(el, all);
