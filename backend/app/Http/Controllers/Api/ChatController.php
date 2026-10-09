@@ -84,7 +84,63 @@ final class ChatController extends Controller
         }
 
         $attachments = $this->extractAttachment($request);
+
+        /* THE FAMILY MOVED PROVIDER (2026-10-09, Anthony: "fresh thread at new provider").
+           A thread belongs to the provider it was started with; after a move it stays with
+           them as history. A parent replying in it is talking to their CURRENT provider,
+           so the message goes to that provider's thread (found or started) instead. */
+        $moved = $this->movedAway($conversationId);
+        if ($moved) {
+            $newId = $this->currentProviderThread($moved['conv'], $moved['family']);
+            $msg = $this->insertMessage($newId, $user->id, $data['body'] ?? '', $attachments);
+            return response()->json($msg + [
+                'conversation_id' => $newId,
+                'moved_to_conversation' => $newId,
+                'notice' => 'Your family is now with ' . $moved['centre_name'] . ', so this went to them in a new conversation.',
+            ]);
+        }
+
         return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments));
+    }
+
+    /**
+     * When a conversation's provider is no longer the family's provider, the details;
+     * otherwise null. ['conv' => row, 'family' => row, 'centre_name' => current provider]
+     */
+    private function movedAway(int $conversationId): ?array
+    {
+        $conv = DB::table('conversations')->where('id', $conversationId)->first();
+        if (! $conv || ! $conv->family_id) { return null; }
+        $family = DB::table('families')->where('id', $conv->family_id)->whereNull('deleted_at')->first();
+        if (! $family || ! $family->centre_id || (int) $family->centre_id === (int) $conv->centre_id) { return null; }
+
+        return ['conv' => $conv, 'family' => $family,
+            'centre_name' => (string) DB::table('centres')->where('id', $family->centre_id)->value('name')];
+    }
+
+    /** The family's thread with its CURRENT provider for the same child (found or started). */
+    private function currentProviderThread(object $oldConv, object $family): int
+    {
+        $q = DB::table('conversations')->where('family_id', $family->id)->where('centre_id', $family->centre_id)->whereNull('deleted_at');
+        $oldConv->child_id ? $q->where('child_id', $oldConv->child_id) : $q->whereNull('child_id');
+        $found = $q->value('id');
+        if ($found) { return (int) $found; }
+
+        return (int) DB::table('conversations')->insertGetId([
+            'centre_id' => $family->centre_id, 'family_id' => $family->id,
+            'child_id' => $oldConv->child_id ?? null, 'subject' => $oldConv->subject ?? null,
+            'last_message_at' => now(), 'created_at' => now(),
+        ]);
+    }
+
+    /** The answer a former provider gets for writing in a moved family's thread. */
+    private function movedAwayRefusal(array $moved): JsonResponse
+    {
+        return response()->json([
+            'message' => ($moved['family']->family_name ?: 'This family') . ' has moved to ' . $moved['centre_name']
+                . '. This conversation is kept as history; new messages go to ' . $moved['centre_name'] . '.',
+            'moved' => true,
+        ], 409);
     }
 
     /**
@@ -231,6 +287,8 @@ final class ChatController extends Controller
         }
 
         $attachments = $this->extractAttachment($request);
+        // A family that has moved provider: this thread is the old provider's history now.
+        if ($moved = $this->movedAway($conversationId)) { return $this->movedAwayRefusal($moved); }
         return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments));
     }
 
@@ -251,6 +309,7 @@ final class ChatController extends Controller
         $name = $sender ? trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? '')) : 'Your centre';
         if ($name === '') $name = 'Your centre';
         $body = '👋 ' . $name . ' sent a nudge — please check your messages when you have a moment.';
+        if ($moved = $this->movedAway($conversationId)) { return $this->movedAwayRefusal($moved); }
         return response()->json($this->insertMessage($conversationId, $user->id, $body));
     }
 
