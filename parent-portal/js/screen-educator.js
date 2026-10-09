@@ -286,7 +286,7 @@
       + '</div>'
       + '<div style="margin-top:9px;">' + (d.forms || []).map(row).join('') + '</div>'
       + '<div style="margin-top:10px;text-align:right;">'
-        + '<a href="#forms" style="font-size:12.5px;color:#1F6080;font-weight:700;text-decoration:none;">'
+        + '<a href="#my-forms" style="font-size:12.5px;color:#1F6080;font-weight:700;text-decoration:none;">'
         + (allDone ? 'View forms' : 'Open forms') + ' →</a>'
       + '</div>'
       + '</div>';

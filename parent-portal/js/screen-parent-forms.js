@@ -385,11 +385,30 @@
   if (Shell && Shell.registerScreen) {
     Shell.registerScreen('guardian:forms', render);
     Shell.registerScreen('guardian:parent-forms', render);
-    // Educators get the same Forms view: their own filed documents (signed NDA,
-    // Terms/Privacy) plus any published forms addressed to staff.
-    Shell.registerScreen('educator:forms', render);
-    // Home visitors too — their own documents + any published forms for them.
-    Shell.registerScreen('home_visitor:forms', render);
+    /* STAFF SEE "DOCUMENTS" HERE (2026-10-09: "when viewing as a educator and viewing
+       forms, this should be renamed to documents and kebab should be used to view,
+       download or print and view should be a popup window"). Educators and home
+       visitors get the shared Documents table (⋮ View / Download / Print, View in the
+       portal's popup), and below it any published forms addressed to staff — only when
+       there are some, so nothing that was reachable here is lost. */
+    Shell.registerScreen('educator:forms', renderStaffDocuments);
+    Shell.registerScreen('home_visitor:forms', renderStaffDocuments);
   }
+  async function renderStaffDocuments(container) {
+    var draw = window.KT && window.KT.renderMyDocuments;
+    if (!draw) { return render(container); }
+    await draw(container);
+    var wrap = container.firstElementChild || container;
+    Api.get('/forms').then(function (data) {
+      if (!data || !data.forms || !data.forms.length || !wrap.isConnected) { return; }
+      var box = Dom.el('div', { style: 'margin-top:22px;' });
+      box.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin:0 2px 10px;' }, 'Forms to fill in'));
+      var list = Dom.el('div', { 'data-kt-list': '1' });
+      data.forms.forEach(function (f) { list.appendChild(renderCard(f, container)); });
+      box.appendChild(list);
+      wrap.appendChild(box);
+    }).catch(function () {});
+  }
+
   KT.ParentForms = { render: render };
 })(window);

@@ -135,7 +135,7 @@
         { hash: 'my-forms',      icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'menu',          icon: '🍽️', label: 'Weekly menu' },
         { hash: 'chat',          icon: '💬', label: 'Messenger' },
-        { hash: 'forms',         icon: '📝', label: 'Forms' },
+        { hash: 'forms',         icon: '📄', label: 'Documents' },   // their filed documents (+ any staff forms) — 2026-10-09
         { hash: 'incidents',     icon: '⚠️', label: 'Incidents' },
         { hash: 'late-pickups',  icon: '⏰', label: 'Late pickup' },
         { hash: 'medications',   icon: '💊', label: 'Medications' },

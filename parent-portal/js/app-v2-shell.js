@@ -900,8 +900,11 @@
        THE HASH IS UNTOUCHED. #my-hours is in bookmarks, the home tiles,
        role-widgets and the Settings shortcut; renaming a route to change a word on
        screen would break every one of them. */
-    var EXTRA_LABELS = { educator: { 'my-hours': 'Payroll' } };
+    /* #forms is "Documents" for staff (2026-10-09): their tile says Documents and the
+       screen is the shared Documents table, so the banner must say so too. */
+    var EXTRA_LABELS = { educator: { 'my-hours': 'Payroll', 'forms': 'Documents' }, home_visitor: { 'forms': 'Documents' } };
     var override = (EXTRA_LABELS[role] || {})[base];
+    if (override === 'Documents') { EXTRA_ICONS[base] = '📄'; }
 
     return {
       icon: EXTRA_ICONS[base] || '',
@@ -1061,7 +1064,7 @@
     b.appendChild(h1);
 
     var key = String(hash || '').split('/')[0].split('?')[0];
-    var desc = SCREEN_DESC[key];
+    var desc = SCREEN_DESC[key] || (info.label === 'Documents' ? SCREEN_DESC['my-documents'] : null);
     if (desc) {
       var sub = document.createElement('div');
       sub.className = 'kt-hero-sub';

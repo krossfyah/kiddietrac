@@ -120,7 +120,7 @@
     var inPanel = !!(window.KT && KT.viewBlob);
     /* Opened before the await — a popup blocker rejects window.open() that is not
        a direct result of the click. */
-    var win = inPanel ? null : window.open('', '_blank');
+    var win = (inPanel || wantPrint === 'download') ? null : window.open('', '_blank');
     try {
       /* Two sources, two download routes, each with its own authorization check:
          /parent/documents is "a report about my child", /auth/me/documents is "a file on
@@ -134,13 +134,27 @@
       });
       if (!r.ok) { throw new Error('HTTP ' + r.status); }
       var blob = await r.blob();
+      /* DOWNLOAD FROM THE ⋮ (2026-10-09: "kebab should be used to view, download or
+         print"). Saved under the document's own name. A link carrying `download` is what
+         kt-doc-viewer recognises as a real download, so in the phone app (whose web view
+         has no download manager) it still reaches the person instead of vanishing. */
+      if (wantPrint === 'download') {
+        var ext = /pdf/i.test(blob.type) ? '.pdf' : (/png/i.test(blob.type) ? '.png' : (/jpe?g/i.test(blob.type) ? '.jpg' : ''));
+        var base = String(doc.title || LABEL[doc.category] || 'document').replace(/[\\/:*?"<>|]+/g, '').trim() || 'document';
+        var du = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = du; a.download = base + ext; a.setAttribute('data-kt-download', '1');
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(du); }, 60000);
+        return;
+      }
       if (inPanel) {
         KT.viewBlob(blob, { title: doc.title || LABEL[doc.category] || 'Document', label: LABEL[doc.category] || 'Document' });
         /* PRINT FROM THE ⋮ (2026-10-09: "add a print button in the kebab for the parents,
            educator, staff for the documents"). Opens the document in the shared viewer and
            presses ITS Print, which already knows how to print in the phone app (where
            window.print() does nothing) and prints just the document, not the portal. */
-        if (wantPrint) {
+        if (wantPrint === true || wantPrint === 'print') {
           setTimeout(function () {
             var all = document.querySelectorAll('.ktdv-fprint, .ktdv-print');
             var p = all[all.length - 1];
@@ -360,12 +374,18 @@
       tr.appendChild(c3);
 
       var c4 = Dom.el('td', { style: tdStyle + 'text-align:right;white-space:nowrap;' });
-      var btn = Dom.el('button', { type: 'button', class: 'btn btn-secondary', style: 'padding:6px 13px;font-size:13px;font-weight:700;' }, 'Open');
+      /* View · Download · Print, alone in the last cell, so kt-row-actions folds them into
+         the standard ⋮ (2026-10-09). View opens the document in the portal's own popup
+         viewer (KT.viewBlob), never a new tab or an outside browser. */
+      var BTN = 'padding:6px 13px;font-size:13px;font-weight:700;margin-left:6px;';
+      var btn = Dom.el('button', { type: 'button', class: 'btn btn-secondary', style: BTN }, '👁 View');
       btn.addEventListener('click', function () { open(d, btn); });
       c4.appendChild(btn);
-      // Print sits beside Open in the last cell, so kt-row-actions puts both in the ⋮.
-      var pbtn = Dom.el('button', { type: 'button', class: 'btn btn-secondary', style: 'padding:6px 13px;font-size:13px;font-weight:700;margin-left:6px;' }, '🖨 Print');
-      pbtn.addEventListener('click', function () { open(d, pbtn, true); });
+      var dbtn = Dom.el('button', { type: 'button', class: 'btn btn-secondary', style: BTN }, '⬇ Download');
+      dbtn.addEventListener('click', function () { open(d, dbtn, 'download'); });
+      c4.appendChild(dbtn);
+      var pbtn = Dom.el('button', { type: 'button', class: 'btn btn-secondary', style: BTN }, '🖨 Print');
+      pbtn.addEventListener('click', function () { open(d, pbtn, 'print'); });
       c4.appendChild(pbtn);
       tr.appendChild(c4);
 
@@ -389,7 +409,9 @@
   function paintCount() {
     if (docCount === null) { return; }
     try { if (window.KT && KT.Shell && KT.Shell.setBadge) { KT.Shell.setBadge('my_documents', docCount); } } catch (e) {}
-    var links = document.querySelectorAll('a[href="#my-documents"],[data-hash="my-documents"],a[href="#signed-docs"]');
+    var staff = /\brole-(educator|home_visitor)\b/.test(document.body.className || '');
+    var links = document.querySelectorAll('a[href="#my-documents"],[data-hash="my-documents"],a[href="#signed-docs"]'
+      + (staff ? ',a[href="#forms"].kt-tile' : ''));
     Array.prototype.forEach.call(links, function (a) {
       if (a.querySelector('[data-badge-key="my_documents"]')) { return; }   // the sidebar's own badge
       var pill = a.querySelector('.kt-doc-count');
