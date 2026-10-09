@@ -95,6 +95,20 @@ final class Suppression
         return self::agencyIds() !== [];
     }
 
+    /**
+     * DAILY / WEEKLY SUMMARIES, PER AGENCY (2026-10-09: "turn on emails in test agency but
+     * turn off daily/weekly summary"). settings.summaries_enabled; absent = on. Covers the
+     * admin/director daily and weekly summary, and the parent and educator daily summaries.
+     */
+    public static function summariesEnabled(?int $agencyId): bool
+    {
+        if (! $agencyId) return true;
+        return \Illuminate\Support\Facades\Cache::remember('kt.agency_summaries:' . $agencyId, 120, function () use ($agencyId) {
+            $s = json_decode((string) \Illuminate\Support\Facades\DB::table('agencies')->where('id', $agencyId)->value('settings'), true) ?: [];
+            return ($s['summaries_enabled'] ?? true) !== false;
+        });
+    }
+
     public static function isAgency(?int $agencyId): bool
     {
         if (! $agencyId) {

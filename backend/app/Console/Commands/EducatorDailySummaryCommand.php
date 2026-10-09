@@ -75,6 +75,9 @@ class EducatorDailySummaryCommand extends Command
             if (! $override && \App\Support\Suppression::isAgency((int) $ed->agency_id)) {
                 continue;
             }
+            if (! $override && ! \App\Support\Suppression::summariesEnabled((int) $ed->agency_id)) {
+                continue;   // the agency's Summaries switch is off
+            }
             $tz = $ed->tz ?: 'America/Toronto';
             $date = $this->option('date') ? Carbon::parse((string) $this->option('date'), $tz) : Carbon::now($tz);
 

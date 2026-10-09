@@ -74,6 +74,9 @@ class ParentDailySummaryCommand extends Command
             if (\App\Support\Suppression::isAgency((int) $child->agency_id)) {
                 continue;
             }
+            if (! \App\Support\Suppression::summariesEnabled((int) $child->agency_id)) {
+                continue;   // the agency's Summaries switch is off
+            }
 
             $tz = $child->agency_tz ?: 'America/Toronto';
             $date = $this->option('date')

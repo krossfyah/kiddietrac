@@ -42,6 +42,11 @@ class AdminDigestCommand extends Command
 
         $sent = 0;
         foreach ($agencies as $agency) {
+            // The agency's Summaries switch (Platform → Agencies → Plan & switches).
+            if (! $test && ! \App\Support\Suppression::summariesEnabled((int) $agency->id)) {
+                $this->line("  {$agency->name}: summaries are switched off");
+                continue;
+            }
             $tz = AgencyTime::tz((int) $agency->id) ?: 'America/Toronto';
             $to = Carbon::now($tz);
             $from = $weekly ? $to->copy()->subDays(6) : $to->copy();

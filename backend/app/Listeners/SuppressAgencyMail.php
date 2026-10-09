@@ -187,6 +187,32 @@ class SuppressAgencyMail
             return true;
         }
 
+        /* ADDRESSES THAT CANNOT EXIST ARE NEVER WRITTEN TO (2026-10-09).
+
+           Test Agency is full of demo people at demo.testagency.com, demo.<centre>.com,
+           example.com and .invalid. With its email switched on (Anthony, 2026-10-09: "turn
+           on emails in test agency"), every reminder and digest to them would bounce — and
+           bounces from noreply@kiddietrac.com cost EVERY agency's deliverability. Such
+           recipients are dropped from To/Cc/Bcc; a message left with nobody is cancelled. */
+        $deadEnd = array_values(array_filter($recipients, [self::class, 'isUndeliverable']));
+        if ($deadEnd) {
+            if (count($deadEnd) === count($recipients)) {
+                $this->cancel($event, $deadEnd, 'Demo / non-existent address (demo.*, example.*, .invalid, .test) - never sent.');
+                return false;
+            }
+            try {
+                $m = $event->message;
+                $keep = fn ($list) => array_values(array_filter($list ?: [], fn ($a) => ! self::isUndeliverable($a->getAddress())));
+                $to = $keep($m->getTo()); $cc = $keep($m->getCc()); $bcc = $keep($m->getBcc());
+                if ($to) { $m->to(...$to); } elseif ($cc || $bcc) { $m->to(...($cc ?: $bcc)); }
+                $m->cc(...$cc);
+                $m->bcc(...$bcc);
+            } catch (\Throwable $e) {
+            }
+            $recipients = array_values(array_diff($recipients, $deadEnd));
+            Log::info('Demo addresses dropped from a message', ['dropped' => $deadEnd]);
+        }
+
         // 0) NOT-ONBOARDED gate. A parent/user who hasn't accepted their invite yet
         //    (users.status = 'invited') must receive NOTHING except the invite /
         //    welcome email itself — no digests, reminders or announcements. The
@@ -664,6 +690,15 @@ class SuppressAgencyMail
     }
 
     /** Record what we stopped — silence with no trail is its own hazard. */
+    /** A domain that cannot receive mail: demo.*, example.*, and the reserved TLDs. */
+    public static function isUndeliverable(?string $addr): bool
+    {
+        $d = mb_strtolower((string) substr(strrchr((string) $addr, '@') ?: '', 1));
+        if ($d === '') return false;
+
+        return (bool) preg_match('/^demo\.|^(example\.(com|org|net)|localhost)$|\.(invalid|test|example|localhost|local)$/', $d);
+    }
+
     private function cancel(MessageSending $event, array $hits, ?string $reason = null): void
     {
         $subject = (string) ($event->message->getSubject() ?? '(no subject)');

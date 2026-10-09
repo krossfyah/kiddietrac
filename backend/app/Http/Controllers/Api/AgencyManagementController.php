@@ -94,6 +94,7 @@ final class AgencyManagementController extends Controller
                    read by every agency admin. */
                 'settings' => [
                     'notifications_enabled' => ($settings['notifications_enabled'] ?? true) !== false,
+                    'summaries_enabled' => ($settings['summaries_enabled'] ?? true) !== false,
                     'schedule_autofill' => (bool) ($settings['schedule_autofill'] ?? false),
                     // Minutes a chat message may sit unread before it is emailed.
                     'chat_email_delay_minutes' => \App\Console\Commands\EmailMissedMessagesCommand::delayForAgency(
@@ -315,6 +316,8 @@ final class AgencyManagementController extends Controller
             'trial_ends_at' => ['nullable', 'date'],
             'plan' => ['nullable', 'in:starter,centre,agency'],
             'notifications_enabled' => ['sometimes', 'boolean'],
+            // Daily / weekly summary emails (Suppression::summariesEnabled).
+            'summaries_enabled' => ['sometimes', 'boolean'],
             // Nightly staff-schedule autofill; read by schedule:autofill.
             'schedule_autofill' => ['sometimes', 'boolean'],
             /* How long a chat message may sit unread before the missed-message email goes
@@ -340,12 +343,17 @@ final class AgencyManagementController extends Controller
         }
 
         if (isset($data['plan']) || array_key_exists('notifications_enabled', $data)
+            || array_key_exists('summaries_enabled', $data)
             || array_key_exists('schedule_autofill', $data)
             || array_key_exists('chat_email_delay_minutes', $data)) {
             $agency = DB::table('agencies')->where('id', $id)->first();
             $settings = json_decode($agency->settings ?? '{}', true) ?: [];
             if (isset($data['plan'])) $settings['plan'] = $data['plan'];
             if (array_key_exists('notifications_enabled', $data)) $settings['notifications_enabled'] = (bool) $data['notifications_enabled'];
+            if (array_key_exists('summaries_enabled', $data)) {
+                $settings['summaries_enabled'] = (bool) $data['summaries_enabled'];
+                \Illuminate\Support\Facades\Cache::forget('kt.agency_summaries:' . $id);
+            }
             if (array_key_exists('schedule_autofill', $data)) $settings['schedule_autofill'] = (bool) $data['schedule_autofill'];
             if (array_key_exists('chat_email_delay_minutes', $data)) $settings['chat_email_delay_minutes'] = (int) $data['chat_email_delay_minutes'];
             $update['settings'] = json_encode($settings);

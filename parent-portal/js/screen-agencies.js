@@ -376,6 +376,19 @@
               </div>
               <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#F9FAFB;margin-bottom:10px;">
                 <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+                  <input type="checkbox" name="summaries_enabled" ${((a.settings || {}).summaries_enabled !== false) ? 'checked' : ''}
+                    style="width:19px;height:19px;margin-top:2px;flex:0 0 auto;accent-color:#159FB4;">
+                  <span>
+                    <span style="display:block;font-size:13.5px;font-weight:700;color:#111827;">Send daily &amp; weekly summaries</span>
+                    <span style="display:block;font-size:12px;color:#6B7280;line-height:1.5;margin-top:2px;">
+                      The daily and weekly summary emails to admins and directors, and the daily summaries
+                      to parents and educators. Everything else (invitations, reminders, notices) follows the switch above.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              <div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#F9FAFB;margin-bottom:10px;">
+                <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
                   <input type="checkbox" name="schedule_autofill" ${autofillOn(a) ? 'checked' : ''}
                     style="width:19px;height:19px;margin-top:2px;flex:0 0 auto;accent-color:#159FB4;">
                   <span>
@@ -455,6 +468,8 @@
       // like it silently refused to turn off. Read it from the element instead.
       const notifBox = form.querySelector('[name="notifications_enabled"]');
       if (notifBox) data.notifications_enabled = notifBox.checked;
+      const sumBox = form.querySelector('[name="summaries_enabled"]');
+      if (sumBox) data.summaries_enabled = sumBox.checked;
       // Same reason — an unchecked box never reaches FormData, so it could be switched
       // on and never off.
       const autoBox = form.querySelector('[name="schedule_autofill"]');
