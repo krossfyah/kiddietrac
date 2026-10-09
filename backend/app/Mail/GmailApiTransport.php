@@ -36,7 +36,7 @@ final class GmailApiTransport extends AbstractTransport
         if (empty($this->sender->google_refresh_enc)) {
             throw new TransportException('This Gmail sender is not connected yet. Press “Connect Gmail” on the Sender accounts tab.');
         }
-        $raw = rtrim(strtr(base64_encode($message->toString()), '+/', '-_'), '=');
+        $raw = rtrim(strtr(base64_encode(self::withoutInternalHeaders($message->toString())), '+/', '-_'), '=');
         try {
             $resp = $this->post(RsvpGmail::accessToken($this->sender), $raw);
             if ($resp->status() === 401) {
@@ -51,6 +51,26 @@ final class GmailApiTransport extends AbstractTransport
         if (! $resp->successful()) {
             throw new TransportException('Gmail API refused the message: ' . ($resp->json('error.message') ?: ('HTTP ' . $resp->status())));
         }
+    }
+
+    /**
+     * KiddieTrac's own X-KT-* headers (agency stamp, open-tracking token, ...) are for
+     * the listeners and the email log on THIS server. Through a person's own Gmail account
+     * they would leave as headers no ordinary Gmail message carries — a fingerprint that
+     * marks the mail as machine-sent (2026-10-09, RSVP invitations in junk). Removed from
+     * the copy handed to Gmail only: the message object, which the MessageSent logger reads
+     * for the tracking token, is untouched. Header block only; folded lines go too.
+     */
+    public static function withoutInternalHeaders(string $raw): string
+    {
+        $split = strpos($raw, "\r\n\r\n");
+        if ($split === false) {
+            return $raw;
+        }
+        $head = substr($raw, 0, $split);
+        $head = preg_replace('/^X-KT-[A-Za-z0-9-]*:[^\r\n]*(?:\r\n[ \t][^\r\n]*)*(?:\r\n|$)/mi', '', $head);
+
+        return rtrim($head, "\r\n") . substr($raw, $split);
     }
 
     private function post(string $token, string $raw)

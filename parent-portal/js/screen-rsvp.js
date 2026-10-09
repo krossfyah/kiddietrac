@@ -30,6 +30,19 @@
   }
   function toast(m, t) { if (KT.toast) { KT.toast(m, t || 'info'); } }
   function isEmail(v) { return /^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$/.test(String(v || '').trim()); }
+
+  /* SENDER NAMES THAT READ AS AN OFFICIAL BODY (2026-10-09). "Town of Mono - Engaged
+     Citizens" from a free @gmail.com address is what mail filters treat as somebody
+     posing as the municipality, and the invitations went to junk. A warning, not a
+     block: a group may genuinely be allowed to use the name. A Gmail-connected sender
+     counts as free mail even before its address is known. */
+  var OFFICIAL_NAME = /\b(town|city|county|township|municipality|village|region|province|government|ministry|council|police|mayor)\s+of\b|\b(city hall|town hall|township|municipality|government of|police service|ministry)\b/i;
+  var FREE_MAIL = /@(gmail|googlemail|hotmail|outlook|live|yahoo|ymail|aol|icloud|me|msn|rogers|sympatico|bell)\.[a-z.]+$/i;
+  function officialNameRisk(name, address, isGmail) {
+    if (!OFFICIAL_NAME.test(String(name || ''))) { return false; }
+    return !!isGmail || FREE_MAIL.test(String(address || '').trim());
+  }
+  var OFFICIAL_NAME_WARN = 'A sender name like “Town of …” sent from a free Gmail address looks like someone posing as the municipality, and Gmail and Outlook tend to put it in junk. Use your group’s own name (e.g. “Engaged Citizens of Mono”), or send from the organisation’s own email domain.';
   function statusPill(s) {
     var c = { open: ['#DCFCE7', '#166534', 'Open'], draft: ['#F1F5F9', '#475569', 'Draft'], closed: ['#FEE2E2', '#991B1B', 'Closed'] }[s] || ['#F1F5F9', '#475569', s];
     return '<span class="rv-pill" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(c[2]) + '</span>';
@@ -884,6 +897,9 @@
     var df = state.defaultFrom || {};
     var fromTxt = snd ? (snd.from_name ? esc(snd.from_name) + ' &lt;' + esc(snd.from_address) + '&gt;' : esc(snd.from_address))
       : (ev.branding === 'none' ? esc(ev.title) : esc(df.name || '')) + ' &lt;' + esc(df.address || '') + '&gt;';
+    if (snd && officialNameRisk(snd.from_name, snd.from_address, snd.type === 'gmail_oauth')) {
+      fromTxt += '<div class="rv-warn" style="margin:6px 0 0">⚠️ ' + esc(OFFICIAL_NAME_WARN) + '</div>';
+    }
     var footHint = ev.status === 'draft' ? 'Draft — the RSVP link isn’t live yet.'
       : ev.status === 'closed' ? 'Closed — no more RSVPs.'
       : (s.pending ? s.pending + ' waiting for an invitation.' : 'Open — taking RSVPs.');
@@ -1293,7 +1309,8 @@
         + rows.map(function (s) {
           var g = s.type === 'gmail_oauth';
           return '<tr><td><strong>' + esc(s.label) + '</strong><div class="rv-hint">' + (g ? 'Gmail' : 'Custom mail server') + '</div></td>'
-            + '<td>' + esc(s.from_name || '') + (s.from_address ? ' &lt;' + esc(s.from_address) + '&gt;' : (g ? '<span class="rv-hint">set when connected</span>' : '')) + (s.reply_to ? '<div class="rv-hint">Reply-To ' + esc(s.reply_to) + '</div>' : '') + '</td>'
+            + '<td>' + esc(s.from_name || '') + (s.from_address ? ' &lt;' + esc(s.from_address) + '&gt;' : (g ? '<span class="rv-hint">set when connected</span>' : '')) + (s.reply_to ? '<div class="rv-hint">Reply-To ' + esc(s.reply_to) + '</div>' : '')
+            + (officialNameRisk(s.from_name, s.from_address, g) ? '<div class="rv-hint" style="color:#B45309;font-weight:700" title="' + esc(OFFICIAL_NAME_WARN) + '">⚠️ Name may send this to junk — Edit for details</div>' : '') + '</td>'
             + '<td>' + senderStatus(s) + '</td><td>' + (s.events || 0) + '</td>'
             + '<td style="text-align:center;white-space:nowrap">'
             + (g ? '<button type="button" class="kt-btn" data-connect="' + s.id + '" title="Sign in with Google">' + (s.google_status === 'connected' ? 'Reconnect Gmail' : 'Connect Gmail') + '</button>' : '')
@@ -1336,8 +1353,9 @@
     s = s || {};
     var smtp = s.id ? s.type !== 'gmail_oauth' : false;
     var html = '<div class="rv-f">'
-      + field('label', 'Account name (for you)', s.label, { full: true, ph: 'e.g. Town of Mono events' })
-      + field('from_name', 'Sender name', s.from_name, { ph: 'e.g. Town of Mono', hint: 'Shown as who the email is from.' })
+      + field('label', 'Account name (for you)', s.label, { full: true, ph: 'e.g. Engaged Citizens events' })
+      + field('from_name', 'Sender name', s.from_name, { ph: 'e.g. Engaged Citizens of Mono', hint: 'Shown as who the email is from.' })
+      + '<div class="full rv-warn" data-name-warn style="display:none">⚠️ ' + esc(OFFICIAL_NAME_WARN) + '</div>'
       + field('reply_to', 'Default Reply-To (optional)', s.reply_to, { type: 'email', hint: 'Fills an event’s sign-up address when it is empty.' })
       + (smtp ? '' : '<div class="full">' + MAIL_HELP + (s.id ? '' : '<div class="rv-hint" style="margin-top:6px">After saving, you’ll be taken to Google to sign in with the Gmail account.</div>') + '</div>')
       + (s.id ? '' : '<div class="full"><label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" data-adv> Advanced: use a custom mail server (SMTP) instead</label></div>')
@@ -1372,7 +1390,15 @@
       paint(main);
     }, s.id ? 'Save account' : (((state.gmail || {}).configured) ? 'Save & connect Gmail' : 'Save'), { width: 720 });
     var adv = ov.querySelector('[data-adv]');
-    if (adv) { adv.onchange = function () { ov.querySelector('[data-smtp]').style.display = adv.checked ? '' : 'none'; }; }
+    var nameWarn = function () {
+      var w = ov.querySelector('[data-name-warn]'); if (!w) { return; }
+      var nm = ov.querySelector('[data-k="from_name"]'), fa = ov.querySelector('[data-k="from_address"]');
+      var viaSmtp = smtp || (adv && adv.checked);
+      w.style.display = officialNameRisk(nm && nm.value, (fa && fa.value) || s.from_address, !viaSmtp) ? '' : 'none';
+    };
+    ov.addEventListener('input', nameWarn);
+    if (adv) { adv.onchange = function () { ov.querySelector('[data-smtp]').style.display = adv.checked ? '' : 'none'; nameWarn(); }; }
+    nameWarn();
   }
 
   function copyToAgency(main, t) {
