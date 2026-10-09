@@ -119,9 +119,48 @@
     }
   }
 
+  /* A DIALOG OPENED FROM A DIALOG GOES ON TOP (2026-10-09).
+
+     Anthony: "when editing a child record I have to hit edit twice". The child record
+     opens in the shell's popup (z-index 100000); its "Edit details" form is an overlay
+     at z-index 9999, so it opened BEHIND the popup, invisible, and the second press only
+     seemed to work once the popup was gone. Twenty-odd screens build overlays at 1000 to
+     99999 the same way. Rather than renumber each, the newest full-screen overlay is lifted
+     above whatever dialog is already showing — only when it would otherwise sit beneath. */
+  function zOf(el) {
+    var best = 0;
+    for (var n = el; n && n.nodeType === 1; n = n.parentElement) {
+      var v = parseInt(getComputedStyle(n).zIndex, 10);
+      if (!isNaN(v) && v > best) best = v;
+    }
+    return best;
+  }
+  function liftAboveOpenDialogs(overlay) {
+    var top = 0;
+    var cands = doc.querySelectorAll('body > *, #modalRoot > *');
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i];
+      if (c === overlay || c.contains(overlay) || overlay.contains(c)) continue;
+      if (c.id === 'kt-splash' || c.hasAttribute('data-kt-refresh-snap') || c.getAttribute('aria-hidden') === 'true') continue;
+      var cs;
+      try { cs = getComputedStyle(c); } catch (e) { continue; }
+      if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') continue;
+      var r = c.getBoundingClientRect();
+      if (r.width < vw() * 0.8 || r.height < vh() * 0.8) continue;
+      top = Math.max(top, zOf(c));
+    }
+    if (top && zOf(overlay) <= top) {
+      overlay.style.setProperty('z-index', String(top + 10), 'important');
+    }
+  }
+
   function check(node) {
     // Defer one tick so layout is measurable.
-    setTimeout(function () { try { if (isOverlay(node)) enhance(node); } catch (e) {} }, 0);
+    setTimeout(function () {
+      try {
+        if (isOverlay(node)) { liftAboveOpenDialogs(node); enhance(node); }
+      } catch (e) {}
+    }, 0);
   }
 
   function watch(container) {

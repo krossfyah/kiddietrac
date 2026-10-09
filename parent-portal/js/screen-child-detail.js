@@ -293,6 +293,8 @@
      away what the user just asked for. That also survives the shell's own re-renders,
      which would otherwise drop somebody out of edit mode mid-task. */
   var editModeFor = null;
+  /* Set by Edit: the next paint of this child opens the details form (one click to edit). */
+  var openDetailsFor = null;
 
   /**
    * Make a region non-interactive while the record is read-only.
@@ -518,6 +520,10 @@
         headerActions.appendChild(btn('📝 Edit details…', btnSecondary(), function () {
           showEditModal(child, function () { renderChildDetail(container, opts); });
         }));
+        if (String(openDetailsFor) === String(child.id)) {
+          openDetailsFor = null;
+          setTimeout(function () { showEditModal(child, function () { renderChildDetail(container, opts); }); }, 0);
+        }
         headerActions.appendChild(btn('✓ Done', btnPrimary(), function () {
           editMode = false;
           renderChildDetail(container, opts);
@@ -525,9 +531,15 @@
       } else {
         headerActions.appendChild(btn('✏️ Edit', btnPrimary(), function () {
           editMode = true;
+          openDetailsFor = child.id;   // the redraw below opens the form once it has painted
           renderChildDetail(container, opts);
-          /* Straight into the field they came for: opening the details modal on entry
-             would be presumptuous when the thing they want may be on a tab. */
+          /* ONE CLICK TO EDIT (2026-10-09: "when editing a child record I have to hit edit
+             twice to actually edit the record"). Edit used to only switch the record into
+             edit mode, and the details form needed a second press of "Edit details…". It
+             now opens the form straight away; closing it leaves the tabs unlocked (edit
+             mode) until Done, so a change on another tab is still one step away. Opened by
+             the redraw (openDetailsFor), not here: opened here it was closed again by the
+             redraw this click starts. */
         }));
       }
       headerActions.appendChild(btn('🚨 Emergency card', btnSecondary(), function () {
