@@ -575,10 +575,9 @@
           openDetailsFor = null;
           setTimeout(function () { showEditModal(child, function () { renderChildDetail(container, opts); }); }, 0);
         }
-        headerActions.appendChild(btn('✓ Done', btnPrimary(), function () {
-          editMode = false;
-          renderChildDetail(container, opts);
-        }));
+        /* No "Done" (2026-10-09: "remove the done button ... not sure why there is a done
+           button there"). It only switched edit mode off; closing the record does that now
+           (openChildModal starts read-only unless opened with Edit). */
       } else {
         headerActions.appendChild(btn('✏️ Edit', btnPrimary(), function () {
           editMode = true;
@@ -726,7 +725,9 @@
 
       // #10 — Allergies & health alerts: safety-critical, so shown prominently in
       // a red-bordered banner whenever there's an allergy or health alert on file.
-      (function () {
+      // Built by a function now (2026-10-09) so the same section is also the
+      // "Allergies & health" subtab while editing: one builder, one editor.
+      function buildAllergySection(target) {
         /* THESE ARE STRUCTURED RECORDS, NOT STRINGS.
 
            This printed `String(value)` straight onto the page. That was fine while the
@@ -788,7 +789,7 @@
 
         if (!anyThing) {
           sec.appendChild(Dom.el('div', { style: 'color:#64748B;font-size:13.5px;' }, 'None on file.'));
-          wrap.appendChild(sec);
+          target.appendChild(sec);
           return;
         }
 
@@ -838,8 +839,9 @@
             a.restriction + (a.details ? ' — ' + a.details : ''));
         }, false);
 
-        wrap.appendChild(sec);
-      })();
+        target.appendChild(sec);
+      }
+      buildAllergySection(wrap);
 
       // #10 — Family record: full address + contacts + guardians, right on the
       // child's detail so staff can reach the family without hunting for it.
@@ -905,14 +907,19 @@
          everything else, so the one screen about this child could not answer "is she up
          to date?". (Anthony, 2026-09-10) */
       var TABS = [['overview', '👤 Overview'], ['enrollment', '🏫 Enrollment'], ['daily', '📊 Daily reports'], ['incidents', '🩹 Incidents'], ['immunization', '💉 Immunization'], ['feed', '📸 Live feed'], ['attachments', '📎 Attachments'], ['history', '🗄️ Full history']];
+      /* While editing, the allergies get their own tab (2026-10-09: "the allergies section
+         should be added when your editing the child record as a subtab"). */
+      if (editMode) { TABS.splice(1, 0, ['allergies', '⚠️ Allergies & health']); }
       var activeTab = 'overview';
-      var tabbar = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin:4px 0 18px;overflow-x:auto;overflow-y:hidden;' });
+      /* ALL THE TABS IN VIEW (2026-10-09: "the subtabs are scrollable vs all there
+         visually"): they wrap onto a second line instead of scrolling sideways. */
+      var tabbar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:2px 4px;border-bottom:1px solid #E5E7EB;margin:4px 0 18px;' });
       var tabContent = Dom.el('div', {});
       function paintTabs() {
         Dom.clear(tabbar);
         TABS.forEach(function (t) {
           var on = activeTab === t[0];
-          var b = Dom.el('button', { style: 'padding:10px 16px;border:none;background:transparent;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;' + (on ? 'color:#1F6080;border-bottom:2px solid #1F6080;margin-bottom:-1px;' : 'color:#6B7280;') }, t[1]);
+          var b = Dom.el('button', { type: 'button', 'data-kt-inpage': '1', style: 'padding:9px 13px;border:none;background:transparent;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;' + (on ? 'color:#1F6080;border-bottom:2px solid #1F6080;margin-bottom:-1px;' : 'color:#6B7280;') }, t[1]);
           b.addEventListener('click', function () { activeTab = t[0]; paintTabs(); paintTab(); });
           tabbar.appendChild(b);
         });
@@ -941,7 +948,8 @@
         gatherLoose();
         if (looseBox) looseBox.style.display = (activeTab === 'overview') ? '' : 'none';
         Dom.clear(tabContent);
-        if (activeTab === 'incidents') appendIncidentsSection(tabContent, child.id);
+        if (activeTab === 'allergies') buildAllergySection(tabContent);
+        else if (activeTab === 'incidents') appendIncidentsSection(tabContent, child.id);
         else if (activeTab === 'enrollment') renderEnrollmentTab(tabContent, child);
         else if (activeTab === 'daily') renderDailyTab(tabContent, child);
         else if (activeTab === 'feed') renderFeedTab(tabContent, child);
@@ -1763,12 +1771,19 @@
       return;
     }
 
-    var host = Dom.el('div', {});
+    /* A STEADY WINDOW (2026-10-09: "the popup window when viewing the child record changes
+       its size when navigating to the subtab"). The popup sized itself to each tab's
+       content, so it grew and shrank as you moved between tabs; it now holds a fixed
+       height and the content scrolls inside it. The title says what this is ("At a
+       glance") — the child's name is the first line of the record itself. */
+    var host = Dom.el('div', { style: 'height:min(76vh, 860px);overflow-y:auto;overflow-x:hidden;' });
     Shell.Modal.open({
-      title: opts.title || 'Child record',
+      title: opts.archived ? 'At a glance (archived)' : 'At a glance',
       body: host,
       large: true,
     });
+    // Opening a record starts read-only; Edit (below) is the only way in to edit mode.
+    if (!opts.edit) { editMode = false; editModeFor = String(childId); }
     /* Opened by a list's Edit (2026-10-09): start in edit mode, details form up — the
        same state one press of ✏️ Edit gives. An archived record is never editable. */
     if (opts.edit && !opts.archived) {
