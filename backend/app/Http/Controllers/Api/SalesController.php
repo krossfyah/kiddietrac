@@ -208,11 +208,18 @@ class SalesController extends Controller
         $l = SalesLead::findOrFail($lead);
         $data = $r->validate([
             'type'     => 'required|in:note,call,email,meeting,followup',
-            'body'     => 'nullable|string|max:5000',
+            // Room for a meeting's transcript (the column is TEXT, ~64 KB).
+            'body'     => 'nullable|string|max:60000',
             'due_date' => 'nullable|date',
+            // Files are coming (a Teams transcript is written into the entry when it lands):
+            // hold the team email until POST /sales/activities/{id}/notify, so it carries what
+            // was discussed instead of a file name.
+            'defer_notify' => 'nullable|boolean',
         ]);
 
+        $this->deferNotify = ! empty($data['defer_notify']);
         $act = $this->logActivity($l, $data['type'], $data['body'] ?? null, $data['due_date'] ?? null);
+        $this->deferNotify = false;
 
         // A followup with a due date is an open task + updates the lead's quick date.
         if ($data['type'] === 'followup' && ! empty($data['due_date'])) {
@@ -233,7 +240,7 @@ class SalesController extends Controller
     {
         $a = SalesActivity::findOrFail($activity);
         $data = $r->validate([
-            'body'     => 'nullable|string|max:5000',
+            'body'     => 'nullable|string|max:60000',
             'due_date' => 'nullable|date',
             'done'     => 'nullable|boolean',
             // The kind of entry, among the ones a person logs (2026-10-09: "need to be able
@@ -325,6 +332,29 @@ class SalesController extends Controller
         }
 
         return response()->json($a->fresh('user'));
+    }
+
+    /** Set by addActivity while files are still on their way; see notifyNow(). */
+    private bool $deferNotify = false;
+
+    /**
+     * POST /sales/activities/{activity}/notify — the team email for an entry whose files
+     * (a Teams transcript) arrived after it was saved. Sent once.
+     */
+    public function notifyNow(Request $r, int $activity)
+    {
+        $a = SalesActivity::findOrFail($activity);
+        if (! self::canEditActivity($a)) {
+            return response()->json(['message' => 'Not allowed.'], 403);
+        }
+        if (! \Illuminate\Support\Facades\Cache::add('sales-activity-notified:' . $a->id, 1, now()->addDays(30))) {
+            return response()->json(['ok' => true, 'already' => true]);
+        }
+        if (($lead = SalesLead::find($a->lead_id))) {
+            $this->notifyActivity($lead, $a->fresh());
+        }
+
+        return response()->json(['ok' => true]);
     }
 
     /** The author, or a platform admin; never a system entry. */
@@ -815,7 +845,7 @@ class SalesController extends Controller
            out to the superadmin/sales team"). Every entry except field-change records (each
            save of the lead's details would mail the team) and "Lead created" (the new-lead
            email already says so). */
-        if ($type !== 'edit' && ! ($type === 'stage' && $body === 'Lead created')) {
+        if (! $this->deferNotify && $type !== 'edit' && ! ($type === 'stage' && $body === 'Lead created')) {
             $this->notifyActivity($lead, $act);
         }
 
@@ -854,7 +884,8 @@ class SalesController extends Controller
                 . '<div style="font-size:12px;color:#5a7080;margin:0 0 4px">' . e($when) . ' · ' . e($who) . '</div>'
                 . '<h2 style="margin:0 0 4px;font-size:19px">' . e($label) . ' — ' . e($leadName) . '</h2>'
                 . ($lead->company && $lead->name ? '<p style="color:#5a7080;margin:0 0 12px">' . e($lead->name) . '</p>' : '')
-                . ($act->body ? '<div style="background:#F8FAFC;border-left:3px solid #7C3AED;border-radius:0 8px 8px 0;padding:10px 14px;font-size:14px;line-height:1.5;white-space:normal">' . nl2br(e($act->body)) . '</div>' : '')
+                . ($act->body ? '<div style="background:#F8FAFC;border-left:3px solid #7C3AED;border-radius:0 8px 8px 0;padding:10px 14px;font-size:14px;line-height:1.5;white-space:normal">'
+                    . nl2br(e(mb_strlen($act->body) > 6000 ? mb_substr($act->body, 0, 6000) . "\n… (continues on the lead)" : $act->body)) . '</div>' : '')
                 . ($due ? '<p style="margin:10px 0 0;font-weight:700;color:#C2410C">Due ' . e($due) . '</p>' : '')
                 . '<p style="margin:18px 0 0"><a href="https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $lead->id . '&tab=activity'
                 . '" style="background:#7C3AED;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">Open lead →</a></p>'

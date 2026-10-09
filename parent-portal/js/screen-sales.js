@@ -150,7 +150,21 @@
       ghost:   'background:#F1F5F9;color:#334155;border:1px solid #E2E8F0',
       danger:  'background:#FEE2E2;color:#B91C1C;border:1px solid #FCA5A5',
     };
-    return el('button', { type: 'button', class: 'btn', style: (K[kind] || K.light) + ';border-radius:9px;padding:9px 15px;font-weight:700;cursor:pointer;font-size:13.5px;line-height:1', onclick: on }, [label]);
+    /* ONE SIZE (2026-10-09: "make sure buttons are same size (full sweep)"). Padding alone
+       let an emoji in the label make one button taller than its neighbour ("Add" beside
+       "📎 Attach …"); a fixed height and a centred row keep every button the same. */
+    var b = el('button', { type: 'button', class: 'btn kt-sales-btn', style: (K[kind] || K.light) + ';border-radius:9px;padding:0 15px;font-weight:700;cursor:pointer;font-size:13.5px;line-height:1;'
+      + 'height:34px;min-height:34px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;box-sizing:border-box;vertical-align:middle', onclick: on }, [label]);
+    return b;
+  }
+  /* The small actions on an activity entry (Edit, mark done, Show transcript, Play,
+     Download, Remove): one compact size, so a row of them lines up. */
+  function chip(label, on, tone) {
+    var c = tone === 'danger' ? 'color:#B91C1C;border-color:#FCA5A5;background:#FFF5F5' : 'color:' + ACCENT + ';border-color:#CBD5E1;background:#fff';
+    return el('button', { type: 'button', 'data-kt-inpage': '1', 'data-kt-iconized': '1', class: 'kt-sales-chip',
+      style: c + ';border:1px solid;border-radius:999px;height:26px;min-height:26px;padding:0 10px;font:inherit;font-size:12px;font-weight:700;line-height:1;'
+        + 'display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer;box-sizing:border-box;vertical-align:middle',
+      onclick: function (ev) { ev.preventDefault(); ev.stopPropagation(); on(ev); } }, [label]);
   }
   function field(label, node) {
     return el('div', { style: 'margin-bottom:0' }, [
@@ -487,6 +501,23 @@
     if (lines.length === 1 && a.type !== 'edit') {
       return el('div', { style: 'font-size:13px;color:#0D1B2A;margin-top:2px' }, [a.body]);
     }
+    if (a.type !== 'edit') {
+      /* Prose of more than one line — a meeting's notes or its transcript — reads as text,
+         and anything long folds after 12 lines with Show more. */
+      var LIMIT = 12, longOne = lines.length > LIMIT;
+      var txt = el('div', { style: 'margin-top:3px;font-size:13px;line-height:1.55;color:#0D1B2A;white-space:pre-wrap;overflow-wrap:anywhere' },
+        [longOne ? lines.slice(0, LIMIT).join('\n') : a.body]);
+      if (!longOne) return txt;
+      var wrapBox = el('div', {}, [txt]);
+      var shown = false;
+      var more = chip('Show more (' + (lines.length - LIMIT) + ' more lines)', function () {
+        shown = !shown;
+        txt.textContent = shown ? a.body : lines.slice(0, LIMIT).join('\n');
+        more.textContent = shown ? 'Show less' : 'Show more (' + (lines.length - LIMIT) + ' more lines)';
+      });
+      wrapBox.appendChild(el('div', { style: 'margin-top:6px' }, [more]));
+      return wrapBox;
+    }
     var box = el('div', { style: 'margin-top:3px;display:flex;flex-direction:column;gap:1px' });
     lines.forEach(function (ln) {
       var idx = ln.indexOf(': ');
@@ -574,29 +605,32 @@
       row.appendChild(head);
       var extra = el('div', {});
       var open = false;
-      function toggle(build) { return function (ev) { ev.preventDefault(); open = !open; clear(extra); if (open) { extra.appendChild(build()); } }; }
+      function toggle(build) { return function () { open = !open; clear(extra); if (open) { extra.appendChild(build()); } }; }
       if (f.kind === 'transcript' && f.transcript) {
-        head.appendChild(el('a', { href: '#', style: 'color:' + ACCENT + ';font-weight:700', onclick: toggle(function () {
+        head.appendChild(chip('Show transcript', toggle(function () {
           return el('div', { style: 'margin-top:8px;max-height:420px;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.55;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px' }, [f.transcript]);
-        }) }, ['Show transcript']));
+        })));
       }
       if (f.kind === 'video' || f.kind === 'audio') {
-        head.appendChild(el('a', { href: '#', style: 'color:' + ACCENT + ';font-weight:700', onclick: toggle(function () {
-          var m = el(f.kind === 'video' ? 'video' : 'audio', { controls: 'controls', preload: 'metadata', src: f.url, style: 'margin-top:8px;width:100%;max-width:880px;border-radius:8px;background:#000' });
-          return m;
-        }) }, ['▶ Play']));
+        head.appendChild(chip('▶ Play', toggle(function () {
+          return el(f.kind === 'video' ? 'video' : 'audio', { controls: 'controls', preload: 'metadata', src: f.url, style: 'margin-top:8px;width:100%;max-width:880px;border-radius:8px;background:#000' });
+        })));
       }
       if (f.url) {
-        head.appendChild(el('a', { href: f.url, target: '_blank', rel: 'noopener', download: f.name, style: 'color:' + ACCENT + ';font-weight:700' }, ['⬇️ Download']));
+        head.appendChild(chip('⬇️ Download', function () {
+          var a2 = document.createElement('a'); a2.href = f.url; a2.target = '_blank'; a2.rel = 'noopener'; a2.download = f.name;
+          document.body.appendChild(a2); a2.click(); a2.remove();
+        }));
       }
       if (a.can_edit) {
-        head.appendChild(el('a', { href: '#', style: 'color:#B91C1C;font-weight:700;margin-left:auto', onclick: async function (ev) {
-          ev.preventDefault();
+        var rm = chip('Remove', async function () {
           var ok = (window.KT && KT.confirm) ? await KT.confirm({ title: 'Remove this file?', description: '“' + f.name + '” will be deleted from this entry.', okLabel: 'Remove', tone: 'danger' }) : false;
           if (!ok) return;
           try { await Api.delete('/sales/activity-files/' + f.id); toast('🗑', 'Removed', f.name); refresh(); }
           catch (er) { toast('⚠️', 'Could not remove', er.message || '', '#DC2626'); }
-        } }, ['Remove']));
+        }, 'danger');
+        rm.style.marginLeft = 'auto';
+        head.appendChild(rm);
       }
       row.appendChild(extra);
       box.appendChild(row);
@@ -724,7 +758,7 @@
     var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }], 'note', { style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' });
     /* A BIGGER BOX (2026-10-09: "make the window to add text bigger as well"): meeting
        notes run to paragraphs. */
-    var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up… (saved with the date and time)', rows: 8 });
+    var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up… (saved with the date and time). Attach a Teams transcript and what was discussed is added to the entry for you.', rows: 8 });
     bigBox(bodyIn, 220);
     /* TEAMS TRANSCRIPTS AND RECORDINGS (2026-10-09: "add ability to upload transcript from MS
        teams meetings and video to activity and history"). Chosen here, uploaded in pieces
@@ -754,8 +788,14 @@
         if (!b.body && picked.length) { b.body = (typeSel.value === 'meeting' ? 'Meeting' : 'Files') + ': ' + picked.map(function (f) { return f.name; }).join(', '); }
         ev.target.disabled = true;
         try {
+          if (picked.length) { b.defer_notify = true; }
           var act = await Api.post('/sales/leads/' + id + '/activities', b);
-          if (picked.length) { await uploadActivityFiles(act.id, picked); }
+          if (picked.length) {
+            /* A transcript is written into the entry as it lands; THEN the team is told, so
+               the email carries what was discussed. Told even if an upload failed. */
+            try { await uploadActivityFiles(act.id, picked); }
+            finally { try { await Api.post('/sales/activities/' + act.id + '/notify', {}); } catch (e) {} }
+          }
           toast('✅', 'Added', picked.length ? picked.length + ' file(s) attached' : '');
           renderDetail(container, ctx);
         } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; renderDetail(container, ctx); }
@@ -774,8 +814,7 @@
          admins) — the server decides (can_edit) and checks again on save. The text is
          corrected in place; the entry keeps its original time and says it was edited. */
       var bodyHost = el('div', {}, [activityBodyNode(a)]);
-      var editLink = a.can_edit ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: function (ev3) {
-        ev3.preventDefault();
+      var editLink = a.can_edit ? chip('✏️ Edit', function () {
         if (bodyHost.getAttribute('data-editing')) { return; }
         bodyHost.setAttribute('data-editing', '1');
         var ta = textarea({ value: a.body || '', rows: 8 });
@@ -821,7 +860,7 @@
         bodyHost.appendChild(moreIn);
         bodyHost.appendChild(el('div', { style: 'display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap' }, [saveB, cancelB, moreB, moreList]));
         ta.focus();
-      } }, ['✏️ Edit']) : '';
+      }) : '';
       timeline.appendChild(el('div', { style: 'border-left:2px solid ' + accent + ';padding:2px 0 2px 10px' }, [
         /* WHEN · WHO · WHAT (2026-10-09: "make the date/timestamp then user name the first
            thing followed by activity"). */
@@ -830,7 +869,7 @@
           el('span', { style: 'color:#334155;font-weight:600' }, ['· ' + (a.user_name || 'Website / system')]),
           el('span', { style: 'color:#64748B' }, ['· ' + (ACT_ICON[a.type] || '•') + ' ' + (ACT_LABEL[a.type] || (a.type.charAt(0).toUpperCase() + a.type.slice(1)))]),
           isFu && a.due_date ? el('span', { style: 'margin-left:6px;font-weight:700;color:' + (a.done ? '#15803D' : '#C2410C') }, [a.done ? '✓ done' : ('due ' + fmtDate(a.due_date))]) : '',
-          isFu && !a.done ? el('a', { href: '#', style: 'margin-left:8px;color:' + ACCENT + ';font-weight:700', onclick: async function (ev2) { ev2.preventDefault(); try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} } }, ['mark done']) : '',
+          isFu && !a.done ? chip('✓ Mark done', async function () { try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} }) : '',
           a.edited_at ? el('span', { style: 'margin-left:6px;color:#94A3B8;font-style:italic', title: 'Edited ' + fmtStamp(a.edited_at) }, ['· edited ' + fmtStamp(a.edited_at)]) : '',
           editLink,
         ]),

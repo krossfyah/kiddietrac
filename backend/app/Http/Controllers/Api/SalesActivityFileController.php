@@ -126,7 +126,52 @@ class SalesActivityFileController extends Controller
         } catch (\Throwable $e) {
         }
 
+        // What was discussed goes into the entry itself (2026-10-09).
+        if ($kind === 'transcript' && $text) {
+            self::writeDiscussion($a, $name, $text, $final, $ext);
+        }
+
         return response()->json(['ok' => true, 'file' => self::present(DB::table('sales_activity_files')->find($id))], 201);
+    }
+
+    /**
+     * WHAT WAS DISCUSSED, IN THE ENTRY (2026-10-09: "with uploading the transcript can you
+     * auto populate the transcript to the activity and history to be logged on what was
+     * discussed?"). A header (the file, who spoke, how long), then the conversation, speaker
+     * by speaker. The placeholder the composer writes when only files were attached
+     * ("Meeting: x.vtt") is replaced; anything the person typed is kept above it. The column
+     * holds ~64 KB, so a very long meeting is cut there and the attached file keeps all of it.
+     */
+    private static function writeDiscussion(SalesActivity $a, string $name, string $text, string $path, string $ext): void
+    {
+        try {
+            $speakers = [];
+            foreach (explode("\n", $text) as $line) {
+                if (preg_match('/^([^:]{2,60}):\s/', $line, $m)) { $speakers[trim($m[1])] = true; }
+            }
+            $dur = null;
+            if (in_array($ext, ['vtt', 'srt'], true) && preg_match_all('/-->\s*(\d{1,2}:)?(\d{1,2}):(\d{2})[.,]\d+/', (string) @file_get_contents($path), $mm, PREG_SET_ORDER)) {
+                $last = end($mm);
+                $secs = ((int) rtrim((string) $last[1], ':')) * 3600 + ((int) $last[2]) * 60 + (int) $last[3];
+                $dur = $secs >= 3600 ? floor($secs / 3600) . ' h ' . floor(($secs % 3600) / 60) . ' min' : max(1, (int) round($secs / 60)) . ' min';
+            }
+            $head = '🗒️ Meeting transcript — ' . $name
+                . ($speakers ? "\nSpeakers: " . implode(', ', array_keys($speakers)) : '')
+                . ($dur ? "\nLength: " . $dur : '');
+
+            $current = trim((string) $a->body);
+            $placeholder = $current === '' || (preg_match('/^(Meeting|Files):\s/u', $current) && ! str_contains($current, "\n"));
+            $prefix = $placeholder ? '' : $current . "\n\n";
+            $budget = 60000 - strlen($prefix) - strlen($head) - 200;
+            $conv = $text;
+            if (strlen($conv) > $budget) {
+                $conv = mb_strcut($conv, 0, max(0, $budget), 'UTF-8') . "\n… (the transcript continues in the attached file)";
+            }
+            $a->body = $prefix . $head . "\n\n" . $conv;
+            $a->save();
+        } catch (\Throwable $e) {
+            // the file is stored either way
+        }
     }
 
     /** DELETE /sales/activity-files/{file} */
