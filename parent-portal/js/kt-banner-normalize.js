@@ -59,7 +59,7 @@
     var chain = [];
     for (var n = banner; n && n !== main; n = n.parentElement) chain.unshift(n);
     if (!chain.length || chain.length > 6) return false;
-    var movers = [];
+    var movers = [], homes = [];
     for (var lv = 0; lv < chain.length; lv++) {
       var node = chain[lv], par = node.parentElement;
       for (var sib = par.firstElementChild; sib && sib !== node; sib = sib.nextElementSibling) {
@@ -71,12 +71,37 @@
         if (r.height < 2 && !(sib.textContent || '').trim()) continue;
         if (r.height > 240) return false;           // real content above: not ours to move
         movers.push(sib);
+        homes.push({ node: sib, home: par, anchor: node });
       }
     }
     if (!movers.length || movers.length > 4) return false;
     var ref = banner;
     movers.forEach(function (m) { ref.parentNode.insertBefore(m, ref.nextSibling); ref = m; });
+    /* Remember where a bar came from when it was moved DOWN into a deeper container. */
+    homes.forEach(function (h) { if (h.home !== banner.parentNode) movedHome.push(h); });
+    if (movedHome.length > 12) movedHome.splice(0, movedHome.length - 12);
     return true;
+  }
+
+  /* A MOVED BAR MUST SURVIVE ITS NEW HOME BEING CLEARED (2026-10-09).
+
+     Anthony: the Audit log's "subtabs not visible". heroLeads() moved the tab row (which
+     the screen keeps OUTSIDE the pane it re-renders) down to just under the hero — i.e.
+     INTO that pane. The next tab click cleared the pane and the tab row went with it: every
+     screen with a persistent tab strip over a re-rendered pane lost its tabs on the first
+     switch. So a bar moved into a deeper container is put back where the screen left it
+     whenever it is detached while that spot still exists (the pane was emptied, not
+     replaced); heroLeads() then places it under the new hero in the same frame. If the
+     screen re-rendered the whole thing (the spot is gone too), it is left alone — the
+     screen drew a new bar of its own. */
+  var movedHome = [];
+  function restoreMoved() {
+    for (var i = movedHome.length - 1; i >= 0; i--) {
+      var h = movedHome[i];
+      if (h.node.isConnected) continue;
+      if (h.anchor.isConnected && h.anchor.parentNode === h.home) h.home.insertBefore(h.node, h.anchor);
+      movedHome.splice(i, 1);
+    }
   }
 
   /* The page's LEADING banner for ordering only: the standard hero, or a screen's own
@@ -90,6 +115,7 @@
     var main = document.getElementById('appMain');
     if (!main) return;
     var banner = findBanner(main);
+    try { restoreMoved(); } catch (e) {}
     try { heroLeads(main, findLead(main)); } catch (e) {}
     if (!banner || banner.getAttribute('data-kt-banner') === '1') return;
     banner.setAttribute('data-kt-banner', '1');

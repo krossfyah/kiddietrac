@@ -1262,7 +1262,8 @@
             + '<div style="font-size:12.5px;color:#64748B;margin-top:3px;line-height:1.5;">Messages that did <strong>not</strong> reach the person they were addressed to — bounced, failed, deferred, or held back by your own delivery settings. A suppressed message is listed here because from the family’s side it is the same event: they were not told. Use Resend once the address or the setting is fixed.</div></div>'
           : '<div style="margin:2px 2px 14px;"><h2 style="margin:0;font-size:20px;color:#0F172A;">📧 Email log</h2>'
             + '<div style="font-size:12.5px;color:#64748B;margin-top:3px;line-height:1.5;">Every message the system sent, with a date &amp; time stamp in your agency’s timezone. Search covers every email ever logged — not just the ones on screen. Use the row actions to open, download or resend. (Delivery still depends on DNS/SPF — this confirms the send + open tracking.)</div></div>')
-      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:0 2px 12px;">'
+      // kt-al-efilters: on a phone the Audit log screen lays these out two to a row (screen-audit-logs.js).
+      + '<div class="kt-al-efilters" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:0 2px 12px;">'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;flex:1;min-width:240px;max-width:380px;">Search'
           + '<input id="elf-q" type="search" placeholder="Name, email address or subject…" style="' + inp + 'width:100%;margin-top:4px;font-weight:400;text-transform:none;"></label>'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Status'

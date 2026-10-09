@@ -56,7 +56,23 @@
       '  #appMain table:not(.kt-nomc) td{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;width:auto !important;',
       '    border:none !important;padding:4px 0 !important;text-align:left !important;white-space:normal !important;font-size:13.5px;}',
       // Column header, shown as a dim label beside the value.
-      '  #appMain table:not(.kt-nomc) td::before{content:attr(data-label);flex:0 0 auto;color:#64748B;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding-top:2px;}',
+      '  #appMain table:not(.kt-nomc) td::before{content:attr(data-label);flex:0 0 auto;max-width:42%;color:#64748B;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding-top:2px;}',
+      /* ONE VALUE PER ROW (2026-10-09, Anthony: audit log "words spilling over to the next
+         line"). The cell is a flex row, so every child of a cell became its own column
+         beside the label: a name and its email, a label and its detail line, a place and
+         its IP were squeezed side by side and broke mid-word ("Sign / ed a / form").
+         restack() now gathers a multi-part cell into ONE .kt-mcv block, so the parts stack
+         under each other on the value side the way they do on desktop. */
+      /* !important throughout: css/kt-mobile-app.css restates the card rules with !important
+         (#appMain table.kt-mcards td{display:flex !important;text-align:right !important}), so
+         these win by being more specific AND important. */
+      '  #appMain table:not(.kt-nomc) td > .kt-mcv{display:block !important;flex:0 1 auto !important;min-width:0 !important;text-align:right !important;overflow-wrap:break-word;}',
+      '  #appMain table:not(.kt-nomc) td > .kt-mcv > div{max-width:none !important;}',
+      /* A LONG value (a sentence, a summary, an address) gets the whole card width: the
+         label sits above it instead of beside it, so it is not read through a slot. */
+      '  #appMain table:not(.kt-nomc) td.kt-mcard-block:not(.kt-mcard-title){display:block !important;text-align:left !important;}',
+      '  #appMain table:not(.kt-nomc) td.kt-mcard-block:not(.kt-mcard-title)::before{display:block !important;max-width:none !important;margin-bottom:3px !important;padding-top:0 !important;white-space:normal !important;}',
+      '  #appMain table:not(.kt-nomc) td.kt-mcard-block > .kt-mcv, #appMain table:not(.kt-nomc) td.kt-mcard-title > .kt-mcv{text-align:left !important;}',
       '  #appMain table:not(.kt-nomc) td[data-label=""]::before{display:none;}',
       // First cell reads as the card title: no label, bigger, full width.
       '  #appMain table:not(.kt-nomc) td.kt-mcard-title{display:block;font-size:15px;font-weight:800;color:#0F172A;padding:0 0 6px !important;}',
@@ -96,6 +112,26 @@
     return !td.querySelector('img,button,a,svg,input');
   }
 
+  /* See the .kt-mcv rule: a cell with more than one part (two divs, text plus a span…)
+     gets them wrapped in a single block so they stack instead of sitting side by side.
+     Cells holding controls are left exactly as built — the row-actions kebab and the
+     screens' own handlers look for their buttons where they put them. A long value is
+     marked to take the full card width. */
+  var CONTROLS = 'button,input,select,textarea,a[href],[role="button"],[contenteditable="true"]';
+  function gatherValue(td) {
+    if (td.hasAttribute('data-kt-mc-keep') || td.querySelector(CONTROLS)) return;
+    var parts = [].filter.call(td.childNodes, function (n) {
+      return n.nodeType === 1 || (n.nodeType === 3 && n.nodeValue.trim() !== '');
+    });
+    if (parts.length > 1) {
+      var box = document.createElement('div');
+      box.className = 'kt-mcv';
+      while (td.firstChild) box.appendChild(td.firstChild);
+      td.appendChild(box);
+    }
+    if ((td.textContent || '').replace(/\s+/g, ' ').trim().length > 44) td.classList.add('kt-mcard-block');
+  }
+
   function restack(table) {
     var labels = labelsOf(table);
     if (!labels || !labels.length) return;
@@ -107,6 +143,7 @@
       cells.forEach(function (td, i) {
         td.setAttribute('data-label', labels[i] == null ? '' : labels[i]);
         if (isBlank(td)) td.classList.add('kt-mcard-empty');
+        else gatherValue(td);
       });
       // The card's title is the first cell with actual TEXT in it. Tables lead
       // with a checkbox/spacer column, and titling that gave every card an empty

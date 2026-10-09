@@ -312,6 +312,99 @@
      follow somebody into tomorrow's session on a shared machine. */
   var KT_AUDIT_TAB_KEY = 'kt_audit_subtab';
 
+  /* THE AUDIT LOG ON A PHONE (2026-10-09, Anthony: "audit log view on mobile apk is hard
+     to read with words spilling over to the next line, subtabs not visible and easy to
+     scroll etc and the view is not using the entire screen size like other pages").
+     Measured at 390px:
+       · every pane added its own 24px of padding inside #appMain's 10px, so cards started
+         34px in — the gutters he saw. On a phone the panes now add none.
+       · the subtab row could not scroll (overflow visible) and its labels wrapped to two
+         lines (80px-tall tabs), so "Email log" was cut off at the edge. It is now one line
+         that scrolls sideways, fades at the edge that has more, and brings the open tab
+         into view.
+       · the five filters stacked full-width took a whole screen before the first entry. On
+         a phone they sit behind a "Filters" button (with a count when any are set), two to
+         a row when open.
+     The card text itself was the shared phone-table layout (kt-mobile-tables.js), fixed
+     there for every table. */
+  function ensureAuditCss() {
+    if (document.getElementById('kt-audit-phone-css')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-audit-phone-css';
+    st.textContent = ''
+      + '.kt-al-ftoggle{display:none;}'
+      + '.kt-al-tabs{scrollbar-width:none;}'
+      + '.kt-al-tabs::-webkit-scrollbar{display:none;}'
+      + '.kt-al-tab{white-space:nowrap;flex:0 0 auto;}'
+      + '@media (max-width:600px){'
+      +   '.kt-al-wrap{padding:6px 0 14px !important;}'
+      +   '.kt-al-tabs{padding:2px 0 0 !important;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}'
+      +   '.kt-al-tabs.kt-al-more-r{-webkit-mask-image:linear-gradient(to right,#000 82%,transparent);mask-image:linear-gradient(to right,#000 82%,transparent);}'
+      +   '.kt-al-tabs.kt-al-more-l{-webkit-mask-image:linear-gradient(to left,#000 82%,transparent);mask-image:linear-gradient(to left,#000 82%,transparent);}'
+      +   '.kt-al-tabs.kt-al-more-l.kt-al-more-r{-webkit-mask-image:linear-gradient(to right,transparent,#000 14%,#000 86%,transparent);mask-image:linear-gradient(to right,transparent,#000 14%,#000 86%,transparent);}'
+      +   '.kt-al-tab{padding:10px 12px !important;font-size:13.5px !important;}'
+      +   '.kt-al-ftoggle{display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;margin:12px 0 0;padding:9px 12px;background:#fff;border:1px solid #E2E8F0;border-radius:10px;font-size:14px;font-weight:700;color:#0F172A;cursor:pointer;}'
+      +   '.kt-al-ftoggle .kt-al-fcount{background:#1F6080;color:#fff;border-radius:999px;font-size:11.5px;padding:1px 8px;}'
+      +   '.kt-al-ftoggle .kt-al-fchev{margin-left:auto;color:#64748B;transition:transform .15s;}'
+      +   '.kt-al-ftoggle.open .kt-al-fchev{transform:rotate(180deg);}'
+      +   '.kt-al-toolbar{display:none !important;}'
+      +   '.kt-al-toolbar.open{display:grid !important;grid-template-columns:1fr 1fr !important;gap:8px !important;padding:10px !important;margin:8px 0 12px !important;}'
+      +   '.kt-al-toolbar.open > .kt-al-full{grid-column:1 / -1;}'
+      +   '.kt-al-toolbar.open > *{min-width:0;}'
+      +   '.kt-al-toolbar input,.kt-al-toolbar select{width:100% !important;max-width:100%;box-sizing:border-box;}'
+      +   '.kt-al-toolbar input,.kt-al-toolbar select{height:38px;padding:4px 9px !important;font-size:15px !important;}'
+      +   '.kt-al-list{margin-top:12px;background:transparent !important;box-shadow:none !important;border:0 !important;overflow:visible !important;}'
+      +   '.kt-al-pager{margin-top:6px !important;}'
+      +   '.kt-al-email .kt-al-efilters{display:grid !important;grid-template-columns:1fr 1fr;gap:8px !important;}'
+      +   '.kt-al-email .kt-al-efilters > label{min-width:0 !important;max-width:none !important;}'
+      +   '.kt-al-email .kt-al-efilters > label:first-child{grid-column:1 / -1;}'
+      +   '.kt-al-email .kt-al-efilters input,.kt-al-email .kt-al-efilters select{width:100% !important;height:38px;}'
+      + '}';
+    document.head.appendChild(st);
+  }
+
+  /* The phone's "Filters" button for a toolbar. countFn says how many filters are set;
+     the toolbar opens by itself when any are, so a search is never hidden. */
+  function filterToggle(toolbar, countFn) {
+    var btn = Dom.el('button', { type: 'button', class: 'kt-al-ftoggle', 'aria-expanded': 'false' });
+    function paint() {
+      var n = countFn();
+      btn.innerHTML = '<span>⚙️ Filters</span>' + (n ? '<span class="kt-al-fcount">' + n + '</span>' : '')
+        + '<span class="kt-al-fchev">▾</span>';
+    }
+    btn.addEventListener('click', function () {
+      var open = !toolbar.classList.contains('open');
+      toolbar.classList.toggle('open', open);
+      btn.classList.toggle('open', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    if (countFn()) { toolbar.classList.add('open'); btn.classList.add('open'); btn.setAttribute('aria-expanded', 'true'); }
+    paint();
+    btn.ktPaint = paint;
+    return btn;
+  }
+
+  /* One-line, sideways-scrolling tab row: fade the edge that has more, and keep the open
+     tab in view (scrollLeft, not scrollIntoView, which would also move the page). */
+  function tabScroller(row) {
+    function edges() {
+      var more = row.scrollWidth - row.clientWidth > 4;
+      row.classList.toggle('kt-al-more-r', more && row.scrollLeft + row.clientWidth < row.scrollWidth - 4);
+      row.classList.toggle('kt-al-more-l', more && row.scrollLeft > 4);
+    }
+    row.addEventListener('scroll', edges, { passive: true });
+    return {
+      edges: edges,
+      show: function (tab) {
+        if (!tab || row.scrollWidth <= row.clientWidth) { edges(); return; }
+        var l = tab.offsetLeft - row.offsetLeft, r = l + tab.offsetWidth;
+        if (l < row.scrollLeft + 8) row.scrollLeft = Math.max(0, l - 24);
+        else if (r > row.scrollLeft + row.clientWidth - 8) row.scrollLeft = r - row.clientWidth + 24;
+        edges();
+      },
+    };
+  }
+
   // Top-level screen: for platform admins, a tab bar with the Audit log + the
   // Email log (hosted here as a subtab). Everyone else just gets the audit log.
   function render(container) {
@@ -331,9 +424,11 @@
        all four. */
     var hasEmail = isPlatform && window.KT && KT.EmailLog && KT.EmailLog.render;
 
-    var tabsRow = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;padding:16px 24px 0;max-width:1800px;margin:0 auto;' });
+    ensureAuditCss();
+    var tabsRow = Dom.el('div', { class: 'kt-al-tabs', style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;padding:16px 24px 0;max-width:1800px;margin:0 auto;' });
     var pane = Dom.el('div', {});
-    var mkTab = function (label) { return Dom.el('button', { style: 'background:none;border:none;border-bottom:3px solid transparent;color:#64748B;font-weight:700;font-size:14px;padding:10px 16px;cursor:pointer;margin-bottom:-1px;' }, label); };
+    var mkTab = function (label) { return Dom.el('button', { class: 'kt-al-tab', style: 'background:none;border:none;border-bottom:3px solid transparent;color:#64748B;font-weight:700;font-size:14px;padding:10px 16px;cursor:pointer;margin-bottom:-1px;' }, label); };
+    var tabScroll = tabScroller(tabsRow);
     var tA = mkTab('📜 Audit log');
     var tP = mkTab('💳 Payment integrations');
     var tE = mkTab('📧 Email log');
@@ -344,13 +439,19 @@
     var tC = mkTab('💬 Chat conversations');
     var activate = function (which) {
       tC.style.borderBottomColor = which === 'chats' ? '#7C3AED' : 'transparent'; tC.style.color = which === 'chats' ? '#7C3AED' : '#64748B';
+      var openTab = { audit: tA, payments: tP, email: tE, errors: tX, chats: tC }[which];
+      setTimeout(function () { tabScroll.show(openTab); }, 0);
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
       tP.style.borderBottomColor = which === 'payments' ? '#12805F' : 'transparent'; tP.style.color = which === 'payments' ? '#12805F' : '#64748B';
       tE.style.borderBottomColor = which === 'email' ? '#1F6080' : 'transparent'; tE.style.color = which === 'email' ? '#1F6080' : '#64748B';
       tX.style.borderBottomColor = which === 'errors' ? '#B91C1C' : 'transparent'; tX.style.color = which === 'errors' ? '#B91C1C' : '#64748B';
+      /* The banner normaliser moves this row to just under the hero — which lives INSIDE
+         the pane. Bring it home before the pane is emptied, or it is emptied with it (the
+         "subtabs not visible" on a phone); it is placed under the new hero again after. */
+      if (tabsRow.parentNode && tabsRow.parentNode !== container && pane.parentNode === container) { container.insertBefore(tabsRow, pane); }
       Dom.clear(pane);
       if (which === 'errors') {
-        var xInner = Dom.el('div', { style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
+        var xInner = Dom.el('div', { class: 'kt-al-wrap kt-al-email', style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
         var xHero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#3F0D0A 0%,#8A1D16 60%,#B91C1C 100%);' });
         xHero.innerHTML = '<div class="kt-hero-greet">⚠️ ADMIN</div><h1>Email errors</h1>'
           + '<div class="kt-hero-sub">Every message that did not reach the person it was addressed to — bounced, '
@@ -363,7 +464,7 @@
         KT.EmailLog.render(xBody, { status: 'problems' });
       }
       else if (which === 'email') {
-        var inner = Dom.el('div', { style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
+        var inner = Dom.el('div', { class: 'kt-al-wrap kt-al-email', style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
         // The Email log had no banner at all, so it opened straight onto a table while
         // its sibling tab had the gradient hero. Same construction as renderAudit's
         // hero, so kt-banner-normalize treats them identically.
@@ -442,7 +543,7 @@
   var chatState = { kind: '', q: '', since: '', until: '', offset: 0, limit: 50 };
   function renderChats(container) {
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    var wrap = Dom.el('div', { class: 'kt-al-wrap', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1E1B4B 0%,#5B21B6 60%,#7C3AED 100%);' });
     hero.innerHTML = '<div class="kt-hero-greet">💬 ADMIN</div><h1>Chat conversations</h1>'
@@ -451,11 +552,15 @@
       + 'audit log. Times are in your agency timezone (' + auditTz() + ').</div>';
     wrap.appendChild(hero);
 
-    var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
+    var toolbar = Dom.el('div', { class: 'kt-al-toolbar', style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
+    var fToggle = filterToggle(toolbar, function () {
+      return ['kind', 'q', 'since', 'until'].filter(function (k) { return chatState[k]; }).length;
+    });
+    wrap.appendChild(fToggle);
     wrap.appendChild(toolbar);
-    var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+    var listWrap = Dom.el('div', { class: 'kt-al-list', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
-    var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
+    var pager = Dom.el('div', { class: 'kt-al-pager', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
     wrap.appendChild(pager);
 
     var kindWrap = Dom.el('div');
@@ -467,11 +572,14 @@
     kindSel.addEventListener('change', function () { chatState.kind = kindSel.value; chatState.offset = 0; load(); });
     kindWrap.appendChild(kindSel);
     toolbar.appendChild(kindWrap);
-    toolbar.appendChild(filterInput('Search', chatState.q, 'text', function (v) { chatState.q = v; chatState.offset = 0; load(); }));
+    var chatSearch = filterInput('Search', chatState.q, 'text', function (v) { chatState.q = v; chatState.offset = 0; load(); });
+    chatSearch.classList.add('kt-al-full');
+    toolbar.appendChild(chatSearch);
     toolbar.appendChild(filterInput('Active from', chatState.since, 'date', function (v) { chatState.since = v; chatState.offset = 0; load(); }));
     toolbar.appendChild(filterInput('Started by', chatState.until, 'date', function (v) { chatState.until = v; chatState.offset = 0; load(); }));
 
     function load() {
+      if (fToggle.ktPaint) fToggle.ktPaint();
       var h = listWrap.offsetHeight; if (h) listWrap.style.minHeight = h + 'px';
       Dom.clear(listWrap);
       listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#94A3B8;font-size:13px;' }, 'Loading…'));
@@ -494,7 +602,7 @@
         listWrap.appendChild(Dom.el('div', { style: 'padding:28px;text-align:center;color:#94A3B8;font-size:13px;' }, 'No conversations match.'));
         return;
       }
-      var html = '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
+      var html = '<div style="overflow-x:auto;"><table data-kt-bulk="off" data-kt-filtered="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
         + '<thead><tr style="background:#F8FAFC;text-align:left;color:#475569;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;">'
         + '<th style="padding:10px 12px;">Conversation</th><th style="padding:10px 12px;">Type</th><th style="padding:10px 12px;">People</th>'
         + '<th style="padding:10px 12px;text-align:right;">Messages</th><th style="padding:10px 12px;">Last message</th><th style="padding:10px 12px;"></th></tr></thead><tbody>';
@@ -599,7 +707,7 @@
     opts = opts || {};
     var isPayments = opts.channel === 'payments';
     Dom.clear(container);
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    var wrap = Dom.el('div', { class: 'kt-al-wrap', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
 
     var hero = Dom.el('div', {
@@ -620,13 +728,17 @@
         + 'All times are shown in your agency timezone (' + auditTz() + ').</div>';
     wrap.appendChild(hero);
 
-    var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
+    var toolbar = Dom.el('div', { class: 'kt-al-toolbar', style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
+    var fToggle = filterToggle(toolbar, function () {
+      return ['action', 'entity_type', 'q', 'since', 'until'].filter(function (k) { return state.filters[k]; }).length;
+    });
+    wrap.appendChild(fToggle);
     wrap.appendChild(toolbar);
 
-    var listWrap = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+    var listWrap = Dom.el('div', { class: 'kt-al-list', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
     wrap.appendChild(listWrap);
 
-    var pager = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
+    var pager = Dom.el('div', { class: 'kt-al-pager', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
     wrap.appendChild(pager);
 
     /* Paging used to throw the reader down the page.
@@ -662,6 +774,7 @@
 
     function reload() {
       holdHeight();
+      if (fToggle.ktPaint) fToggle.ktPaint();
       Dom.clear(listWrap);
       listWrap.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading audit log…'));
 
@@ -747,9 +860,11 @@
       }));
 
       // Free-text
-      toolbar.appendChild(filterInput('Search', state.filters.q, 'text', function (v) {
+      var searchBox = filterInput('Search', state.filters.q, 'text', function (v) {
         state.filters.q = v; state.offset = 0; reload();
-      }));
+      });
+      searchBox.classList.add('kt-al-full');
+      toolbar.appendChild(searchBox);
 
       // Date range
       toolbar.appendChild(filterInput('From', state.filters.since, 'date', function (v) {
@@ -762,7 +877,7 @@
       }));
 
       // Reset
-      var resetWrap = Dom.el('div', { style: 'display:flex;align-items:flex-end;gap:6px;' });
+      var resetWrap = Dom.el('div', { class: 'kt-al-full', style: 'display:flex;align-items:flex-end;gap:6px;' });
       var resetBtn = Dom.el('button', { style: 'background:white;border:1px solid #D1D5DB;color:#374151;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;flex:1;' }, 'Reset');
       resetBtn.addEventListener('click', function () {
         state.filters = { entity_type: '', action: '', q: '', since: '', until: '' };
@@ -843,7 +958,7 @@
     // attach — otherwise it client-paginated the 50 rows we load per server page
     // into 25-per-page chunks, producing a SECOND Prev/Next and capping the view
     // at "2 pages" no matter how many pages the server actually has.
-    var t = Dom.el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+    var t = Dom.el('table', { 'data-kt-filtered': '1', 'data-kt-bulk': 'off', style: 'width:100%;border-collapse:collapse;font-size:13px;' });
     var thead = Dom.el('thead', { style: 'background:#FAFBFC;' });
     var hr = Dom.el('tr');
     ['When', 'Action', 'Entity', 'Actor', 'Location'].forEach(function (h) {
@@ -906,7 +1021,7 @@
       row.appendChild(whenCell);
 
       // Action
-      var actCell = Dom.el('td', { style: 'padding:10px 14px;vertical-align:top;max-width:360px;' });
+      var actCell = Dom.el('td', { class: 'kt-mcard-block', style: 'padding:10px 14px;vertical-align:top;max-width:360px;' });
       var actLine = Dom.el('div', {});
       actLine.appendChild(Dom.el('span', { style: 'font-size:16px;margin-right:6px;' }, iconFor(l.action)));
       // Show the clean label, and keep the raw action in the tooltip for anyone
