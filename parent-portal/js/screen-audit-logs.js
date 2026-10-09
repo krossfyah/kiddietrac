@@ -521,7 +521,7 @@
           // Action dropdown sat there with nothing in it forever, no matter what
           // the API sent. Rebuild it the moment the lists change.
           if (before !== state.actions.length + '|' + state.entities.length) {
-            buildToolbar();
+            refreshSelects();
           }
         }
         Dom.clear(listWrap);
@@ -540,6 +540,26 @@
         Dom.clear(listWrap);
         listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));
         releaseHeight();
+      });
+    }
+
+    /* THE LISTS ARRIVE AFTER THE TOOLBAR IS ON SCREEN (2026-10-09). This used to call
+       buildToolbar() again, which replaced EVERY control, the search box included. On a
+       phone, tapping Search and typing while that first response was still on its way
+       lost the box, the keyboard and what had been typed (Anthony: "I cannot seem to
+       search in mobile apk view with audit logs"). Only the two dropdowns change, so only
+       their options are rebuilt, and the search box is never replaced. */
+    function refreshSelects() {
+      [['action', 'Action', state.actions], ['entity', 'Entity', state.entities]].forEach(function (d) {
+        var sel = toolbar.querySelector('select[data-kt-filter="' + d[0] + '"]');
+        if (!sel) { buildToolbar(); return; }
+        var cur = d[0] === 'action' ? state.filters.action : state.filters.entity_type;
+        while (sel.firstChild) sel.removeChild(sel.firstChild);
+        [''].concat(d[2]).forEach(function (o) {
+          var opt = Dom.el('option', { value: o }, o ? (d[1] === 'Action' ? actionLabel(o) : o) : 'All');
+          if (o === cur) opt.selected = true;
+          sel.appendChild(opt);
+        });
       });
     }
 
@@ -825,7 +845,7 @@
   function filterSelect(label, value, options, onChange) {
     var wrap = Dom.el('div');
     wrap.appendChild(Dom.el('label', { style: lblStyle() }, label));
-    var sel = Dom.el('select', { style: inputStyle() });
+    var sel = Dom.el('select', { style: inputStyle(), 'data-kt-filter': label === 'Action' ? 'action' : (label === 'Entity' ? 'entity' : '') });
     options.forEach(function (o) {
       // The value stays raw (that's what the API filters on); only the text is
       // humanised — a dropdown of "post:api/v1/notifications/mark-read" is not a
@@ -842,12 +862,32 @@
   function filterInput(label, value, type, onChange) {
     var wrap = Dom.el('div');
     wrap.appendChild(Dom.el('label', { style: lblStyle() }, label));
-    var input = Dom.el('input', { type: type, value: value && type === 'date' ? value.slice(0, 10) : value, style: inputStyle() });
-    var deb;
-    function fire() { onChange(input.value); }
-    input.addEventListener(type === 'text' ? 'input' : 'change', function () {
-      clearTimeout(deb); deb = setTimeout(fire, type === 'text' ? 320 : 0);
-    });
+    var isText = type === 'text';
+    /* A phone keyboard (2026-10-09): type=search + enterkeyhint gives Android's keyboard a
+       Search key; that key, Enter, the end of an IME composition and a change on Done all
+       search at once, as well as the 320ms typing debounce. Whichever a keyboard sends,
+       the term reaches the server, once (the same term is never fetched twice in a row). */
+    var input = Dom.el('input', isText
+      ? { type: 'search', enterkeyhint: 'search', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', value: value || '', style: inputStyle() }
+      : { type: type, value: value && type === 'date' ? value.slice(0, 10) : value, style: inputStyle() });
+    var deb, last = value || '';
+    function fire() {
+      clearTimeout(deb);
+      if (isText && input.value === last) return;
+      last = input.value;
+      onChange(input.value);
+    }
+    if (isText) {
+      input.addEventListener('input', function () { clearTimeout(deb); deb = setTimeout(fire, 320); });
+      input.addEventListener('compositionend', function () { clearTimeout(deb); deb = setTimeout(fire, 320); });
+      input.addEventListener('change', fire);
+      input.addEventListener('search', fire);   // the clear (x) on a search box
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); fire(); try { input.blur(); } catch (er) {} }
+      });
+    } else {
+      input.addEventListener('change', function () { clearTimeout(deb); deb = setTimeout(fire, 0); });
+    }
     wrap.appendChild(input);
     return wrap;
   }
