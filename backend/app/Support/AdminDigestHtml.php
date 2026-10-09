@@ -51,6 +51,7 @@ final class AdminDigestHtml
             'To invite' => $s['welcome']['count'] ?? 0,
             'No emergency contact' => $s['emergency']['count'] ?? 0,
             'Families joined' => $s['newFamilies']['count'] ?? 0,
+            'Providers setting up' => $s['onboarding']['count'] ?? 0,
         ]);
         if ($counts) {
             $html .= self::barChart('Where things stand', $counts, '#1F6FB2');
@@ -66,6 +67,7 @@ final class AdminDigestHtml
 
         $html .= self::section('⏰ Late pick-ups awaiting your decision', $s['late'] ?? null, 'late',
             'Approve with a fee, waive, or decline — nothing is charged until you do.');
+        $html .= self::onboarding($s['onboarding'] ?? null);
         $html .= self::section('👪 Families who joined', $s['newFamilies'] ?? null, 'newFamilies',
             'New this period. Check each has guardians invited, a room, and the forms you require.');
         $html .= self::section('🚨 Families with no emergency contact', $s['emergency'] ?? null, 'emergency',
@@ -241,6 +243,38 @@ final class AdminDigestHtml
             . ' <span style="background:#0E7C90;color:#fff;border-radius:999px;font-size:11.5px;padding:1px 8px;margin-left:4px;">'
             . (int) $data['count'] . '</span></div>'
             . $inner . '</div>';
+    }
+
+    /** New providers: one card each, "they still need to" beside "you still need to". */
+    private static function onboarding(?array $data): string
+    {
+        if (empty($data['cards'])) return '';
+        $list = function (array $items, string $colour) {
+            if (! $items) return '<div style="font-size:13px;color:#16A34A;">✓ Nothing outstanding</div>';
+            $h = '';
+            foreach ($items as $i) {
+                $h .= '<div style="font-size:13px;line-height:1.5;color:#334155;padding:1px 0;"><span style="color:' . $colour . ';font-weight:800;">•</span> ' . e($i) . '</div>';
+            }
+            return $h;
+        };
+        $body = '<div style="font-size:13.5px;color:#475569;line-height:1.5;margin:0 0 10px;">Providers added in the last '
+            . \App\Support\AdminDigest::NEW_DAYS . ' days, or whose centre is still being set up. Each drops off this list once everything is done.</div>';
+        foreach ($data['cards'] as $c) {
+            $body .= '<div style="border:1px solid #E2E8F0;border-left:3px solid #0E7C90;border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:9px;background:#FFFFFF;">'
+                . '<div style="font-size:14.5px;font-weight:800;color:#0F172A;">' . e($c['who'])
+                . ' <span style="font-weight:600;font-size:12.5px;color:#64748B;">· ' . e($c['where']) . ' · ' . e($c['since']) . '</span></div>'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;"><tr>'
+                . ($c['provider'] || ! $c['office'] ? '<td valign="top" style="width:50%;padding-right:10px;"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#B45309;margin-bottom:3px;">They still need to</div>'
+                    . $list($c['provider'], '#B45309') . '</td>' : '')
+                . '<td valign="top"><div style="font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#1F6FB2;margin-bottom:3px;">You still need to</div>'
+                . $list($c['office'], '#1F6FB2') . '</td>'
+                . '</tr></table></div>';
+        }
+        if ((int) ($data['count'] ?? 0) > count($data['cards'])) {
+            $body .= '<div style="font-size:12.5px;color:#64748B;">…and ' . ((int) $data['count'] - count($data['cards'])) . ' more.</div>';
+        }
+
+        return self::wrap('🧩 New providers still setting up', $body);
     }
 
     private static function wrap(string $title, string $inner): string

@@ -46,9 +46,14 @@ class AdminDigestCommand extends Command
             $to = Carbon::now($tz);
             $from = $weekly ? $to->copy()->subDays(6) : $to->copy();
 
-            $sections = AdminDigest::gather((int) $agency->id, $from->toDateString(), $to->toDateString());
+            /* One digest for the agency's admins, and one per centre director built from
+               THEIR centres only (2026-10-09) — the same email used to go to both, so a
+               director read every centre's items. A test send gets the admin version. */
+            foreach ($this->audiences((int) $agency->id, $test) as [$scope, $people]) {
+            $sections = AdminDigest::gather((int) $agency->id, $from->toDateString(), $to->toDateString(),
+                ($scope === null ? [] : ['centres' => $scope]) + ['weekly' => $weekly]);
             if (! $sections && ! $this->option('force') && ! $test) {
-                $this->line("  {$agency->name}: nothing outstanding");
+                $this->line("  {$agency->name}" . ($scope === null ? '' : ' (centres ' . implode(',', $scope) . ')') . ': nothing outstanding');
                 continue;
             }
 
@@ -70,7 +75,7 @@ class AdminDigestCommand extends Command
                 'preheader' => self::preheader($sections),
             ]);
 
-            foreach ($this->recipients((int) $agency->id, $test) as $r) {
+            foreach ($people as $r) {
                 try {
                     AgencyMailer::forAgency((int) $agency->id)->html($html, function ($m) use ($r, $subject, $test, $agency) {
                         // Engagement mail: withheld from accounts nobody has claimed.
@@ -95,6 +100,7 @@ class AdminDigestCommand extends Command
                     $this->warn('    failed ' . $r->email . ': ' . $e->getMessage());
                 }
             }
+            }
         }
 
         $this->info("Sent {$sent} digest(s)");
@@ -116,6 +122,39 @@ class AdminDigestCommand extends Command
         return 'What needs your attention';
     }
 
+    /**
+     * [centre scope or null for agency-wide, recipients] pairs. Anyone holding an
+     * agency-wide role gets the agency digest; a person who is ONLY a centre director
+     * gets one covering their centres (people with the same set of centres share it).
+     *
+     * @return array<int,array{0:?array,1:iterable}>
+     */
+    private function audiences(int $agencyId, ?string $test): array
+    {
+        $all = collect($this->recipients($agencyId, $test));
+        if ($test) {
+            return [[null, $all]];
+        }
+        $wide = DB::table('role_assignments')->where('active', 1)->where('agency_id', $agencyId)
+            ->whereIn('role', ['agency_admin', 'platform_admin'])->distinct()->pluck('user_id')->flip();
+        $open = array_flip(\App\Support\Live::centreIds($agencyId));
+        $out = [[null, $all->filter(fn ($r) => isset($wide[$r->id]))->values()]];
+        $groups = [];
+        foreach ($all as $r) {
+            if (isset($wide[$r->id])) continue;
+            $cs = DB::table('role_assignments')->where('user_id', $r->id)->where('active', 1)->where('role', 'centre_director')
+                ->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)
+                ->filter(fn ($id) => isset($open[$id]))->unique()->sort()->values()->all();
+            if (! $cs) continue;   // no open centre: nothing of theirs to report
+            $groups[implode(',', $cs)][] = $r;
+        }
+        foreach ($groups as $key => $people) {
+            $out[] = [array_map('intval', explode(',', $key)), $people];
+        }
+
+        return array_values(array_filter($out, fn ($a) => count($a[1]) > 0));
+    }
+
     /** @return iterable<object> */
     private function recipients(int $agencyId, ?string $test): iterable
     {
@@ -129,6 +168,6 @@ class AdminDigestCommand extends Command
             ->whereIn('ra.role', ['agency_admin', 'centre_director'])
             ->where(fn ($q) => $q->where('ra.agency_id', $agencyId)->orWhereIn('ra.centre_id', $centreIds))
             ->whereNull('u.deleted_at')->whereNotNull('u.email')
-            ->distinct()->get(['u.email', 'u.first_name', 'u.last_name']);
+            ->distinct()->get(['u.id', 'u.email', 'u.first_name', 'u.last_name']);
     }
 }

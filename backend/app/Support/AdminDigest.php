@@ -25,14 +25,25 @@ use Illuminate\Support\Facades\Schema;
 final class AdminDigest
 {
     /** @return array<string,mixed> */
-    public static function gather(int $agencyId, string $from, string $to): array
+    public static function gather(int $agencyId, string $from, string $to, array $opts = []): array
     {
         // Open centres only (App\Support\Live, 2026-10-09): a closed provider has nothing to report.
         $centreIds = \App\Support\Live::centreIds($agencyId);
+        /* A CENTRE DIRECTOR'S DIGEST COVERS THEIR CENTRES (2026-10-09). This was built
+           once per agency and the same email went to every admin and every director, so a
+           director read every centre's late pickups, time off, tickets and fee plans.
+           $opts['centres'] narrows it; 'scoped' then also drops the agency-wide rows
+           (requests not tied to a centre, support tickets, fee plans, the agency scorecard). */
+        $scoped = array_key_exists('centres', $opts);
+        if ($scoped) {
+            $only = array_flip(array_map('intval', (array) $opts['centres']));
+            $centreIds = array_values(array_filter($centreIds, fn ($id) => isset($only[(int) $id])));
+        }
         if (! $centreIds) {
             return [];
         }
-        $ctx = ['agency' => $agencyId, 'centres' => $centreIds, 'from' => $from, 'to' => $to];
+        $ctx = ['agency' => $agencyId, 'centres' => $centreIds, 'from' => $from, 'to' => $to,
+            'scoped' => $scoped, 'weekly' => ! empty($opts['weekly'])];
 
         $out = [];
         foreach ([
@@ -44,6 +55,7 @@ final class AdminDigest
             'emergency' => 'emergencyContacts',
             'openDays' => 'openDays', 'scorecard' => 'scorecard',
             'educators' => 'educators', 'newFamilies' => 'newFamilies',
+            'onboarding' => 'onboarding',
         ] as $key => $method) {
             try {
                 $v = self::$method($ctx);
@@ -82,7 +94,9 @@ final class AdminDigest
     {
         if (! Schema::hasTable('time_off_requests')) return null;
         $rows = DB::table('time_off_requests as t')->join('users as u', 'u.id', '=', 't.user_id')
-            ->where(fn ($q) => $q->where('t.agency_id', $c['agency'])->orWhereIn('t.centre_id', $c['centres']))
+            ->where(fn ($q) => empty($c['scoped'])
+                ? $q->where('t.agency_id', $c['agency'])->orWhereIn('t.centre_id', $c['centres'])
+                : $q->whereIn('t.centre_id', $c['centres']))
             ->where('t.status', 'pending')->orderBy('t.start_at')->limit(8)
             ->get(['t.request_type', 't.start_at', 't.end_at', 'u.first_name', 'u.last_name']);
         if ($rows->isEmpty()) return null;
@@ -98,7 +112,9 @@ final class AdminDigest
     {
         if (! Schema::hasTable('tasks')) return null;
         $q = DB::table('tasks as t')->leftJoin('users as u', 'u.id', '=', 't.assigned_to')
-            ->where(fn ($x) => $x->where('t.agency_id', $c['agency'])->orWhereIn('t.centre_id', $c['centres']));
+            ->where(fn ($x) => empty($c['scoped'])
+                ? $x->where('t.agency_id', $c['agency'])->orWhereIn('t.centre_id', $c['centres'])
+                : $x->whereIn('t.centre_id', $c['centres']));
         if (Schema::hasColumn('tasks', 'status')) { $q->where('t.status', '!=', 'done'); }
 
         $rows = $q->orderBy('t.due_date')->limit(8)
@@ -125,7 +141,8 @@ final class AdminDigest
 
         $q = DB::table('tour_bookings');
         if (in_array('centre_id', $cols)) { $q->whereIn('centre_id', $c['centres']); }
-        elseif (in_array('agency_id', $cols)) { $q->where('agency_id', $c['agency']); }
+        elseif (in_array('agency_id', $cols) && empty($c['scoped'])) { $q->where('agency_id', $c['agency']); }
+        else { return null; }   // a director's digest: bookings that name no centre are not theirs
         $rows = $q->whereDate($dateCol, '>=', $c['from'])->orderBy($dateCol)->limit(6)->get();
         if ($rows->isEmpty()) return null;
 
@@ -310,7 +327,7 @@ final class AdminDigest
 
     private static function tickets(array $c): ?array
     {
-        if (! Schema::hasTable('support_tickets')) return null;
+        if (! Schema::hasTable('support_tickets') || ! empty($c['scoped'])) return null;   // agency-level
         $rows = DB::table('support_tickets')->where('agency_id', $c['agency'])
             ->whereNull('resolved_at')->orderByDesc('created_at')->limit(6)
             ->get(['subject', 'category', 'priority', 'created_at']);
@@ -326,7 +343,7 @@ final class AdminDigest
     /** Who is due to be billed, grouped by how often their plan bills. */
     private static function invoicing(array $c): ?array
     {
-        if (! Schema::hasTable('fee_plans')) return null;
+        if (! Schema::hasTable('fee_plans') || ! empty($c['scoped'])) return null;   // agency-level
         $plans = DB::table('fee_plans')->where('agency_id', $c['agency'])
             ->when(Schema::hasColumn('fee_plans', 'active'), fn ($q) => $q->where('active', 1))
             ->get(['name', 'amount', 'frequency']);
@@ -422,7 +439,9 @@ final class AdminDigest
         }
         if (Schema::hasTable('time_off_requests')) {
             foreach (DB::table('time_off_requests as t')->join('users as u', 'u.id', '=', 't.user_id')
-                ->where(fn ($q) => $q->where('t.agency_id', $c['agency'])->orWhereIn('t.centre_id', $c['centres']))
+                ->where(fn ($q) => empty($c['scoped'])
+                    ? $q->where('t.agency_id', $c['agency'])->orWhereIn('t.centre_id', $c['centres'])
+                    : $q->whereIn('t.centre_id', $c['centres']))
                 ->where('t.status', 'approved')
                 ->whereDate('t.start_at', '<=', $end->toDateString())
                 ->whereDate('t.end_at', '>=', $start->toDateString())
@@ -583,6 +602,7 @@ final class AdminDigest
         $educators = DB::table('role_assignments as ra')
             ->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.active', true)->where('ra.agency_id', $c['agency'])
+            ->when(! empty($c['scoped']), fn ($q) => $q->whereIn('ra.centre_id', $c['centres']))
             ->whereIn('ra.role', ['educator', 'home_visitor'])
             ->whereNull('u.deleted_at')
             ->distinct()
@@ -705,6 +725,128 @@ final class AdminDigest
         }
 
         return 'Close to the mark — a short note on each care log turns a tick into something a parent can read.';
+    }
+
+    /**
+     * NEW PROVIDERS STILL SETTING UP (weekly only, 2026-10-09).
+     *
+     * Anthony: "add in weekly admin/director email to remind about new provider not
+     * completing their profile/onboarding and any actions for admin/director to complete".
+     *
+     * Who: each open centre that is still 'onboarding' or was added in the last
+     * NEW_DAYS, and each educator added to one of our centres in that window. For each,
+     * two lists — what the PROVIDER still has to do, and what the OFFICE has to do —
+     * and only items that are actually outstanding. A provider with nothing left drops
+     * out, so the section empties itself as people finish.
+     */
+    public const NEW_DAYS = 30;
+
+    private static function onboarding(array $c): ?array
+    {
+        if (empty($c['weekly'])) return null;
+        $since = Carbon::parse($c['to'])->subDays(self::NEW_DAYS)->toDateTimeString();
+        $today = Carbon::parse($c['to'])->toDateString();
+
+        $centres = DB::table('centres')->whereIn('id', $c['centres'])
+            ->where(fn ($q) => $q->where('status', 'onboarding')->orWhere('created_at', '>=', $since))
+            ->get(['id', 'name', 'status', 'license_number', 'supervisor_first_name', 'supervisor_last_name', 'address_line1', 'created_at'])
+            ->keyBy('id');
+        // Educators new to one of our centres — the provider of a home childcare, or staff at a centre.
+        $people = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->whereIn('ra.centre_id', $c['centres'])->where('ra.active', 1)->where('ra.role', 'educator')
+            ->whereNull('u.deleted_at')->whereNotIn('u.status', ['deactivated', 'suspended'])
+            // Not a supervisor placed in rooms for access (Not on the staff rota), nor a
+            // floater who is on three or more centres — neither is a new provider.
+            ->where('u.rota_exempt', false)
+            ->whereRaw('(select count(distinct ra2.centre_id) from role_assignments ra2 where ra2.user_id = u.id and ra2.active = 1 and ra2.role = ?) < 3', ['educator'])
+            ->where(fn ($q) => $q->where('u.created_at', '>=', $since)->orWhereIn('ra.centre_id', $centres->keys()->all()))
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.status', 'u.onboarded_at', 'u.last_login_at', 'u.photo_url',
+                'u.phone', 'u.created_at', 'ra.centre_id']);
+        if ($centres->isEmpty() && $people->isEmpty()) return null;
+
+        $ids = $people->pluck('id')->unique()->all();
+        $signed = $ids ? DB::table('signed_documents')->whereIn('signer_user_id', $ids)->distinct()->pluck('signer_user_id')->flip() : collect();
+        $checks = $ids ? DB::table('background_checks')->whereIn('user_id', $ids)->where('agency_id', $c['agency'])
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>=', $today))
+            ->distinct()->pluck('user_id')->flip() : collect();
+        $firstAid = $ids ? DB::table('staff_certifications')->whereIn('user_id', $ids)
+            ->where(fn ($q) => $q->whereNull('active')->orWhere('active', 1))
+            ->whereIn('cert_type', ['First_Aid', 'CPR', 'First Aid', 'first_aid'])
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>=', $today))
+            ->distinct()->pluck('user_id')->flip() : collect();
+        // One-time forms sent to them and never completed (recurring daily forms are not onboarding).
+        $formsOwed = [];
+        if ($ids && Schema::hasTable('managed_form_recipients')) {
+            foreach (DB::table('managed_form_recipients as r')->join('managed_forms as f', 'f.id', '=', 'r.managed_form_id')
+                ->whereIn('r.user_id', $ids)->where('f.active', 1)->where(fn ($q) => $q->whereNull('f.reusable')->orWhere('f.reusable', 0))
+                ->whereNotExists(fn ($q) => $q->from('managed_form_signoffs as s')->whereColumn('s.managed_form_id', 'r.managed_form_id')->whereColumn('s.user_id', 'r.user_id'))
+                ->get(['r.user_id', 'f.title']) as $f) {
+                $formsOwed[(int) $f->user_id][] = (string) $f->title;
+            }
+        }
+        $rooms = DB::table('rooms')->whereIn('centre_id', $c['centres'])->where(fn ($q) => $q->whereNull('active')->orWhere('active', 1))
+            ->select('centre_id', DB::raw('count(*) n'))->groupBy('centre_id')->pluck('n', 'centre_id');
+        $visitors = DB::table('role_assignments')->whereIn('centre_id', $c['centres'])->where('active', 1)->where('role', 'home_visitor')
+            ->distinct()->pluck('centre_id')->flip();
+        $kids = DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')->join('children as ch', 'ch.id', '=', 'e.child_id')
+            ->tap(fn ($q) => \App\Support\Live::enrolments($q, 'e', $today))
+            ->tap(fn ($q) => \App\Support\Live::enrolledChildren($q, 'ch'))
+            ->whereIn('r.centre_id', $c['centres'])->select('r.centre_id', DB::raw('count(distinct ch.id) n'))->groupBy('r.centre_id')->pluck('n', 'r.centre_id');
+
+        $fmt = fn ($d) => $d ? Carbon::parse($d)->format('j M') : '';
+        $cards = [];
+        // Office actions per centre, once per centre.
+        $officeFor = function ($ctr) use ($rooms, $visitors, $kids) {
+            $o = [];
+            if (($ctr->status ?? '') === 'onboarding') $o[] = 'Set the centre to Active once setup is complete';
+            if (trim((string) $ctr->license_number) === '') $o[] = 'Add the licence / agreement number';
+            if (trim((string) $ctr->supervisor_first_name . (string) $ctr->supervisor_last_name) === '') $o[] = 'Fill in the provider (owner) name';
+            if (trim((string) $ctr->address_line1) === '') $o[] = 'Add the home address';
+            if (empty($rooms[$ctr->id])) $o[] = 'Set up a room';
+            if (! isset($visitors[$ctr->id])) $o[] = 'Assign a home visitor';
+            if (empty($kids[$ctr->id])) $o[] = 'No children placed yet';
+            return $o;
+        };
+        $seenCentre = [];
+        $seenPerson = [];
+        foreach ($people->sortByDesc('created_at') as $p) {
+            if (isset($seenPerson[$p->id])) continue;   // one card per person
+            $seenPerson[$p->id] = true;
+            $mine = []; $office = [];
+            if (in_array($p->status, ['invited', 'not_invited'], true) || ! $p->last_login_at) {
+                $mine[] = 'Accept the invitation and sign in (added ' . $fmt($p->created_at) . ')';
+            } elseif (! $p->onboarded_at) {
+                $mine[] = 'Finish the onboarding steps in the portal';
+            }
+            if (! $p->photo_url) $mine[] = 'Add a profile photo';
+            if (! $p->phone) $mine[] = 'Add a phone number';
+            if (! isset($signed[$p->id])) $mine[] = 'Sign the provider agreement';
+            if (! empty($formsOwed[$p->id])) {
+                $n = count($formsOwed[$p->id]);
+                $mine[] = 'Complete ' . $n . ' form' . ($n === 1 ? '' : 's') . ': ' . implode(', ', array_slice($formsOwed[$p->id], 0, 3)) . ($n > 3 ? '…' : '');
+            }
+            if (! isset($checks[$p->id])) $office[] = 'Record a current vulnerable sector check';
+            if (! isset($firstAid[$p->id])) $office[] = 'Record a current First Aid / CPR certificate';
+            $ctr = $centres[$p->centre_id] ?? null;
+            if ($ctr && ! isset($seenCentre[$ctr->id])) { $office = array_merge($office, $officeFor($ctr)); $seenCentre[$ctr->id] = true; }
+            if (! $mine && ! $office) continue;
+            $cards[] = [
+                'who' => trim($p->first_name . ' ' . $p->last_name),
+                'where' => $ctr ? (string) $ctr->name : (string) DB::table('centres')->where('id', $p->centre_id)->value('name'),
+                'since' => 'added ' . $fmt($p->created_at),
+                'provider' => $mine, 'office' => $office,
+            ];
+        }
+        // A new centre with nobody on it yet still has office work.
+        foreach ($centres as $ctr) {
+            if (isset($seenCentre[$ctr->id])) continue;
+            $office = array_merge(['Add the provider and send their invitation'], $officeFor($ctr));
+            $cards[] = ['who' => (string) $ctr->name, 'where' => 'No provider account yet', 'since' => 'added ' . $fmt($ctr->created_at),
+                'provider' => [], 'office' => $office];
+        }
+        if (! $cards) return null;
+
+        return ['count' => count($cards), 'cards' => array_slice($cards, 0, 12)];
     }
 
     private static function educators(array $c): ?array
