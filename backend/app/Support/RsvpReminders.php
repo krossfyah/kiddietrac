@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class RsvpReminders
 {
-    public const AUDIENCES = ['registered', 'no_response', 'both'];
+    public const AUDIENCES = ['registered', 'no_response', 'both', 'incomplete'];
 
     /** When a reminder is due, in UTC, or null when it cannot be placed (no start time). */
     public static function dueAt(object $r, object $event): ?Carbon
@@ -41,9 +41,46 @@ final class RsvpReminders
     }
 
     /** The invite rows a reminder goes to (opted-out addresses already removed). */
-    public static function recipients(object $event, string $audience)
+    /**
+     * The questions this person left blank: [key => label]. One question when $fieldKey is
+     * given, else every question on the form. "Left blank" = no answer at all, or an empty
+     * one (an unticked checkbox counts as an answer).
+     */
+    public static function missingFields(object $event, ?object $response, ?string $fieldKey = null): array
+    {
+        $fields = json_decode((string) ($event->fields ?? ''), true) ?: [];
+        $answers = $response ? (json_decode((string) $response->answers, true) ?: []) : [];
+        $out = [];
+        foreach ($fields as $f) {
+            $k = (string) ($f['key'] ?? '');
+            if ($k === '' || ($fieldKey && $k !== $fieldKey)) continue;
+            if (in_array($f['type'] ?? '', ['checkbox', 'heading', 'info'], true)) continue;
+            $a = $answers[$k] ?? null;
+            $v = is_array($a) ? ($a['value'] ?? '') : $a;
+            if (is_array($v)) $v = implode(',', $v);
+            if (trim((string) $v) === '') $out[$k] = (string) ($f['label'] ?? $k);
+        }
+
+        return $out;
+    }
+
+    public static function recipients(object $event, string $audience, ?string $fieldKey = null)
     {
         $q = DB::table('rsvp_invites')->where('event_id', $event->id)->where('agency_id', $event->agency_id)->whereNull('opted_out_at');
+        /* SIGNED UP, BUT LEFT A QUESTION BLANK (2026-10-09, Anthony: "another function to those
+           that didnt add input to one of the fields"). Their invite link opens with their
+           earlier answers filled in, so the reminder only asks for what is missing. */
+        if ($audience === 'incomplete') {
+            $resp = DB::table('rsvp_responses')->where('event_id', $event->id)->get(['email', 'answers'])
+                ->keyBy(fn ($r) => strtolower((string) $r->email));
+            $optedOut = DB::table('rsvp_optouts')->where('agency_id', $event->agency_id)->pluck('email')->map(fn ($e) => strtolower((string) $e))->flip();
+
+            return $q->whereNotNull('registered_at')->orderBy('id')->get(['id', 'email', 'name', 'registered_at', 'send_status'])
+                ->filter(function ($i) use ($resp, $optedOut, $event, $fieldKey) {
+                    $em = strtolower((string) $i->email);
+                    return ! isset($optedOut[$em]) && isset($resp[$em]) && self::missingFields($event, $resp[$em], $fieldKey);
+                })->values();
+        }
         if ($audience === 'registered') {
             $q->whereNotNull('registered_at');
         } elseif ($audience === 'no_response') {
@@ -99,7 +136,7 @@ final class RsvpReminders
             return ['status' => 'skipped', 'queued' => 0, 'note' => $why];
         }
 
-        $people = self::recipients($event, $r->audience);
+        $people = self::recipients($event, $r->audience, $r->field_key ?? null);
         // Paced through a personal Gmail account, like invitations: a burst of identical
         // messages from a new account is what its filters treat as spam.
         $paced = ! empty($event->sender_id)
@@ -121,6 +158,7 @@ final class RsvpReminders
         $note = $n ? null : 'Nobody to remind: ' . match ($r->audience) {
             'registered' => 'no one has signed up yet.',
             'no_response' => 'everyone invited has replied.',
+            'incomplete' => 'everyone who signed up answered ' . (($r->field_key ?? null) ? 'that question.' : 'every question.'),
             default => 'no one has signed up or been sent an invitation.',
         };
         DB::table('rsvp_reminders')->where('id', $r->id)->update(['status' => 'sent', 'recipient_count' => $n, 'sent_at' => now(),

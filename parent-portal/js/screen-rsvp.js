@@ -707,8 +707,26 @@
      server sends what is due every five minutes. "Send a reminder now" goes through a
      preview and a confirm with the number of people it will reach. */
   var REM_OFFSETS = [[10080, '1 week before'], [4320, '3 days before'], [1440, '1 day before'], [720, '12 hours before'], [180, '3 hours before'], [120, '2 hours before'], [60, '1 hour before']];
-  var REM_AUD = [['registered', 'Everyone who signed up'], ['no_response', 'Invited, but not replied yet'], ['both', 'Both — signed up and not replied']];
-  function audLabel(a) { return ({ registered: 'Signed up', no_response: 'Not replied yet', both: 'Signed up + not replied' })[a] || a; }
+  var REM_AUD = [['registered', 'Everyone who signed up'], ['no_response', 'Invited, but not replied yet'], ['both', 'Both — signed up and not replied'],
+    ['incomplete', 'Signed up, but left a question blank']];
+  function audLabel(a) { return ({ registered: 'Signed up', no_response: 'Not replied yet', both: 'Signed up + not replied', incomplete: 'Left a question blank' })[a] || a; }
+  /* "Which question" for an incomplete-answer reminder (2026-10-09): any question, or one in
+     particular, with how many people each would reach. Shown only for that audience. */
+  var _remReach = {};
+  function questionPick(ev, current, audience) {
+    var fs = ev && ev.fields; if (typeof fs === 'string') { try { fs = JSON.parse(fs); } catch (e) { fs = []; } }
+    var by = (_remReach && _remReach.incomplete_by_field) || {};
+    var opts = [['', 'Any question' + (_remReach.incomplete != null ? ' (' + _remReach.incomplete + ')' : '')]].concat((fs || []).filter(function (f) { return f && f.key && ['checkbox', 'heading', 'info'].indexOf(f.type) === -1; })
+      .map(function (f) { return [f.key, (f.label || f.key) + (by[f.key] != null ? ' (' + by[f.key] + ')' : '')]; }));
+    return '<div data-fkwrap class="full"' + (audience === 'incomplete' ? '' : ' style="display:none"') + '>'
+      + field('field_key', 'Which question', current || '', { select: opts, hint: 'People who signed up but left this blank. Their link opens with their other answers filled in.' }).replace(/^<div[^>]*>/, '').replace(/<\/div>$/, '') + '</div>';
+  }
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t || !t.matches || !t.matches('select[data-k="audience"]')) return;
+    var root = t.closest('.rv-f') || t.parentNode; var w = root && root.querySelector('[data-fkwrap]');
+    if (w) w.style.display = t.value === 'incomplete' ? '' : 'none';
+  });
   function remPill(s) {
     var c = { scheduled: ['#EFF6FF', '#1D4ED8', 'Scheduled'], sending: ['#FEF3C7', '#92400E', 'Sending'], sent: ['#ECFDF5', '#047857', 'Sent'],
       cancelled: ['#F1F5F9', '#64748B', 'Cancelled'], skipped: ['#FEF2F2', '#B91C1C', 'Not sent'] }[s] || ['#F1F5F9', '#475569', s];
@@ -716,6 +734,7 @@
   }
 
   async function loadReminders(main, host, ev) {
+    try { Api.get('/admin/rsvp/events/' + ev.id + '/reminders').then(function (r) { _remReach = (r && r.reach) || {}; }).catch(function () {}); } catch (e) {}
     var d;
     try { d = await Api.get('/admin/rsvp/events/' + ev.id + '/reminders'); }
     catch (e) { host.innerHTML = '<div class="rv-hint" style="color:#B91C1C">Could not load reminders: ' + esc(e.message || e) + '</div>'; return; }
@@ -761,8 +780,8 @@
           add('✏️ Edit', function () { reminderDialog(ev, x, d, refresh); });
           add('🔔 Send it now', function () { sendReminderNow(ev, x, refresh); });
         }
-        add('👁 Preview', function () { reminderPreview(ev, { audience: x.audience, subject: x.subject, message: x.message }); });
-        add('✉️ Send a test', function () { reminderTest(ev, { audience: x.audience, subject: x.subject, message: x.message }); });
+        add('👁 Preview', function () { reminderPreview(ev, { audience: x.audience, field_key: x.field_key, subject: x.subject, message: x.message }); });
+        add('✉️ Send a test', function () { reminderTest(ev, { audience: x.audience, field_key: x.field_key, subject: x.subject, message: x.message }); });
         if (x.status === 'scheduled') {
           add('✕ Cancel reminder', async function () {
             var ok = await KT.confirm({ title: 'Cancel this reminder?', description: 'It will not be sent. You can add a new one any time.', okLabel: 'Cancel reminder', cancelLabel: 'Keep it' });
@@ -788,20 +807,21 @@
       + (d && !d.has_start ? '<div class="rv-hint" style="color:#B45309">This event has no start time yet — set one with Edit first, or pick a specific date and time.</div>' : '') + '</div>'
       + '<div class="full" data-timewrap><label>Send at (' + esc((d && d.tz) || 'agency time') + ')</label><input type="datetime-local" data-k="send_local" value="' + esc(x ? x.send_local : '') + '"></div>'
       + field('audience', 'Send to', x ? x.audience : 'registered', { select: REM_AUD, full: true })
+      + questionPick(ev, x ? x.field_key : '', x ? x.audience : 'registered')
       + field('subject', 'Subject line (optional)', x ? x.subject : '', { full: true, ph: defs.subject || 'Reminder: {{event}} is coming up' })
       + field('message', 'Message (optional)', x ? x.message : '', { area: true, full: true, rows: 5, max: 4000,
           hint: 'Leave blank for a friendly default — people who signed up get “see you there” with their RSVP details; people who haven’t replied get an “RSVP now” button. The event details, the map and your tips are added for you. You can use {{first_name}}, {{event}}, {{date}} and {{location}}.' })
       + '</div>';
     var ov = dialog(x ? 'Edit reminder' : 'Schedule a reminder', html, async function (root) {
-      var v = vals(root), body = { audience: v.audience, subject: v.subject || null, message: v.message || null };
+      var v = vals(root), body = { audience: v.audience, field_key: v.field_key || null, subject: v.subject || null, message: v.message || null };
       if (v.rmode === 'time') { if (!v.send_local) { throw new Error('Pick the date and time.'); } body.send_local = v.send_local; }
       else { body.offset_minutes = +v.offset_minutes; }
       await Api.post('/admin/rsvp/events/' + ev.id + '/reminders' + (x ? '/' + x.id : ''), body);
       toast(x ? 'Reminder updated' : 'Reminder scheduled', 'success');
       if (done) { done(); }
     }, x ? 'Save reminder' : 'Schedule reminder', { width: 620, extra: [
-      { label: '👁 Preview', onClick: function (root) { var v = vals(root); reminderPreview(ev, { audience: v.audience, subject: v.subject, message: v.message }); } },
-      { label: '✉️ Test', onClick: function (root) { var v = vals(root); reminderTest(ev, { audience: v.audience, subject: v.subject, message: v.message }); } }] });
+      { label: '👁 Preview', onClick: function (root) { var v = vals(root); reminderPreview(ev, { audience: v.audience, field_key: v.field_key, subject: v.subject, message: v.message }); } },
+      { label: '✉️ Test', onClick: function (root) { var v = vals(root); reminderTest(ev, { audience: v.audience, field_key: v.field_key, subject: v.subject, message: v.message }); } }] });
     var dlg = ov.querySelector('.rv-dlg');
     var sync = function () { var t = dlg.querySelector('[data-k="rmode"]').value === 'time'; dlg.querySelector('[data-offwrap]').style.display = t ? 'none' : ''; dlg.querySelector('[data-timewrap]').style.display = t ? '' : 'none'; };
     dlg.querySelector('[data-k="rmode"]').addEventListener('change', sync);
@@ -826,25 +846,26 @@
       } catch (err) { toast(err.message || 'Could not send', 'error'); return false; }
       return true;
     };
-    if (x) { go({ audience: x.audience, subject: x.subject, message: x.message }); return; }
+    if (x) { go({ audience: x.audience, field_key: x.field_key, subject: x.subject, message: x.message }); return; }
     var html = '<div class="rv-f">'
       + field('audience', 'Send to', 'registered', { select: REM_AUD, full: true })
+      + questionPick(ev, '', 'registered')
       + field('subject', 'Subject line (optional)', '', { full: true, ph: 'Reminder: {{event}} is coming up' })
       + field('message', 'Message (optional)', '', { area: true, full: true, rows: 5, max: 4000,
           hint: 'Leave blank for a friendly default. The event details, the map and your tips are added for you.' })
       + '</div>';
     dialog('Send a reminder now', html, async function (root) {
       var v = vals(root);
-      var sent = await go({ audience: v.audience, subject: v.subject || null, message: v.message || null });
+      var sent = await go({ audience: v.audience, field_key: v.field_key || null, subject: v.subject || null, message: v.message || null });
       return sent ? true : false;
     }, 'Continue', { width: 600, extra: [
-      { label: '👁 Preview', onClick: function (root) { var v = vals(root); reminderPreview(ev, { audience: v.audience, subject: v.subject, message: v.message }); } },
-      { label: '✉️ Test', onClick: function (root) { var v = vals(root); reminderTest(ev, { audience: v.audience, subject: v.subject, message: v.message }); } }] });
+      { label: '👁 Preview', onClick: function (root) { var v = vals(root); reminderPreview(ev, { audience: v.audience, field_key: v.field_key, subject: v.subject, message: v.message }); } },
+      { label: '✉️ Test', onClick: function (root) { var v = vals(root); reminderTest(ev, { audience: v.audience, field_key: v.field_key, subject: v.subject, message: v.message }); } }] });
   }
 
   async function reminderPreview(ev, body) {
     var d;
-    try { d = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-preview', { audience: body.audience || 'registered', subject: body.subject || null, message: body.message || null }); }
+    try { d = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-preview', { audience: body.audience || 'registered', field_key: body.field_key || null, subject: body.subject || null, message: body.message || null }); }
     catch (e) { toast(e.message || 'Could not build the preview', 'error'); return; }
     var tabs = [['registered', 'Signed up'], ['no_response', 'Not replied yet']].filter(function (t) { return d[t[0]]; });
     var tab = tabs[0][0];
@@ -878,7 +899,7 @@
     to = String(to || '').trim();
     if (!isEmail(to)) { toast('Enter an email address', 'error'); return; }
     try {
-      var r = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-test', { to: to, audience: body.audience || 'registered', subject: body.subject || null, message: body.message || null });
+      var r = await Api.post('/admin/rsvp/events/' + ev.id + '/reminders-test', { to: to, audience: body.audience || 'registered', field_key: body.field_key || null, subject: body.subject || null, message: body.message || null });
       toast(r.sent ? 'Test reminder sent to ' + to : ('Not sent: ' + (r.reason || r.status)), r.sent ? 'success' : 'error');
     } catch (err) { toast(err.message || 'Could not send', 'error'); }
   }

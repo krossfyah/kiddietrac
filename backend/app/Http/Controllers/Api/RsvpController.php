@@ -1206,7 +1206,7 @@ class RsvpController extends Controller
         foreach ($rows as $r) {
             $due = RsvpReminders::dueAt($r, $e);
             $out[] = [
-                'id' => (int) $r->id, 'audience' => $r->audience, 'offset_minutes' => $r->offset_minutes !== null ? (int) $r->offset_minutes : null,
+                'id' => (int) $r->id, 'audience' => $r->audience, 'field_key' => $r->field_key ?? null, 'offset_minutes' => $r->offset_minutes !== null ? (int) $r->offset_minutes : null,
                 'offset_label' => RsvpReminders::offsetLabel($r->offset_minutes !== null ? (int) $r->offset_minutes : null),
                 'send_local' => $r->send_at ? Carbon::parse($r->send_at, 'UTC')->setTimezone($tz)->format('Y-m-d\TH:i') : '',
                 'due_label' => $due ? AgencyTime::fmt($due, $tz, 'D M j, g:i A') : '',
@@ -1229,9 +1229,14 @@ class RsvpController extends Controller
         unset($o);
         $reach = [];
         foreach (RsvpReminders::AUDIENCES as $a) $reach[$a] = count(RsvpReminders::recipients($e, $a));
+        // Per question, for the "left a question blank" picker.
+        $reach['incomplete_by_field'] = [];
+        foreach (json_decode((string) ($e->fields ?? ''), true) ?: [] as $f) {
+            if (! empty($f['key'])) $reach['incomplete_by_field'][$f['key']] = count(RsvpReminders::recipients($e, 'incomplete', (string) $f['key']));
+        }
 
         return response()->json(['reminders' => $out, 'reach' => $reach, 'has_start' => ! empty($e->starts_at), 'tz' => $tz,
-            'defaults' => ['subject' => RsvpMail::REMINDER_SUBJECT, 'registered' => RsvpMail::REMINDER_REGISTERED, 'no_response' => RsvpMail::REMINDER_NO_RESPONSE],
+            'defaults' => ['subject' => RsvpMail::REMINDER_SUBJECT, 'registered' => RsvpMail::REMINDER_REGISTERED, 'no_response' => RsvpMail::REMINDER_NO_RESPONSE, 'incomplete' => RsvpMail::REMINDER_INCOMPLETE],
             'blocker' => RsvpReminders::blocker($e)]);
     }
 
@@ -1239,13 +1244,21 @@ class RsvpController extends Controller
     private function reminderInput(Request $request, object $e, int $agencyId, bool $needSchedule): array
     {
         $d = $request->validate([
-            'audience' => ['required', 'in:registered,no_response,both'],
+            'audience' => ['required', 'in:registered,no_response,both,incomplete'],
+            'field_key' => ['nullable', 'string', 'max:60'],
             'offset_minutes' => ['nullable', 'integer', 'min:5', 'max:129600'],
             'send_local' => ['nullable', 'date_format:Y-m-d\TH:i'],
             'subject' => ['nullable', 'string', 'max:200'],
             'message' => ['nullable', 'string', 'max:4000'],
         ]);
         $row = ['audience' => $d['audience'], 'subject' => trim((string) ($d['subject'] ?? '')) ?: null, 'message' => trim((string) ($d['message'] ?? '')) ?: null];
+        // Which question an "incomplete" reminder chases (null = any). Must be one of the event's.
+        $fk = $d['audience'] === 'incomplete' ? (trim((string) ($d['field_key'] ?? '')) ?: null) : null;
+        if ($fk) {
+            $keys = array_column(json_decode((string) ($e->fields ?? ''), true) ?: [], 'key');
+            abort_unless(in_array($fk, $keys, true), 422, 'That question is not on this event’s form.');
+        }
+        $row['field_key'] = $fk;
         if (! $needSchedule) return $row;
         if (! empty($d['offset_minutes'])) {
             abort_unless(! empty($e->starts_at), 422, 'Give the event a date and time first — a reminder "before the event" needs to know when it starts.');
@@ -1330,12 +1343,12 @@ class RsvpController extends Controller
         $e = $this->ownEvent($agencyId, $id);
         $rem = (object) $this->reminderInput($request, $e, $agencyId, false);
         $inv = (object) ['name' => 'Alex Sample', 'email' => 'alex.sample@example.com', 'token' => 'preview'];
-        $out = ['recipients' => count(RsvpReminders::recipients($e, $rem->audience))];
+        $out = ['recipients' => count(RsvpReminders::recipients($e, $rem->audience, $rem->field_key ?? null))];
         if ($rem->audience !== 'no_response') {
             [$s, $h] = RsvpMail::reminder($e, $inv, $rem, $this->sampleRegistrant($e));
             $out['registered'] = ['subject' => $s, 'html' => $h];
         }
-        if ($rem->audience !== 'registered') {
+        if (! in_array($rem->audience, ['registered', 'incomplete'], true)) {   // "incomplete" people have signed up
             [$s, $h] = RsvpMail::reminder($e, $inv, $rem, null);
             $out['no_response'] = ['subject' => $s, 'html' => $h];
         }

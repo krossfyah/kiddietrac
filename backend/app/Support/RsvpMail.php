@@ -305,6 +305,7 @@ final class RsvpMail
 
     public const REMINDER_SUBJECT = 'Reminder: {{event}} is coming up';
     public const REMINDER_REGISTERED = "Hi {{first_name}},\n\nA friendly reminder that {{event}} is coming up soon — we’re looking forward to seeing you there.\n\nBring your questions and the topics you care about. This is your chance to be heard.";
+    public const REMINDER_INCOMPLETE = "Hi {{first_name}},\n\nThank you for signing up for {{event}}. Your RSVP is missing an answer or two — could you take a moment to add them? Your other answers are already filled in.";
     public const REMINDER_NO_RESPONSE = "Hi {{first_name}},\n\n{{event}} is coming up soon and we’d love to have you there. There’s still time to RSVP — it only takes a minute.";
 
     /**
@@ -319,9 +320,19 @@ final class RsvpMail
     {
         $registered = (bool) $response;
         $name = $response->name ?? $invite->name ?? null;
-        $subject = self::fill(trim((string) ($reminder->subject ?? '')) !== '' ? (string) $reminder->subject : self::REMINDER_SUBJECT, $event, $name);
-        $msg = trim((string) ($reminder->message ?? '')) !== '' ? (string) $reminder->message : ($registered ? self::REMINDER_REGISTERED : self::REMINDER_NO_RESPONSE);
+        $subject = self::fill(trim((string) ($reminder->subject ?? '')) !== '' ? (string) $reminder->subject
+            : ((($reminder->audience ?? null) === 'incomplete') ? 'Your RSVP for {{event}} is missing a detail' : self::REMINDER_SUBJECT), $event, $name);
+        $incomplete = ($reminder->audience ?? null) === 'incomplete';
+        $msg = trim((string) ($reminder->message ?? '')) !== '' ? (string) $reminder->message
+            : ($incomplete ? self::REMINDER_INCOMPLETE : ($registered ? self::REMINDER_REGISTERED : self::REMINDER_NO_RESPONSE));
         $url = self::rsvpUrl((string) $invite->token);
+        // What this person left blank (or, in a preview with complete answers, the question chosen).
+        $missing = $incomplete ? \App\Support\RsvpReminders::missingFields($event, $response, $reminder->field_key ?? null) : [];
+        if ($incomplete && ! $missing && ! empty($reminder->field_key)) {
+            foreach (json_decode((string) ($event->fields ?? ''), true) ?: [] as $f) {
+                if (($f['key'] ?? '') === $reminder->field_key) $missing[$f['key']] = (string) ($f['label'] ?? $f['key']);
+            }
+        }
 
         $summary = '';
         if ($registered) {
@@ -346,7 +357,13 @@ final class RsvpMail
             . self::heading($event, ($registered ? 'See you soon: ' : 'Coming up: ') . $event->title)
             . self::para(self::fill($msg, $event, $name))
             . self::detailsBox($event)
-            . ($registered ? $summary : EmailTemplate::button('RSVP now', $url))
+            . ($incomplete
+                ? '<div style="margin:16px 0 6px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:12px 14px">'
+                    . '<div style="font-size:12px;font-weight:800;color:#92400E;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px">Still needed</div>'
+                    . ($missing ? '<ul style="margin:0;padding-left:18px;font-size:14px;color:#334155;line-height:1.6">' . implode('', array_map(fn ($l) => '<li>' . e($l) . '</li>', $missing)) . '</ul>'
+                        : '<div style="font-size:14px;color:#334155">A detail or two from your RSVP.</div>')
+                    . '</div>' . EmailTemplate::button('Add the missing details', $url)
+                : ($registered ? $summary : EmailTemplate::button('RSVP now', $url)))
             . self::mapBlock($event)
             . self::tipsBlock($event)
             . self::optOutLine($event, (string) $invite->token);
