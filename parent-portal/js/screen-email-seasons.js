@@ -14,7 +14,13 @@
   var Api = KT.Api;
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function toast(m, t) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast(m, t || 'info'); }
-  function nice(v, yearly) { if (!v) return '—'; var d = new Date(v); var o = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }; if (!yearly) o.year = 'numeric'; return d.toLocaleString('en-CA', o); }
+  // The stored value IS Toronto wall-clock ("2026-10-01T00:00"); show it as written, never through the browser's zone.
+  function nice(v, yearly) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(v || ''); if (!m) return '—';
+    var M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1];
+    var h = +m[4], ap = h < 12 ? 'a.m.' : 'p.m.'; h = h % 12 || 12;
+    return M + ' ' + (+m[3]) + (yearly ? '' : ', ' + m[1]) + ', ' + h + ':' + m[5] + ' ' + ap;
+  }
   function apiBase() { return KT.API_BASE || 'https://api.kiddietrac.com/api/v1'; }
   function token() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''; }
 
