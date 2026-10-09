@@ -3943,6 +3943,22 @@
     wrap.appendChild(seg('Active', showing !== 'archived', function () { renderActive(content); }));
     var archBtn = seg('Archived', showing === 'archived', function () { renderArchivedInto(content, key, renderActive); });
     wrap.appendChild(archBtn);
+    /* UNDER THE BANNER, NEVER ABOVE IT (2026-10-09: "the active and archived tabs are
+       above the hero banner under children - this needs to be consistent across the
+       platform"). Callers append this switch first and their hero after it; the shell
+       only re-orders during its post-navigation sweeps, so flipping Active / Archived
+       later left the switch on top. Once the caller has finished building (a microtask —
+       before anything is painted), the switch moves itself to just below the section's
+       hero. kt-banner-normalize enforces the same rule platform-wide as a backstop. */
+    Promise.resolve().then(function () {
+      try {
+        if (!wrap.parentNode) return;
+        var hero = content.querySelector('.kt-hero, .kt-page-hero');
+        if (hero && (wrap.compareDocumentPosition(hero) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+          hero.parentNode.insertBefore(wrap, hero.nextSibling);
+        }
+      } catch (e) {}
+    });
     // Fill the count in afterwards; the section must not block on it.
     archivedData().then(function (d) {
       var n = (d.counts || {})[key];
@@ -4266,6 +4282,16 @@
 
   async function renderArchivedInto(content, key, renderActive) {
     Dom.clear(content);
+    /* The archived view keeps its section's banner. It cleared the screen and started
+       with the Active | Archived switch, so the page had no hero at all and the switch
+       sat where the banner belongs. */
+    var ARCH_HERO = {
+      children: ['🧒 Children', 'Archived children — records kept after a child leaves.', 'cloudsAndStars'],
+      families: ['👪 Families', 'Archived families — records kept after a family leaves.', 'cloudsAndStars'],
+      centres: ['🏫 Centres', 'Archived providers — records kept after a centre closes.', 'cloudsAndStars'],
+    };
+    var hz = ARCH_HERO[key] || ['🗄️ Archived', 'Records kept after they were archived.', 'cloudsAndStars'];
+    content.appendChild(tabHero(hz[0], hz[1], hz[2]));
     content.appendChild(archiveSwitch(content, key, renderActive, 'archived'));
     var body = Dom.el('div', {});
     content.appendChild(body);

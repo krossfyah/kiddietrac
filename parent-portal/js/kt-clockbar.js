@@ -275,9 +275,20 @@
      jumped 80px down. It also re-checked "am I first?" and moved itself back on top each
      time the bar was re-inserted. Anchored the way the shell's heroAnchor() is: right
      after the live bar when there is one, first otherwise. Walked, not :scope. */
+  /* AND UNDER THE BANNER (2026-10-09: "nothing between the top bar and the hero —
+     consistent across the platform"). The page reads top bar, hero, then everything else,
+     this strip included. When the screen has a hero the strip sits directly after it
+     (inside whatever wraps it); until the hero exists, after the top bar as before —
+     kt-banner-normalize then moves it below the hero the moment one appears, and this
+     check leaves it there instead of pulling it back on top. */
   function mount(el) {
     var main = document.getElementById('appMain');
     if (!main) return;
+    var hero = main.querySelector('.kt-hero, .kt-page-hero') || main.querySelector('[data-kt-hero], #kt-day-brief');
+    if (hero && !hero.contains(el)) {
+      if (el.previousElementSibling !== hero) hero.parentNode.insertBefore(el, hero.nextSibling);
+      return;
+    }
     var bar = null;
     for (var i = 0; i < main.children.length; i++) { if (main.children[i].id === 'kt-topbar') { bar = main.children[i]; break; } }
     var want = bar ? bar.nextSibling : main.firstChild;

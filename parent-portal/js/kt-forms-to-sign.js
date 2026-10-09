@@ -354,7 +354,10 @@
           al.style.cssText = 'background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:12px;padding:11px 14px;margin:0 0 12px;font-size:13.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;';
           al.innerHTML = '✍️ You have ' + _cnt + ' form' + (_cnt === 1 ? '' : 's') + ' that need your signature — tap to review.';
           al.onclick = function () { location.hash = 'my-forms'; };
-          brief.parentNode.insertBefore(al, brief);
+          /* Under the brief, not above it (2026-10-09): "Today at a glance" is this page's
+             banner, and nothing sits between the top of the page and the banner. */
+          al.style.margin = '12px 0';
+          brief.parentNode.insertBefore(al, brief.nextSibling);
         }
       } else if (existing) { existing.remove(); }
     } catch (e) {}

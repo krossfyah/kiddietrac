@@ -39,10 +39,58 @@
     return main.querySelector('.kt-hero, .kt-page-hero, .page-header-v17');
   }
 
+  /* THE BANNER LEADS THE PAGE (2026-10-09).
+
+     Anthony: "the active and archived tabs are above the hero banner under children - this
+     needs to be consistent across the platform - full sweep". The rule: top bar, then the
+     hero, then everything else. The shell's own hoist (app-v2-shell tidyOwnBanner) only
+     runs in the sweeps after a navigation, so a screen that re-renders IN PLACE later —
+     a tab or an Active | Archived flip — could leave a tab strip, a filter or a toolbar
+     above its banner for as long as you stayed. This runs on every mutation (rAF, so
+     before the frame is painted) and moves whatever a screen drew before its hero to
+     just below it, in the same order.
+
+     Bounded so it can only ever fix a stray bar, never rearrange a page: at most four
+     elements, none taller than 240px, and the banner no more than six levels deep (a
+     card's own .kt-hero further down is not the page's). Anything that must stay above
+     opts out with data-kt-above-hero. */
+  function heroLeads(main, banner) {
+    if (!banner || !main.contains(banner)) return false;
+    var chain = [];
+    for (var n = banner; n && n !== main; n = n.parentElement) chain.unshift(n);
+    if (!chain.length || chain.length > 6) return false;
+    var movers = [];
+    for (var lv = 0; lv < chain.length; lv++) {
+      var node = chain[lv], par = node.parentElement;
+      for (var sib = par.firstElementChild; sib && sib !== node; sib = sib.nextElementSibling) {
+        if (sib.id === 'kt-topbar' || /^(SCRIPT|STYLE|LINK|TEMPLATE|META)$/.test(sib.tagName)) continue;
+        if (sib.hidden || sib.hasAttribute('data-kt-above-hero')) continue;
+        var cs = getComputedStyle(sib);
+        if (cs.display === 'none' || cs.position === 'fixed' || cs.position === 'absolute' || cs.position === 'sticky') continue;
+        var r = sib.getBoundingClientRect();
+        if (r.height < 2 && !(sib.textContent || '').trim()) continue;
+        if (r.height > 240) return false;           // real content above: not ours to move
+        movers.push(sib);
+      }
+    }
+    if (!movers.length || movers.length > 4) return false;
+    var ref = banner;
+    movers.forEach(function (m) { ref.parentNode.insertBefore(m, ref.nextSibling); ref = m; });
+    return true;
+  }
+
+  /* The page's LEADING banner for ordering only: the standard hero, or a screen's own
+     header that stands in for it (the educator's "Today at a glance" brief, or anything
+     marked data-kt-hero). Only findBanner()'s result is decorated below. */
+  function findLead(main) {
+    return findBanner(main) || main.querySelector('[data-kt-hero], #kt-day-brief');
+  }
+
   function normalize() {
     var main = document.getElementById('appMain');
     if (!main) return;
     var banner = findBanner(main);
+    try { heroLeads(main, findLead(main)); } catch (e) {}
     if (!banner || banner.getAttribute('data-kt-banner') === '1') return;
     banner.setAttribute('data-kt-banner', '1');
 

@@ -229,7 +229,12 @@
   // ============================ HDLH gaps ============================
   async function renderHdlhGaps(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:24px;">Loading children…</div>';
+    /* The banner shows while it loads (2026-10-09). This walks up to 30 children one
+       request at a time, and the bare "Loading children…" it painted first replaced the
+       shell's banner — so for several seconds the page had no hero at all. */
+    main.innerHTML = '<div style="padding:24px;max-width:1800px;margin:0 auto;"><div class="kt-page-hero"><h2>🎯 Framework gap detection</h2>'
+      + '<p>Children with few observations in an area of your learning framework.</p></div>'
+      + '<div style="padding:18px 4px;color:#64748B;">Loading children…</div></div>';
     const childrenRes = await Api.get('/admin/children').catch(() => ({ data: [] }));
     // /admin/children answers {children:[...]}; reading .data showed "No children on file" to everyone.
     const children = (childrenRes.children || childrenRes.data || []).slice(0, 30);
