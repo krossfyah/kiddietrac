@@ -236,21 +236,41 @@ class SalesController extends Controller
             'body'     => 'nullable|string|max:5000',
             'due_date' => 'nullable|date',
             'done'     => 'nullable|boolean',
+            // The kind of entry, among the ones a person logs (2026-10-09: "need to be able
+            // to edit the type of action as well"). Stage moves / field changes are not offered.
+            'type'     => 'nullable|in:note,call,email,meeting,followup',
         ]);
         /* EDITING WHAT WAS WRITTEN (2026-10-09: "allow me to edit notes that I have added to
            leads to correct anything"). The wording of an entry is its author's — or a
            platform admin's — to correct; anyone on the team may still tick a follow-up done.
            System entries (stage moves, field changes) are a record, not prose: never edited. */
-        $editsWords = array_key_exists('body', $data) || array_key_exists('due_date', $data);
-        $beforeBody = $a->body; $beforeDue = optional($a->due_date)->toDateString();
+        $editsWords = array_key_exists('body', $data) || array_key_exists('due_date', $data)
+            || (! empty($data['type']) && $data['type'] !== $a->type);
+        $beforeBody = $a->body; $beforeDue = optional($a->due_date)->toDateString(); $beforeType = $a->type;
         if ($editsWords) {
             if (! self::canEditActivity($a)) {
                 return response()->json(['message' => in_array($a->type, ['stage', 'edit'], true)
                     ? 'This entry was recorded by the system and cannot be edited.'
                     : 'Only the person who wrote this entry, or a platform admin, can edit it.'], 403);
             }
-            if (array_key_exists('body', $data) && trim((string) $data['body']) === '' && $a->type !== 'followup') {
+            $newType = ! empty($data['type']) ? $data['type'] : $a->type;
+            if (array_key_exists('body', $data) && trim((string) $data['body']) === '' && $newType !== 'followup') {
                 return response()->json(['message' => 'An entry cannot be empty.', 'errors' => ['body' => ['Write something.']]], 422);
+            }
+            // A follow-up is a task with a date: becoming one needs a due date.
+            $dueAfter = array_key_exists('due_date', $data) ? $data['due_date'] : $beforeDue;
+            if ($newType === 'followup' && $beforeType !== 'followup' && ! $dueAfter) {
+                return response()->json(['message' => 'A follow-up needs a due date.', 'errors' => ['due_date' => ['Pick a due date.']]], 422);
+            }
+        }
+        if (! empty($data['type']) && $data['type'] !== $a->type) {
+            $toFollowup = $data['type'] === 'followup';
+            $a->type = $data['type'];
+            if ($toFollowup && ! array_key_exists('done', $data)) {
+                $a->done = false; $a->done_at = null;          // a new task is open
+            } elseif (! $toFollowup && $beforeType === 'followup') {
+                $a->done = true; $a->done_at = $a->done_at ?: now();
+                if (! array_key_exists('due_date', $data)) { $a->due_date = null; }   // no longer a task
             }
         }
         if (array_key_exists('body', $data)) {
@@ -264,7 +284,8 @@ class SalesController extends Controller
             $a->done_at = $a->done ? now() : null;
         }
         $changedWords = $editsWords && ((string) $beforeBody !== (string) $a->body
-            || (string) $beforeDue !== (string) optional($a->due_date)->toDateString());
+            || (string) $beforeDue !== (string) optional($a->due_date)->toDateString()
+            || $beforeType !== $a->type);
         if ($changedWords) {
             $a->edited_at = now();
             $a->edited_by_id = auth()->id();
@@ -278,10 +299,10 @@ class SalesController extends Controller
                     'agency_id' => auth()->id() ? \App\Support\AuditScope::resolve((int) auth()->id(), $r) : null,
                     'action' => 'sales.activity_edited', 'entity_type' => 'sales_lead', 'entity_id' => $a->lead_id,
                     'payload' => json_encode([
-                        'summary' => 'Edited a ' . $a->type . ' on lead #' . $a->lead_id,
+                        'summary' => 'Edited a ' . ($beforeType !== $a->type ? $beforeType . ' (now a ' . $a->type . ')' : $a->type) . ' on lead #' . $a->lead_id,
                         'activity_id' => $a->id,
-                        'before' => ['body' => $beforeBody, 'due_date' => $beforeDue],
-                        'after' => ['body' => $a->body, 'due_date' => optional($a->due_date)->toDateString()],
+                        'before' => ['type' => $beforeType, 'body' => $beforeBody, 'due_date' => $beforeDue],
+                        'after' => ['type' => $a->type, 'body' => $a->body, 'due_date' => optional($a->due_date)->toDateString()],
                     ]),
                     'created_at' => now(),
                 ]);
@@ -289,11 +310,16 @@ class SalesController extends Controller
             }
         }
 
-        // Clear the lead's quick follow-up date once its open follow-up is done.
-        if ($a->type === 'followup' && $a->done && ($lead = SalesLead::find($a->lead_id))) {
-            $stillOpen = SalesActivity::where('lead_id', $lead->id)->where('type', 'followup')->where('done', false)->exists();
-            if (! $stillOpen) {
-                $lead->follow_up_date = null;
+        /* The lead's quick "next follow-up" date follows its OPEN follow-ups: the earliest
+           one, or none. Recomputed whenever a follow-up is ticked done or an entry becomes /
+           stops being one. */
+        if (($a->type === 'followup' || $beforeType === 'followup') && ($lead = SalesLead::find($a->lead_id))) {
+            $next = SalesActivity::where('lead_id', $lead->id)->where('type', 'followup')->where('done', false)
+                ->whereNotNull('due_date')->min('due_date');
+            $next = $next ? \Illuminate\Support\Carbon::parse($next)->toDateString() : null;
+            if ((string) optional($lead->follow_up_date)->toDateString() !== (string) $next
+                && (string) $lead->follow_up_date !== (string) $next) {
+                $lead->follow_up_date = $next;
                 $lead->save();
             }
         }

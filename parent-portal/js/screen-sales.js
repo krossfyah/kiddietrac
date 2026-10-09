@@ -649,19 +649,35 @@
         bodyHost.setAttribute('data-editing', '1');
         var ta = textarea({ value: a.body || '', rows: 4 });
         ta.style.marginTop = '6px';
-        var due = isFu ? input({ type: 'date', value: a.due_date || '' }) : null;
+        /* THE KIND OF ENTRY TOO (2026-10-09: "need to be able to edit the type of action as
+           well"). The five a person logs; a follow-up brings its due date with it. */
+        var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }],
+          a.type, { style: 'width:auto;min-width:170px;padding:7px 10px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:13.5px' });
+        var due = input({ type: 'date', value: a.due_date || '' });
+        var dueWrap = el('div', { style: 'max-width:220px' }, [field('Due date', due)]);
+        function syncDue() { dueWrap.style.display = typeSel.value === 'followup' ? '' : 'none'; }
+        typeSel.addEventListener('change', syncDue);
         var saveB = btn('Save', 'primary', async function (ev4) {
+          var t = typeSel.value;
           var b = { body: ta.value.trim() };
-          if (!b.body && !isFu) { toast('⚠️', 'Write something', '', '#DC2626'); return; }
-          if (due) { b.due_date = due.value || null; }
+          if (t !== a.type) { b.type = t; }
+          if (!b.body && t !== 'followup') { toast('⚠️', 'Write something', '', '#DC2626'); return; }
+          if (t === 'followup') {
+            if (!due.value) { toast('⚠️', 'Pick a due date', 'A follow-up is a task with a date.', '#DC2626'); return; }
+            b.due_date = due.value;
+          }
           ev4.target.disabled = true;
           try { await Api.patch('/sales/activities/' + a.id, b); toast('✅', 'Updated'); renderDetail(container, ctx); }
           catch (er) { toast('⚠️', 'Could not save', er.message || '', '#DC2626'); ev4.target.disabled = false; }
         });
         var cancelB = btn('Cancel', 'light', function () { bodyHost.removeAttribute('data-editing'); clear(bodyHost); bodyHost.appendChild(activityBodyNode(a)); });
         clear(bodyHost);
+        bodyHost.appendChild(el('div', { style: 'display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:6px' }, [
+          el('div', {}, [el('div', { style: 'font-size:11px;font-weight:700;color:#5a7080;margin-bottom:3px' }, ['TYPE']), typeSel]),
+          dueWrap,
+        ]));
+        syncDue();
         bodyHost.appendChild(ta);
-        if (due) { bodyHost.appendChild(el('div', { style: 'margin-top:6px;max-width:220px' }, [field('Due date', due)])); }
         bodyHost.appendChild(el('div', { style: 'display:flex;gap:8px;margin-top:8px' }, [saveB, cancelB]));
         ta.focus();
       } }, ['✏️ Edit']) : '';
