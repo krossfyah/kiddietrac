@@ -1194,7 +1194,11 @@
       const ANDROID = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85a.637.637 0 0 0-.83.22l-1.88 3.24a11.43 11.43 0 0 0-8.94 0L5.65 5.67a.643.643 0 0 0-.87-.2c-.28.18-.37.54-.22.83L6.4 9.48A10.78 10.78 0 0 0 1 18h22a10.78 10.78 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z"/></svg>';
       const devMeta = (label) => {
         const l = String(label || '').toLowerCase();
-        if (/apple|ios|iphone|ipad|mac/.test(l)) return { icon: APPLE, color: '#111827', name: 'Apple / iOS' };
+        /* iPhone and iPad keep their own names (2026-10-09): both used to be renamed
+           "Apple / iOS", which drew two identical tiles side by side. */
+        if (/ipad/.test(l)) return { icon: APPLE, color: '#111827', name: 'iPad' };
+        if (/iphone/.test(l)) return { icon: APPLE, color: '#111827', name: 'iPhone' };
+        if (/apple|ios|mac/.test(l)) return { icon: APPLE, color: '#111827', name: 'Apple / iOS' };
         if (/android/.test(l)) return { icon: ANDROID, color: '#3DDC84', name: 'Android' };
         if (/web|desktop|browser|windows/.test(l)) return { icon: '🌐', color: '#0EA5E9', name: label || 'Web' };
         return { icon: '💻', color: '#64748B', name: label || 'Other' };
@@ -1202,17 +1206,29 @@
       const deviceTiles = (rows) => {
         if (!rows || !rows.length) return '<div style="color:var(--kt-text-faint); font-size:12px; padding:4px 0;">No responses yet.</div>';
         const total = rows.reduce((a, r) => a + (r.count || 0), 0) || 1;
-        return '<div style="display:flex; flex-wrap:wrap; gap:10px;">' + rows.map(r => {
+        /* One tile per DISPLAYED name: raw values that read the same are counted together,
+           so a name can never appear twice. */
+        const merged = [];
+        rows.forEach(r => {
           const m = devMeta(r.label);
+          const hit = merged.find(x => x.m.name === m.name);
+          if (hit) { hit.count += (r.count || 0); } else { merged.push({ m, count: r.count || 0 }); }
+        });
+        merged.sort((a, b) => b.count - a.count);
+        /* A grid, not equal-flex boxes (2026-10-09: "Desktop / laptop · 10%" ran out of its
+           tile). Each tile is at least 150px, the label may wrap, and min-width:0 lets the
+           text column shrink instead of pushing past the border. */
+        return '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px;">' + merged.map(x => {
+          const m = x.m; const r = { count: x.count };
           const pct = Math.round((r.count / total) * 100);
           const glyph = m.icon.charAt(0) === '<'
             ? `<span style="color:${m.color}; display:flex; align-items:center;">${m.icon}</span>`
             : `<span style="font-size:19px; line-height:1;">${m.icon}</span>`;
-          return `<div style="flex:1 1 130px; min-width:120px; display:flex; align-items:center; gap:11px; padding:10px 13px; border:1px solid var(--kt-border); border-radius:12px; background:var(--kt-surface);">
+          return `<div style="min-width:0; display:flex; align-items:center; gap:11px; padding:10px 13px; border:1px solid var(--kt-border); border-radius:12px; background:var(--kt-surface); box-sizing:border-box;">
             ${glyph}
-            <div style="min-width:0;">
+            <div style="min-width:0; flex:1 1 auto;">
               <div style="font-size:19px; font-weight:800; line-height:1; color:var(--kt-text); font-variant-numeric:tabular-nums;">${r.count}</div>
-              <div style="font-size:11px; color:var(--kt-text-muted); margin-top:3px; white-space:nowrap;">${esc(m.name)} · ${pct}%</div>
+              <div title="${esc(m.name)} · ${pct}%" style="font-size:11px; line-height:1.3; color:var(--kt-text-muted); margin-top:3px; overflow-wrap:anywhere;">${esc(m.name)} · ${pct}%</div>
             </div>
           </div>`;
         }).join('') + '</div>';
@@ -1220,7 +1236,7 @@
       const cover = d.total ? ` · ${d.reported}/${d.total} shared` : '';
       body.style.color = 'inherit';
       body.innerHTML = `
-        <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:22px; align-items:start;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap:22px; align-items:start;">
           <div>
             <div style="font-weight:700; font-size:12.5px; color:var(--kt-text); margin-bottom:10px;">🌍 Race / ethnicity <span style="font-weight:500; color:var(--kt-text-faint);">${cover}</span></div>
             ${bars(d.ethnicity)}

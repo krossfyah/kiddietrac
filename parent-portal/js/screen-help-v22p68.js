@@ -1260,7 +1260,13 @@
       .kt-help-cattile { display: flex; align-items: center; gap: 11px; background: #fff; border: 1px solid #E7EDF3; border-radius: 15px; padding: 13px 14px; cursor: pointer; text-align: left; transition: transform .15s, box-shadow .15s, border-color .15s; box-shadow: 0 2px 8px -4px rgba(15,23,42,.12); }
       .kt-help-cattile:hover { border-color: #1F6080; transform: translateY(-2px); box-shadow: 0 8px 18px -6px rgba(31,96,128,.22); }
       .kt-help-cattile-ic { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
-      .kt-help-cattile-nm { font-size: 14px; font-weight: 800; color: #0F172A; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
+      .kt-help-cattile > div:not(.kt-help-cattile-ic) { min-width: 0; }
+      .kt-help-cattile-nm { font-size: 14px; font-weight: 800; color: #0F172A; line-height: 1.25; overflow-wrap: anywhere; hyphens: auto; }
+      @media (max-width: 520px) {
+        .kt-help-cattile { flex-direction: column; align-items: flex-start; gap: 8px; }
+        .kt-help-cattile-ic { width: 38px; height: 38px; font-size: 19px; }
+        .kt-help-cattile-nm { font-size: 13.5px; }
+      }
       .kt-help-cattile-ct { font-size: 11.5px; color: #64748B; margin-top: 2px; }
       .kt-help-catback { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; color: #1F6080; font-weight: 800; font-size: 14px; cursor: pointer; padding: 6px 0; margin-bottom: 8px; }
       .kt-help-catback:hover { color: #0E7C90; }

@@ -76,6 +76,11 @@
     s.textContent =
       '.kt-hero-iconbtn{min-width:0!important;width:38px;height:38px;padding:0!important;' +
       'display:inline-flex;align-items:center;justify-content:center;font-size:17px;line-height:1;gap:0!important;}' +
+      /* (2026-10-09) [data-kt-pretty] .kt-btn / .kt-btn-sm set padding 11px 22px !important
+         at higher specificity, so a 38px icon button kept text-button padding and clipped
+         its emoji (Trip GPS refresh, Document templates import). Same rule, specific enough. */
+      '[data-kt-pretty] .kt-btn.kt-hero-iconbtn,[data-kt-pretty] .kt-btn-sm.kt-hero-iconbtn,.kt-btn.kt-hero-iconbtn,.kt-btn-sm.kt-hero-iconbtn' +
+      '{padding:0!important;gap:0!important;font-size:17px!important;min-width:38px!important;overflow:visible!important;}' +
       '.kt-add-btn-std{transition:background .12s ease,border-color .12s ease;line-height:1.1;}' +
       '.kt-add-btn-std:hover{background:#F8FAFC!important;border-color:#94A3B8!important;}';
     document.head.appendChild(s);

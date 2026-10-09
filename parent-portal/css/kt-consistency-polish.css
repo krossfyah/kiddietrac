@@ -775,3 +775,9 @@ table thead th.kt-today-cell {
         the bar, 1405 without. Reserving the scrollbar's space permanently ends that; on
         overlay-scrollbar devices (Mac, phones) it reserves nothing. ── */
 html { scrollbar-gutter: stable; }
+
+/* PILLS, BADGES AND CHIPS NEVER OUTGROW THEIR CONTAINER (2026-10-09).
+   Anthony: "the pill for the device type for desktop is overflowing - make sure this never
+   happens to any other pills and sections". A pill can be as wide as its row, never wider;
+   js/kt-overflow-guard.js handles text that still runs past a bordered box at runtime. */
+#appMain :is([class*="pill"], [class*="badge"], [class*="chip"]) { max-width: 100%; box-sizing: border-box; }

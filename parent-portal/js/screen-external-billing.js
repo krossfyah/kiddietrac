@@ -120,9 +120,11 @@
   }
 
   function statCard(label, value, sub, c1, c2, ink, tint) {
-    return '<div style="background:' + tint + ';border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:16px 17px;">'
+    // min-width:0 + a value that scales with the screen: "$11,607.00" at 30px was wider
+    // than a phone tile (2026-10-09).
+    return '<div style="min-width:0;background:' + tint + ';border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:16px 17px;">'
       + '<div style="font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:' + ink + ';opacity:.72;">' + esc(label) + '</div>'
-      + '<div style="font-size:30px;font-weight:900;line-height:1.05;color:' + ink + ';margin-top:6px;">' + value + '</div>'
+      + '<div style="font-size:clamp(20px,6.2vw,30px);font-weight:900;line-height:1.05;color:' + ink + ';margin-top:6px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;">' + value + '</div>'
       + '<div style="font-size:11.5px;color:#64748b;margin-top:3px;">' + esc(sub) + '</div></div>';
   }
 
