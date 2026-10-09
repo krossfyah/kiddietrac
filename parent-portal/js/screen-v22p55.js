@@ -540,6 +540,9 @@
       main.setAttribute('data-kt-screen', hash);
     }
   }
+  // The shell calls this straight after swapping in a new #appMain on navigation (see
+  // __ktSwapMain), so a route-listed screen has its markers before it paints.
+  KT.applyPrettyClass = applyPrettyClass;
   window.addEventListener('hashchange', () => setTimeout(applyPrettyClass, 250));
   setTimeout(applyPrettyClass, 600);
   setInterval(applyPrettyClass, 2500);

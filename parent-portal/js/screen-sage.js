@@ -49,7 +49,7 @@
     if (document.getElementById('kt-sage-css')) return;
     var s = document.createElement('style'); s.id = 'kt-sage-css';
     s.textContent = ''
-      + '.sg-wrap{padding:20px 24px;max-width:1100px;margin:0 auto;}'
+      + '.sg-wrap{padding:20px 24px;max-width:1800px;margin:0 auto;}'   /* the portal's content width (2026-10-09) */
       + '.sg-tabs{display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-top:16px;overflow-x:auto;white-space:nowrap;}'
       + '.sg-tab{background:none;border:0;border-bottom:3px solid transparent;color:#64748B;font-weight:700;font-size:14px;padding:9px 14px;cursor:pointer;margin-bottom:-1px;}'
       + '.sg-tab.on{color:' + ACC + ';border-bottom-color:' + ACC + ';}'

@@ -32,7 +32,7 @@
     if (document.getElementById(CSS)) return;
     var s = document.createElement('style'); s.id = CSS;
     s.textContent = ''
-      + '.xr-wrap{padding:20px 24px;max-width:1100px;margin:0 auto;}'
+      + '.xr-wrap{padding:20px 24px;max-width:1800px;margin:0 auto;}'   /* the portal's content width (2026-10-09) */
       + '.xr-card{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px 18px;margin-top:14px;}'
       + '.xr-card.off{opacity:.55;pointer-events:none;}'
       + '.xr-h{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:15px;font-weight:800;color:#0F172A;}'

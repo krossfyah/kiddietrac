@@ -60,7 +60,19 @@
      Falls back to the old behaviour on ANY failure, and can be turned off outright with
      window.__ktNoMainSwap — this sits on the path every screen in the portal renders
      through, so it must never be the thing that takes the app down. */
-  function __ktSwapMain(main) {
+  /* SCREEN-SCOPED MARKERS (2026-10-09). Anthony: "look at what happens when i refresh the
+     screen is not full size at times". data-kt-pretty / data-kt-screen / data-kt-narrow
+     describe ONE screen's layout ([data-kt-pretty] > div is the 1800px content width, plus
+     the table, label and button styling). Screens set them during render and the route
+     list in screen-v22p55 sets them 250ms after a hashchange, but nothing ever removed
+     data-kt-pretty, and the copy below carried it onto every later screen. So a screen's
+     width depended on where you came from: Xero measured 1100px after a reload and 1613px
+     after visiting Admin → Children (same build, same viewport), and a refresh "shrank" it.
+     On NAVIGATION these three are now dropped and the route's own markers re-applied at
+     once (KT.applyPrettyClass), so each screen looks the same however you arrive; a
+     same-screen re-render still keeps them, which is what the copy was for. */
+  var __KT_SCREEN_MARKERS = { 'data-kt-pretty': 1, 'data-kt-screen': 1, 'data-kt-narrow': 1 };
+  function __ktSwapMain(main, isNavigation) {
     try {
       if (window.__ktNoMainSwap || !main || !main.parentNode) { Dom.clear(main); return main; }
 
@@ -81,6 +93,7 @@
            5/5 with a renderScreen() 150ms after a navigation). A navigation sets its own
            hold on the node it has just swapped in, so nothing is lost by not copying it. */
         if (a.name === 'data-kt-revealing') { continue; }
+        if (isNavigation && __KT_SCREEN_MARKERS[a.name]) { continue; }
         try { fresh.setAttribute(a.name, a.value); } catch (e) {}
       }
 
@@ -91,6 +104,8 @@
 
       main.parentNode.replaceChild(fresh, main);
       try { fresh.scrollTop = top; } catch (e) {}
+      // The new screen's route-level markers, now rather than 250ms from now (no flash).
+      if (isNavigation) { try { if (window.KT && KT.applyPrettyClass) KT.applyPrettyClass(); } catch (e) {} }
 
       try {
         document.dispatchEvent(new CustomEvent('kt:main-swapped', { detail: { node: fresh } }));
@@ -2373,7 +2388,7 @@
        visibility:hidden on it, and the swap copies every attribute across — so the new
        node inherits that hidden style and stays covered. __ktDropSnapshot re-queries
        #appMain by id, so it un-hides whichever node is live by then. */
-    main = __ktSwapMain(main);
+    main = __ktSwapMain(main, !_ktSameScreen);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
 
     /* A NEW SCREEN APPEARS ONCE, FINISHED (2026-09-28).
