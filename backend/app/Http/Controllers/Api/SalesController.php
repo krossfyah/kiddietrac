@@ -220,7 +220,13 @@ class SalesController extends Controller
             $l->save();
         }
 
-        return response()->json($act->load('user:id,name'), 201);
+        /* users has first_name/last_name, not name: 'user:id,name' threw a 500 after the
+           note was already saved, so every note looked like it failed (2026-10-09). */
+        $act->load('user:id,first_name,last_name');
+        $out = $act->toArray();
+        $out['user_name'] = $act->user ? trim($act->user->first_name . ' ' . $act->user->last_name) : null;
+
+        return response()->json($out, 201);
     }
 
     public function updateActivity(Request $r, int $activity)
@@ -784,7 +790,7 @@ class SalesController extends Controller
             'activities'  => $l->activities->map(fn ($a) => [
                 'id' => $a->id, 'type' => $a->type, 'body' => $a->body,
                 'due_date' => optional($a->due_date)->toDateString(),
-                'done' => (bool) $a->done, 'user_name' => optional($a->user)->name,
+                'done' => (bool) $a->done, 'user_name' => $a->user ? trim($a->user->first_name . ' ' . $a->user->last_name) : null,
                 'created_at' => optional($a->created_at)->toDateTimeString(),
             ])->values(),
             'quotes' => $l->quotes->map(fn ($q) => [
