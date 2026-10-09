@@ -197,9 +197,47 @@
       }, canEditBuiltin
         ? 'Built-in roles show what each role can reach today. Changes to a built-in role apply to this agency. Custom roles cover one centre unless they are based on Agency admin. The permission check is watch-only for now: it compares this list with what really happens and blocks nothing.'
         : 'Built-in roles show what each role can do today and are managed by KiddieTrac. For a different set, create a custom role (it covers one centre unless it is based on Agency admin).'));
-      if (isPlatform) wrap.appendChild(shadowPanel(container));
-
       var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;' });
+
+      /* SUBTABS (2026-10-09: "roles and permissions and permissions check should be a
+         subtab"). The role editor and the watch-only permission check each get the page
+         to themselves; the tab is kept in the address (&tab=) for refresh and back. Only
+         platform admins see the check, so only they get the tab bar. */
+      var tabHost = null;
+      if (isPlatform) {
+        var TABS = [{ key: 'roles', label: '🛡 Roles & permissions' }, { key: 'check', label: '🔎 Permission check' }];
+        var want = ((location.hash.match(/[?&]tab=([a-z]+)/) || [])[1]) || 'roles';
+        if (want !== 'check') want = 'roles';
+        var bar = Dom.el('div', { role: 'tablist', style: 'display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #E2E8F0;margin:0 0 16px;' });
+        tabHost = Dom.el('div', {});
+        var checkPane = null;
+        var showTab = function (key) {
+          TABS.forEach(function (t) {
+            var on = t.key === key;
+            t.el.setAttribute('aria-selected', on ? 'true' : 'false');
+            t.el.style.background = on ? '#fff' : 'transparent';
+            t.el.style.color = on ? '#0C6070' : '#475569';
+            t.el.style.borderColor = on ? '#E2E8F0' : 'transparent';
+            t.el.style.boxShadow = on ? 'inset 0 3px 0 #0C6070' : 'none';
+          });
+          Dom.clear(tabHost);
+          if (key === 'check') { checkPane = checkPane || shadowPanel(container); tabHost.appendChild(checkPane); }
+          else { tabHost.appendChild(grid); }
+          try {
+            var h = location.hash.replace(/([?&])tab=[a-z]+&?/, '$1').replace(/[?&]$/, '');
+            history.replaceState(null, '', h + (h.indexOf('?') >= 0 ? '&' : '?') + 'tab=' + key);
+          } catch (e) {}
+        };
+        TABS.forEach(function (t) {
+          t.el = Dom.el('button', { type: 'button', role: 'tab', 'data-kt-inpage': '1', 'data-kt-iconized': '1',
+            style: 'display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;background:transparent;font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;margin-bottom:-1px;' }, t.label);
+          t.el.addEventListener('click', function () { showTab(t.key); });
+          bar.appendChild(t.el);
+        });
+        wrap.appendChild(bar);
+        wrap.appendChild(tabHost);
+        setTimeout(function () { showTab(want); }, 0);
+      }
 
       // Left column: role list
       var listCol = Dom.el('div', { style: 'background:white;border-radius:14px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);position:sticky;top:20px;' });
@@ -250,7 +288,7 @@
       // Right column: detail panel (populated by selectRole)
       var detailCol = Dom.el('div');
       grid.appendChild(detailCol);
-      wrap.appendChild(grid);
+      if (!tabHost) wrap.appendChild(grid);
 
       function selectRole(role) {
         // Highlight selected in the list
