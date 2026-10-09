@@ -502,6 +502,108 @@
     return box;
   }
 
+  /* ── Files on an activity: Teams transcripts and recordings (2026-10-09) ──────── */
+  var ACT_FILE_ACCEPT = '.vtt,.docx,.txt,.srt,.mp4,.mov,.m4v,.webm,.mkv,.m4a,.mp3,.wav,.aac,.ogg,.pdf,.pptx,.xlsx,.csv,.png,.jpg,.jpeg';
+  var CHUNK = 8 * 1024 * 1024;   // under the host's 64 MB request limit with room to spare
+  /* The portal caps textareas (width and height, with !important) for ordinary forms; a
+     meeting note is not an ordinary form field. Full card width, a tall start, and the
+     user can still drag it taller. */
+  function bigBox(t, h) {
+    t.style.setProperty('width', '100%', 'important');
+    t.style.setProperty('max-width', 'none', 'important');
+    t.style.setProperty('min-height', h + 'px', 'important');
+    t.style.setProperty('max-height', 'none', 'important');
+    t.style.setProperty('resize', 'vertical', 'important');
+    t.style.setProperty('box-sizing', 'border-box', 'important');
+  }
+  function fmtBytes(n) { n = Number(n || 0); return n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+  function fileIcon(name) {
+    var e = String(name || '').split('.').pop().toLowerCase();
+    if (/^(vtt|srt|txt|docx)$/.test(e)) return '📝';
+    if (/^(mp4|mov|m4v|webm|mkv)$/.test(e)) return '🎬';
+    if (/^(m4a|mp3|wav|aac|ogg)$/.test(e)) return '🎧';
+    return '📄';
+  }
+  /* Raw-body chunks (not FormData), so kt-upload-progress does not open a popup per piece;
+     one progress job covers the whole file. Each piece is retried twice on a network error. */
+  async function uploadActivityFiles(activityId, files) {
+    var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    var token = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+    var agency = ''; try { agency = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+    var UP = window.KT && KT.uploadProgress;
+    for (var fi = 0; fi < files.length; fi++) {
+      var f = files[fi];
+      var total = Math.max(1, Math.ceil(f.size / CHUNK));
+      var uid = (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).slice(0, 24);
+      var job = UP ? UP.start(f.name, f.size) : null;
+      try {
+        for (var i = 0; i < total; i++) {
+          var blob = f.slice(i * CHUNK, Math.min(f.size, (i + 1) * CHUNK));
+          var qs = 'upload_id=' + uid + '&index=' + i + '&total=' + total + '&size=' + f.size + '&name=' + encodeURIComponent(f.name);
+          var res = null, lastErr = null;
+          for (var attempt = 0; attempt < 3 && !res; attempt++) {
+            try {
+              res = await fetch(base + '/sales/activities/' + activityId + '/upload?' + qs, {
+                method: 'POST', body: blob,
+                headers: { 'Authorization': 'Bearer ' + token, 'X-Active-Agency-Id': agency, 'Content-Type': 'application/octet-stream', 'Accept': 'application/json' },
+              });
+            } catch (e) { lastErr = e; res = null; }
+          }
+          if (!res) { throw new Error('Network error uploading ' + f.name + (lastErr && lastErr.message ? ' (' + lastErr.message + ')' : '')); }
+          if (!res.ok) {
+            var msg = 'HTTP ' + res.status; try { msg = (await res.json()).message || msg; } catch (e) {}
+            throw new Error(f.name + ': ' + msg);
+          }
+          if (UP && job) { UP.set(job, Math.min(f.size, (i + 1) * CHUNK), f.size); }
+        }
+        if (UP && job) { UP.done(job, true); }
+      } catch (e) { if (UP && job) { UP.done(job, false); } throw e; }
+    }
+  }
+  function activityFilesNode(a, refresh) {
+    var files = a.files || [];
+    if (!files.length) return null;
+    var box = el('div', { style: 'margin-top:8px;display:flex;flex-direction:column;gap:6px' });
+    files.forEach(function (f) {
+      var row = el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;background:#FAFBFD' });
+      var head = el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px' }, [
+        el('span', { style: 'font-weight:700;color:#0F172A' }, [fileIcon(f.name) + ' ' + (f.kind === 'transcript' ? 'Transcript' : f.kind === 'video' ? 'Recording' : f.kind === 'audio' ? 'Audio' : 'File')]),
+        el('span', { style: 'color:#475569;overflow-wrap:anywhere' }, [f.name]),
+        el('span', { style: 'color:#94A3B8' }, [fmtBytes(f.size)]),
+      ]);
+      row.appendChild(head);
+      var extra = el('div', {});
+      var open = false;
+      function toggle(build) { return function (ev) { ev.preventDefault(); open = !open; clear(extra); if (open) { extra.appendChild(build()); } }; }
+      if (f.kind === 'transcript' && f.transcript) {
+        head.appendChild(el('a', { href: '#', style: 'color:' + ACCENT + ';font-weight:700', onclick: toggle(function () {
+          return el('div', { style: 'margin-top:8px;max-height:420px;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.55;color:#1E293B;background:#fff;border:1px solid #E2E8F0;border-radius:8px;padding:10px 12px' }, [f.transcript]);
+        }) }, ['Show transcript']));
+      }
+      if (f.kind === 'video' || f.kind === 'audio') {
+        head.appendChild(el('a', { href: '#', style: 'color:' + ACCENT + ';font-weight:700', onclick: toggle(function () {
+          var m = el(f.kind === 'video' ? 'video' : 'audio', { controls: 'controls', preload: 'metadata', src: f.url, style: 'margin-top:8px;width:100%;max-width:880px;border-radius:8px;background:#000' });
+          return m;
+        }) }, ['▶ Play']));
+      }
+      if (f.url) {
+        head.appendChild(el('a', { href: f.url, target: '_blank', rel: 'noopener', download: f.name, style: 'color:' + ACCENT + ';font-weight:700' }, ['⬇️ Download']));
+      }
+      if (a.can_edit) {
+        head.appendChild(el('a', { href: '#', style: 'color:#B91C1C;font-weight:700;margin-left:auto', onclick: async function (ev) {
+          ev.preventDefault();
+          var ok = (window.KT && KT.confirm) ? await KT.confirm({ title: 'Remove this file?', description: '“' + f.name + '” will be deleted from this entry.', okLabel: 'Remove', tone: 'danger' }) : false;
+          if (!ok) return;
+          try { await Api.delete('/sales/activity-files/' + f.id); toast('🗑', 'Removed', f.name); refresh(); }
+          catch (er) { toast('⚠️', 'Could not remove', er.message || '', '#DC2626'); }
+        } }, ['Remove']));
+      }
+      row.appendChild(extra);
+      box.appendChild(row);
+    });
+    return box;
+  }
+
   // ─────────────────────────────── Lead detail ───────────────────────────────
   async function renderDetail(container, ctx) {
     clear(container);
@@ -620,18 +722,47 @@
     // Activity + follow-up composer
     var acWrap = card([el('div', { style: 'font-weight:800;margin-bottom:12px' }, ['Activity & history'])], '');
     var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }], 'note', { style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' });
-    var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up… (saved with the date and time)' });
+    /* A BIGGER BOX (2026-10-09: "make the window to add text bigger as well"): meeting
+       notes run to paragraphs. */
+    var bodyIn = textarea({ placeholder: 'Log a note, or describe the follow-up… (saved with the date and time)', rows: 8 });
+    bigBox(bodyIn, 220);
+    /* TEAMS TRANSCRIPTS AND RECORDINGS (2026-10-09: "add ability to upload transcript from MS
+       teams meetings and video to activity and history"). Chosen here, uploaded in pieces
+       after the entry is saved; a transcript is read into text on the server. */
+    var filesIn = el('input', { type: 'file', multiple: 'multiple', accept: ACT_FILE_ACCEPT, style: 'display:none' });
+    var filesList = el('div', { style: 'font-size:12.5px;color:#475569;display:flex;flex-direction:column;gap:2px' });
+    var pickBtn = btn('📎 Attach transcript / recording', 'light', function () { filesIn.click(); });
+    filesIn.addEventListener('change', function () {
+      clear(filesList);
+      Array.prototype.forEach.call(filesIn.files || [], function (f) {
+        filesList.appendChild(el('div', {}, [fileIcon(f.name) + ' ' + f.name + ' · ' + fmtBytes(f.size)]));
+      });
+      // A transcript or recording is a meeting, unless they already chose otherwise.
+      if ((filesIn.files || []).length && typeSel.value === 'note') { typeSel.value = 'meeting'; }
+    });
     var dueIn = input({ type: 'date' }); dueIn.style.display = 'none';
     typeSel.addEventListener('change', function () { dueIn.style.display = typeSel.value === 'followup' ? 'block' : 'none'; });
     acWrap.appendChild(el('div', { style: 'display:grid;grid-template-columns:minmax(150px,180px) 1fr;gap:8px;margin-bottom:8px' }, [typeSel, dueIn]));
     acWrap.appendChild(bodyIn);
-    acWrap.appendChild(el('div', { style: 'margin-top:8px' }, [btn('Add', 'primary', async function (ev) {
-      var b = { type: typeSel.value, body: bodyIn.value.trim() };
-      if (typeSel.value === 'followup') { if (!dueIn.value) { toast('⚠️', 'Pick a due date', '', '#DC2626'); return; } b.due_date = dueIn.value; }
-      if (!b.body && typeSel.value !== 'followup') { toast('⚠️', 'Write something', '', '#DC2626'); return; }
-      ev.target.disabled = true;
-      try { await Api.post('/sales/leads/' + id + '/activities', b); toast('✅', 'Added'); renderDetail(container, ctx); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; }
-    })]));
+    acWrap.appendChild(filesIn);
+    acWrap.appendChild(el('div', { style: 'display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-top:8px' }, [
+      btn('Add', 'primary', async function (ev) {
+        var picked = Array.prototype.slice.call(filesIn.files || []);
+        var b = { type: typeSel.value, body: bodyIn.value.trim() };
+        if (typeSel.value === 'followup') { if (!dueIn.value) { toast('⚠️', 'Pick a due date', '', '#DC2626'); return; } b.due_date = dueIn.value; }
+        if (!b.body && typeSel.value !== 'followup' && !picked.length) { toast('⚠️', 'Write something', 'Or attach a transcript or recording.', '#DC2626'); return; }
+        if (!b.body && picked.length) { b.body = (typeSel.value === 'meeting' ? 'Meeting' : 'Files') + ': ' + picked.map(function (f) { return f.name; }).join(', '); }
+        ev.target.disabled = true;
+        try {
+          var act = await Api.post('/sales/leads/' + id + '/activities', b);
+          if (picked.length) { await uploadActivityFiles(act.id, picked); }
+          toast('✅', 'Added', picked.length ? picked.length + ' file(s) attached' : '');
+          renderDetail(container, ctx);
+        } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; renderDetail(container, ctx); }
+      }),
+      pickBtn,
+      filesList,
+    ]));
     var timeline = el('div', { style: 'margin-top:14px;display:flex;flex-direction:column;gap:8px' });
     var ACT_ICON = { note: '📝', call: '📞', email: '📧', meeting: '🤝', followup: '⏰', stage: '↗️', edit: '✏️' };
     var ACT_LABEL = { note: 'Note', call: 'Call', email: 'Email', meeting: 'Meeting', followup: 'Follow-up', stage: 'Stage change', edit: 'Field change' };
@@ -647,8 +778,8 @@
         ev3.preventDefault();
         if (bodyHost.getAttribute('data-editing')) { return; }
         bodyHost.setAttribute('data-editing', '1');
-        var ta = textarea({ value: a.body || '', rows: 4 });
-        ta.style.marginTop = '6px';
+        var ta = textarea({ value: a.body || '', rows: 8 });
+        ta.style.marginTop = '6px'; bigBox(ta, 200);
         /* THE KIND OF ENTRY TOO (2026-10-09: "need to be able to edit the type of action as
            well"). The five a person logs; a follow-up brings its due date with it. */
         var typeSel = selectEl([{ v: 'note', l: '📝 Note' }, { v: 'call', l: '📞 Call' }, { v: 'email', l: '📧 Email' }, { v: 'meeting', l: '🤝 Meeting' }, { v: 'followup', l: '⏰ Follow-up task' }],
@@ -667,10 +798,19 @@
             b.due_date = due.value;
           }
           ev4.target.disabled = true;
-          try { await Api.patch('/sales/activities/' + a.id, b); toast('✅', 'Updated'); renderDetail(container, ctx); }
+          try {
+            await Api.patch('/sales/activities/' + a.id, b);
+            var more = Array.prototype.slice.call(moreIn.files || []);
+            if (more.length) { await uploadActivityFiles(a.id, more); }
+            toast('✅', 'Updated'); renderDetail(container, ctx);
+          }
           catch (er) { toast('⚠️', 'Could not save', er.message || '', '#DC2626'); ev4.target.disabled = false; }
         });
         var cancelB = btn('Cancel', 'light', function () { bodyHost.removeAttribute('data-editing'); clear(bodyHost); bodyHost.appendChild(activityBodyNode(a)); });
+        var moreIn = el('input', { type: 'file', multiple: 'multiple', accept: ACT_FILE_ACCEPT, style: 'display:none' });
+        var moreList = el('span', { style: 'font-size:12.5px;color:#475569' });
+        moreIn.addEventListener('change', function () { moreList.textContent = Array.prototype.map.call(moreIn.files || [], function (f) { return f.name; }).join(', '); });
+        var moreB = btn('📎 Attach files', 'light', function () { moreIn.click(); });
         clear(bodyHost);
         bodyHost.appendChild(el('div', { style: 'display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-top:6px' }, [
           el('div', {}, [el('div', { style: 'font-size:11px;font-weight:700;color:#5a7080;margin-bottom:3px' }, ['TYPE']), typeSel]),
@@ -678,7 +818,8 @@
         ]));
         syncDue();
         bodyHost.appendChild(ta);
-        bodyHost.appendChild(el('div', { style: 'display:flex;gap:8px;margin-top:8px' }, [saveB, cancelB]));
+        bodyHost.appendChild(moreIn);
+        bodyHost.appendChild(el('div', { style: 'display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap' }, [saveB, cancelB, moreB, moreList]));
         ta.focus();
       } }, ['✏️ Edit']) : '';
       timeline.appendChild(el('div', { style: 'border-left:2px solid ' + accent + ';padding:2px 0 2px 10px' }, [
@@ -694,6 +835,7 @@
           editLink,
         ]),
         bodyHost,
+        activityFilesNode(a, function () { renderDetail(container, ctx); }),
       ]));
     });
     if (!(lead.activities || []).length) timeline.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No activity yet.']));

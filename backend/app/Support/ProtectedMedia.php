@@ -37,6 +37,9 @@ class ProtectedMedia
            templates. Readable by superadmins only, so it must never be servable
            from its /storage path by anyone holding the URL. */
         'sales-library',
+        /* Transcripts and recordings on a lead's activity (2026-10-09) — the same audience
+           as sales-library, and recordings run to hundreds of MB: never servable by URL. */
+        'sales-activity',
         'child-documents',
         /* A CHILD'S PHOTOGRAPH, which was served unsigned and publicly readable by
            anyone holding the URL — while `child-documents` beside it was protected.

@@ -328,7 +328,7 @@ class SalesController extends Controller
     }
 
     /** The author, or a platform admin; never a system entry. */
-    private static function canEditActivity(SalesActivity $a): bool
+    public static function canEditActivity(SalesActivity $a): bool
     {
         if (in_array($a->type, ['stage', 'edit'], true)) return false;
         $me = auth()->user();
@@ -923,14 +923,18 @@ class SalesController extends Controller
             'num_locations'    => $l->num_locations,
             'notes'       => $l->notes,
             'lost_reason' => $l->lost_reason,
-            'activities'  => $l->activities->map(fn ($a) => [
+            'activities'  => (function () use ($l) {
+                $files = \App\Http\Controllers\Api\SalesActivityFileController::forActivities($l->activities->pluck('id')->all());
+                return $l->activities->map(fn ($a) => [
+                'files' => $files[$a->id] ?? [],
                 'id' => $a->id, 'type' => $a->type, 'body' => $a->body,
                 'due_date' => optional($a->due_date)->toDateString(),
                 'done' => (bool) $a->done, 'user_name' => $a->user ? trim($a->user->first_name . ' ' . $a->user->last_name) : null,
                 'created_at' => optional($a->created_at)->toDateTimeString(),
                 'edited_at' => $a->edited_at ? \Illuminate\Support\Carbon::parse($a->edited_at)->toDateTimeString() : null,
                 'can_edit' => self::canEditActivity($a),
-            ])->values(),
+            ])->values();
+            })(),
             'quotes' => $l->quotes->map(fn ($q) => [
                 'id' => $q->id, 'number' => $q->number, 'title' => $q->title,
                 'status' => $q->status, 'total' => $q->total, 'subtotal' => $q->subtotal,
