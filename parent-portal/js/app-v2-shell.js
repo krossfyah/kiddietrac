@@ -384,8 +384,6 @@
             : []),
           /* No "My profile" here (2026-10-01, Anthony): your name in the top bar opens
              it, so Settings holds agency settings only. #my-profile still routes. */
-          // Their own signed forms and agreements, with a count (2026-10-09).
-          { hash: 'my-documents', label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
@@ -504,8 +502,6 @@
           { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
           /* No "My profile" here either: a director's name in the top bar opens
              #my-profile (kt-topbar openProfile). */
-          // Their own signed forms and agreements, with a count (2026-10-09).
-          { hash: 'my-documents',     label: 'My documents',     icon: '📄', badgeKey: 'my_documents' },
 
 
 
