@@ -63,13 +63,30 @@ class SuppressAgencyMail
        attaches the pixel. A suppressed message gets nothing — it is not going anywhere. */
     public function handle(MessageSending $event): bool
     {
+        /* ONE DECISION PER MESSAGE (2026-10-07). This listener is registered twice
+           (AppServiceProvider plus event discovery), so every message went through the
+           gate twice. The first pass strips X-KT-Account-Notice before the message
+           leaves; the second pass then saw ordinary mail to a closed account and held
+           it — the de-enrolment notices for families 39 and 137 were resent and
+           suppressed exactly that way. Keyed on the message object (a WeakMap, so
+           nothing outlives the message in a long-running queue worker). */
+        $msg = $event->message;
+        self::$decided ??= new \WeakMap();
+        if (isset(self::$decided[$msg])) {
+            return self::$decided[$msg];
+        }
+
         $send = $this->decide($event);
         if ($send) {
             $this->attachOpenPixel($event);
         }
+        self::$decided[$msg] = $send;
 
         return $send;
     }
+
+    /** @var \WeakMap<object, bool>|null */
+    private static ?\WeakMap $decided = null;
 
     /**
      * Give this message a tracking token and a 1x1 pixel that reports it.
@@ -508,7 +525,12 @@ class SuppressAgencyMail
 
                So accountOff is decided ACROSS the address rather than by the first row
                to object: held only when there is genuinely nobody left to reach. */
-            $reachable = $uidsHere->filter(
+            /* An account notice is ABOUT the closed account, so a closed account is
+               exactly who it is for (the 2026-09-16 rule below: "emails to closed
+               educators should not be supressed"). This check, added 2026-09-14, ran
+               ahead of that exemption and swallowed the de-enrolment notice whenever
+               every guardian login was already closed. */
+            $reachable = $isAccountNotice ? $uidsHere->values() : $uidsHere->filter(
                 fn ($id) => ! \App\Support\Suppression::accountOff((int) $id)
             )->values();
 
