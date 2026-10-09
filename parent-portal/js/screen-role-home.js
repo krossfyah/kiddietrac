@@ -108,7 +108,7 @@
       more: [
         { hash: 'directory',      icon: '👪', label: 'Family directory' },
         { hash: 'conferences',    icon: '🗣', label: 'Conferences' },
-        { hash: 'signed-docs',    icon: '✍️', label: 'Documents' },
+        { hash: 'my-documents',   icon: '✍️', label: 'Documents' },   // ONE Documents screen for a parent (2026-10-09)
         { hash: 'immunizations',  icon: '🩹', label: 'Immunizations' },
         { hash: 'wellness',       icon: '🩺', label: 'Wellness check' },
         { hash: 'pickup-auth',    icon: '🪪', label: 'Pickup people' },

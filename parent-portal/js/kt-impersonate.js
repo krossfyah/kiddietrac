@@ -129,15 +129,50 @@
 
     var q = ov.querySelector('#kt-imp-q');
     var list = ov.querySelector('#kt-imp-list');
-    /* Committed, not streamed: this asks /platform/directory, so the debounce still
-       meant a request per pause in typing and the list rebuilding underneath. */
-    KT.onSearchCommit(q, function () { load(); });
+    /* FILTERS AS YOU TYPE (2026-10-09: "the search under view as is not working quick
+       enough"). The search only ran on Enter or when the box lost focus, so typing a name
+       did nothing at all. The whole directory for a role is small (86 people, 27 KB,
+       ~70 ms), so it is fetched ONCE per role chip and every keystroke filters it in
+       place -- no request, no "Loading…" flash. Words match in any order across name,
+       email, role, agency and centre ("sam kicks", "lorraine director"). Only when the
+       server says the list was cut at its 1000-row cap does a typed search go back to the
+       server, so a much larger platform still finds everybody. */
+    var all = null, allRole = null, capped = false, seq = 0;
+    q.addEventListener('input', function () { show(); });
+    q.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { var first = list.querySelector('button'); if (first) { e.preventDefault(); first.click(); } }
+    });
 
     function load() {
+      if (all && allRole === curRole) { show(); return; }
+      var mine = ++seq;
       list.innerHTML = '<div style="padding:22px;text-align:center;color:#64748B;font-size:13px;">Loading…</div>';
-      api('/platform/directory?search=' + encodeURIComponent(q.value.trim()) + '&role=' + encodeURIComponent(curRole))
+      api('/platform/directory?search=&role=' + encodeURIComponent(curRole))
         .then(function (d) {
-          var us = (d && d.users) || []; list.innerHTML = '';
+          if (mine !== seq) { return; }   // a later chip press won
+          all = (d && d.users) || []; allRole = curRole; capped = all.length >= 1000;
+          show();
+        })
+        .catch(function (e) { list.innerHTML = '<div style="padding:22px;text-align:center;color:#b91c1c;font-size:13px;">Could not load: ' + esc(e.message) + '</div>'; });
+    }
+
+    function show() {
+      if (!all) { return; }
+      var words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      var us = !words.length ? all : all.filter(function (u) {
+        var hay = [u.name, u.email, u.role_label, u.agency, u.centre].join(' ').toLowerCase();
+        return words.every(function (w) { return hay.indexOf(w) !== -1; });
+      });
+      if (capped && words.length && us.length < 5) {
+        var mine = ++seq;
+        api('/platform/directory?search=' + encodeURIComponent(q.value.trim()) + '&role=' + encodeURIComponent(curRole))
+          .then(function (d) { if (mine === seq) { draw((d && d.users) || []); } }).catch(function () {});
+      }
+      draw(us);
+    }
+
+    function draw(us) {
+          list.innerHTML = '';
           if (!us.length) { list.innerHTML = '<div style="padding:22px;text-align:center;color:#64748B;font-size:13px;">No matching users.</div>'; return; }
           us.slice(0, 400).forEach(function (u) {
             var row = document.createElement('button'); row.type = 'button';
@@ -152,8 +187,6 @@
             row.onclick = function () { row.disabled = true; start(u); };
             list.appendChild(row);
           });
-        })
-        .catch(function (e) { list.innerHTML = '<div style="padding:22px;text-align:center;color:#b91c1c;font-size:13px;">Could not load: ' + esc(e.message) + '</div>'; });
     }
     load();
     setTimeout(function () { try { q.focus(); } catch (e) {} }, 60);

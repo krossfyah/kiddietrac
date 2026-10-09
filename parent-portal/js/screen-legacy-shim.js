@@ -203,7 +203,11 @@
   });
   ['guardian'].forEach(function (r) {
     Shell.registerScreen(r + ':vacation-holds', bridge('KT.V22p56', 'renderVacationHolds'));
-    Shell.registerScreen(r + ':signed-docs',    bridge('KT.V22p56', 'renderSignedDocs'));
+    /* ONE DOCUMENTS SCREEN FOR A PARENT (2026-10-09). This e-signature table listed only
+       e-signed agreements (the NDA), so a parent who opened "Documents" here saw none of
+       the forms she had signed, while #my-documents had them all. #my-documents now also
+       shows anything awaiting her e-signature, so an old #signed-docs link goes there. */
+    Shell.registerScreen(r + ':signed-docs',    bridge('KT', 'renderMyDocuments'));
   });
   // Educators can log/see late pickups too (they're on the floor when a parent is late).
   /* late-pickups: now screen-late-events.js (one late-pickup section, 2026-10-06). */

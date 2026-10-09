@@ -108,7 +108,7 @@
     contract: '📃', certificate: '🎓', id: '🪪', file: '📎',
   };
 
-  async function open(doc, btn) {
+  async function open(doc, btn, wantPrint) {
     var was = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Opening…';
@@ -136,6 +136,17 @@
       var blob = await r.blob();
       if (inPanel) {
         KT.viewBlob(blob, { title: doc.title || LABEL[doc.category] || 'Document', label: LABEL[doc.category] || 'Document' });
+        /* PRINT FROM THE ⋮ (2026-10-09: "add a print button in the kebab for the parents,
+           educator, staff for the documents"). Opens the document in the shared viewer and
+           presses ITS Print, which already knows how to print in the phone app (where
+           window.print() does nothing) and prints just the document, not the portal. */
+        if (wantPrint) {
+          setTimeout(function () {
+            var all = document.querySelectorAll('.ktdv-fprint, .ktdv-print');
+            var p = all[all.length - 1];
+            if (p) { p.click(); }
+          }, 700);
+        }
         return;
       }
       var u = URL.createObjectURL(blob);
@@ -245,6 +256,26 @@
         : Promise.resolve([]),
     ]);
     mine = results[0]; shared = results[1];
+    if (mineOk) { setCount(mine.length + shared.length); }
+
+    /* Awaiting your signature (parents): what the old e-signature "Documents" screen
+       showed on top, kept so merging the two screens loses nothing. Never blocks the list. */
+    if (isGuardian) {
+      A.get('/parent/edocuments').then(function (r) {
+        var pend = ((r && (r.data || r.documents)) || []).filter(function (d) { return !d.signed; });
+        if (!pend.length || !list.isConnected) { return; }
+        var box = Dom.el('div', { 'data-kt-doc-awaiting': '1', style: 'margin:0 0 14px;' });
+        box.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#B91C1C;margin:0 2px 8px;' },
+          '⚠ Awaiting your signature (' + pend.length + ')'));
+        pend.forEach(function (d) {
+          var a = Dom.el('a', { href: '#edocuments', style: 'display:flex;align-items:center;gap:12px;text-decoration:none;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:14px;padding:12px 14px;margin-bottom:8px;' });
+          a.appendChild(Dom.el('span', { style: 'flex:1;min-width:0;font-weight:800;color:#0F172A;font-size:14.5px;overflow-wrap:anywhere;' }, d.title || d.name || d.document_name || 'Document'));
+          a.appendChild(Dom.el('span', { style: 'flex:0 0 auto;background:#DC2626;color:#fff;font-size:13px;font-weight:800;padding:7px 16px;border-radius:10px;' }, 'Sign'));
+          box.appendChild(a);
+        });
+        list.parentNode.insertBefore(box, list);
+      }).catch(function () {});
+    }
 
     // The tag open() reads. Set here, once, where the origin is actually known.
     mine.forEach(function (d) { d.__mine = true; });
@@ -283,48 +314,124 @@
       return;
     }
 
+    /* A TABLE WITH HEADINGS (2026-10-09: "it should also have a column that shows counter
+       signed as well by admin/director name"). Document | Signed | Counter-signed | Open.
+       Every row carries the same facts, so columns let the eye run down one axis — the
+       same reasoning as the signed-documents table (Anthony, 2026-09-09). The Open button
+       sits alone in the last cell, where kt-row-actions folds it into the standard ⋮. */
+    var th = function (t) {
+      return Dom.el('th', { style: 'text-align:left;padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;'
+        + 'text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;border-bottom:1px solid var(--kt-border);' }, t);
+    };
+    var tdStyle = 'padding:11px 14px;border-bottom:1px solid var(--kt-border);vertical-align:middle;';
+    var shell = Dom.el('div', { style: 'overflow-x:auto;background:var(--kt-surface);border:1px solid var(--kt-border);border-radius:14px;' });
+    var table = Dom.el('table', { 'data-kt-paginate': '25', style: 'width:100%;border-collapse:collapse;font-size:13.5px;min-width:640px;' });
+    var head = Dom.el('tr', { style: 'background:#F8FAFC;' });
+    [th('Document'), th('Signed'), th('Counter-signed'), th('')].forEach(function (x) { head.appendChild(x); });
+    var thead = Dom.el('thead', {}); thead.appendChild(head); table.appendChild(thead);
+    var tbody = Dom.el('tbody', {});
+
     docs.forEach(function (d) {
       var kid = [d.child && d.child.first_name, d.child && d.child.last_name].filter(Boolean).join(' ');
-      var card = Dom.el('div', {
-        style: 'background:var(--kt-surface);border:1px solid var(--kt-border);border-radius:14px;'
-             + 'padding:15px 16px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:10px 13px;align-items:center;',
-      });
-      card.appendChild(Dom.el('div', {
-        style: 'flex:0 0 auto;width:42px;height:42px;border-radius:11px;background:var(--kt-bg);'
-             + 'display:flex;align-items:center;justify-content:center;font-size:20px;',
+      var tr = Dom.el('tr', {});
+
+      var c1 = Dom.el('td', { style: tdStyle });
+      var line = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;min-width:0;' });
+      line.appendChild(Dom.el('span', {
+        style: 'flex:0 0 auto;width:30px;height:30px;border-radius:9px;background:var(--kt-bg);'
+             + 'display:inline-flex;align-items:center;justify-content:center;font-size:15px;',
       }, ICON[d.category] || '📄'));
+      var nm = Dom.el('div', { style: 'min-width:0;' });
+      nm.appendChild(Dom.el('div', { style: 'font-weight:700;color:var(--kt-text);line-height:1.35;' },
+        d.title || (LABEL[d.category] || 'Document')));
+      var sub = [kid, LABEL[d.category] || null, kb(d.file_size)].filter(Boolean).join('  ·  ');
+      if (sub) { nm.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--kt-text-muted);margin-top:1px;' }, sub)); }
+      line.appendChild(nm);
+      c1.appendChild(line);
+      tr.appendChild(c1);
 
-      var mid = Dom.el('div', { style: 'flex:1 1 220px;min-width:0;' });
-      mid.appendChild(Dom.el('div', {
-        style: 'font-weight:700;font-size:14.5px;color:var(--kt-text);line-height:1.35;',
-      }, d.title || (LABEL[d.category] || 'Document')));
-      mid.appendChild(Dom.el('div', {
-        style: 'font-size:12.5px;color:var(--kt-text-muted);margin-top:2px;',
-      }, [
-        kid,
-        LABEL[d.category] || null,
-        d.signed_at ? 'signed ' + filedOn(d.signed_at) : 'filed ' + filedOn(d.created_at),
-        kb(d.file_size),
-      ].filter(Boolean).join('  ·  ')));
-      card.appendChild(mid);
+      tr.appendChild(Dom.el('td', { style: tdStyle + 'color:#475569;white-space:nowrap;' },
+        d.signed_at ? filedOn(d.signed_at) : 'filed ' + filedOn(d.created_at)));
 
-      /* COUNTER-SIGNED, AND BY WHOM (2026-10-09: "it should also have a column that shows
-         counter signed as well by admin/director name"). The office's review of each
-         signed form, from the server's `review`: who counter-signed it and when, or that
-         it was sent back for correction, or that it has not been counter-signed yet. A
-         fixed-width column on a wide screen; on a phone it drops under the title. */
-      if (d.review) { card.appendChild(reviewCell(d.review)); }
+      // The office's review: counter-signed by whom and when, sent back, or not yet.
+      var c3 = Dom.el('td', { style: tdStyle });
+      if (d.review) { c3.appendChild(reviewCell(d.review)); }
+      else { c3.appendChild(Dom.el('span', { style: 'color:#CBD5E1;' }, '—')); }
+      tr.appendChild(c3);
 
-      var btn = Dom.el('button', {
-        class: 'btn btn-secondary',
-        style: 'flex:0 0 auto;padding:8px 15px;font-size:13.5px;font-weight:700;',
-      }, 'Open');
+      var c4 = Dom.el('td', { style: tdStyle + 'text-align:right;white-space:nowrap;' });
+      var btn = Dom.el('button', { type: 'button', class: 'btn btn-secondary', style: 'padding:6px 13px;font-size:13px;font-weight:700;' }, 'Open');
       btn.addEventListener('click', function () { open(d, btn); });
-      card.appendChild(btn);
+      c4.appendChild(btn);
+      // Print sits beside Open in the last cell, so kt-row-actions puts both in the ⋮.
+      var pbtn = Dom.el('button', { type: 'button', class: 'btn btn-secondary', style: 'padding:6px 13px;font-size:13px;font-weight:700;margin-left:6px;' }, '🖨 Print');
+      pbtn.addEventListener('click', function () { open(d, pbtn, true); });
+      c4.appendChild(pbtn);
+      tr.appendChild(c4);
 
-      list.appendChild(card);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    shell.appendChild(table);
+    list.appendChild(shell);
+    try { if (window.KT && KT.sweepRowActions) { KT.sweepRowActions(); } } catch (e) {}
+  }
+
+  /* A COUNT ON EVERY "DOCUMENTS" LINK (2026-10-09: "add a counter to the documents
+     section under parents, educators and staff as well"). How many documents are on
+     file for you. The sidebar entries carry a nav-badge (badgeKey my_documents); the
+     home tiles and the phone menu have no badge slot, so any other link to
+     #my-documents gets a small pill of its own. Neutral grey, not the red of an unread
+     count: it says how many you have, not that something needs you. Asked once at
+     start, again when the Documents screen draws (its own list is the truth), and at
+     most every five minutes after that. */
+  var docCount = null, docCountAt = 0, countBusy = false;
+  function paintCount() {
+    if (docCount === null) { return; }
+    try { if (window.KT && KT.Shell && KT.Shell.setBadge) { KT.Shell.setBadge('my_documents', docCount); } } catch (e) {}
+    var links = document.querySelectorAll('a[href="#my-documents"],[data-hash="my-documents"],a[href="#signed-docs"]');
+    Array.prototype.forEach.call(links, function (a) {
+      if (a.querySelector('[data-badge-key="my_documents"]')) { return; }   // the sidebar's own badge
+      var pill = a.querySelector('.kt-doc-count');
+      if (!docCount) { if (pill) { pill.remove(); } return; }
+      if (!pill) {
+        pill = document.createElement('span'); pill.className = 'kt-doc-count';
+        pill.style.cssText = 'display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#E2E8F0;'
+          + 'color:#334155;font-size:11px;font-weight:800;line-height:1.5;vertical-align:middle;';
+        var label = a.querySelector('.nav-label, .kt-tile-label, span:last-child') || a;
+        label.appendChild(pill);
+      }
+      var txt = docCount > 99 ? '99+' : String(docCount);
+      if (pill.textContent !== txt) { pill.textContent = txt; }
     });
   }
+  function setCount(n) { docCount = n; docCountAt = Date.now(); paintCount(); }
+  function refreshCount(force) {
+    var A = api();
+    if (!A || countBusy || (!force && docCountAt && Date.now() - docCountAt < 300000)) { paintCount(); return; }
+    var tok = token && token();
+    if (!tok) { return; }   // signed out: nothing to count
+    countBusy = true;
+    A.get('/auth/me/documents').then(function (r) { setCount(((r && r.documents) || []).length); })
+      .catch(function () {}).then(function () { countBusy = false; });
+  }
+  KT.refreshDocumentCount = refreshCount;
+  try {
+    var css = document.createElement('style');
+    css.textContent = '.app-sidebar .nav-link .nav-badge[data-badge-key="my_documents"]{background:#E2E8F0;color:#334155;}';
+    (document.head || document.documentElement).appendChild(css);
+  } catch (e) {}
+  setTimeout(function () { refreshCount(true); }, 2500);
+  window.addEventListener('hashchange', function () { setTimeout(function () { refreshCount(false); }, 400); });
+  // Menus and tiles are drawn after the fact (and redrawn): paint any new link, cheaply.
+  try {
+    var painting = false;
+    new MutationObserver(function () {
+      if (painting || docCount === null) { return; }
+      painting = true;
+      setTimeout(function () { painting = false; paintCount(); }, 60);   // not rAF: it never fires on a hidden tab
+    }).observe(document.body || document.documentElement, { childList: true, subtree: true });
+  } catch (e) {}
 
   KT.renderMyDocuments = render;
   /* THE SCREEN NEVER REGISTERED (2026-10-09: "I still don't see the signed files under
