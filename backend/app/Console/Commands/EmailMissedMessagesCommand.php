@@ -92,9 +92,17 @@ final class EmailMissedMessagesCommand extends Command
         // Pick up candidates that are stale enough and not yet emailed.
         // We over-fetch a bit (200 max per run) so even busy installs don't
         // pile up; if more than 200 are queued, the next tick gets them.
+        /* UNREAD BY THE SIDE IT WAS FOR (2026-10-09). This used read_at, which ANY reader
+           sets — so when a colleague opened the thread seconds after Lloydene wrote to a
+           parent, the message counted as read and the parent was never emailed. Each
+           message is now held against its own audience below (family_read_at for staff
+           messages, read_at for the family's). Only the last day is looked at, so the
+           change does not suddenly email people about old threads. */
         $candidates = DB::table('messages')
             ->whereNull('email_notified_at')
-            ->whereNull('read_at')
+            ->whereNull('deleted_at')
+            ->where(fn ($q) => $q->whereNull('read_at')->orWhereNull('family_read_at'))
+            ->where('created_at', '>=', $now->copy()->subDay())
             ->where('created_at', '<=', $now->copy()->subMinutes($defaultDelay))
             ->orderBy('created_at')
             ->limit(200)
@@ -134,15 +142,28 @@ final class EmailMissedMessagesCommand extends Command
             $msgs = $msgs->filter(fn ($m) => strtotime((string) $m->created_at) <= $convCutoff->getTimestamp());
             if ($msgs->isEmpty()) continue;
 
-            $recipients = $this->resolveRecipients($conv);
+            /* Each message to ITS audience (App\Support\ChatAudience): a staff message is
+               for the family and counts as missed until the FAMILY reads it; a family
+               message is for the staff and counts until staff read it. */
+            $perUser = [];   // user id => [message, ...]
+            foreach ($msgs as $m) {
+                $fromFamily = \App\Support\ChatAudience::isFamilySide($conv, (int) $m->sender_id);
+                $unread = $fromFamily ? $m->read_at === null : $m->family_read_at === null;
+                if (! $unread) continue;
+                foreach (\App\Support\ChatAudience::recipientIds($conv, (int) $m->sender_id) as $uid) {
+                    $perUser[$uid][$m->id] = $m;
+                }
+            }
+            if (! $perUser) continue;
+            $recipients = DB::table('users')->whereIn('id', array_keys($perUser))->whereNull('deleted_at')
+                ->whereNotNull('email')->get(['id', 'email', 'first_name', 'last_name'])->all();
             if (empty($recipients)) continue;
 
             $senderIds = $msgs->pluck('sender_id')->unique()->all();
             $senders = DB::table('users')->whereIn('id', $senderIds)->get()->keyBy('id');
 
             foreach ($recipients as $r) {
-                // Skip senders so they don't email themselves about their own messages
-                $unreadFromOthers = $msgs->reject(function ($m) use ($r) { return (int) $m->sender_id === (int) $r->id; });
+                $unreadFromOthers = collect(array_values($perUser[(int) $r->id] ?? []));
                 if ($unreadFromOthers->isEmpty()) continue;
                 // An integration mailbox is not a person waiting to be told about a chat.
                 if ($this->isServiceAccount($r)) continue;

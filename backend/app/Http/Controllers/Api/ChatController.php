@@ -797,10 +797,10 @@ final class ChatController extends Controller
                     ->pluck('user_id')
                     ->all();
 
-                $recipients = array_values(array_diff(
-                    array_unique(array_merge($guardianIds, $staffIds)),
-                    [$senderId]
-                ));
+                /* THE OTHER SIDE ONLY (2026-10-09) — see App\Support\ChatAudience. Staff
+                   writing tells the family; the family writing tells the staff. The lists
+                   above stay for the code below that reads them. */
+                $recipients = \App\Support\ChatAudience::recipientIds($conv, (int) $senderId);
 
                 if (! empty($recipients)) {
                     $sender = DB::table('users')->where('id', $senderId)->first(['first_name', 'last_name']);
