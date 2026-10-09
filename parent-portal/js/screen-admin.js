@@ -6,6 +6,29 @@
   'use strict';
   const { Api, Dom, Shell } = window.KT;
 
+  /* SOFT GRADIENT CARDS FOR RECORD VIEWS (2026-10-09: "under daily overview and where it
+     shows the educators name its using a nice gradient can you use that when viewing user,
+     family records etc where it shows data and use different colours instead of the
+     bands"). The teal one is the Daily Overview provider header exactly; the others are
+     the same recipe in other hues, so each group on a record reads as its own block
+     instead of a grey band. */
+  (function () {
+    if (document.getElementById('kt-grad-cards')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-grad-cards';
+    st.textContent = '.kt-grad{border:1px solid;border-radius:13px;padding:6px 15px;margin:10px 0}'
+      + '.kt-grad-teal{background:linear-gradient(135deg,#F0FAFC,#F8FAFC);border-color:#DCEDF1}'
+      + '.kt-grad-violet{background:linear-gradient(135deg,#F5F3FF,#FBFAFF);border-color:#E6E0FB}'
+      + '.kt-grad-blue{background:linear-gradient(135deg,#EFF5FF,#F8FAFF);border-color:#DBE6FA}'
+      + '.kt-grad-amber{background:linear-gradient(135deg,#FFF8EC,#FFFCF6);border-color:#F3E4C4}'
+      + '.kt-grad-green{background:linear-gradient(135deg,#EEFAF3,#F7FCF9);border-color:#D3EEDC}'
+      + '.kt-grad-rose{background:linear-gradient(135deg,#FFF1F4,#FFF9FA);border-color:#F6DCE2}'
+      + '.kt-grad>[data-kt-row]{border-top-color:rgba(15,23,42,.07)!important}'
+      + '.kt-grad>[data-kt-row]:first-child{border-top:0!important}';
+    (document.head || document.documentElement).appendChild(st);
+  })();
+  var GRAD_TONES = ['teal', 'violet', 'blue', 'amber', 'green', 'rose'];
+
   // State per tab to keep loaded data
   const state = {
     activeTab: 'centres',
@@ -202,10 +225,13 @@
 
     /* Two columns on a desktop dialog, one on a phone — the label column is fixed
        so the values line up and can be read down rather than hunted for. */
-    var grid = null;
+    var grid = null, _tone = 0;
     function startGrid() {
       grid = Dom.el('div', { style: 'display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:7px 16px;align-items:start;' });
-      body.appendChild(grid);
+      // Each section's facts sit in their own soft-coloured card (2026-10-09).
+      var cardEl = Dom.el('div', { class: 'kt-grad kt-grad-' + GRAD_TONES[(_tone++) % GRAD_TONES.length], style: 'padding:11px 15px;margin:4px 0 6px;' });
+      cardEl.appendChild(grid);
+      body.appendChild(cardEl);
     }
     function row(label, value, opts) {
       if (!grid) startGrid();
@@ -2010,13 +2036,16 @@
   function showUserView(u, content) {
     var fmtDT = function (d) { if (!d) return '—'; try { return new Date(d).toLocaleString(); } catch (e) { return d; } };
     var rowEl = function (label, val, mono) {
-      return Dom.el('div', { style: 'display:grid;grid-template-columns:130px 1fr;gap:6px 14px;padding:9px 0;border-top:1px solid var(--ink-100,#EEF2F6);' }, [
+      return Dom.el('div', { 'data-kt-row': '1', style: 'display:grid;grid-template-columns:130px 1fr;gap:6px 14px;padding:9px 0;border-top:1px solid var(--ink-100,#EEF2F6);' }, [
         Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500,#64748B);font-weight:600;' }, label),
         Dom.el('div', { style: 'font-size:13.5px;color:var(--ink-800,#0f172a);' + (mono ? 'font-family:ui-monospace,Menlo,monospace;' : '') }, val || '—'),
       ]);
     };
     var body = Dom.el('div', {});
-    var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:6px;' });
+    // Each group of facts is its own soft-coloured card (see .kt-grad above).
+    var target = body;
+    var card = function (tone) { target = Dom.el('div', { class: 'kt-grad kt-grad-' + tone }); body.appendChild(target); return target; };
+    var head = Dom.el('div', { class: 'kt-grad kt-grad-teal', style: 'display:flex;align-items:center;gap:14px;padding:12px 15px;margin:0 0 4px;' });
     head.appendChild(avatarCircle(u, 52, { user: true }));
     head.appendChild(Dom.el('div', {}, [
       Dom.el('div', { style: 'font-size:18px;font-weight:800;color:#0f172a;' }, u.name || u.email),
@@ -2025,14 +2054,16 @@
     body.appendChild(head);
     // What the list row already knows — shown immediately so the dialog is never
     // empty while the full record is on its way.
-    body.appendChild(rowEl('Username', u.username || '—', true));
-    body.appendChild(rowEl('Email', u.email));
-    body.appendChild(rowEl('Phone', u.phone));
-    body.appendChild(rowEl('Roles', (u.roles || []).map(function (r) { return r.replace(/_/g, ' '); }).join(', ') || '—'));
-    body.appendChild(rowEl('Last login', fmtDT(u.last_login_at)));
+    card('violet');
+    target.appendChild(rowEl('Username', u.username || '—', true));
+    target.appendChild(rowEl('Email', u.email));
+    target.appendChild(rowEl('Phone', u.phone));
+    target.appendChild(rowEl('Roles', (u.roles || []).map(function (r) { return r.replace(/_/g, ' '); }).join(', ') || '—'));
+    card('blue');
+    target.appendChild(rowEl('Last login', fmtDT(u.last_login_at)));
     /* A different fact, worth having beside it: last_login_at is the last
        authentication; this is when they were last actually in the portal. */
-    body.appendChild(rowEl('Last seen', fmtDT(u.last_seen_at)));
+    target.appendChild(rowEl('Last seen', fmtDT(u.last_seen_at)));
     /* Beside the sign-in facts, because that is the group it belongs to: an admin
        looking at "last login" is already asking questions about this account's access. */
     (function () {
@@ -2045,7 +2076,7 @@
           if (pw.bold) val.style.fontWeight = '700';
         }
       } catch (e) {}
-      body.appendChild(row);
+      target.appendChild(row);
     })();
     /* Beside the contact details, because that is the question it answers: we hold this
        email and this number - do they actually receive anything on them? */
@@ -2055,7 +2086,7 @@
         var val = row.lastElementChild;
         if (val) { Dom.clear(val); val.appendChild(commsChips(u.comms)); }
       } catch (e) {}
-      body.appendChild(row);
+      target.appendChild(row);
     })();
     /* THE OTHER ACCOUNTS THIS PERSON HOLDS (2026-09-21).
 
@@ -2089,10 +2120,11 @@
 
       var row = rowEl('Other accounts', '');
       try { var v = row.lastElementChild; if (v) { Dom.clear(v); v.appendChild(host); } } catch (e) {}
-      body.appendChild(row);
+      target.appendChild(row);
     })();
-    body.appendChild(rowEl('Onboarded', u.onboarded_at ? fmtDT(u.onboarded_at) : 'Not yet'));
-    body.appendChild(rowEl('Created', fmtDT(u.created_at)));
+    card('amber');
+    target.appendChild(rowEl('Onboarded', u.onboarded_at ? fmtDT(u.onboarded_at) : 'Not yet'));
+    target.appendChild(rowEl('Created', fmtDT(u.created_at)));
 
     // Then EVERYTHING they entered. The list payload carries a handful of account
     // fields; the record endpoint carries the bio, address, date of birth,
@@ -2108,6 +2140,8 @@
         var shown = { 'Username': 1, 'Email': 1, 'Phone': 1, 'Role': 1, 'Roles': 1, 'Status': 1,
                       'Last login': 1, 'Onboarded': 1, 'Created': 1, 'First name': 1, 'Last name': 1 };
         var keys = Object.keys(rec).filter(function (k) { return !shown[k]; });
+        var rest = Dom.el('div', { class: 'kt-grad kt-grad-green' });   // everything they entered
+        if (keys.length) body.appendChild(rest);
         if (!keys.length) {
             body.appendChild(Dom.el('div', { style: 'padding:8px 0;font-size:12.5px;color:#94A3B8;' },
                 'Nothing further was captured for this user.'));
@@ -2117,12 +2151,12 @@
             var value = String(rec[label]);
             // A bio is a paragraph, not a table cell — give it room to breathe.
             if (value.length > 90) {
-                var wrap = Dom.el('div', { style: 'padding:10px 0;border-top:1px solid #F1F5F9;' });
+                var wrap = Dom.el('div', { 'data-kt-row': '1', style: 'padding:10px 0;border-top:1px solid #F1F5F9;' });
                 wrap.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;color:#94A3B8;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px;' }, label));
                 wrap.appendChild(Dom.el('div', { style: 'font-size:13.5px;color:#0F172A;line-height:1.55;white-space:pre-wrap;' }, value));
-                body.appendChild(wrap);
+                rest.appendChild(wrap);
             } else {
-                body.appendChild(rowEl(label, value));
+                rest.appendChild(rowEl(label, value));
             }
         });
     }).catch(function () {
@@ -7944,7 +7978,7 @@
            + 'and remove guardians. Press Done when you have finished.'));
       }
       function _kv(k, v) { var d = Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:14px;padding:4px 0;font-size:13.5px;' }); d.appendChild(Dom.el('span', { style: 'color:var(--ink-500);flex-shrink:0;' }, k)); d.appendChild(Dom.el('span', { style: 'font-weight:600;color:#0F172A;text-align:right;word-break:break-word;' }, (v == null || v === '') ? '—' : String(v))); return d; }
-      var _famCard = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;margin:8px 0 6px;' });
+      var _famCard = Dom.el('div', { class: 'kt-grad kt-grad-teal', style: 'padding:12px 15px;margin:8px 0 6px;' });
       _famCard.appendChild(_kv('Email', _f.primary_email));
       _famCard.appendChild(_kv('Phone', _f.primary_phone));
       var _addr = [_f.address_line1, _f.address_line2, [_f.city, _f.province, _f.postal_code].filter(Boolean).join(' ')].filter(Boolean).join(', ');
@@ -7974,7 +8008,7 @@
         body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'No children'));
       } else {
         data.children.forEach(c => {
-          const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px; display:flex; align-items:center; gap:10px;' });
+          const row = Dom.el('div', { class: 'kt-grad kt-grad-violet', style: 'padding: 10px 12px; margin: 0 0 6px; display:flex; align-items:center; gap:10px;' });
           // v22p83: child avatar (photo or initials)
           const cName = c.preferred_name || (c.first_name + ' ' + c.last_name);
           row.appendChild(Dom.el('span', { html: KT.avatar(c.first_name + ' ' + c.last_name, { size: 34, photoUrl: c.photo_url }) }));
@@ -7997,7 +8031,7 @@
         showAddGuardian(data.family, function () { Shell.Modal.close(); showFamilyDetail(familyId, archived); });
       } : null));
       data.guardians.forEach(g => {
-        const row = Dom.el('div', { style: 'padding: 10px; background: var(--ink-50); border-radius: 6px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;' });
+        const row = Dom.el('div', { class: 'kt-grad kt-grad-blue', style: 'padding: 10px 12px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px;' });
         // v22p83: guardian avatar (photo or initials)
         row.appendChild(Dom.el('span', { html: KT.avatar(g.first_name + ' ' + g.last_name, { size: 34, photoUrl: g.photo_url }) }));
         const info = Dom.el('div', { style: 'flex: 1; min-width: 0;' });
@@ -8078,7 +8112,7 @@
         body.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, 'None on file.'));
       } else {
         _ecs.forEach(function (e) {
-          var er = Dom.el('div', { style: 'padding:10px;background:var(--ink-50);border-radius:6px;margin-bottom:6px;' });
+          var er = Dom.el('div', { class: 'kt-grad kt-grad-rose', style: 'padding:10px 12px;margin:0 0 6px;' });
           er.appendChild(Dom.el('div', { style: 'font-weight:600;' }, e.name + (e.can_pickup ? '  ·  ✓ pickup' : '')));
           er.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);' }, [e.relationship, e.phone, e.alt_phone].filter(Boolean).join('  ·  ') || '—'));
           body.appendChild(er);
