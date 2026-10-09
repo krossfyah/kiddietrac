@@ -8,11 +8,12 @@
   'use strict';
 
   /* One way in, used by the card, the row and the Open button alike. */
-  function _openChild(c, centreIdHint) {
+  function _openChild(c, centreIdHint, edit) {
     var KT2 = window.KT || {};
     if (KT2.ChildDetail && KT2.ChildDetail.openModal) {
       KT2.ChildDetail.openModal(c.id, {
         centreId: centreIdHint || '',
+        edit: !!edit,   // the row menu's Edit: straight into the edit form
         title: ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.display_name || 'Child record',
       });
 
@@ -190,7 +191,8 @@
       }
 
       // Grid of cards
-      var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;' });
+      // data-kt-list: kt-row-actions folds each card's Open / Edit bar into its ⋮ menu.
+      var grid = Dom.el('div', { 'data-kt-list': '1', style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;' });
       children.forEach(function (c) {
         /* The href stays so the card is still a real link (middle-click, copy link
            address); the click handler below opens the popup instead of navigating. */
@@ -204,6 +206,8 @@
              habit worth keeping, and the href above still points at the full screen. */
           if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1) { return; }
           ev.preventDefault();
+          // A press on the card's ⋮ menu (or its bar) is that menu's, not "open the card".
+          if (ev.target && ev.target.closest && ev.target.closest('[data-kt-card-actions], .kt-ka-kebab, .kt-ka-menu')) { return; }
           _openChild(c, centreSelect.value || '');
         });
         var header = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;' });
@@ -228,9 +232,21 @@
         if (c.monthly_fee) {
           card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:4px;' }, '💰 $' + c.monthly_fee + ' / month'));
         }
+        /* The card's ⋮ (2026-10-09: "children records should have an edit that goes right
+           into the edit record in the kebab"): Open, and Edit straight into the form. Pure
+           buttons in the LAST child, which is how kt-row-actions recognises a card's bar. */
+        var cardBar = Dom.el('div', { 'data-kt-card-actions': '1', style: 'display:flex;justify-content:flex-end;gap:6px;margin-top:8px;' });
+        var cOpen = Dom.el('button', { type: 'button', style: 'background:transparent;border:1px solid #D1D5DB;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:#374151;' }, 'Open');
+        cOpen.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); _openChild(c, centreSelect.value || ''); });
+        var cEdit = Dom.el('button', { type: 'button', style: 'background:transparent;border:1px solid #D1D5DB;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:#374151;' }, '✏️ Edit');
+        cEdit.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); _openChild(c, centreSelect.value || '', true); });
+        cardBar.appendChild(cOpen); cardBar.appendChild(cEdit);
+        card.appendChild(cardBar);
         grid.appendChild(card);
       });
       resultsEl.appendChild(grid);
+      // The cards arrive after the page's own menu sweep: ask for one now.
+      try { if (window.KT && KT.sweepRowActions) { KT.sweepRowActions(); } } catch (e) {}
     }
 
     // Load centres for the dropdown (parallel with the initial fetch)
@@ -378,6 +394,19 @@
         _openChild(c, centreIdHint);
       });
       actTd.appendChild(viewBtn);
+      /* EDIT IN THE ROW MENU (2026-10-09: "children records should have an edit that goes
+         right into the edit record in the kebab"). Beside Open, so kt-row-actions folds
+         the two into the row's ⋮ menu; it opens the record already in edit mode with the
+         details form up. */
+      var editBtn = Dom.el('button', {
+        type: 'button',
+        style: 'margin-left:6px;background:transparent;border:1px solid #D1D5DB;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:#374151;',
+      }, '✏️ Edit');
+      editBtn.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        _openChild(c, centreIdHint, true);
+      });
+      actTd.appendChild(editBtn);
       tr.appendChild(actTd);
 
       tbody.appendChild(tr);

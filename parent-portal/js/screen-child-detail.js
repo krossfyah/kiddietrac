@@ -136,6 +136,56 @@
       style: 'margin:0 0 16px;font-size:18px;',
     }, 'Edit ' + (child.display_name || child.full_name)));
 
+    /* THE CHILD'S PHOTO, IN THE SAME FORM (2026-10-09: "edit on child record should also
+       allow to edit the avatar/display picture for that child"). Uploaded the moment it is
+       chosen (POST /director/children/{id}/photo, the same storage as the add-child wizard), shown
+       at once, and written to the record with Save changes — Cancel leaves it unchanged. */
+    var photoState = { url: child.photo_url || null, changed: false };
+    var photoBox = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin:0 0 16px;padding:12px;border:1px solid #E5E7EB;border-radius:10px;background:#F9FAFB;' });
+    var photoPreview = Dom.el('div', { style: 'flex:0 0 auto;' });
+    var paintPhoto = function () {
+      Dom.clear ? Dom.clear(photoPreview) : (photoPreview.innerHTML = '');
+      photoPreview.appendChild(_avatarEl(child.full_name, { size: 64, photoUrl: photoState.url ? (photoState.preview || mediaUrl(photoState.url)) : '' }));
+      removeLink.style.display = photoState.url ? '' : 'none';
+    };
+    var photoIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;' });
+    var photoMsg = Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:4px;' }, 'JPG, PNG or WebP, up to 4 MB.');
+    var changeBtn = btn('📷 Change photo', btnSecondary(), function () { photoIn.click(); });
+    var removeLink = Dom.el('button', { type: 'button', style: 'margin-left:8px;background:none;border:0;padding:0;color:#B91C1C;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:underline;' }, 'Remove photo');
+    removeLink.addEventListener('click', function () {
+      photoState.url = null; photoState.preview = null; photoState.changed = true;
+      photoMsg.textContent = 'Photo will be removed when you save.';
+      paintPhoto();
+    });
+    photoIn.addEventListener('change', function () {
+      var f = photoIn.files && photoIn.files[0];
+      if (!f) return;
+      if (f.size > 4 * 1024 * 1024) { photoMsg.textContent = 'That photo is over 4 MB — please choose a smaller one.'; photoMsg.style.color = '#B91C1C'; return; }
+      var fd = new FormData(); fd.append('photo', f);
+      var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      var agency = ''; try { agency = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+      changeBtn.disabled = true; photoMsg.style.color = '#6B7280'; photoMsg.textContent = 'Uploading…';
+      fetch(base + '/director/children/' + child.id + '/photo', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'X-Active-Agency-Id': agency, 'Accept': 'application/json' }, body: fd })
+        .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message || ('HTTP ' + r.status)); return j; }); })
+        .then(function (j) {
+          photoState.url = j.photo_url; photoState.changed = true;
+          try { photoState.preview = URL.createObjectURL(f); } catch (e) { photoState.preview = null; }
+          photoMsg.textContent = 'New photo ready — Save changes to keep it.';
+          paintPhoto();
+        })
+        .catch(function (e) { photoMsg.style.color = '#B91C1C'; photoMsg.textContent = 'Upload failed: ' + (e.message || 'error'); })
+        .then(function () { changeBtn.disabled = false; photoIn.value = ''; });
+    });
+    var photoSide = Dom.el('div', { style: 'min-width:0;' });
+    photoSide.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:600;color:#374151;margin-bottom:6px;' }, 'Photo'));
+    var photoBtns = Dom.el('div', { style: 'display:flex;align-items:center;flex-wrap:wrap;gap:4px;' });
+    photoBtns.appendChild(changeBtn); photoBtns.appendChild(removeLink);
+    photoSide.appendChild(photoBtns); photoSide.appendChild(photoMsg);
+    photoBox.appendChild(photoPreview); photoBox.appendChild(photoSide); photoBox.appendChild(photoIn);
+    modal.appendChild(photoBox);
+    paintPhoto();
+
     var form = Dom.el('form', {});
     var fields = [
       { name: 'first_name', label: 'First name', value: child.first_name, type: 'text' },
@@ -208,6 +258,7 @@
         if (v === '') v = null;
         payload[k] = v;
       });
+      if (photoState.changed) { payload.photo_url = photoState.url; }
       saveB.disabled = true;
       saveB.textContent = 'Saving...';
       Api.patch('/director/children/' + child.id, payload)
@@ -1718,6 +1769,13 @@
       body: host,
       large: true,
     });
+    /* Opened by a list's Edit (2026-10-09): start in edit mode, details form up — the
+       same state one press of ✏️ Edit gives. An archived record is never editable. */
+    if (opts.edit && !opts.archived) {
+      editMode = true;
+      editModeFor = String(childId);
+      openDetailsFor = String(childId);
+    }
 
     renderChildDetail(host, {
       params: {

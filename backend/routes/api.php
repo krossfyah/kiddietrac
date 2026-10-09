@@ -1417,6 +1417,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // v22p5: full CRUD on child record (separate from enrollment updates)
             Route::patch('/children/{child}', [ChildController::class, 'update']);
             Route::delete('/children/{child}', [ChildController::class, 'destroy']);
+            // A child's photo from the record's Edit form — directors (own centre) as well as admins (2026-10-09).
+            Route::post('/children/{child}/photo', [ChildController::class, 'uploadPhoto'])->where('child', '[0-9]+');
 
             Route::get('/families', [FamilyController::class, 'index']);
             Route::post('/families', [FamilyController::class, 'store']);

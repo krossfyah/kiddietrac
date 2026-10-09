@@ -960,6 +960,20 @@ final class ChildController extends Controller
             return response()->json(["message" => "Forbidden"], 403);
         }
 
+        /* A PHOTO COMES BACK AS A SIGNED LINK (2026-10-09). Every API response rewrites a
+           stored /storage/child-photos/… path into a signed /media/f?p=… link, so the path
+           the Edit form gets from the upload, and sends back on Save, is that link. Turn it
+           back into the stored path; anything else is left for the rule below to refuse. */
+        if ($request->filled('photo_url')) {
+            $pu = (string) $request->input('photo_url');
+            if (str_contains($pu, '/media/f') && preg_match('/[?&]p=([A-Za-z0-9_-]+)/', $pu, $m)) {
+                $rel = \App\Support\ProtectedMedia::decode($m[1]);
+                if ($rel && str_starts_with($rel, 'child-photos/')) {
+                    $request->merge(['photo_url' => '/storage/' . $rel]);
+                }
+            }
+        }
+
         $data = $request->validate([
             "first_name" => ["sometimes", "string", "max:80"],
             "last_name" => ["sometimes", "string", "max:80"],
@@ -967,7 +981,8 @@ final class ChildController extends Controller
             "pronouns" => ["sometimes", "nullable", "string", "max:40"],
             "date_of_birth" => ["sometimes", "date", "before:today"],
             "gender" => ["sometimes", "nullable", "in:female,male,non_binary,prefer_not_to_say,other"],
-            "photo_url" => ["sometimes", "nullable", "string", "max:255"],
+            // Only a file in our own child-photos store (2026-10-09): the edit form now sets it.
+            "photo_url" => ["sometimes", "nullable", "string", "max:255", "regex:#^/storage/child-photos/[A-Za-z0-9._-]+$#"],
             "health_card_last4" => ["sometimes", "nullable", "string", "size:4"],
             "doctor_name" => ["sometimes", "nullable", "string", "max:120"],
             "doctor_phone" => ["sometimes", "nullable", "string", "max:40"],
@@ -1136,6 +1151,32 @@ final class ChildController extends Controller
      * role:centre_director,agency_admin so a parent cannot reach this at all; assertChild
      * (via authorizeChild) is what stops a director reaching into another agency.
      */
+    /**
+     * POST /director/children/{child}/photo — store a new photo for this child and return
+     * its path; the Edit form writes it to the record on Save (2026-10-09: "edit on child
+     * record should also allow to edit the avatar/display picture"). Per child so the same
+     * access rule applies as to the record itself: a director only for their own centre.
+     */
+    public function uploadPhoto(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) return response()->json(['message' => 'Not found'], 404);
+        $this->authorizeChild($request->user(), $child);
+
+        $request->validate([
+            'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+        ]);
+        $file = $request->file('photo');
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'webp'], true)) {
+            return response()->json(['message' => 'Please choose a JPG, PNG or WebP image.'], 422);
+        }
+        $name = (string) \Illuminate\Support\Str::uuid() . '.' . $ext;
+        $file->storeAs('child-photos', $name, 'public');
+
+        return response()->json(['photo_url' => '/storage/child-photos/' . $name, 'message' => 'Photo uploaded']);
+    }
+
     public function uploadDocument(Request $request, int $childId): JsonResponse
     {
         $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
