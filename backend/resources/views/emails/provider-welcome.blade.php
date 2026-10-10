@@ -15,6 +15,14 @@
       try { [$r1, $g1, $b1] = $h($a); [$r2, $g2, $b2] = $h($b); } catch (\Throwable $e) { return $b; }
       return sprintf('#%02X%02X%02X', $r1 + ($r2 - $r1) * $t, $g1 + ($g2 - $g1) * $t, $b1 + ($b2 - $b1) * $t);
   })($primary, $accent, 100 / 135);
+  /* The banner as an IMAGE (2026-10-09): CSS gradients are dropped by new Outlook and
+     Outlook on the web ("the gradient not showing in outlook"); a background image is not.
+     The same file feeds classic Outlook through VML. Solid colour underneath as the floor. */
+  $heroImg = \App\Support\EmailGradient::url($primary, $accent);
+  /* Website link: a bare "www.…" is clickable in Gmail (it auto-links) but a broken
+     relative link in Outlook, which then also prints the address beside it. */
+  $site = !empty($websiteUrl) ? (preg_match('#^https?://#i', $websiteUrl) ? $websiteUrl : 'https://' . ltrim($websiteUrl, '/')) : null;
+  $siteLabel = $site ? preg_replace('#^https?://#i', '', rtrim($site, '/')) : null;
 @endphp
 <!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -72,8 +80,8 @@
 
       {{-- Hero banner. Square on top when the logo panel is above it, so the two
            read as one card rather than two stacked ones. --}}
-      <tr><td bgcolor="{{ $primary }}" style="background-color:{{ $primary }};background:linear-gradient(135deg,{{ $primary }} 0%,{{ $accent }} 135%);border-radius:{{ !empty($agencyLogoPanelUrl) ? '0' : '16px 16px 0 0' }};padding:30px 34px 30px;">
-        <!--[if gte mso 9]><v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;mso-fit-shape-to-text:true;"><v:fill type="gradient" color="{{ $primary }}" color2="{{ $heroEnd }}" angle="135" /><v:textbox inset="0,0,0,0" style="mso-fit-shape-to-text:true;"><div><![endif]-->
+      <tr><td bgcolor="{{ $primary }}" @if($heroImg) background="{{ $heroImg }}" @endif style="background-color:{{ $primary }};@if($heroImg)background-image:url('{{ $heroImg }}');background-size:cover;background-position:center;background-repeat:no-repeat;@else background:linear-gradient(135deg,{{ $primary }} 0%,{{ $accent }} 135%);@endif border-radius:{{ !empty($agencyLogoPanelUrl) ? '0' : '16px 16px 0 0' }};padding:30px 34px 30px;">
+        <!--[if gte mso 9]><v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;mso-fit-shape-to-text:true;">@if($heroImg)<v:fill type="frame" src="{{ $heroImg }}" color="{{ $primary }}" />@else<v:fill type="gradient" color="{{ $primary }}" color2="{{ $heroEnd }}" angle="135" />@endif<v:textbox inset="0,0,0,0" style="mso-fit-shape-to-text:true;"><div><![endif]-->
         @if(empty($agencyLogoPanelUrl))
           <div style="color:#ffffff;font-size:23px;font-weight:800;margin-bottom:18px;letter-spacing:-0.3px;">{{ $agencyName }}</div>
         @endif
@@ -154,7 +162,7 @@
             <strong>{{ $agencyName }}</strong>@if(!empty($agencyOwnerName))<br><span class="kt-muted" style="color:#5B6B85;">Owner / Director: {{ $agencyOwnerName }}</span>@endif<br>
             @if($agencyPhone)📞 <a href="tel:{{ $agencyPhone }}" style="color:{{ $accent }};text-decoration:none;">{{ $agencyPhone }}</a><br>@endif
             @if($agencyEmail)✉️ <a href="mailto:{{ $agencyEmail }}" style="color:{{ $accent }};text-decoration:none;">{{ $agencyEmail }}</a>@endif
-            @if(!empty($websiteUrl))<br>🌐 <a href="{{ $websiteUrl }}" style="color:{{ $accent }};text-decoration:none;">{{ preg_replace('#^https?://#', '', rtrim($websiteUrl, '/')) }}</a>@endif
+            @if($site)<br>🌐 <a href="{{ $site }}" style="color:{{ $accent }};text-decoration:none;">{{ $siteLabel }}</a>@endif
             @if(!empty($agencyAddress))<br>📍 <span class="kt-muted" style="color:#5B6B85;">{!! nl2br(e($agencyAddress)) !!}</span>@endif
           </td></tr>
         </table>
@@ -169,10 +177,15 @@
 
       {{-- Footer --}}
       <tr><td class="kt-foot" style="padding:20px 8px 6px;color:#8693A8;background:#EEF1F6;font-size:12px;line-height:1.7;text-align:center;">
-        Sent by {{ $agencyName }} via KiddieTrac.<br>
-        @if(!empty($websiteUrl))<a href="{{ $websiteUrl }}" style="color:{{ $accent }};text-decoration:none;">{{ preg_replace('#^https?://#', '', rtrim($websiteUrl, '/')) }}</a> · @endif
-        @if($privacyUrl)<a href="{{ $privacyUrl }}" style="color:{{ $accent }};text-decoration:none;">Privacy Policy</a> · @endif
-        @if($termsUrl)<a href="{{ $termsUrl }}" style="color:{{ $accent }};text-decoration:none;">Terms of Use</a>@endif
+        Sent by {{ $agencyName }} via KiddieTrac.
+        @php
+          $footLinks = array_filter([
+            $site ? '<a href="' . e($site) . '" style="color:' . e($accent) . ';text-decoration:none;">' . e($siteLabel) . '</a>' : null,
+            !empty($privacyUrl) ? '<a href="' . e($privacyUrl) . '" style="color:' . e($accent) . ';text-decoration:none;">Privacy Policy</a>' : null,
+            !empty($termsUrl) ? '<a href="' . e($termsUrl) . '" style="color:' . e($accent) . ';text-decoration:none;">Terms of Use</a>' : null,
+          ]);
+        @endphp
+        @if($footLinks)<br>{!! implode(' &middot; ', $footLinks) !!}@endif
       </td></tr>
 
     </table>
