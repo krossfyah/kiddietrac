@@ -111,8 +111,9 @@ final class CurrencyController extends Controller
     public function show(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $cur = DB::table('agencies')->where('id', $agencyId)->value('currency') ?: 'CAD';
-        if (!isset(self::SUPPORTED[$cur])) $cur = 'CAD';
+        $fallback = \App\Support\Jurisdictions::forAgency($agencyId)['currency'] ?? 'CAD';
+        $cur = DB::table('agencies')->where('id', $agencyId)->value('currency') ?: $fallback;
+        if (!isset(self::SUPPORTED[$cur])) $cur = isset(self::SUPPORTED[$fallback]) ? $fallback : 'CAD';
         return response()->json([
             'currency'  => $cur,
             'symbol'    => self::SUPPORTED[$cur]['symbol'],
@@ -163,7 +164,72 @@ final class CurrencyController extends Controller
             'locale'     => $row->locale ?? null,
             'pack'       => $code ? array_merge(['code' => $code], self::COUNTRIES[$code]) : null,
             'supported'  => $this->countryList(),
+            // Province / state (2026-10-09): the jurisdiction profile the rest of the product reads.
+            'jurisdiction'  => \App\Support\Jurisdictions::codeFor($agencyId),
+            'jurisdictions' => \App\Support\Jurisdictions::options(),
+            'profile'       => $this->profileSummary(\App\Support\Jurisdictions::forAgency($agencyId)),
         ]);
+    }
+
+    /** What the settings card shows about a jurisdiction: a short, human summary of its profile. */
+    private function profileSummary(array $p): array
+    {
+        $inc = $p['incident'] ?? [];
+        return [
+            'code' => $p['code'], 'label' => $p['label'], 'country' => $p['country'], 'authority' => $p['authority'] ?? null,
+            'currency' => $p['currency'], 'timezone' => $p['timezone'],
+            'license_types' => $p['license_types'] ?? [],
+            'drills' => array_column((array) ($p['drills'] ?? []), 'label'),
+            'background_checks' => array_column((array) ($p['background_checks'] ?? []), 'label'),
+            'background_check_note' => $p['background_check_note'] ?? null,
+            'serious_incident' => trim(($inc['serious_label'] ?? 'Serious incident')
+                . (! empty($inc['report_to']) ? ' — reported to ' . $inc['report_to'] : '')
+                . (! empty($inc['deadline']) ? ', ' . $inc['deadline'] : '')),
+            'pd_hours' => $p['pd_hours'] ?? null,
+            'terms' => $p['terms'] ?? [],
+            'privacy_note' => $p['privacy_note'] ?? null,
+        ];
+    }
+
+    /** GET /admin/jurisdiction — the active agency's profile (any signed-in user: screens read its wording). */
+    public function showJurisdiction(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $p = \App\Support\Jurisdictions::forAgency($agencyId);
+        return response()->json(['jurisdiction' => $p['code'], 'profile' => $this->profileSummary($p), 'incident' => $p['incident'] ?? null,
+            'drills' => $p['drills'] ?? [], 'immunization_schedule' => $p['immunization_schedule'] ?? null]);
+    }
+
+    /**
+     * PATCH /admin/jurisdiction { jurisdiction } — admins. Sets the province/state; when it is in
+     * another country than the agency's, the country pack (currency + locale) follows, exactly as
+     * PATCH /admin/country does. Timezones are NEVER changed here: the profile's timezone is only
+     * the fallback for an agency that has none set.
+     */
+    public function updateJurisdiction(Request $request): JsonResponse
+    {
+        $this->assertAdmin($request);
+        $data = $request->validate(['jurisdiction' => ['required', 'string', 'in:' . implode(',', array_keys(\App\Support\Jurisdictions::all()))]]);
+        $agencyId = $this->resolveAgencyId($request);
+        $p = \App\Support\Jurisdictions::profile($data['jurisdiction']);
+        $row = DB::table('agencies')->where('id', $agencyId)->first(['settings', 'jurisdiction']);
+        $settings = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
+        $update = ['jurisdiction' => $p['code'], 'updated_at' => now()];
+        if (($settings['country'] ?? null) !== $p['country'] && isset(self::COUNTRIES[$p['country']])) {
+            $settings['country'] = $p['country'];
+            $update['settings'] = json_encode($settings);
+            $update['currency'] = self::COUNTRIES[$p['country']]['currency'];
+            $update['locale'] = self::COUNTRIES[$p['country']]['locale'];
+        }
+        DB::table('agencies')->where('id', $agencyId)->update($update);
+        try {
+            \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $agencyId, 'action' => 'agency.jurisdiction_changed', 'entity_type' => 'agency', 'entity_id' => $agencyId,
+                'payload' => json_encode(['summary' => 'Province/state changed from ' . ($row->jurisdiction ?? '—') . ' to ' . $p['code'] . ' (' . $p['label'] . ')']),
+                'ip_address' => substr((string) $request->ip(), 0, 45), 'created_at' => now()]);
+        } catch (\Throwable $e) {}
+
+        return response()->json(['ok' => true, 'jurisdiction' => $p['code'], 'profile' => $this->profileSummary($p),
+            'country' => $p['country'], 'currency' => $update['currency'] ?? null]);
     }
 
     /** PATCH /admin/country { country } — applies currency + locale + compliance */

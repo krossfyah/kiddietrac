@@ -2163,6 +2163,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
        assertAdmin() themselves as well. */
     Route::get('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'show']);
     Route::get('/admin/country',  [\App\Http\Controllers\Api\CurrencyController::class, 'showCountry']);
+    // Province / state profile (2026-10-09, App\Support\Jurisdictions) — read by screens for wording and rules.
+    Route::get('/admin/jurisdiction', [\App\Http\Controllers\Api\CurrencyController::class, 'showJurisdiction']);
 
     // ---- Agency billing config (late-fee + SMS + locale) ----
     /* TUITION / FEE PLANS, OWN CENTRE (2026-10-05): a centre director manages their own
@@ -2185,6 +2187,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            administrative. */
         Route::patch('/admin/currency', [\App\Http\Controllers\Api\CurrencyController::class, 'update']);
         Route::patch('/admin/country', [\App\Http\Controllers\Api\CurrencyController::class, 'updateCountry']);
+        Route::patch('/admin/jurisdiction', [\App\Http\Controllers\Api\CurrencyController::class, 'updateJurisdiction']);
         // Twilio credentials per agency, set from the portal rather than .env.
         Route::get  ('/admin/sms-settings',      [\App\Http\Controllers\Api\SmsSettingsController::class, 'show']);
         Route::get  ('/admin/sms-settings/telnyx-usage', [\App\Http\Controllers\Api\SmsSettingsController::class, 'telnyxUsage']);

@@ -8544,6 +8544,26 @@
       sel.appendChild(o);
     });
     selWrap.appendChild(sel); topRow.appendChild(selWrap);
+    /* PROVINCE / STATE (2026-10-09). The jurisdiction the rest of the product reads for its
+       rules and wording (drills, background checks, serious-incident wording and deadline,
+       certification deadlines). Only this country's provinces/states are offered. */
+    var jurWrap = Dom.el('div', { style: 'flex:1;min-width:200px;' });
+    jurWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Province / state'));
+    var jurSel = Dom.el('select', { style: 'width:100%;padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;' });
+    jurWrap.appendChild(jurSel); topRow.appendChild(jurWrap);
+    function fillJur() {
+      Dom.clear(jurSel);
+      var list = (info.jurisdictions || []).filter(function (j) { return !sel.value || j.country === sel.value; });
+      if (!list.length) { jurSel.appendChild(Dom.el('option', { value: '' }, 'Not available yet for this country')); jurSel.disabled = true; return; }
+      jurSel.disabled = false;
+      list.forEach(function (j) {
+        var o = Dom.el('option', { value: j.code }, j.label);
+        if (info.jurisdiction === j.code) o.selected = true;
+        jurSel.appendChild(o);
+      });
+    }
+    fillJur();
+    sel.addEventListener('change', fillJur);
     var applyBtn = Dom.el('button', { style: btnPrimary() }, 'Apply');
     topRow.appendChild(applyBtn);
     card.appendChild(topRow);
@@ -8574,6 +8594,33 @@
     }
     renderPack(info.pack, info.currency, info.locale);
 
+    // What the chosen province/state means in KiddieTrac.
+    var profBox = Dom.el('div', { style: 'margin-top:12px;' });
+    card.appendChild(profBox);
+    function renderProfile(p) {
+      Dom.clear(profBox);
+      if (!p) return;
+      var rows = [
+        ['Licensing', p.authority],
+        ['Drills', (p.drills || []).join(' · ')],
+        ['Background checks', (p.background_checks || []).join(' · ') + (p.background_check_note ? ' — ' + p.background_check_note : '')],
+        ['Serious incidents', p.serious_incident],
+        ['Training hours', p.pd_hours ? (p.pd_hours.hours + ' hours a year (year starts month ' + p.pd_hours.year_starts_month + ')') : ''],
+        ['Subsidy', p.terms && p.terms.subsidy], ['Quality rating', p.terms && p.terms.quality_rating], ['Staff registry', p.terms && p.terms.registry],
+        ['Privacy', p.privacy_note],
+      ].filter(function (r) { return r[1]; });
+      var box = Dom.el('div', { style: 'border:1px solid var(--ink-100,#E5E7EB);border-radius:10px;padding:10px 12px;' });
+      box.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;margin-bottom:6px;' }, '📍 ' + p.label + ' rules KiddieTrac follows'));
+      rows.forEach(function (r) {
+        var line = Dom.el('div', { style: 'display:flex;gap:10px;font-size:12.5px;padding:3px 0;' });
+        line.appendChild(Dom.el('div', { style: 'flex:0 0 130px;color:var(--ink-500);' }, r[0]));
+        line.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;' }, String(r[1])));
+        box.appendChild(line);
+      });
+      profBox.appendChild(box);
+    }
+    renderProfile(info.profile);
+
     applyBtn.addEventListener('click', async function () {
       if (!sel.value) { msg.style.color = '#DC2626'; msg.textContent = 'Pick a country first.'; return; }
       applyBtn.disabled = true; msg.style.color = '#1F6080'; msg.textContent = 'Applying…';
@@ -8581,6 +8628,12 @@
         var r = await Api.patch('/admin/country', { country: sel.value });
         msg.style.color = '#16A34A'; msg.textContent = '✓ Applied ' + r.country + ' — currency set to ' + r.currency + '.';
         renderPack(r.pack, r.currency, r.locale);
+        if (jurSel.value && !jurSel.disabled) {
+          var rj = await Api.patch('/admin/jurisdiction', { jurisdiction: jurSel.value });
+          info.jurisdiction = rj.jurisdiction;
+          renderProfile(rj.profile);
+          msg.textContent = '✓ Applied ' + rj.profile.label + ', ' + r.country + ' — currency ' + r.currency + '.';
+        }
         if (Dom.toast) Dom.toast('Country compliance applied: ' + r.currency, 'success');
       } catch (e) {
         msg.style.color = '#DC2626'; msg.textContent = 'Failed: ' + (e.message || 'error');
