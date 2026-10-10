@@ -942,11 +942,12 @@
          ever readable from the immunization SECTION or buried in Attachments among
          everything else, so the one screen about this child could not answer "is she up
          to date?". (Anthony, 2026-09-10) */
-      var TABS = [['overview', '👤 Overview'], ['enrollment', '🏫 Enrollment'], ['daily', '📊 Daily reports'], ['incidents', '🩹 Incidents'], ['immunization', '💉 Immunization'], ['feed', '📸 Live feed'], ['attachments', '📎 Attachments'], ['history', '🗄️ Full history']];
+      var TABS = [['overview', '👤 Overview'], ['enrollment', '🏫 Enrollment'], ['daily', '📊 Daily reports'], ['incidents', '🩹 Incidents'], ['immunization', '💉 Immunization'], ['feed', '📸 Live feed'], ['attachments', '📎 Attachments'], ['notes', '📝 Notes'], ['history', '🗄️ Full history']];
       /* While editing, the allergies get their own tab (2026-10-09: "the allergies section
          should be added when your editing the child record as a subtab"). */
       // (Allergies & health is a subtab of the Edit popup, not of the record — 2026-10-09.)
-      var activeTab = 'overview';
+      // A note alert links here with &tab=notes (2026-10-09).
+      var activeTab = (params && params.tab === 'notes') ? 'notes' : 'overview';
       /* ALL THE TABS IN VIEW (2026-10-09: "the subtabs are scrollable vs all there
          visually"): they wrap onto a second line instead of scrolling sideways. */
       var tabbar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:2px 4px;border-bottom:1px solid #E5E7EB;margin:4px 0 18px;' });
@@ -992,6 +993,10 @@
         else if (activeTab === 'immunization') renderImmunizationTab(tabContent, child);
         else if (activeTab === 'attachments') renderAttachmentsTab(tabContent, child);
         else if (activeTab === 'history') renderHistoryTab(tabContent, child);
+        else if (activeTab === 'notes') {
+          if (KT.renderChildNotes) KT.renderChildNotes(tabContent, child.id);
+          else tabContent.textContent = 'Reload the page to see notes.';
+        }
         else renderOverviewTab(tabContent, child);
       }
       // Tabs sit directly under the header — they decide what you are looking at,

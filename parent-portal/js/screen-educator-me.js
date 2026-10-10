@@ -356,6 +356,10 @@
       html += '<div style="' + CARD + 'color:#16A34A;font-weight:700;font-size:13.5px;">✓ No allergies or medical alerts on file.</div>';
     }
 
+    /* NOTES (2026-10-09, Anthony: "allow educators to add notes to child record and see
+       time/days and can edit"). Filled by KT.renderChildNotes once the record is drawn. */
+    html += '<div style="' + CARD + '"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">📝 Notes</div><div id="cr-notes"></div></div>';
+
     /* Usual drop-off / pick-up. The room plans the day around these, and an
        educator wondering "is someone late?" should not have to leave the record
        to find out. Stored as a wall-clock TIME, so nothing is converted. */
@@ -473,6 +477,8 @@
     html += '</div>';
 
     ov.querySelector('#cr-body').innerHTML = html;
+    var notesBox = ov.querySelector('#cr-notes');
+    if (notesBox && KT.renderChildNotes) KT.renderChildNotes(notesBox, childId);
     renderHistory();
     makeCollapsible(ov);
 
