@@ -54,7 +54,18 @@ class SecurityHeaders
         }
         $h->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $h->set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
-        $h->set('Cross-Origin-Resource-Policy', 'same-site');
+        /* CROSS-ORIGIN FOR WHAT EMAILS EMBED (2026-10-09). same-site tells a browser to refuse
+           this response inside any page outside *.kiddietrac.com. Gmail fetches images on its
+           own servers, where the header means nothing, so the provider photo showed there; new
+           Outlook and Outlook on the web load images straight into an outlook.com page, which
+           obeys it, so the same photo was a broken image (Anthony: "the educator photo didnt
+           show up at all with a broken link" in Outlook). The two routes that exist only to be
+           shown inside someone's mail reader -- signed email media (/media/e/{token}) and the
+           open-tracking pixel (/e/o/{token}) -- say cross-origin; everything else stays
+           same-site. */
+        $path = '/' . ltrim($request->path(), '/');
+        $h->set('Cross-Origin-Resource-Policy',
+            preg_match('#^/api/v1/(media/e|e/o)/#', $path) ? 'cross-origin' : 'same-site');
         $h->set('X-Permitted-Cross-Domain-Policies', 'none');
 
         // HSTS only over HTTPS. 1 year; add includeSubDomains + preload later

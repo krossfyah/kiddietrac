@@ -12,7 +12,7 @@
   $blk = function ($t) { $t = (string) $t; return strip_tags($t) === $t ? nl2br(e($t)) : $t; };
 @endphp
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -82,9 +82,21 @@
   [data-ogsc] .kt-logobar, [data-ogsb] .kt-logobar { background:#FFFFFF !important; border-color:#C6D0DE !important; }
   [data-ogsc] .kt-logobar td, [data-ogsb] .kt-logobar td { background:#FFFFFF !important; }
 </style>
+{{-- OUTLOOK FOR WINDOWS (2026-10-09, Anthony: "the email ... in outlook shows up way
+     differently than in gmail"). Outlook renders with Word: it ignores the font on <body>
+     (so every cell fell back to Times New Roman), ignores gradients, div padding, rounded
+     corners and inline-block buttons. These rules and the bgcolor / table fallbacks below
+     are read only by Outlook; Gmail and Apple Mail never see them. --}}
+<!--[if mso]>
+<style>
+  table, td, div, p, a, span, h2, strong { font-family: 'Segoe UI', Arial, sans-serif !important; }
+  table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+</style>
+<noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+<![endif]-->
 </head>
 <body style="margin:0;padding:0;background:#EEF1F6;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0B1A33;">
-<span style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">A warm welcome from {{ $providerName }} — meet your child's provider and what to expect.</span>
+<span style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;font-size:1px;line-height:1px;">A warm welcome from {{ $providerName }} — meet your child's provider and what to expect.</span>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="kt-page" style="background:#EEF1F6;color:#0B1A33;">
   <tr><td align="center" class="kt-page" style="padding:24px 14px;background:#EEF1F6;color:#0B1A33;">
     <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
@@ -103,14 +115,14 @@
            It also generalises — any logo an agency uploads, light or dark, sits
            correctly on white, which is not true of the gradient. --}}
       @if(!empty($agencyLogoPanelUrl))
-      <tr><td align="center" class="kt-logobar" style="background:#FFFFFF;border:1px solid #D7DEE8;border-bottom:none;border-radius:16px 16px 0 0;padding:22px 24px 20px;">
+      <tr><td align="center" bgcolor="#FFFFFF" class="kt-logobar" style="background:#FFFFFF;border:1px solid #D7DEE8;border-bottom:none;border-radius:16px 16px 0 0;padding:22px 24px 20px;">
         <img src="{{ $agencyLogoPanelUrl }}" alt="{{ $agencyName }}" width="286" style="width:286px;max-width:100%;height:auto;display:block;margin:0 auto;border:0;outline:none;text-decoration:none;">
       </td></tr>
       @endif
 
       {{-- Hero banner. Square on top when the logo panel is above it, so the two
            read as one card rather than two stacked ones. --}}
-      <tr><td style="background:linear-gradient(135deg,{{ $primary }} 0%,{{ $accent }} 135%);border-radius:{{ !empty($agencyLogoPanelUrl) ? '0' : '16px 16px 0 0' }};padding:30px 34px 30px;">
+      <tr><td bgcolor="{{ $primary }}" style="background-color:{{ $primary }};background:linear-gradient(135deg,{{ $primary }} 0%,{{ $accent }} 135%);border-radius:{{ !empty($agencyLogoPanelUrl) ? '0' : '16px 16px 0 0' }};padding:30px 34px 30px;">
         @if(empty($agencyLogoPanelUrl))
           <div style="color:#ffffff;font-size:23px;font-weight:800;margin-bottom:18px;letter-spacing:-0.3px;">{{ $agencyName }}</div>
         @endif
@@ -120,7 +132,7 @@
       </td></tr>
 
       {{-- Body card --}}
-      <tr><td class="kt-card" style="background:#ffffff;color:#2A3D5F;border-radius:0 0 16px 16px;padding:8px 34px 30px;box-shadow:0 1px 4px rgba(8,28,65,.06);">
+      <tr><td class="kt-card" bgcolor="#ffffff" style="background:#ffffff;color:#2A3D5F;border-radius:0 0 16px 16px;padding:8px 34px 30px;box-shadow:0 1px 4px rgba(8,28,65,.06);">
 
         {{-- Provider profile --}}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 8px;">
@@ -129,7 +141,7 @@
               @if(!empty($providerPhotoUrl))
                 <img src="{{ $providerPhotoUrl }}" alt="{{ $providerName }}" width="76" height="76" style="width:76px;height:76px;border-radius:50%;object-fit:cover;border:3px solid {{ $accent }};display:block;">
               @else
-                <div style="width:76px;height:76px;border-radius:50%;background:{{ $accent }};color:#fff;font-size:34px;text-align:center;line-height:76px;">👩</div>
+                <table role="presentation" cellpadding="0" cellspacing="0"><tr><td width="76" height="76" align="center" valign="middle" bgcolor="{{ $accent }}" style="width:76px;height:76px;border-radius:50%;background:{{ $accent }};color:#fff;font-size:34px;text-align:center;">👩</td></tr></table>
               @endif
             </td>
             <td valign="top">
@@ -141,10 +153,12 @@
         </table>
 
         {{-- Bio --}}
-        <div class="kt-panel" style="background:#F6F8FB;color:#2A3D5F;border-left:4px solid {{ $accent }};border-radius:8px;padding:16px 18px;margin:14px 0 6px;">
-          <div class="kt-muted" style="font-size:11.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#7A8AA3;margin-bottom:6px;">A little about me</div>
-          <div class="kt-text" style="font-size:14.5px;color:#2A3D5F;line-height:1.6;">{!! nl2br(e($providerBio)) !!}</div>
-        </div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0 6px;">
+          <tr><td class="kt-panel" bgcolor="#F6F8FB" style="background:#F6F8FB;color:#2A3D5F;border-left:4px solid {{ $accent }};border-radius:8px;padding:16px 18px;">
+            <div class="kt-muted" style="font-size:11.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#7A8AA3;margin-bottom:6px;">A little about me</div>
+            <div class="kt-text" style="font-size:14.5px;color:#2A3D5F;line-height:1.6;">{!! nl2br(e($providerBio)) !!}</div>
+          </td></tr>
+        </table>
 
         {{-- How we'll nurture --}}
         <h2 class="kt-head" style="font-size:16px;color:{{ $primary }};font-weight:800;margin:26px 0 8px;">🌱 How we'll care for {{ $childName ?: 'your little one' }} this term</h2>
@@ -163,9 +177,11 @@
         </table>
 
         {{-- CTA --}}
-        <div style="text-align:center;margin:22px 0 6px;">
-          <a href="{{ $portalUrl }}" style="display:inline-block;background:{{ $primary }};color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;padding:14px 30px;border-radius:9px;">Open your parent app →</a>
-        </div>
+        <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:22px auto 6px;">
+          <tr><td align="center" bgcolor="{{ $primary }}" style="background:{{ $primary }};border-radius:9px;mso-padding-alt:14px 30px;">
+            <a href="{{ $portalUrl }}" style="display:inline-block;background:{{ $primary }};color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;padding:14px 30px;border-radius:9px;mso-padding-alt:0;">Open your parent app →</a>
+          </td></tr>
+        </table>
 
         {{-- Contacts & escalation --}}
         <h2 class="kt-head" style="font-size:16px;color:{{ $primary }};font-weight:800;margin:26px 0 10px;">☎️ Who to contact</h2>
