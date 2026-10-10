@@ -10,77 +10,27 @@
   // Rich-editor blocks may be HTML; plain-text defaults are not. If a block has
   // no tags, escape it + convert newlines; otherwise trust the (server-sanitised) HTML.
   $blk = function ($t) { $t = (string) $t; return strip_tags($t) === $t ? nl2br(e($t)) : $t; };
+  $heroEnd = (function ($a, $b, $t) {
+      $h = fn ($c) => array_map('hexdec', str_split(ltrim(strlen(ltrim($c, '#')) === 3 ? preg_replace('/(.)/', '$1$1', ltrim($c, '#')) : ltrim($c, '#'), '#'), 2));
+      try { [$r1, $g1, $b1] = $h($a); [$r2, $g2, $b2] = $h($b); } catch (\Throwable $e) { return $b; }
+      return sprintf('#%02X%02X%02X', $r1 + ($r2 - $r1) * $t, $g1 + ($g2 - $g1) * $t, $b1 + ($b2 - $b1) * $t);
+  })($primary, $accent, 100 / 135);
 @endphp
 <!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-{{-- DARK MODE.
-
-     The email declared `color-scheme: light` and then set backgrounds and text
-     colours on DIFFERENT elements — `background:#ffffff` on the card <td>, and
-     `color:#2A3D5F` on the divs inside it. Mail clients that force a dark theme
-     invert what they can see: the white card went near-black, the navy text
-     stayed navy, and the body of the email became dark-on-dark.
-
-     Two fixes, because no single one covers every client:
-
-     1. We now declare `light dark` and ship an actual dark palette below. Apple
-        Mail, iOS, Outlook and Outlook.com honour that and use OUR colours rather
-        than inverting ours.
-     2. Every background below is now paired with a colour on the SAME element.
-        Gmail ignores the media query and inverts regardless, but it inverts an
-        element's background and text together — so a paired declaration survives
-        it, and an unpaired one is what broke.
-
-     Both are needed: the media query alone leaves Gmail broken, and the pairing
-     alone gives Apple Mail a washed-out auto-invert instead of a designed one. --}}
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark">
+{{-- LIGHT ONLY (2026-10-09). This email used to ship a dark palette for clients in dark
+     mode. Gmail ignores it, Outlook applies it — so the same welcome arrived purple-and-gold
+     in Gmail and near-black in Outlook ("the welcome email has a black background ... very
+     different"). It now declares itself light and looks the same everywhere. A reader whose
+     Outlook still darkens it can switch it back with the sun icon at the top of the message. --}}
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
 <title>Welcome to {{ $providerName }}</title>
 <style>
-  :root { color-scheme: light dark; supported-color-schemes: light dark; }
-
-  @media (prefers-color-scheme: dark) {
-    /* The page and the card it sits on. */
-    .kt-page, .kt-page td { background:#0F1523 !important; }
-    .kt-card { background:#182131 !important; color:#D6DEEC !important; }
-
-    /* Body copy, headings and the quieter greys. Headings used the brand navy,
-       which is near-black and unreadable on a dark card. */
-    .kt-text { color:#D6DEEC !important; }
-    .kt-head { color:#EAF1FF !important; }
-    .kt-muted { color:#93A0B8 !important; }
-    .kt-foot, .kt-foot td { color:#8494AC !important; }
-
-    /* Panels: the bio quote and the contacts table. */
-    .kt-panel { background:#1E2939 !important; color:#D6DEEC !important; }
-    .kt-panel-head { background:#232F42 !important; color:#EAF1FF !important; }
-    .kt-bordered { border-color:#2C3A50 !important; }
-    .kt-bordered td { border-color:#2C3A50 !important; }
-
-    /* The logo panel is the ONE thing that must not follow the dark palette: it
-       holds the original logo, which is artwork drawn on white. Invert the panel
-       and the logo keeps its own white rectangle while the panel goes dark, so
-       the file's edges show as a bright box. Pinned white, with the outline
-       darkened just enough to still read against the dark page. */
-    .kt-logobar, .kt-logobar td { background:#FFFFFF !important; }
-    .kt-logobar { border-color:#C6D0DE !important; }
-
-  }
-
-  /* Outlook.com rewrites colours and prefixes the body, so it needs its own
-     selectors — [data-ogsc] for text, [data-ogsb] for backgrounds. */
-  [data-ogsc] .kt-page, [data-ogsb] .kt-page { background:#0F1523 !important; }
-  [data-ogsc] .kt-card, [data-ogsb] .kt-card { background:#182131 !important; color:#D6DEEC !important; }
-  [data-ogsc] .kt-text { color:#D6DEEC !important; }
-  [data-ogsc] .kt-head { color:#EAF1FF !important; }
-  [data-ogsc] .kt-muted, [data-ogsc] .kt-foot { color:#93A0B8 !important; }
-  [data-ogsc] .kt-panel, [data-ogsb] .kt-panel { background:#1E2939 !important; color:#D6DEEC !important; }
-  [data-ogsc] .kt-panel-head, [data-ogsb] .kt-panel-head { background:#232F42 !important; color:#EAF1FF !important; }
-  [data-ogsc] .kt-logobar, [data-ogsb] .kt-logobar { background:#FFFFFF !important; border-color:#C6D0DE !important; }
-  [data-ogsc] .kt-logobar td, [data-ogsb] .kt-logobar td { background:#FFFFFF !important; }
+  :root { color-scheme: light; supported-color-schemes: light; }
 </style>
 {{-- OUTLOOK FOR WINDOWS (2026-10-09, Anthony: "the email ... in outlook shows up way
      differently than in gmail"). Outlook renders with Word: it ignores the font on <body>
@@ -123,12 +73,14 @@
       {{-- Hero banner. Square on top when the logo panel is above it, so the two
            read as one card rather than two stacked ones. --}}
       <tr><td bgcolor="{{ $primary }}" style="background-color:{{ $primary }};background:linear-gradient(135deg,{{ $primary }} 0%,{{ $accent }} 135%);border-radius:{{ !empty($agencyLogoPanelUrl) ? '0' : '16px 16px 0 0' }};padding:30px 34px 30px;">
+        <!--[if gte mso 9]><v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;mso-fit-shape-to-text:true;"><v:fill type="gradient" color="{{ $primary }}" color2="{{ $heroEnd }}" angle="135" /><v:textbox inset="0,0,0,0" style="mso-fit-shape-to-text:true;"><div><![endif]-->
         @if(empty($agencyLogoPanelUrl))
           <div style="color:#ffffff;font-size:23px;font-weight:800;margin-bottom:18px;letter-spacing:-0.3px;">{{ $agencyName }}</div>
         @endif
         <div style="color:#CFE9EA;font-size:12px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;">A warm welcome to our family</div>
         <div style="color:#ffffff;font-size:28px;font-weight:800;line-height:1.2;margin-top:8px;">Welcome to<br>{{ $providerName }} 🌿</div>
         <div style="color:#E9F5F5;font-size:15px;margin-top:14px;line-height:1.6;">{!! $blk($intro) !!}</div>
+        <!--[if gte mso 9]></div></v:textbox></v:rect><![endif]-->
       </td></tr>
 
       {{-- Body card --}}
