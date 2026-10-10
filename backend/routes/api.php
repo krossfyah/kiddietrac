@@ -2221,6 +2221,36 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/drills/{id}',      [\App\Http\Controllers\Api\DrillController::class, 'destroy'])->whereNumber('id');
         Route::post  ('/drills/reminders', [\App\Http\Controllers\Api\DrillController::class, 'reminders']);
     });
+    /* OHIO PFCC + STEP UP TO QUALITY (2026-10-10): directors (their centres) and admins. Both
+       controllers 404 unless the agency is US-OH or has switched the feature on. */
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get   ('/pfcc',                              [\App\Http\Controllers\Api\PfccController::class, 'index']);
+        Route::get   ('/pfcc/children',                     [\App\Http\Controllers\Api\PfccController::class, 'children']);
+        Route::post  ('/pfcc/authorizations',               [\App\Http\Controllers\Api\PfccController::class, 'store']);
+        Route::patch ('/pfcc/authorizations/{id}',          [\App\Http\Controllers\Api\PfccController::class, 'update'])->whereNumber('id');
+        Route::post  ('/pfcc/authorizations/{id}/end',      [\App\Http\Controllers\Api\PfccController::class, 'end'])->whereNumber('id');
+        Route::post  ('/pfcc/authorizations/{id}/agreement',[\App\Http\Controllers\Api\PfccController::class, 'uploadAgreement'])->whereNumber('id');
+        Route::get   ('/pfcc/authorizations/{id}/agreement',[\App\Http\Controllers\Api\PfccController::class, 'agreement'])->whereNumber('id');
+        Route::get   ('/pfcc/authorizations/{id}/copays',   [\App\Http\Controllers\Api\PfccController::class, 'copays'])->whereNumber('id');
+        Route::patch ('/pfcc/copays/{id}',                  [\App\Http\Controllers\Api\PfccController::class, 'payCopay'])->whereNumber('id');
+        Route::get   ('/pfcc/reconciliation',               [\App\Http\Controllers\Api\PfccController::class, 'reconciliation']);
+        Route::get   ('/pfcc/invoices',                     [\App\Http\Controllers\Api\PfccController::class, 'invoices']);
+        Route::get   ('/pfcc/invoices/{id}/split',          [\App\Http\Controllers\Api\PfccController::class, 'splitPreview'])->whereNumber('id');
+        Route::post  ('/pfcc/invoices/{id}/split',          [\App\Http\Controllers\Api\PfccController::class, 'splitApply'])->whereNumber('id');
+        Route::delete('/pfcc/invoices/{id}/split',          [\App\Http\Controllers\Api\PfccController::class, 'splitUndo'])->whereNumber('id');
+        Route::get   ('/pfcc/settings',                     [\App\Http\Controllers\Api\PfccController::class, 'settings']);
+        Route::patch ('/pfcc/settings',                     [\App\Http\Controllers\Api\PfccController::class, 'settings']);
+        Route::get   ('/sutq',                              [\App\Http\Controllers\Api\SutqController::class, 'index']);
+        Route::get   ('/sutq/binder',                       [\App\Http\Controllers\Api\SutqController::class, 'binder']);
+        Route::post  ('/sutq/events',                       [\App\Http\Controllers\Api\SutqController::class, 'storeEvent']);
+        Route::patch ('/sutq/events/{id}',                  [\App\Http\Controllers\Api\SutqController::class, 'updateEvent'])->whereNumber('id');
+        Route::get   ('/sutq/children/{id}/events',         [\App\Http\Controllers\Api\SutqController::class, 'childEvents'])->whereNumber('id');
+        Route::post  ('/sutq/referrals',                    [\App\Http\Controllers\Api\SutqController::class, 'saveReferral']);
+        Route::patch ('/sutq/referrals/{id}',               [\App\Http\Controllers\Api\SutqController::class, 'saveReferral'])->whereNumber('id');
+        Route::post  ('/sutq/cip',                          [\App\Http\Controllers\Api\SutqController::class, 'saveCip']);
+        Route::patch ('/sutq/cip/{id}',                     [\App\Http\Controllers\Api\SutqController::class, 'saveCip'])->whereNumber('id');
+        Route::delete('/sutq/cip/{id}',                     [\App\Http\Controllers\Api\SutqController::class, 'saveCip'])->whereNumber('id');
+    });
 
     // ---- Agency billing config (late-fee + SMS + locale) ----
     /* TUITION / FEE PLANS, OWN CENTRE (2026-10-05): a centre director manages their own

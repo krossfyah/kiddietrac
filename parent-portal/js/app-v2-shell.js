@@ -276,6 +276,9 @@
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
+          // Ohio (2026-10-10): shown only for US-OH agencies or where switched on (screen-ohio.js).
+          { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🏛️' },
+          { hash: 'sutq',          label: 'Step Up To Quality', icon: '⭐' },
           { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
@@ -468,6 +471,9 @@
           { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
+          // Ohio (2026-10-10): shown only for US-OH agencies or where switched on (screen-ohio.js).
+          { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🏛️' },
+          { hash: 'sutq',          label: 'Step Up To Quality', icon: '⭐' },
           { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
@@ -989,6 +995,8 @@
     'tours': 'Prospective families who booked a centre tour.',
     'incidents': 'Injuries, behaviour and safeguarding reports.',
     'drills': 'Fire, weather and lockdown drills — what is owed under your province or state.',
+    'pfcc': 'Ohio publicly funded child care: authorizations, copays, absent days and the weekly TAP reconciliation.',
+    'sutq': 'Step Up To Quality: screening and assessment timers, referrals, the improvement plan and the evidence binder.',
     'medications': 'Medication authorised, given and outstanding.',
     'immunizations': 'Immunisation records and what is missing.',
     'immun-schedule': 'Children with an immunisation due.',

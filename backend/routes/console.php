@@ -449,3 +449,6 @@ Schedule::command('xero:sync')->everyThirtyMinutes()->withoutOverlapping(25)->ru
 Schedule::command('qbo:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
 /* Sage Accounting (cloud): the same, for agencies with automatic sync on in Settings → Sage. */
 Schedule::command('sage:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
+/* Ohio PFCC (2026-10-10): unpaid copays and the absent-day cap — bell only, to directors and
+   admins, only for agencies where PFCC is on. See PfccAlertsCommand. */
+Schedule::command('pfcc:alerts')->dailyAt('07:15')->timezone('America/New_York')->withoutOverlapping(30)->onOneServer();

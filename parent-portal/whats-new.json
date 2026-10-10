@@ -4,6 +4,30 @@
   {
    "type": "new",
    "date": "2026-10-10",
+   "icon": "🏛️",
+   "title": "Ohio publicly funded child care",
+   "body": "For Ohio agencies: record each child's PFCC authorization (case number, dates, care unit, rate and weekly copay) with the signed copay agreement, keep the weekly copay ledger, watch absent days against the half-year limit, and check each Sunday–Saturday week before you submit in TAP, with a CSV. You can also split a draft invoice between the state and the family. Directors and admins get a bell when a copay goes unpaid or a child nears the absent-day limit. Ontario agencies see no change.",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-10",
+   "icon": "⭐",
+   "title": "Step Up To Quality",
+   "body": "For Ohio agencies: timers for each child's developmental screening (within 60 days, results shared within 30), family needs assessment and twice-yearly assessments, a referral log with follow-up dates, a continuous improvement plan per centre, and an evidence binder showing what is in place and what is missing. Ohio's Early Learning and Development Standards are now a learning framework too.",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-10",
    "icon": "🎓",
    "title": "Staff training, checks and deadlines",
    "body": "Where your province or state sets staff deadlines (Ohio today), Compliance now tracks them: first aid, CPR, child abuse training and orientation counted from each person's hire date, required background checks, the registry number and yearly training hours. Staff log their hours in My training and you approve them. Ontario agencies see no change.",

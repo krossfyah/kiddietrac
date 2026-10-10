@@ -114,6 +114,21 @@ final class LearningFrameworks
                     'social_studies'   => ['Social studies', 'Diversity, community roles, decision-making and ecology.'],
                 ],
             ],
+            /* Ohio (2026-10-10). The five domains and their strands are VERIFIED against "Ohio's Early
+               Learning and Development Standards in All Essential Domains of School Readiness (Birth -
+               Age 5)", Ohio Department of Education & Workforce. TO COMPLETE: the topics under each
+               strand and the age-band standard statements (infants, young toddlers, older toddlers,
+               pre-K) are not loaded yet. Step Up To Quality asks that curriculum align to these. */
+            'OH_ELDS' => [
+                'name' => "Ohio's Early Learning and Development Standards", 'short' => 'Ohio ELDS', 'region' => 'Ohio',
+                'areas' => [
+                    'social_emotional'  => ['Social and emotional development', 'Strands: Self; Relationships.'],
+                    'physical'          => ['Physical well-being and motor development', 'Strands: Motor development; Physical well-being.'],
+                    'approaches'        => ['Approaches toward learning', 'Strands: Initiative; Engagement and persistence; Creativity.'],
+                    'language_literacy' => ['Language and literacy development', 'Strands: Listening and speaking; Reading; Writing.'],
+                    'cognition'         => ['Cognition and general knowledge', 'Cognitive skills, plus mathematics, social studies and science.'],
+                ],
+            ],
             'CUSTOM' => [
                 'name' => 'Our own framework', 'short' => 'Custom', 'region' => 'Your agency',
                 'areas' => [],   // filled from settings.learning_framework.custom_areas
@@ -139,6 +154,8 @@ final class LearningFrameworks
                    'cognitive' => 'cognition', 'creative_arts' => 'approaches', 'language_literacy' => 'language_literacy'],
         'EYFS' => ['social_emotional' => 'psed', 'physical' => 'physical', 'self_care' => 'physical', 'outdoor' => 'understanding_world',
                    'cognitive' => 'mathematics', 'creative_arts' => 'expressive_arts', 'language_literacy' => 'communication_language'],
+        'OH_ELDS' => ['social_emotional' => 'social_emotional', 'physical' => 'physical', 'self_care' => 'physical', 'outdoor' => 'physical',
+                      'cognitive' => 'cognition', 'creative_arts' => 'approaches', 'language_literacy' => 'language_literacy'],
         'HIGHSCOPE' => ['social_emotional' => 'social_emotional', 'physical' => 'physical_health', 'self_care' => 'physical_health', 'outdoor' => 'science_tech',
                         'cognitive' => 'mathematics', 'creative_arts' => 'creative_arts', 'language_literacy' => 'language_literacy'],
     ];
@@ -165,7 +182,7 @@ final class LearningFrameworks
     {
         $p = strtoupper(trim((string) $province));
         $c = strtoupper(trim((string) $country));
-        if (in_array($c, ['US', 'USA', 'UNITED STATES'], true)) return 'ELOF';
+        if (in_array($c, ['US', 'USA', 'UNITED STATES'], true)) return in_array($p, ['OH', 'OHIO'], true) ? 'OH_ELDS' : 'ELOF';
         if (in_array($c, ['GB', 'UK', 'UNITED KINGDOM', 'ENGLAND'], true)) return 'EYFS';
         return match ($p) {
             'BC', 'BRITISH COLUMBIA' => 'BC_ELF',
