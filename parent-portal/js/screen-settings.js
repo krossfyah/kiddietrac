@@ -41,7 +41,7 @@
   var CARD = 'background:#fff;border-radius:16px;box-shadow:0 1px 6px rgba(15,23,42,.06);padding:16px;margin-bottom:14px;';
   var LABEL = 'font-size:12px;font-weight:800;letter-spacing:.4px;color:#475569;margin:0 0 5px;text-transform:uppercase;';
   var INPUT = 'width:100%;box-sizing:border-box;padding:12px 14px;font-size:16px;border:1.5px solid #E3EAF1;border-radius:11px;background:#fff;color:#0D1B2A;';
-  var SECT = 'font-size:15px;font-weight:800;color:#0f172a;margin:0 0 12px;';
+  var SECT = 'font-size:16px;font-weight:800;color:#0f172a;margin:0 0 10px;';
 
   function apiBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
   function token() { try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; } }
@@ -248,8 +248,13 @@
      agency admin "My profile → Security" said "The security panel is not loaded."
      and the passkey section added on 2026-09-28 was unreachable for them. */
   function buildSecurityCard() {
+    /* Three cards, not one 1,000px card (2026-10-09): password, two-factor, and how this
+       device signs in. Returned in a display:contents group, so the Settings columns place
+       each card and the "My profile" dialog simply stacks them. */
+    var grp = el('div', { class: 'kt-st-group' });
     var sc = el('div', { style: CARD });
-    sc.appendChild(el('div', { style: SECT }, ['Security']));
+    grp.appendChild(sc);
+    sc.appendChild(el('div', { style: SECT }, ['Password']));
 
     // change password
     var cur = field(sc, 'Current password', 'password', '');
@@ -290,30 +295,31 @@
       var _roles = (cachedUser().roles) || [];
       var _mfa = window.KT && KT.MfaScreen;
       if (_mfa && _mfa.appliesTo && _mfa.appliesTo(_roles)) {
-        sc.appendChild(el('div', {
-          style: 'height:1px;background:#EEF2F7;margin:16px 0 14px;',
-        }));
+        var _mc = el('div', { style: CARD });
+        grp.appendChild(_mc);
         var _hdr = el('div', {
-          style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px;',
+          style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px;',
         });
         _hdr.appendChild(el('div', {
-          style: 'font-size:14px;font-weight:800;color:#0f172a;',
-        }, ['🔐 Two-factor authentication']));
+          style: 'font-size:16px;font-weight:800;color:#0f172a;',
+        }, ['Two-factor authentication']));
         if (_mfa.required && _mfa.required(_roles)) {
           _hdr.appendChild(el('span', {
             style: 'font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;'
               + 'background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:20px;',
           }, ['Required for your role']));
         }
-        sc.appendChild(_hdr);
-        var _mfaBox = el('div', {});
-        sc.appendChild(_mfaBox);
+        _mc.appendChild(_hdr);
+        var _mfaBox = el('div', { class: 'kt-st-mfa' });
+        _mc.appendChild(_mfaBox);
         _mfa.render(_mfaBox, { embedded: true });
       }
     } catch (e) { /* the rest of Settings must render even if this does not */ }
 
-    // biometric toggle (native only)
-    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
+    // biometric toggle (native only) — the third card: how THIS device signs in.
+    sc = el('div', { style: CARD });
+    grp.appendChild(sc);
+    sc.appendChild(el('div', { style: SECT }, ['Sign-in on this device']));
     var bioRow = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
     var bioSub = el('div', { style: 'font-size:12px;color:#64748B;', id: 'kt-bio-sub' }, ['Checking…']);
     bioRow.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Fingerprint / Face sign-in']), bioSub]));
@@ -422,7 +428,7 @@
     }
     if (pin) pinBtn.addEventListener('click', function () { pinFlow(pinArea, paintPin); });
     paintPin();
-    return sc;
+    return grp;
   }
   KT.renderSecurityEditor = function (host) {
     host.innerHTML = '';
@@ -579,22 +585,46 @@
        two to a row from 900px up; phones keep the single column and the 16px inputs
        (smaller text makes iOS zoom the page on focus). The grid is a CLASS so the tab
        switcher's style.display = '' still shows a pane as a grid. */
-    if (!document.getElementById('kt-st-wide-css')) {
+    /* ONE LAYOUT FOR EVERY SETTINGS TAB (2026-10-09, Anthony: "under settings ... the boxes
+       are all over the place and are not consistent - full sweep ... make this nice").
+       Measured before: Profile/Security were a two-column GRID, so each row was as tall as
+       its tallest card — a 616px Profile beside a 155px Language left a 460px hole, and the
+       848px "Texts and phone calls" card sat alone; padding, radius, headings and buttons
+       differed card to card; Documents was its own 820px centred block with no card.
+       Now: Profile and Security flow into two balanced COLUMNS (cards never stretch or leave
+       a hole), every card is the same white card with the same heading, fields fill their
+       card at one height, and buttons share one size. Tabs with a single thing (Documents,
+       Payments, Payroll, About) are one full-width card. Phones: one column, 16px fields
+       (smaller text makes iOS zoom on focus). All scoped to .kt-st-wrap. */
+    try { var _oldSt = document.getElementById('kt-st-wide-css'); if (_oldSt) _oldSt.remove(); } catch (e) {}
+    if (!document.getElementById('kt-st-layout-v2')) {
       var stCss = document.createElement('style');
-      stCss.id = 'kt-st-wide-css';
+      stCss.id = 'kt-st-layout-v2';
+      var CARDSEL = '.kt-st-cols > div,.kt-st-cols > .kt-st-group > div,.kt-st-full > div';
       stCss.textContent = ''
         + '.kt-st-wrap{padding:2px 2px 12px;max-width:1800px;margin:0 auto;box-sizing:border-box;}'
-        + '.kt-st-grid{display:block;}'
-        + '@media (min-width:900px){'
+        + '.kt-st-group{display:contents;}'
+        + CARDSEL.split(',').map(function (x) { return x + '{background:#fff !important;border-radius:14px !important;box-shadow:0 1px 3px rgba(15,23,42,.06) !important;padding:18px 20px !important;margin:0 0 16px !important;box-sizing:border-box;break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;}'; }).join('')
+        + CARDSEL.split(',').map(function (x) { return x + ':not([style*="#FECACA"]):not([style*="#FCA5A5"]){border:1px solid #E6ECF2 !important;}'; }).join('')
+        + '.kt-st-docs{background:#fff;border:1px solid #E6ECF2;border-radius:14px;box-shadow:0 1px 3px rgba(15,23,42,.06);padding:18px 20px;box-sizing:border-box;}'
+        + '.kt-st-docs > div{max-width:none !important;margin:0 !important;padding:0 !important;border:0 !important;box-shadow:none !important;}'
+        + '.kt-st-wrap button.kt-actionbtn,.kt-st-wrap .kt-st-primary{display:inline-flex !important;align-items:center;justify-content:center;min-height:36px !important;padding:0 18px !important;border-radius:9px !important;font-size:13.5px !important;font-weight:800 !important;margin-top:10px !important;width:auto !important;}'
+        + '.kt-st-wrap button[style*="1.5px solid #cbd5e1"]{border-radius:9px !important;padding:7px 14px !important;font-size:13px !important;}'
+        + '.kt-st-wrap button[style*="#FECACA"],.kt-st-wrap button[style*="#FCA5A5"]{min-height:36px !important;padding:0 16px !important;border-radius:9px !important;font-size:13.5px !important;margin-top:10px !important;}'
+        + '.kt-st-mfa div[style*="box-shadow"]{box-shadow:none !important;padding:0 !important;margin:0 0 14px !important;border-radius:0 !important;background:transparent !important;border:0 !important;}'
+        + '.kt-st-mfa h3{font-size:14px !important;margin:4px 0 6px !important;}'
+        + '.kt-st-mfa p{font-size:13px !important;color:#475569 !important;margin-top:8px !important;}'
+        + '@media (max-width:999px){' + CARDSEL.split(',').map(function (x) { return x + '{padding:16px !important;}'; }).join('') + '}'
+        + '@media (min-width:1000px){'
         +   '.kt-st-wrap{padding:2px 24px 16px;}'
-        +   '.kt-st-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px;align-items:start;}'
-        +   '.kt-st-wrap input:not([type=checkbox]):not([type=radio]):not([type=range]),.kt-st-wrap select{padding:7px 11px !important;font-size:14px !important;border-radius:9px !important;}'
-        +   '.kt-st-wrap textarea{font-size:14px !important;}'
-        // Fields are capped at 480px portal-wide (kt-fullwidth.css). A password box sits in a
-        // position:relative wrapper with its eye button pinned to the WRAPPER's right edge,
-        // so the wrapper gets the same cap or the eye floats off the end of the field.
-        +   '.kt-st-wrap div[style*="position:relative"]{max-width:480px;}'
+        +   '.kt-st-cols{column-count:2;column-gap:18px;}'
+        // (the class is repeated to out-rank kt-fullwidth.css's #appMain input:not(…×10) cap)
+        +   '#appMain .kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),#appMain .kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap select{width:100% !important;max-width:none !important;min-height:34px;padding:6px 11px !important;font-size:14px !important;border-radius:9px !important;box-sizing:border-box;}'
+        +   '#appMain .kt-st-mfa input{width:160px !important;}'
+        +   '.kt-st-wrap textarea{font-size:14px !important;border-radius:9px !important;}'
+        +   '.kt-st-wrap div[style*="position:relative"]{max-width:none;}'
         +   '.kt-st-wrap div[style*="position:relative"] > input{padding-right:46px !important;}'
+        +   '#appMain .kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap .kt-st-full input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]),#appMain .kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap.kt-st-wrap .kt-st-full select,#appMain .kt-st-full div[style*="position:relative"]{max-width:520px !important;}'
         + '}';
       document.head.appendChild(stCss);
     }
@@ -625,12 +655,14 @@
     var isPaidStaff = ['educator', 'home_visitor', 'centre_director', 'agency_admin']
       .indexOf(activeRole) !== -1;
     var tabBar = el('div', { style: 'display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid #E5E7EB;margin-bottom:16px;-webkit-overflow-scrolling:touch;' });
-    var paneProfile = el('div', { class: 'kt-st-grid' });
-    var paneDocs = el('div', { style: 'display:none;' });
-    var panePay = el('div', { style: 'display:none;' });
-    var panePayroll = el('div', { style: 'display:none;' });
-    var paneSecurity = el('div', { class: 'kt-st-grid', style: 'display:none;' });
-    var paneAbout = el('div', { style: 'display:none;' });
+    var paneProfile = el('div', { class: 'kt-st-pane kt-st-cols' });
+    var paneDocs = el('div', { class: 'kt-st-pane kt-st-docs', style: 'display:none;' });
+    // Payments holds Autopay and the Wallet, which draw their own cards and hero; framing
+    // them again in a settings card doubled the border and padding.
+    var panePay = el('div', { class: 'kt-st-pane', style: 'display:none;' });
+    var panePayroll = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;' });
+    var paneSecurity = el('div', { class: 'kt-st-pane kt-st-cols', style: 'display:none;' });
+    var paneAbout = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;' });
     var _stabs = [];
     function stab(label, pane) {
       var b = el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:9px 8px;margin-bottom:-1px;font-size:14px;font-weight:700;color:#6B7280;cursor:pointer;white-space:nowrap;flex:0 0 auto;' }, [label]);
@@ -861,10 +893,10 @@
     // tokens via /push/test-fcm, bypassing chat-recipient logic — the cleanest
     // way to confirm OS notifications actually land in the Android bar.
     try {
-      var nd = el('div', { style: 'background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px;margin-bottom:14px;' });
-      nd.appendChild(el('div', { style: 'font-weight:800;font-size:14px;color:#0F172A;margin-bottom:4px;' }, ['🔔 Notifications']));
+      var nd = el('div', { style: CARD });
+      nd.appendChild(el('div', { style: SECT }, ['Notifications']));
       nd.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' }, ['Send yourself a test push. Tip: background the app first — an open app shows it in-app, not in the bar.']));
-      var ntBtn = el('button', { type: 'button', style: 'display:block;margin-top:16px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);border:0;color:#fff;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:800;cursor:pointer;' }, ['Send test notification']);
+      var ntBtn = el('button', { type: 'button', class: 'kt-st-primary', style: 'border:0;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);cursor:pointer;' }, ['Send test notification']);
       var ntMsg = el('div', { style: 'font-size:12px;margin-top:8px;min-height:16px;' });
       ntBtn.addEventListener('click', function () {
         ntBtn.disabled = true; var old = ntBtn.textContent; ntBtn.textContent = 'Sending…'; ntMsg.style.color = '#64748B'; ntMsg.textContent = '';
@@ -1088,7 +1120,7 @@
 
     // Delete my account (App Store Guideline 5.1.1(v) in-app deletion path).
     var dz = el('div', { style: CARD + 'border:1px solid #FECACA;' });
-    dz.appendChild(el('div', { style: 'font-size:15px;font-weight:800;color:#B91C1C;margin:0 0 8px;' }, ['Delete my account']));
+    dz.appendChild(el('div', { style: 'font-size:16px;font-weight:800;color:#B91C1C;margin:0 0 10px;' }, ['Delete my account']));
     dz.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:12px;' }, ['Your account is managed by your childcare agency. Request deletion and your agency administrator will permanently remove your account and personal data.']));
     var dzStatus = el('div', { style: 'font-size:12.5px;min-height:16px;margin-bottom:8px;' });
     var dzBtn = el('button', { type: 'button', style: 'background:#fff;color:#B91C1C;border:1.5px solid #FCA5A5;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:800;cursor:pointer;min-height:0;' }, ['Request account deletion']);
