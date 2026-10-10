@@ -54,6 +54,8 @@
       body.appendChild(top);
 
       body.appendChild(renderCentreCapacityCard(data.centre_ratios || []));
+      // Staff training & checks from the jurisdiction's rules (kt-staff-compliance.js); empty where there are none.
+      if (window.KT && KT.renderStaffComplianceCard) { var sc = Dom.el('div', {}); body.appendChild(sc); KT.renderStaffComplianceCard(sc); }
     }).catch(function (e) {
       Dom.clear(body);
       body.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, 'Could not load: ' + (e.message || 'error')));

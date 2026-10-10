@@ -1,6 +1,33 @@
 {
- "updated": "2026-10-09",
+ "updated": "2026-10-10",
  "entries": [
+  {
+   "type": "new",
+   "date": "2026-10-10",
+   "icon": "🎓",
+   "title": "Staff training, checks and deadlines",
+   "body": "Where your province or state sets staff deadlines (Ohio today), Compliance now tracks them: first aid, CPR, child abuse training and orientation counted from each person's hire date, required background checks, the registry number and yearly training hours. Staff log their hours in My training and you approve them. Ontario agencies see no change.",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director",
+    "educator",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-10",
+   "icon": "🏠",
+   "title": "Household residents for home daycares",
+   "body": "Where your rules require it (Ohio today), keep a list of the adults living in each home where care is provided, with their background checks — renewal dates fill in from your rules. Directors, admins and the provider themself can see it.",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director",
+    "educator"
+   ]
+  },
   {
    "type": "new",
    "date": "2026-10-09",

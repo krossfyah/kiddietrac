@@ -31,15 +31,6 @@
   function $(s, r) { return (r || document).querySelector(s); }
 
   async function render(container) {
-    // The agency's country, currency and regulatory framework — the same card the
-    // Agency overview shows, rendered from one implementation.
-    try {
-      if (window.KT && KT.renderCountryCard) {
-        const countryHost = document.createElement('div');
-        container.appendChild(countryHost);
-        KT.renderCountryCard(countryHost);
-      }
-    } catch (e) {}
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading branding…</div>';
     const user = getUser();
     // v22p87: use the ACTIVE agency (the one being viewed via the agency
@@ -182,6 +173,21 @@
         </div>
       </div>
     `;
+
+    /* COUNTRY & COMPLIANCE (2026-10-09). The card used to be appended BEFORE the
+       "Loading branding…" placeholder replaced the whole container, so it was drawn and
+       wiped in the same tick and never seen. It is placed now, after the page itself is
+       built: under the heading, above the branding grid. Same card as Agency overview. */
+    try {
+      if (window.KT && KT.renderCountryCard) {
+        const grid = container.querySelector('#kt-brand-grid');
+        const countryHost = document.createElement('div');
+        countryHost.style.cssText = 'margin:0 0 20px;';
+        if (grid && grid.parentNode) grid.parentNode.insertBefore(countryHost, grid);
+        else container.appendChild(countryHost);
+        KT.renderCountryCard(countryHost);
+      }
+    } catch (e) {}
 
     refreshPreview(container, agencyId);
 

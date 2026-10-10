@@ -353,6 +353,8 @@
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
           { hash: 'admin-forms',      label: 'Custom forms',     icon: '📝' },
           { hash: 'compliance',       label: 'Compliance',       icon: '✅' },
+          // Staff training & household residents (2026-10-10): shown only where the jurisdiction has rules (kt-staff-compliance.js).
+          { hash: 'household',        label: 'Household residents', icon: '🏠' },
           { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
           { hash: 'closures',         label: 'Closures',         icon: '🗓' },
           { hash: 'room-ratios',      label: 'Room ratios',      icon: '👥' },
@@ -494,6 +496,8 @@
         ]},
         { label: 'Compliance', items: [
           { hash: 'compliance',        label: 'Compliance',           icon: '✅' },
+          { hash: 'my-training',       label: 'My training',          icon: '🎓' },
+          { hash: 'household',         label: 'Household residents',  icon: '🏠' },
           { hash: 'inspection',        label: 'Inspection checklist', icon: '✅' },
           { hash: 'renewals',          label: 'Renewals calendar',    icon: '📅' },
           { hash: 'cwelcc',            label: 'Subsidies',         icon: '💵' },
@@ -566,6 +570,8 @@
              Terms/Privacy/NDA and anything an admin attached to their record.
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
+          { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'household',     label: 'Household residents', icon: '🏠' },
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
@@ -591,6 +597,8 @@
              Terms/Privacy/NDA and anything an admin attached to their record.
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
+          { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'household',     label: 'Household residents', icon: '🏠' },
           { hash: 'files',          label: 'Files',          icon: '📎' },
         ]},
         { label: 'Account', items: [

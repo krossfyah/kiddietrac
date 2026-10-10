@@ -1888,6 +1888,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/files/{id}',             [\App\Http\Controllers\Api\FamilyFilesController::class, 'destroy'])->whereNumber('id');
     });
 
+    // Staff compliance (2026-10-10): hire date + registry number, deadlines from hire date,
+    // training hours, household residents. Scoped in the controller (admins: agency;
+    // directors: their centres; staff: themselves; a provider: their own home).
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get   ('/admin/staff-compliance',               [\App\Http\Controllers\Api\StaffComplianceController::class, 'rollup']);
+        Route::get   ('/admin/staff-compliance/{user}',        [\App\Http\Controllers\Api\StaffComplianceController::class, 'show'])->whereNumber('user');
+        Route::patch ('/admin/staff-compliance/{user}/hr',     [\App\Http\Controllers\Api\StaffComplianceController::class, 'updateHr'])->whereNumber('user');
+        Route::get   ('/my-compliance',                        [\App\Http\Controllers\Api\StaffComplianceController::class, 'mine']);
+        Route::get   ('/pd-hours',                             [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdIndex']);
+        Route::post  ('/pd-hours',                             [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdStore'])->middleware('throttle:30,1');
+        Route::post  ('/pd-hours/{id}/review',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdReview'])->whereNumber('id');
+        Route::delete('/pd-hours/{id}',                        [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdDelete'])->whereNumber('id');
+        Route::get   ('/pd-hours/{id}/certificate',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdCertificate'])->whereNumber('id');
+        Route::get   ('/household',                            [\App\Http\Controllers\Api\StaffComplianceController::class, 'household']);
+        Route::post  ('/household/{centre}/residents',         [\App\Http\Controllers\Api\StaffComplianceController::class, 'residentStore'])->whereNumber('centre');
+        Route::patch ('/household-residents/{id}',             [\App\Http\Controllers\Api\StaffComplianceController::class, 'residentUpdate'])->whereNumber('id');
+        Route::delete('/household-residents/{id}',             [\App\Http\Controllers\Api\StaffComplianceController::class, 'residentDelete'])->whereNumber('id');
+        Route::post  ('/household-residents/{id}/checks',      [\App\Http\Controllers\Api\StaffComplianceController::class, 'checkStore'])->whereNumber('id');
+        Route::delete('/household-resident-checks/{id}',       [\App\Http\Controllers\Api\StaffComplianceController::class, 'checkDelete'])->whereNumber('id');
+    });
+
     // Educators: their own children's emergency cards, and texting/emailing those children's
     // parents through KiddieTrac (2026-10-09). Room-scoped in the controllers (canAccessChildId).
     Route::middleware('role:educator,centre_director,agency_admin,home_visitor,platform_admin')->prefix('provider')->group(function () {

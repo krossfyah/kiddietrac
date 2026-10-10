@@ -123,6 +123,9 @@ final class Jurisdictions
                     ['code' => 'other', 'label' => 'Other', 'renew_years' => null],
                 ],
                 'background_check_note' => 'Before day one, then every 5 years. Keep the DCY 01176 result notice. In homes, every adult resident is checked.',
+                // Required of every staff member before day one (StaffCompliance). Household residents: same types.
+                'checks_required' => ['bci', 'fbi', 'sex_offender_state', 'sex_offender_national', 'sacwis'],
+                'household_checks' => true,
                 'certifications' => [
                     ['code' => 'First_Aid', 'label' => 'First aid', 'within_days_of_hire' => 90],
                     ['code' => 'CPR', 'label' => 'CPR (with an in-person part)', 'within_days_of_hire' => 90],
