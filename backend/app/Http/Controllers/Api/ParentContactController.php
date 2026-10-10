@@ -87,6 +87,22 @@ final class ParentContactController extends Controller
             'sms_max' => self::SMS_MAX, 'recent' => $recent]);
     }
 
+    /** The family's parents and whether each can be texted / emailed — shared with Message Centre. */
+    public static function familyContacts(int $agencyId, int $familyId): array
+    {
+        $self = new self();
+        $out = [];
+        foreach ($self->guardians($familyId) as $g) {
+            [$smsOk, $smsWhy] = $self->smsState($agencyId, $g);
+            $email = trim((string) $g->email);
+            $emailOk = filter_var($email, FILTER_VALIDATE_EMAIL) && ! \App\Support\ChatAudience::isServiceEmail($email);
+            $out[] = ['user_id' => (int) $g->id, 'name' => trim($g->first_name . ' ' . $g->last_name), 'relationship' => $g->relationship,
+                'is_primary' => (bool) $g->is_primary, 'sms_ok' => $smsOk, 'sms_note' => $smsWhy, 'email_ok' => (bool) $emailOk];
+        }
+
+        return $out;
+    }
+
     /** POST /provider/children/{child}/message-parents {guardian_ids[], channels[], body} */
     public function send(Request $request, int $childId): JsonResponse
     {

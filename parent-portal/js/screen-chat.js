@@ -2118,6 +2118,83 @@
     if (compose && compose.parentNode) compose.parentNode.insertBefore(b, compose); else root.appendChild(b);
   }
 
+  async function openTextEmail(c) {
+    const M = window.KT && KT.Shell && KT.Shell.Modal;
+    if (!M) return;
+    let d;
+    try { d = await api('GET', '/provider/chats/' + c.id + '/parent-contacts'); }
+    catch (e) { if (KT.toast) KT.toast('⚠️', 'Could not open', (e && e.message) || '', '#DC2626'); return; }
+    const gs = d.guardians || [];
+    const max = d.sms_max || 480;
+    const box = document.createElement('div');
+    box.innerHTML = '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-2px 0 10px;">Sent from the agency\'s number and email, not yours. Replies go to the agency.'
+      + (d.sms_thread ? ' This conversation is already a text conversation, so its messages reach the parent\'s phone anyway.' : '') + '</div>'
+      + '<div style="font-size:11.5px;font-weight:800;letter-spacing:.4px;color:#334155;text-transform:uppercase;margin-bottom:4px;">To</div>'
+      + (gs.length ? gs.map((g) => '<label style="display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid #F1F5F9;cursor:pointer;">'
+          + '<input type="checkbox" data-g="' + g.user_id + '" checked style="margin-top:3px;">'
+          + '<span style="flex:1;min-width:0;"><b style="font-size:13.5px;color:#0F172A;">' + escapeHtml(g.name) + '</b>'
+          + '<span style="font-size:12px;color:#64748B;"> · ' + escapeHtml(g.relationship || 'Parent') + '</span><br>'
+          + '<span style="font-size:12px;color:' + (g.sms_ok ? '#047857' : '#B45309') + ';">📱 ' + (g.sms_ok ? 'Can be texted' : escapeHtml(g.sms_note || 'Cannot be texted')) + '</span>'
+          + '<span style="font-size:12px;color:' + (g.email_ok ? '#047857' : '#B45309') + ';"> · ✉️ ' + (g.email_ok ? 'Can be emailed' : 'No email on file') + '</span></span></label>').join('')
+        : '<div style="color:#64748B;font-size:13px;">No parents with an account in this family.</div>')
+      + '<div style="display:flex;gap:8px;margin:12px 0 8px;flex-wrap:wrap;">'
+      + ['sms', 'email', 'all'].map((k) => '<button type="button" data-ch="' + k + '" style="height:30px;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:13px;font-weight:700;cursor:pointer;">'
+          + (k === 'sms' ? '📱 Text' : k === 'email' ? '✉️ Email' : 'All') + '</button>').join('')
+      + '</div>'
+      + '<textarea data-body rows="5" placeholder="Write your message…" style="width:100%;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>'
+      + '<div data-count style="font-size:11.5px;color:#64748B;text-align:right;margin-top:3px;"></div>'
+      + '<label style="display:flex;gap:7px;align-items:center;font-size:13px;color:#334155;margin-top:6px;cursor:pointer;"><input type="checkbox" data-post> Also post it in this Message Centre conversation</label>'
+      + '<div data-out style="font-size:13px;margin-top:8px;"></div>';
+    const chosen = new Set(gs.some((g) => g.sms_ok) ? ['sms'] : ['email']);
+    const ta = box.querySelector('[data-body]'), cnt = box.querySelector('[data-count]'), out = box.querySelector('[data-out]');
+    function paint() {
+      box.querySelectorAll('[data-ch]').forEach((b) => {
+        const k = b.getAttribute('data-ch');
+        const on = k === 'all' ? chosen.size === 2 : chosen.has(k);
+        b.style.background = on ? '#159FB4' : '#fff'; b.style.color = on ? '#fff' : '#334155'; b.style.borderColor = on ? '#159FB4' : '#CBD5E1';
+      });
+      const n = (ta.value || '').trim().length;
+      cnt.textContent = n + (chosen.has('sms') ? ' / ' + max + ' (text)' : ' characters');
+      cnt.style.color = chosen.has('sms') && n > max ? '#B91C1C' : '#64748B';
+    }
+    box.querySelectorAll('[data-ch]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.getAttribute('data-ch');
+      if (k === 'all') { if (chosen.size === 2) { chosen.clear(); chosen.add('email'); } else { chosen.add('sms'); chosen.add('email'); } }
+      else if (chosen.has(k)) { if (chosen.size > 1) chosen.delete(k); } else chosen.add(k);
+      paint();
+    }));
+    ta.addEventListener('input', paint); paint();
+    let done = false;
+    M.open({
+      title: '📱✉️ Text / Email — ' + (d.family_name || c.family_name || 'family'), body: box,
+      actions: [
+        { label: 'Close' },
+        { label: 'Send', primary: true, busyLabel: 'Sending…', handler: function () {
+            if (done) return;
+            const ids = [].map.call(box.querySelectorAll('[data-g]:checked'), (x) => +x.getAttribute('data-g'));
+            const body = (ta.value || '').trim();
+            out.style.color = '#B91C1C';
+            if (!ids.length) { out.textContent = 'Choose at least one parent.'; return false; }
+            if (body.length < 2) { out.textContent = 'Write a message.'; ta.focus(); return false; }
+            if (chosen.has('sms') && body.length > max) { out.textContent = 'A text can be at most ' + max + ' characters — shorten it or send by email only.'; return false; }
+            const post = !!box.querySelector('[data-post]').checked;
+            return api('POST', '/provider/chats/' + c.id + '/text-email', { guardian_ids: ids, channels: [...chosen], body: body, post_in_thread: post }).then((r) => {
+              const res = (r && r.results) || [];
+              out.style.color = '#0F172A';
+              out.innerHTML = res.map((x) => {
+                const ok = x.status === 'sent';
+                return '<div style="color:' + (ok ? '#047857' : '#B45309') + ';">' + (ok ? '✓ ' : '• ') + escapeHtml(x.name || '') + ' — ' + (x.channel === 'sms' ? 'text' : 'email') + ': '
+                  + (ok ? 'sent' : escapeHtml(x.status) + (x.note ? ' (' + escapeHtml(x.note) + ')' : '')) + '</div>';
+              }).join('') + (post && r.message ? '<div style="color:#047857;">✓ Posted in this conversation</div>' : '');
+              done = true;
+              if (KT.toast) KT.toast('💬', r.sent ? 'Sent' : 'Nothing was sent', r.sent ? (r.sent + ' text/email sent') : 'See the reasons in the window', r.sent ? '#16A34A' : '#B45309');
+              return false;
+            }).catch((e) => { out.style.color = '#B91C1C'; out.textContent = (e && e.message) || 'Could not send.'; return false; });
+          } },
+      ],
+    });
+  }
+
   function renderThread(data, container) {
     const c = data.conversation || {};
     const messages = data.messages || [];
@@ -2133,6 +2210,7 @@
             <div style="font-weight:700;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(headerLabel)} ${escapeHtml(subLabel)}</div>
             <div style="font-size:13px;color:#6B7280;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(c.subject || (c.child_name ? 'About ' + c.child_name : 'Conversation'))}</div>
           </div>
+          ${myRole !== 'guardian' ? `<button class="kt-textemail" type="button" title="Text or email the parents" style="background:rgba(31,96,128,.12);border:none;height:40px;padding:0 12px;border-radius:20px;font-size:13px;font-weight:800;color:#1F6080;cursor:pointer;flex-shrink:0;white-space:nowrap;">📱✉️ Text / Email</button>` : ''}
           ${myRole !== 'guardian' ? `<button class="kt-nudge" type="button" title="Nudge the family for a reply" style="background:rgba(31,96,128,.12);border:none;width:40px;height:40px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;line-height:1;">👋</button>` : ''}
         </div>
         <div class="kt-thread-body" data-kt-scroll="1" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px;">
@@ -2144,13 +2222,6 @@
             <button class="kt-attach-remove" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>
           </div>
         </div>
-        ${myRole !== 'guardian' ? `<div class="kt-also-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 12px 0;background:white;border-top:1px solid #E5E7EB;flex-shrink:0;font-size:12px;color:#64748B;">
-          <span style="font-weight:700;">Also send by</span>
-          <button type="button" class="kt-also" data-also="sms" aria-pressed="false" style="height:26px;padding:0 10px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:12px;font-weight:700;cursor:pointer;">📱 Text</button>
-          <button type="button" class="kt-also" data-also="email" aria-pressed="false" style="height:26px;padding:0 10px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:12px;font-weight:700;cursor:pointer;">✉️ Email</button>
-          <button type="button" class="kt-also-all" style="height:26px;padding:0 10px;border-radius:999px;border:1px dashed #CBD5E1;background:#fff;color:#64748B;font-size:12px;font-weight:700;cursor:pointer;">All</button>
-          <span class="kt-also-note" style="font-size:11.5px;color:#94A3B8;">Message Centre only</span>
-        </div>` : ''}
         <div class="kt-thread-compose" style="padding:10px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:4px;flex-shrink:0;align-items:center;position:relative;">
           <input class="kt-attach-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display:none;" />
           <button class="kt-emoji-btn" type="button" title="Emoji" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">😊</button>
@@ -2259,6 +2330,11 @@
     // Nudge — one-tap "please check your messages" ping to the family (the
     // provider mirror of the parent's 👋 nudge). The family's guardians get an
     // urgent full-screen takeover notification, same as any chat message.
+    /* TEXT / EMAIL — A SEPARATE FUNCTION AND POPUP (2026-10-10, Anthony: "this needs to be
+       seperated out from within the chat popup into a seperate function and popup"). The
+       composer below only posts Message Centre messages. */
+    const teBtn = $('.kt-textemail', container);
+    if (teBtn) teBtn.addEventListener('click', () => openTextEmail(c));
     const nudgeBtn = $('.kt-nudge', container);
     if (nudgeBtn) {
       nudgeBtn.addEventListener('click', async () => {
@@ -2354,42 +2430,9 @@
     });
     attachRemove.addEventListener('click', () => setPending(null));
 
-    /* ALSO BY TEXT / EMAIL (2026-10-09, Anthony: "in messager under educator add the SMS,
-       text and email as well or allow to choose all if required"). The message always goes
-       in Message Centre; the chips add a text and/or an email with the same words to the
-       family's parents, from the agency's number and mailer (consent respected, logged on
-       the family). The choice resets after each send so a text is never sent by accident. */
-    const alsoSel = new Set();
-    function paintAlso() {
-      container.querySelectorAll('.kt-also').forEach((b) => {
-        const on = alsoSel.has(b.getAttribute('data-also'));
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        b.style.background = on ? '#159FB4' : '#fff';
-        b.style.color = on ? '#fff' : '#334155';
-        b.style.borderColor = on ? '#159FB4' : '#CBD5E1';
-      });
-      const note = $('.kt-also-note', container);
-      if (note) note.textContent = alsoSel.size ? ('Message Centre + ' + [...alsoSel].map((x) => x === 'sms' ? 'text' : 'email').join(' + ')) : 'Message Centre only';
-    }
-    container.querySelectorAll('.kt-also').forEach((b) => b.addEventListener('click', () => {
-      const k = b.getAttribute('data-also');
-      if (alsoSel.has(k)) alsoSel.delete(k); else alsoSel.add(k);
-      paintAlso();
-    }));
-    const allBtn = $('.kt-also-all', container);
-    if (allBtn) allBtn.addEventListener('click', () => {
-      if (alsoSel.size === 2) alsoSel.clear(); else { alsoSel.add('sms'); alsoSel.add('email'); }
-      paintAlso();
-    });
-
     const doSend = async () => {
       const body = input.value.trim();
       if (!body && !pendingFile) return;
-      const also = [...alsoSel];
-      if (also.indexOf('sms') > -1 && body.length > 480) {
-        alert('A text can be at most 480 characters. Shorten the message, or untick Text.');
-        return;
-      }
       send.disabled = true;
       input.disabled = true;
       attachBtn.disabled = true;
@@ -2400,7 +2443,6 @@
           const fd = new FormData();
           fd.append('body', body);
           fd.append('attachment', pendingFile);
-          also.forEach((a) => fd.append('also[]', a));
           const res = await fetch(apiBase() + endpointBase() + '/' + c.id + '/send', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
@@ -2412,16 +2454,7 @@
           }
           msg = await res.json();
         } else {
-          msg = await api('POST', endpointBase() + '/' + c.id + '/send', also.length ? { body: body, also: also } : { body: body });
-        }
-        if (also.length && window.KT && KT.toast) {
-          const res = (msg && msg.reach) || [];
-          const ok = res.filter((r) => r.status === 'sent');
-          const not = res.filter((r) => r.status !== 'sent');
-          if (msg && msg.reach_error) KT.toast('⚠️', 'Sent in Message Centre only', msg.reach_error, '#B45309');
-          else KT.toast(ok.length ? '💬' : '⚠️', ok.length ? ('Also sent: ' + ok.map((r) => (r.channel === 'sms' ? 'text' : 'email') + ' to ' + (r.name || 'parent')).join(', ')) : 'Only sent in Message Centre',
-            not.length ? not.map((r) => (r.name || 'Parent') + ' — ' + (r.channel === 'sms' ? 'text' : 'email') + ': ' + (r.note || r.status)).join(' · ') : '', ok.length && !not.length ? '#16A34A' : '#B45309');
-          alsoSel.clear(); paintAlso();
+          msg = await api('POST', endpointBase() + '/' + c.id + '/send', { body: body });
         }
         input.value = '';
         setPending(null);

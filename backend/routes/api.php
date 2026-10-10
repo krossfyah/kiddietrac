@@ -1862,6 +1862,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/chats/{conversation}/messages/{message}/react', [ChatController::class, 'providerReactMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
         Route::delete('/chats/{conversation}', [ChatController::class, 'providerDeleteConversation'])->where('conversation','[0-9]+');
         Route::post('/chats/{conversation}/nudge',  [ChatController::class, 'providerNudge']);
+        // Text / Email the family from a conversation — a separate function and popup (2026-10-10).
+        Route::get ('/chats/{conversation}/parent-contacts', [ChatController::class, 'providerParentContacts'])->whereNumber('conversation');
+        Route::post('/chats/{conversation}/text-email',      [ChatController::class, 'providerTextEmail'])->whereNumber('conversation')->middleware('throttle:20,1');
         Route::post('/chats/{conversation}/typing', [ChatController::class, 'providerTyping'])->where('conversation','[0-9]+');
         Route::post('/chats/start',                [ChatController::class, 'providerStart']);
         // Families this person may start a conversation with (Message Centre rules, 2026-10-09).

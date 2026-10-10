@@ -355,6 +355,61 @@ final class ChatController extends Controller
      * the family's guardians get the same urgent FCM full-screen takeover any
      * other chat message triggers; no separate notification path to drift.
      */
+    /* TEXT / EMAIL FROM A CONVERSATION — ITS OWN FUNCTION (2026-10-10, Anthony: "this needs
+       to be seperated out from within the chat popup into a seperate function and popup").
+       The chat composer only posts Message Centre messages; this sends a text and/or email to
+       the family's parents (ParentContactController::reach: consent, logging, replies to the
+       agency) and can also post the same words in the conversation. Same access rules as
+       sending in the thread (access, moved family, the agency's Message Centre rules). */
+    private function reachContext(Request $request, int $conversationId): array
+    {
+        $user = $request->user();
+        abort_unless($this->providerCanAccess($user->id, $conversationId), 403, 'Forbidden');
+        if ($moved = $this->movedAway($conversationId)) abort(409, 'This family has moved to another provider.');
+        $conv = DB::table('conversations')->where('id', $conversationId)->first();
+        $family = $conv ? DB::table('families')->where('id', $conv->family_id)->first() : null;
+        $centre = $family ? DB::table('centres')->where('id', $family->centre_id)->first() : null;
+        abort_unless($conv && $family && $centre, 404);
+        abort_unless(\App\Support\MessagingRules::familyAllowed((int) $user->id, (int) $family->id), 403, 'Your agency does not allow you to message this family.');
+
+        return [$conv, $family, $centre, (int) $centre->agency_id];
+    }
+
+    /** GET /provider/chats/{conversation}/parent-contacts */
+    public function providerParentContacts(Request $request, int $conversationId): JsonResponse
+    {
+        [$conv, $family, $centre, $agencyId] = $this->reachContext($request, $conversationId);
+
+        return response()->json(['guardians' => \App\Http\Controllers\Api\ParentContactController::familyContacts($agencyId, (int) $family->id),
+            'family_name' => $family->family_name, 'sms_max' => 480, 'sms_thread' => ($conv->channel ?? null) === 'sms']);
+    }
+
+    /** POST /provider/chats/{conversation}/text-email {guardian_ids[], channels[], body, post_in_thread} */
+    public function providerTextEmail(Request $request, int $conversationId): JsonResponse
+    {
+        [$conv, $family, $centre, $agencyId] = $this->reachContext($request, $conversationId);
+        $d = $request->validate([
+            'guardian_ids' => ['required', 'array', 'min:1', 'max:6'], 'guardian_ids.*' => ['integer'],
+            'channels' => ['required', 'array', 'min:1'], 'channels.*' => ['in:sms,email'],
+            'body' => ['required', 'string', 'min:2', 'max:2000'],
+            'post_in_thread' => ['sometimes', 'boolean'],
+        ]);
+        $body = trim($d['body']);
+        if (in_array('sms', $d['channels'], true) && mb_strlen($body) > 480) {
+            return response()->json(['message' => 'A text can be at most 480 characters. Shorten it, or send by email only.'], 422);
+        }
+        $user = $request->user();
+        $child = $conv->child_id ? DB::table('children')->where('id', $conv->child_id)->first() : null;
+        $results = \App\Http\Controllers\Api\ParentContactController::reach($agencyId, $family, $centre, $child, $user,
+            $d['guardian_ids'], $d['channels'], $body, ! ($d['post_in_thread'] ?? false), (string) $request->ip());
+        $msg = null;
+        if (! empty($d['post_in_thread'])) {
+            $msg = $this->insertMessage($conversationId, $user->id, $body, []);
+        }
+
+        return response()->json(['sent' => count(array_filter($results, fn ($r) => $r['status'] === 'sent')), 'results' => $results, 'message' => $msg]);
+    }
+
     public function providerNudge(Request $request, int $conversationId): JsonResponse
     {
         $user = $request->user();
