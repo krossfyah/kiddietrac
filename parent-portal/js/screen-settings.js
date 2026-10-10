@@ -573,7 +573,32 @@
     Dom.clear ? Dom.clear(main) : (main.innerHTML = '');
     // Extra bottom padding so the last controls (Remove PIN / Sign out) clear the
     // fixed mobile bottom bar instead of hiding behind it.
-    var wrap = el('div', { style: 'padding:2px 2px 12px;max-width:520px;margin:0 auto;' });
+    /* FILL THE PAGE ON DESKTOP (2026-10-09, Anthony: "settings page under the educator
+       desktop view needs to fill the page better"). It was one 520px column centred in a
+       1900px window. Now the portal's standard width, with the Profile and Security cards
+       two to a row from 900px up; phones keep the single column and the 16px inputs
+       (smaller text makes iOS zoom the page on focus). The grid is a CLASS so the tab
+       switcher's style.display = '' still shows a pane as a grid. */
+    if (!document.getElementById('kt-st-wide-css')) {
+      var stCss = document.createElement('style');
+      stCss.id = 'kt-st-wide-css';
+      stCss.textContent = ''
+        + '.kt-st-wrap{padding:2px 2px 12px;max-width:1800px;margin:0 auto;box-sizing:border-box;}'
+        + '.kt-st-grid{display:block;}'
+        + '@media (min-width:900px){'
+        +   '.kt-st-wrap{padding:2px 24px 16px;}'
+        +   '.kt-st-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px;align-items:start;}'
+        +   '.kt-st-wrap input:not([type=checkbox]):not([type=radio]):not([type=range]),.kt-st-wrap select{padding:7px 11px !important;font-size:14px !important;border-radius:9px !important;}'
+        +   '.kt-st-wrap textarea{font-size:14px !important;}'
+        // Fields are capped at 480px portal-wide (kt-fullwidth.css). A password box sits in a
+        // position:relative wrapper with its eye button pinned to the WRAPPER's right edge,
+        // so the wrapper gets the same cap or the eye floats off the end of the field.
+        +   '.kt-st-wrap div[style*="position:relative"]{max-width:480px;}'
+        +   '.kt-st-wrap div[style*="position:relative"] > input{padding-right:46px !important;}'
+        + '}';
+      document.head.appendChild(stCss);
+    }
+    var wrap = el('div', { class: 'kt-st-wrap' });
     main.appendChild(wrap);
     // No in-screen "Settings" title: the shell's auto-hero already titles the
     // page, and rendering our own stacked a second "Settings" under it.
@@ -600,11 +625,11 @@
     var isPaidStaff = ['educator', 'home_visitor', 'centre_director', 'agency_admin']
       .indexOf(activeRole) !== -1;
     var tabBar = el('div', { style: 'display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid #E5E7EB;margin-bottom:16px;-webkit-overflow-scrolling:touch;' });
-    var paneProfile = el('div', {});
+    var paneProfile = el('div', { class: 'kt-st-grid' });
     var paneDocs = el('div', { style: 'display:none;' });
     var panePay = el('div', { style: 'display:none;' });
     var panePayroll = el('div', { style: 'display:none;' });
-    var paneSecurity = el('div', { style: 'display:none;' });
+    var paneSecurity = el('div', { class: 'kt-st-grid', style: 'display:none;' });
     var paneAbout = el('div', { style: 'display:none;' });
     var _stabs = [];
     function stab(label, pane) {
