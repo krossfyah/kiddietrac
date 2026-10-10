@@ -6,33 +6,62 @@ roles: agency_admin, platform_admin
 ---
 # QuickBooks Online sync
 
-Push paid + unpaid invoices from KiddieTrac into your QBO file. One-way today (KT → QBO).
+**Settings → QuickBooks.** Send your KiddieTrac invoices, voids, payments and refunds to your
+QuickBooks Online company. Families become customers, invoices keep their KiddieTrac numbers,
+and syncing again updates them instead of making copies. It goes one way: KiddieTrac → QuickBooks.
 
-## Prerequisites
+The screen has three steps, the same as Xero and Sage.
 
-Platform-side env vars must be set: `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REDIRECT_URI`, `QBO_ENV`. Without these the screen will say "QBO not configured".
+## 1. Your Intuit app
 
-## Connecting
+1. In [developer.intuit.com → Dashboard](https://developer.intuit.com/app/developer/dashboard), create an app with the **Accounting** scope.
+2. Under **Keys & credentials**, add the **Redirect URI** shown in KiddieTrac (use **Copy**).
+3. Paste the **Client ID** and **Client secret** into KiddieTrac.
+4. **Environment**: *Production* for your real company, or *Sandbox* to try it out with a sandbox company and the Development keys.
+5. **Save app details.**
 
-1. Sidebar → **Administration → QuickBooks**.
-2. Click **Connect to QBO**.
-3. A popup opens to Intuit's login. Authorize KiddieTrac for the company you want to sync.
-4. After authorization you're returned to KiddieTrac with **Connected ✓**.
+If your agency has no app of its own saved, the KiddieTrac platform app is used (the screen says so).
 
-Refresh tokens are stored on the agency row — re-authentication is automatic.
+## 2. Connect your company
 
-## Syncing an invoice
+Press **Connect to QuickBooks →**, sign in to Intuit, choose your company and press **Connect**.
+The window closes and the screen shows **Connected to …**.
 
-1. Open an invoice in KiddieTrac.
-2. Click **⤓ Push to QBO**.
-3. We upsert the customer if needed, then create the invoice in QBO with the matching invoice number and line items.
+## 3. Products, accounts & sync
+
+The lists are read live from your QuickBooks company.
+
+| Setting | What it does |
+|---|---|
+| **Product/service for tuition** (required) | Invoice lines use this item, so they land in its income account. |
+| **Product/service for subsidies** | Subsidy goes in as a negative line. Blank uses the tuition item. |
+| **Deposit payments to** | Where payments are received. Default: Undeposited Funds. |
+| **Tax code for tax-free lines** | Canadian companies need one (usually *Exempt*). |
+| **Tax code for taxed lines** | Only for invoices that charge tax; those invoices wait until one is chosen. |
+| **Only invoices issued on or after** | Your QuickBooks start date, so older invoices are not duplicated. |
+| **Record payments and refunds** | Payments are received against the invoice; a refunded one is deleted. |
+| **Sync automatically every 30 minutes** | Off by default. |
+
+## What gets sent
+
+- **Families → customers**, found again on every sync rather than duplicated.
+- **Issued invoices** (never KiddieTrac drafts) with the same invoice number; subsidy and discount are negative lines so the total matches.
+- **Changes** update the same QuickBooks invoice; one already fully paid in QuickBooks is left alone.
+- **Voids** are voided in QuickBooks, unless payments are applied to them there.
+- **Payments and refunds**, as above.
+
+## Sync now and the sync log
+
+**Sync now** sends everything waiting and reports the result. The **Sync log** lists every
+invoice and payment with what happened and why.
 
 ## Disconnecting
 
-Same screen → **Disconnect**. Stored tokens are deleted; QBO won't be touched until you re-authorize.
+**Disconnect** stops syncing; what is in QuickBooks stays. **Clear & disconnect** also removes
+your app's credentials. Changing the app or the environment disconnects, because the old
+connection belongs to the old app.
 
-## Limits today
+> **Before October 2026** the QuickBooks screen could connect but never actually sent an invoice.
+> Nothing was ever pushed, so there is nothing to clean up. Start with step 1.
 
-- One-way only (KT → QBO). Payments captured in QBO don't flow back.
-- No category mapping yet — every line books to a generic "Services" item.
-- Bulk push is not available — sync one invoice at a time. v22p52 adds bulk sync.
+See also: [Xero](xero) · [Sage](sage)

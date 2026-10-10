@@ -53,6 +53,26 @@ The export is ordered exactly as the screen is, ties included. It previously sor
 
 Click any row for a full detail view including pretty-printed JSON payload — useful for understanding *exactly* what changed.
 
+## Chat conversations tab
+
+**Audit log → 💬 Chat conversations** (agency admins and platform admins). Every conversation in
+your agency, families with staff and staff with each other, newest activity first:
+
+- **Type** filter (families ↔ staff, staff ↔ staff), **Search** across people, families, centres
+  and anything said, and **Active from / Started by** dates.
+- **View transcript** shows the whole conversation by day. Deleted messages are struck through in
+  red with when they were deleted, edited ones are flagged, and attachments are listed by name.
+  **⬇️ Download transcript** saves it as a text file.
+- **Opening a transcript is itself recorded** here as *Chat transcript viewed*, naming who opened
+  which conversation.
+
+Centre directors do not see this tab.
+
+## On a phone
+
+On a phone each entry is a card (time, then the action, then its detail), the tabs sit in one
+line you can swipe, and the filters fold behind a **⚙️ Filters** button that shows how many are set.
+
 ## Scope
 
 Agency admins see actions by users in their agency (role-based scope OR guardian path). Platform admins see every row across the platform.

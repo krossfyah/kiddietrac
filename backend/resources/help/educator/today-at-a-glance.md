@@ -10,7 +10,8 @@ At the very top of your **Today** screen is a warm summary banner — **"Today a
 
 ## What the banner tells you
 
-The headline sums up the day, for example *"1 thing needs your attention today"* or *"You're all set — have a great day!"*. It's a gentle nudge, not a to-do avalanche.
+The banner shows **your name** (or the provider/room you're looking at, with a switcher when you
+have more than one) and a headline that sums up the day, for example *"1 thing needs your attention today"* or *"You're all set — have a great day!"*. It's a gentle nudge, not a to-do avalanche.
 
 ## The quick cards
 
@@ -26,6 +27,13 @@ Below the banner, each card is a tappable shortcut. What you see depends on your
 
 Tapping a card takes you straight to that part of the app — so the brief doubles as a fast launcher for your morning.
 
+## Your day score and the ratio
+
+Under the cards, the **day score** card shows how the day is going (moments, children,
+observations, time on the floor). The live **ratio card** sits on the right of it: green when
+you're within ratio, amber at the limit, red if the room goes over. It updates as children are
+checked in and out.
+
 ## How to use it
 
 - **Start here every morning.** A five-second read tells you who's missing, whether the plan is ready, and what's outstanding.
@@ -38,7 +46,7 @@ Everything in the brief is pulled live from what you and the room have logged �
 
 ## On mobile and tablet
 
-The brief sits right at the top on both phone and tablet, with the room selector and roster directly beneath it — so your whole morning routine is one screen, no scrolling required.
+The brief sits right at the top on both phone and tablet, with the roster directly beneath it — so your whole morning routine is one screen, no scrolling required.
 
 ## Common questions
 

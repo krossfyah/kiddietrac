@@ -24,6 +24,16 @@ Holidays, PD days, emergency closures. Pause billing on closures (or not), and n
 - Closure shows on the staff schedule + parent Today screen.
 - If billing-paused, the daily tuition cron skips these dates when generating invoices.
 
+## What people see when they open the app
+
+On a closed day, or up to two weeks before one, a notice appears once a day when someone opens
+the app. It is worded for the person reading it:
+
+- **The provider whose centre it is:** *"You are closed today for … No children are expected, so
+  there is no attendance to take."* (or *"Your closure is coming up"*).
+- **Other staff at that centre:** *"[Centre] is closed today… No children are expected."*
+- **Families:** *"We are closed today… Enjoy the day."* (or a reminder of the dates).
+
 ## Removing
 
 Open the closure row and tap **Remove**. Notifications already sent are not retracted.

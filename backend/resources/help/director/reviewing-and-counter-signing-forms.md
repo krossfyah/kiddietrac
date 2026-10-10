@@ -94,3 +94,17 @@ You can send a form back as many times as a correction needs.
 
 See also: [Forms Manager and form packages](forms-manager), [Requesting files](requesting-files),
 [Document workflows](doc-workflows).
+
+## Forms that need no counter-signature
+
+Not every form needs the office to sign it. In **Forms Manager**, when adding or editing a form
+(including in the forms library and multi-form packages), turn **Requires counter-signature** off.
+Its signed copies show **Not required** in Completed and are never included in reminders.
+
+## Daily reminders to counter-sign
+
+**Settings → Notifications → Forms waiting for counter-signature.** Admins and directors get one
+email listing the signed forms still waiting for them, on your schedule: every day, weekdays,
+weekly or every few days, at the time you choose. Directors only see forms from their own
+provider; if a provider has no director, its forms go to the admins. You can also turn on a bell
+notification or a push, **Preview** the email, and **Send test…** to an address you type.

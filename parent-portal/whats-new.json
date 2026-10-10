@@ -1,6 +1,196 @@
 {
- "updated": "2026-09-29",
+ "updated": "2026-10-09",
  "entries": [
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📗",
+   "title": "Xero",
+   "body": "Settings → Xero: connect your own Xero app, choose your organisation and accounts, then send issued invoices, voids, payments and refunds to Xero. Families become Xero contacts, invoices keep their KiddieTrac numbers, and syncing again updates them instead of making copies. Optional automatic sync every 30 minutes, with a sync log.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📒",
+   "title": "QuickBooks Online, rebuilt",
+   "body": "Settings → QuickBooks now syncs properly: families become customers, issued invoices go in on the product/service you choose, and voids, payments and refunds follow. Re-syncing updates the same invoice instead of making a copy. Sync now, a sync log, and optional automatic sync every 30 minutes.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📘",
+   "title": "Sage",
+   "body": "Settings → Sage: connect Sage Accounting (cloud) and invoices, voids and payments sync like Xero and QuickBooks. On Sage 50 desktop? Set your account numbers and download a customers file and a balanced journal file to import. Each journal file holds only what is new since the last one, with reversals for voids and refunds.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "💬",
+   "title": "Chat conversations in the Audit log",
+   "body": "Audit log → Chat conversations: every family and staff conversation in your agency, searchable by person, family or anything said, with the full transcript (deleted and edited messages flagged) and a download. Opening a transcript is itself recorded in the audit log.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📱",
+   "title": "Audit log on your phone",
+   "body": "The Audit log reads properly on a phone now: tidy cards with no words breaking mid-line, tabs in one scrolling line, the full width of the screen, and the filters folded behind a Filters button.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📁",
+   "title": "Upload several files at once",
+   "body": "Files repository → Add a file: pick several files in one go. Folder, category and notes apply to all of them, each keeps its own name, and any that fail stay listed so Add retries just those.",
+   "roles": [
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "✍️",
+   "title": "Provider bio reminders",
+   "body": "Settings → Notifications → Provider bios: providers without a bio are reminded why it matters and given a link straight to the bio box, by email, in the app and with a small on-screen card. Choose how often, when reminders stop, and get a summary of who still has no bio.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "✍️",
+   "title": "Tell families about yourself",
+   "body": "Your bio goes in every new family’s welcome email and on your provider card in the parents’ app. If you haven’t written one yet, the reminder card opens Settings → Profile → Your bio for you. It takes about two minutes.",
+   "roles": [
+    "educator",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "👋",
+   "title": "Moving a child sends the new provider’s welcome",
+   "body": "Move to another provider now also sends the family the new provider’s welcome email (photo, bio and how to reach them) after the change-of-provider letter. The educator the child is leaving is told the child moved to a new educator, without the new provider’s name.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "🌷",
+   "title": "Closure notices written for you",
+   "body": "When your centre is closed, the notice you see when you open the app now speaks to you, for example “You are closed today. No children are expected, so there is no attendance to take”, rather than the message families get.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "☀️",
+   "title": "A tidier Today screen",
+   "body": "Your name now sits in the Today at a glance banner with the day’s greeting, and the live ratio card sits beside your day score, so there is no separate row to scroll past.",
+   "roles": [
+    "educator"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📧",
+   "title": "Welcome emails look right in Outlook",
+   "body": "The provider welcome email now looks the same in Outlook as in Gmail: the coloured banner, the provider’s photo, the button and a single, clickable website link.",
+   "roles": [
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "✍️",
+   "title": "Counter-signing: choose per form, with daily reminders",
+   "body": "Forms Manager: set whether each form needs a counter-signature. Settings → Notifications sends admins and directors one list of signed forms still waiting for their counter-signature, on the schedule you choose.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "🎃",
+   "title": "Seasonal email banners",
+   "body": "Email seasons: KiddieTrac emails switch their header banner automatically by season (Fall, Late Fall, Christmas, Winter, Spring, Easter, Summer). Add your own images and dates.",
+   "roles": [
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "🎟️",
+   "title": "RSVP reminders for missing answers",
+   "body": "Event RSVPs: remind people who have not replied, or who signed up but left a question blank. Pick the question and they get a reminder showing exactly what is still needed.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "🎨",
+   "title": "Colour-coded labels",
+   "body": "Type and status labels across the portal are colour-coded now (closure types, statuses, categories), and raw values read as words, so lists are quicker to scan.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "🤝",
+   "title": "Prospect NDA",
+   "body": "Send our NDA to a prospect for e-signature. They add their business name, address and role, the signed copy is emailed to sales@ and filed in the lead’s Documents, and you can preview it from the menu.",
+   "roles": [
+    "platform_admin",
+    "sales_rep"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "⏱️",
+   "title": "Timesheets: All centres fixed",
+   "body": "Timesheets → All centres lists only your agency’s open centres, without blank rows, and a double tap on Clock in no longer creates a second punch.",
+   "roles": [
+    "agency_admin",
+    "centre_director"
+   ]
+  },
   {
    "type": "new",
    "date": "2026-09-29",

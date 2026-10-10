@@ -48,6 +48,8 @@ if it differs, and any notes below that. The **Type** column leads with the exte
 
 [[show: #sales-library @ Add a file | Show me the Add a file button]]
 
+> **Several at once:** in the file picker, select as many files as you like (Ctrl or Shift, ⌘ on a Mac), or pick again to add more. Folder, category and notes apply to all of them, and each file keeps its own name as its title. If any fail, they stay listed with the reason, and **Add to repository** retries just those.
+
 > **Tip:** Name the file to your convention before you upload it, e.g. `KT-2026-Q4-RateCard-v3.pdf`. The title picks that name up, so you never retype it.
 
 The title is only filled in while you have not typed in it yourself. Once you edit the
