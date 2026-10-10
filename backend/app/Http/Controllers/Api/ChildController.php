@@ -703,8 +703,10 @@ final class ChildController extends Controller
 
             $rows = [];
             foreach (array_unique($oldEducators) as $uid) {
+                /* The provider they are leaving is not told who takes over (2026-10-09, Anthony:
+                   "shouldnt show the new providers name and should just state new educator"). */
                 $rows[] = ['user_id' => $uid, 'type' => 'transfer', 'title' => '👋 Moving on',
-                    'body' => $names.' transferred to '.$toCentre->name.', effective '.$effFmt
+                    'body' => $names.' moved to a new educator, effective '.$effFmt
                         .'. They have come off your roster.',
                     'data' => json_encode(['link' => '#today']), 'created_at' => now()];
             }
