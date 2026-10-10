@@ -4,6 +4,19 @@
     {
       "type": "new",
       "date": "2026-10-09",
+      "icon": "💬",
+      "title": "Choose who educators can message",
+      "body": "Educators and home visitors now message the families of children in their own rooms, plus admins, directors and the super admin. Conversations outside that become read-only history. Agency admins can change all of this in Settings → Notifications → Message Centre: allow all families at the centre, allow messaging other educators or home visitors, or hide old conversations instead.",
+      "roles": [
+        "educator",
+        "home_visitor",
+        "centre_director",
+        "agency_admin"
+      ]
+    },
+    {
+      "type": "new",
+      "date": "2026-10-09",
       "icon": "📎",
       "title": "Files: share printables and homework",
       "body": "A new Files section lets educators send printables, homework and notes to the families they work with — one family, several, or everyone in their room — and lets parents send files back. Files stay private in KiddieTrac: families get a notification (and an email saying a file is waiting, which your agency can switch off), and every download is recorded.",

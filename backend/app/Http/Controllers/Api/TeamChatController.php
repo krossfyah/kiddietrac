@@ -147,10 +147,16 @@ final class TeamChatController extends Controller
            chat nobody will ever read. */
         $staff = self::withoutServiceAccounts($staff);
 
-        return array_values(array_unique(array_merge(
+        $ids = array_values(array_unique(array_merge(
             $staff,
             $this->reachableGuardianIds($exclude, $centreIds)
         )));
+
+        /* WHO EDUCATORS MAY MESSAGE (2026-10-09, App\Support\MessagingRules). For an educator
+           or home visitor: only the staff roles the agency allows (by default admins,
+           directors and super admins) and the parents of children in their own rooms. This
+           list feeds the picker, start() and adding people, so all three follow it. */
+        return \App\Support\MessagingRules::filterPeople($exclude, $ids);
     }
 
     /**
@@ -266,6 +272,20 @@ final class TeamChatController extends Controller
         $mine = DB::table('staff_thread_participants')->where('user_id', $uid)->pluck('thread_id')->all();
         if (! $mine) return response()->json(['threads' => []]);
 
+        // Message Centre rules: threads with nobody this person may message are read-only or hidden.
+        $roThreads = [];
+        if (\App\Support\MessagingRules::forUser($uid)) {
+            $keep = [];
+            foreach ($mine as $tid) {
+                $st = \App\Support\MessagingRules::threadState($uid, (int) $tid);
+                if ($st === 'hidden') continue;
+                if ($st === 'read_only') $roThreads[(int) $tid] = true;
+                $keep[] = $tid;
+            }
+            $mine = $keep;
+            if (! $mine) return response()->json(['threads' => []]);
+        }
+
         $myPart = DB::table('staff_thread_participants')->where('user_id', $uid)->whereIn('thread_id', $mine)
             ->pluck('last_read_at', 'thread_id');
 
@@ -366,6 +386,7 @@ final class TeamChatController extends Controller
                 'preview'    => $last ? mb_substr((($last->sender_id == $uid && ! $last->is_system) ? 'You: ' : '') . strip_tags((string) $last->body), 0, 80) : '',
                 'at'         => $last->created_at ?? $t->last_message_at,
                 'unread'     => $unread,
+                'read_only'  => isset($roThreads[(int) $t->id]),
             ];
         }
         return response()->json(['threads' => $out]);
@@ -754,6 +775,8 @@ final class TeamChatController extends Controller
     {
         $uid = (int) $request->user()->id;
         if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+        $ruleState = \App\Support\MessagingRules::threadState($uid, $thread);
+        if ($ruleState === 'hidden') return response()->json(['message' => 'Not found'], 404);
 
         $msgs = DB::table('staff_messages as m')->leftJoin('users as u', 'u.id', '=', 'm.sender_id')
             ->where('m.thread_id', $thread)->orderBy('m.id')
@@ -835,6 +858,8 @@ final class TeamChatController extends Controller
             'member_count'  => $people->count(),
             'other_read_at' => $otherReadAt,
             'messages'  => $msgs,
+            'read_only' => $ruleState === 'read_only',
+            'read_only_reason' => $ruleState === 'read_only' ? \App\Support\MessagingRules::READ_ONLY_MESSAGE : null,
         ]);
     }
 
@@ -850,6 +875,9 @@ final class TeamChatController extends Controller
     {
         $uid = (int) $request->user()->id;
         if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+        if (\App\Support\MessagingRules::threadState($uid, $thread) !== 'ok') {
+            return response()->json(['message' => \App\Support\MessagingRules::READ_ONLY_MESSAGE, 'read_only' => true], 403);
+        }
 
         $data = $request->validate(['emoji' => ['required', 'string', 'max:8']]);
         $emoji = trim($data['emoji']);
@@ -896,6 +924,9 @@ final class TeamChatController extends Controller
     {
         $uid = (int) $request->user()->id;
         if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+        if (\App\Support\MessagingRules::threadState($uid, $thread) !== 'ok') {
+            return response()->json(['message' => \App\Support\MessagingRules::READ_ONLY_MESSAGE, 'read_only' => true], 403);
+        }
         // A message may be an attachment with no words — a photo of a rota does not
         // need a caption. required_without mirrors the family chat rule.
         $data = $request->validate([

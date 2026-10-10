@@ -1214,7 +1214,8 @@
     // Pick the right families endpoint based on role. platform_admin was missing and
     // fell through to "not available for your role".
     var famPath = (myRole === 'agency_admin' || myRole === 'platform_admin') ? '/admin/families'
-                : (myRole === 'centre_director' || myRole === 'educator' || myRole === 'home_visitor') ? '/director/families'
+                : (myRole === 'educator' || myRole === 'home_visitor') ? '/provider/chat-families'   // Message Centre rules (2026-10-09)
+                : (myRole === 'centre_director') ? '/director/families'
                 : null;
 
     /* Disambiguate people who share a name within the same role group. Only adds a
@@ -1627,6 +1628,7 @@
 
       var body = target.querySelector('#kt-st-body');
       pinToBottom(body);        // colleague threads carry photos too
+      if (data.read_only) applyReadOnly(target, data.read_only_reason);
       var input = target.querySelector('#kt-st-input');
       if (input) { input.value = draft; }
 
@@ -2100,6 +2102,22 @@
     }
   }
 
+  /* READ-ONLY HISTORY (2026-10-09, App\Support\MessagingRules). When the agency's Message
+     Centre rules no longer let this person write in a conversation, it stays readable but
+     the composer is replaced by one line saying why. The server refuses a send anyway. */
+  function applyReadOnly(root, reason) {
+    if (!root) return;
+    root.querySelectorAll('.kt-thread-compose, .kt-also-row, .kt-attach-preview').forEach(function (el) { el.style.display = 'none'; });
+    if (root.querySelector('.kt-ro-banner')) return;
+    var b = document.createElement('div');
+    b.className = 'kt-ro-banner';
+    b.setAttribute('role', 'note');
+    b.style.cssText = 'flex:0 0 auto;padding:10px 14px;border-top:1px solid #E5E7EB;background:#F8FAFC;color:#475569;font-size:13px;line-height:1.45;display:flex;gap:8px;align-items:flex-start;';
+    b.innerHTML = '<span aria-hidden="true">🔒</span><span>' + escapeHtml(reason || 'This conversation is read-only.') + '</span>';
+    var compose = root.querySelector('.kt-thread-compose');
+    if (compose && compose.parentNode) compose.parentNode.insertBefore(b, compose); else root.appendChild(b);
+  }
+
   function renderThread(data, container) {
     const c = data.conversation || {};
     const messages = data.messages || [];
@@ -2148,6 +2166,7 @@
     `;
     const body = $('.kt-thread-body', container);
     pinToBottom(body);          // survives images that decode after this line
+    if (data.read_only) applyReadOnly(container, data.read_only_reason);
 
     // Delete own messages — delegated so it also catches poll-appended bubbles.
     body.addEventListener('click', async function (e) {

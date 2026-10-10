@@ -216,6 +216,13 @@ final class ChatController extends Controller
             ->whereNull('deleted_at')                 // hide deleted conversations
             ->whereIn('centre_id', $centreIds);
 
+        // Message Centre rules: families outside an educator's rooms are hidden or read-only.
+        $rules = \App\Support\MessagingRules::forUser((int) $user->id);
+        $allowedFams = $rules ? \App\Support\MessagingRules::familyIds((int) $user->id, $rules) : null;
+        if ($allowedFams !== null && $rules['existing'] === 'hidden') {
+            $base->whereIn('family_id', $allowedFams ?: [0]);
+        }
+
         // Searching has to run over the whole set, not the page — otherwise it only
         // finds what was already on screen, which is not searching.
         if ($q = trim((string) $request->query('q', ''))) {
@@ -245,8 +252,19 @@ final class ChatController extends Controller
             ->forPage($page, $perPage)
             ->get();
 
+        $list = $this->enrichConversations($conversations, $user->id);
+        if ($allowedFams !== null) {
+            foreach ($list as &$cv) {
+                $fid = (int) (is_array($cv) ? ($cv['family_id'] ?? 0) : ($cv->family_id ?? 0));
+                if (! in_array($fid, $allowedFams, true)) {
+                    if (is_array($cv)) { $cv['read_only'] = true; } else { $cv->read_only = true; }
+                }
+            }
+            unset($cv);
+        }
+
         return response()->json([
-            'conversations' => $this->enrichConversations($conversations, $user->id),
+            'conversations' => $list,
             'meta' => [
                 'page' => $page,
                 'per_page' => $perPage,
@@ -269,7 +287,13 @@ final class ChatController extends Controller
 
         $this->markRead($conversationId, $user->id);
 
-        return response()->json($this->fetchThread($conversationId, $user->id));
+        $thread = $this->fetchThread($conversationId, $user->id);
+        if ($this->rulesRefuseWrite((int) $user->id, $conversationId)) {
+            $thread['read_only'] = true;
+            $thread['read_only_reason'] = \App\Support\MessagingRules::familyMessage();
+        }
+
+        return response()->json($thread);
     }
 
     /**
@@ -289,6 +313,7 @@ final class ChatController extends Controller
         if (! $this->providerCanAccess($user->id, $conversationId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
+        if ($ro = $this->rulesRefuseWrite((int) $user->id, $conversationId)) return $ro;
 
         $attachments = $this->extractAttachment($request);
         // A family that has moved provider: this thread is the old provider's history now.
@@ -336,6 +361,7 @@ final class ChatController extends Controller
         if (! $this->providerCanAccess($user->id, $conversationId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
+        if ($ro = $this->rulesRefuseWrite((int) $user->id, $conversationId)) return $ro;
         $sender = DB::table('users')->where('id', $user->id)->first(['first_name', 'last_name']);
         $name = $sender ? trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? '')) : 'Your centre';
         if ($name === '') $name = 'Your centre';
@@ -350,6 +376,26 @@ final class ChatController extends Controller
      * with a family they have provider access to (mirror of parentStart).
      * Body: family_id (req) + child_id? + subject? + body (req).
      */
+    /**
+     * GET /provider/chat-families — families this person may start a conversation with:
+     * the families at their centres, narrowed by the agency's Message Centre rules.
+     */
+    public function providerFamilies(Request $request): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        $centreIds = $this->providerCentreIds($uid);
+        if (! $centreIds) return response()->json(['data' => []]);
+        $q = DB::table('families')->whereIn('centre_id', $centreIds)->whereNull('deleted_at');
+        $q = \App\Support\Live::families($q, 'families');
+        $allowed = \App\Support\MessagingRules::familyIds($uid);
+        if ($allowed !== null) $q->whereIn('id', $allowed ?: [0]);
+        $rows = $q->orderBy('family_name')->get(['id', 'family_name', 'centre_id']);
+        $centres = DB::table('centres')->whereIn('id', $rows->pluck('centre_id')->unique()->all() ?: [0])->pluck('name', 'id');
+
+        return response()->json(['data' => $rows->map(fn ($f) => ['id' => (int) $f->id, 'family_name' => $f->family_name,
+            'centre_name' => $centres[$f->centre_id] ?? null])->values()]);
+    }
+
     public function providerStart(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -362,6 +408,9 @@ final class ChatController extends Controller
 
         $family = DB::table('families')->where('id', $data['family_id'])->whereNull('deleted_at')->first();
         if (! $family) return response()->json(['message' => 'Family not found'], 404);
+        if (! \App\Support\MessagingRules::familyAllowed((int) $user->id, (int) $family->id)) {
+            return response()->json(['message' => 'You can message the families of children in your rooms. Ask your director to message this family.'], 403);
+        }
 
         // Platform admins can start a conversation with any family. Everyone else
         // needs a role_assignment that grants access to this family's centre.
@@ -704,6 +753,7 @@ final class ChatController extends Controller
     {
         $user = $request->user();
         if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        if ($this->rulesRefuseWrite((int) $user->id, $conversationId)) return response()->json(['ok' => false]);
         $this->markTyping($conversationId, $user);
         return response()->json(['ok' => true]);
     }
@@ -721,6 +771,7 @@ final class ChatController extends Controller
     {
         $user = $request->user();
         if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        if ($ro = $this->rulesRefuseWrite((int) $user->id, $conversationId)) return $ro;
         return $this->doDeleteMessage($conversationId, $messageId, (int) $user->id);
     }
 
@@ -737,6 +788,7 @@ final class ChatController extends Controller
     {
         $user = $request->user();
         if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        if ($ro = $this->rulesRefuseWrite((int) $user->id, $conversationId)) return $ro;
         return $this->doDeleteConversation($conversationId);
     }
 
@@ -764,6 +816,7 @@ final class ChatController extends Controller
     {
         $user = $request->user();
         if (! $this->providerCanAccess($user->id, $conversationId)) return response()->json(['message' => 'Forbidden'], 403);
+        if ($ro = $this->rulesRefuseWrite((int) $user->id, $conversationId)) return $ro;
         return $this->doReact($conversationId, $messageId, (int) $user->id, (string) $request->input('emoji', ''));
     }
 
@@ -1048,10 +1101,27 @@ final class ChatController extends Controller
     {
         $centreIds = $this->providerCentreIds($userId);
         if (empty($centreIds)) return false;
-        return DB::table('conversations')
+        $conv = DB::table('conversations')
             ->where('id', $conversationId)
             ->whereIn('centre_id', $centreIds)
-            ->exists();
+            ->first(['id', 'family_id']);
+        if (! $conv) return false;
+        // Message Centre rules (Settings → Notifications): a hidden conversation is not there.
+        return \App\Support\MessagingRules::conversationState($userId, $conv) !== 'hidden';
+    }
+
+    /**
+     * WHO EDUCATORS MAY MESSAGE (2026-10-09, App\Support\MessagingRules). A conversation the
+     * agency's rules keep as read-only history can be read, but nothing may be added to it:
+     * no message, nudge, typing, reaction or delete. Null when writing is allowed.
+     */
+    private function rulesRefuseWrite(int $userId, int $conversationId): ?JsonResponse
+    {
+        $conv = DB::table('conversations')->where('id', $conversationId)->first(['id', 'family_id']);
+        if ($conv && \App\Support\MessagingRules::conversationState($userId, $conv) !== 'ok') {
+            return response()->json(['message' => \App\Support\MessagingRules::familyMessage(), 'read_only' => true], 403);
+        }
+        return null;
     }
 
     /**

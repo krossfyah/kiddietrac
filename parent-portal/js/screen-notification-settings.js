@@ -47,7 +47,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:14px 24px;max-width:900px;">'
       + '<div id="ns-body"><div class="kt-card" style="max-width:680px;color:#64748B;">Loading…</div></div>'
-      + '<div id="ns-bio" style="margin-top:16px;"></div><div id="ns-files" style="margin-top:16px;"></div></div>';
+      + '<div id="ns-bio" style="margin-top:16px;"></div><div id="ns-files" style="margin-top:16px;"></div><div id="ns-msg" style="margin-top:16px;"></div></div>';
     var body = main.querySelector('#ns-body');
     try { await paintCountersign(body); }
     catch (e) {
@@ -55,6 +55,56 @@
     }
     try { await paintBio(main.querySelector('#ns-bio')); } catch (e) {}
     try { await paintFiles(main.querySelector('#ns-files')); } catch (e) {}
+    try { await paintMessaging(main.querySelector('#ns-msg')); } catch (e) {}
+  }
+
+  /* ── Message Centre: who educators and home visitors may message (2026-10-09) ──
+     Anthony: "this should be configurable in the settings to allowing educators to message
+     who including other staff members ... also to home visitors as well". Defaults are his
+     chosen behaviour: their own room families, plus admins, directors and super admins.
+     Enforced on the server (App\\Support\\MessagingRules); this only edits the setting. */
+  async function paintMessaging(body) {
+    var res;
+    try { res = await Api.get('/admin/messaging-rules'); } catch (e) { return; }
+    var s = res.settings || {};
+    var STAFF = [['agency_admin', 'Agency admins'], ['centre_director', 'Directors'], ['platform_admin', 'Super admin'], ['educator', 'Other educators'], ['home_visitor', 'Home visitors']];
+    function block(role, title) {
+      var r = s[role] || { families: 'rooms', staff: {} };
+      return '<div style="padding:10px 0 4px;border-bottom:1px solid #F1F5F9;">'
+        + '<div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:2px;">' + title + '</div>'
+        + row('Families they can message', 'Rooms = only families of the children in rooms they are assigned to.',
+            sel('mr-' + role + '-fam', [['rooms', 'Families in their rooms'], ['centre', 'All families at their centre']], r.families))
+        + row('Staff they can message', '',
+            STAFF.map(function (p) {
+              return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:#334155;margin:2px 6px 2px 0;">'
+                + '<input type="checkbox" data-mr="' + role + '" data-staff="' + p[0] + '"' + (r.staff && r.staff[p[0]] ? ' checked' : '') + '> ' + p[1] + '</label>';
+            }).join(''))
+        + '</div>';
+    }
+    body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">💬 Message Centre — who staff can message</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">Limits who <b>educators</b> and <b>home visitors</b> can message in the Message Centre. '
+      + 'Directors and admins can always message everyone. Parents can always reply to the people messaging them.</div>'
+      + block('educator', 'Educators')
+      + block('home_visitor', 'Home visitors')
+      + row('Conversations these rules no longer allow', 'Read-only keeps the history visible; nothing new can be sent.',
+          sel('mr-existing', [['read_only', 'Keep as read-only history'], ['hidden', 'Hide them']], s.existing || 'read_only'))
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;">'
+      + '<button id="mr-save" class="kt-btn kt-btn-primary">Save</button><span id="mr-msg" style="font-size:13px;"></span></div>'
+      + '</div>';
+    var msg = body.querySelector('#mr-msg');
+    body.querySelector('#mr-save').addEventListener('click', function () {
+      var out = { existing: body.querySelector('#mr-existing').value };
+      ['educator', 'home_visitor'].forEach(function (role) {
+        var staff = {};
+        body.querySelectorAll('[data-mr="' + role + '"]').forEach(function (cb) { staff[cb.getAttribute('data-staff')] = cb.checked; });
+        out[role] = { families: body.querySelector('#mr-' + role + '-fam').value, staff: staff };
+      });
+      msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      Api.post('/admin/messaging-rules', out)
+        .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved — applies straight away'; })
+        .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
   }
 
   /* ── Files between educators and families (2026-10-09) ── */
