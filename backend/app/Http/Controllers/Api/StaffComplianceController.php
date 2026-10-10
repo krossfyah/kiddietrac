@@ -162,11 +162,14 @@ final class StaffComplianceController extends Controller
             $name = mb_substr($f->getClientOriginalName(), 0, 190);
             $path = $f->storeAs('pd-certificates/' . $agencyId, Str::uuid() . '.' . strtolower($f->getClientOriginalExtension() ?: 'bin'), 'local');
         }
-        // A director/admin entering hours for staff approves them as they go; staff entries wait for review.
-        $approved = $manager && $uid !== $me;
+        /* Training hours count as soon as they are logged (2026-10-10, Anthony: staff-logged
+           hours should not need approval — "count immediately"; directors can still remove
+           anything wrong). A director/admin entering for someone else is still recorded as the
+           reviewer. */
+        $approved = true;
         $id = DB::table('pd_hours')->insertGetId(['agency_id' => $agencyId, 'user_id' => $uid, 'taken_on' => $d['taken_on'], 'title' => $d['title'],
             'provider' => $d['provider'] ?? null, 'hours' => round((float) $d['hours'], 2), 'certificate_path' => $path, 'certificate_name' => $name,
-            'status' => $approved ? 'approved' : 'pending', 'reviewed_by' => $approved ? $me : null, 'reviewed_at' => $approved ? now() : null,
+            'status' => $approved ? 'approved' : 'pending', 'reviewed_by' => ($manager && $uid !== $me) ? $me : null, 'reviewed_at' => now(),
             'created_by' => $me, 'created_at' => now(), 'updated_at' => now()]);
         $this->audit($request, $agencyId, 'staff.pd_hours_added', 'user', $uid, 'Training hours logged: ' . $d['hours'] . ' h — ' . $d['title'] . ($approved ? ' (approved)' : ' (waiting for review)'));
         if (! $approved) {
@@ -208,7 +211,7 @@ final class StaffComplianceController extends Controller
         $row = DB::table('pd_hours')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
         abort_unless($row, 404);
         $me = (int) $request->user()->id;
-        abort_unless(($row->user_id == $me && $row->status === 'pending') || $this->canManageUser($request, $agencyId, (int) $row->user_id), 403);
+        abort_unless($row->user_id == $me || $this->canManageUser($request, $agencyId, (int) $row->user_id), 403);
         DB::table('pd_hours')->where('id', $id)->update(['deleted_at' => now(), 'updated_at' => now()]);
         $this->audit($request, $agencyId, 'staff.pd_hours_removed', 'user', (int) $row->user_id, 'Training hours removed: ' . $row->hours . ' h — ' . $row->title);
 
