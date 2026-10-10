@@ -96,11 +96,11 @@ class SendScheduledReports extends Command
 
         if (! empty($u->deleted_at)) {
             return "the recipient address belongs to {$who}, whose account was removed on "
-                . substr((string) $u->deleted_at, 0, 10) . ' — notifications to it are paused';
+                . substr((string) $u->deleted_at, 0, 10) . ' — other notifications to it are paused, but scheduled reports always go';
         }
         if (in_array((string) $u->status, ['deactivated', 'suspended'], true)) {
             return "the recipient address belongs to {$who}, whose account is {$u->status}"
-                . ' — notifications to it are paused';
+                . ' — other notifications to it are paused, but scheduled reports always go';
         }
 
         return null;
@@ -270,6 +270,10 @@ class SendScheduledReports extends Command
                 // reasoning, and the same header, as the other 29 senders that address a
                 // configured recipient.
                 try { $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1'); } catch (\Throwable $e) {}
+                // ...and the bypass above still stops at a closed ACCOUNT on the address.
+                // Scheduled reports are never suppressed at all (Anthony, 2026-10-10); the
+                // mail gate honours this header ahead of every other rule.
+                $m->getHeaders()->addTextHeader('X-KT-Scheduled-Report', '1');
                 // File it under the agency the REPORT is for, not the one guessed from the
                 // recipient. These were landing in the demo agency's log because the
                 // recipient held a role there too, so they were invisible in the log of the
