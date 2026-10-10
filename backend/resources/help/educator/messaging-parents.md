@@ -31,6 +31,22 @@ Each child has a conversation thread between their parent(s) and the room. Use i
 
 Parents see the message in their app and (if they have notifications on their phone enabled) get a push notification.
 
+## Texting or emailing a parent
+
+On a child's record, use **💬 Message parents**, or **Text** / **Email** beside a parent's
+**Call** button:
+
+1. Choose who to send to and how: text, email, or both.
+2. Write your message. A text can be up to **480 characters**; for anything longer, send it by email.
+3. Send. You'll see, for each parent, whether it was sent.
+
+Good to know:
+
+- Messages go from **your agency's SMS number and email, never your own** number or address.
+- A parent who hasn't agreed to receive texts shows *"Has not agreed to texts — email instead"*. You can still **email** them.
+- **Replies go to the agency**, not to you.
+- **Every message is kept on the child's record** (and in the audit log), and the parent also sees it in their app.
+
 ## Response time expectations
 
 - During care hours: try to respond to parents within an hour

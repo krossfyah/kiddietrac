@@ -4,6 +4,18 @@
   {
    "type": "new",
    "date": "2026-10-09",
+   "icon": "🆘",
+   "title": "Emergency cards and messaging parents",
+   "body": "On a child’s record: open their 🆘 Emergency card (and print it), and text or email their parents through KiddieTrac with Message parents, or Text / Email beside each parent. Messages go from your agency’s number and email, never your own; a parent who has not agreed to texts can still be emailed; replies go to the agency; and every message is kept on the child’s record.",
+   "roles": [
+    "educator",
+    "home_visitor",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
    "icon": "📗",
    "title": "Xero",
    "body": "Settings → Xero: connect your own Xero app, choose your organisation and accounts, then send issued invoices, voids, payments and refunds to Xero. Families become Xero contacts, invoices keep their KiddieTrac numbers, and syncing again updates them instead of making copies. Optional automatic sync every 30 minutes, with a sync log.",

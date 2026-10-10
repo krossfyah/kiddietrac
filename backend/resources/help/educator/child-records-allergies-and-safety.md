@@ -26,6 +26,15 @@ The record leads with **safety**, because that's what you reach for mid-room:
 
 Safety cards stay open by default; the rest you can collapse to keep the record scannable.
 
+## The emergency card
+
+On a child's record, **🆘 Emergency card** puts everything for an emergency on one page:
+allergies and medical notes, parents and emergency contacts with their numbers, and who may
+collect the child. **Print** opens it ready to print.
+
+You can open the emergency cards of the children **in your own rooms**, the same children you
+see on your roster. Every time a card is opened, it is recorded in the audit log.
+
 ## Allergies: the golden rule
 
 **Check allergies before every meal, snack, cooking activity, and craft that involves food or common allergens.** A child's allergy card is red for a reason. If you're covering an unfamiliar room, make reading each child's allergies your very first job.
