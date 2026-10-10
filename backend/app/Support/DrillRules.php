@@ -53,6 +53,9 @@ final class DrillRules
         $tz = AgencyTime::tz($agencyId);
         $now = ($now ?: now())->copy()->setTimezone($tz);
         $rules = Jurisdictions::forAgency($agencyId)['drills'] ?? [];
+        /* "Missed" only counts once the centre has started its drill log: before its first
+           recorded drill there is no way to tell a missed drill from one done on paper. */
+        $first = DB::table('drills')->where('centre_id', $centreId)->whereNull('deleted_at')->min('drilled_at');
         $out = [];
         foreach ($rules as $rule) {
             $every = $rule['every'] ?? 'month';
@@ -70,7 +73,8 @@ final class DrillRules
                 'type' => $rule['type'], 'label' => $rule['label'] ?? (self::TYPES[$rule['type']] ?? $rule['type']), 'every' => $every,
                 'optional' => ! empty($rule['only_if']),
                 'current' => ['period' => self::periodLabel($every, $cs), 'owed' => $curOwed, 'done_at' => $curDone],
-                'previous' => ['period' => self::periodLabel($every, $ps), 'owed' => $prevOwed, 'missed' => $prevOwed && ! $prevDone],
+                'previous' => ['period' => self::periodLabel($every, $ps), 'owed' => $prevOwed,
+                    'missed' => $prevOwed && ! $prevDone && $first !== null && Carbon::parse($first, 'UTC')->lt($ps->copy()->utc())],
             ];
         }
 
