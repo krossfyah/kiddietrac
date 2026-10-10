@@ -98,38 +98,52 @@ final class ParentContactController extends Controller
             'channels.*' => ['in:sms,email'],
             'body' => ['required', 'string', 'min:2', 'max:2000'],
         ]);
-        $sender = $request->user();
-        $senderName = trim($sender->first_name . ' ' . $sender->last_name) ?: 'Your educator';
-        $childName = $child->preferred_name ?: $child->first_name;
-        $agency = DB::table('agencies')->where('id', $agencyId)->first(['name', 'contact_email', 'brand_support_email']);
-        $agencyName = (string) ($agency->name ?? 'Your child care agency');
         $body = trim($d['body']);
-        $wantSms = in_array('sms', $d['channels'], true);
-        $wantEmail = in_array('email', $d['channels'], true);
-        if ($wantSms && mb_strlen($body) > self::SMS_MAX) {
+        if (in_array('sms', $d['channels'], true) && mb_strlen($body) > self::SMS_MAX) {
             return response()->json(['message' => 'A text can be at most ' . self::SMS_MAX . ' characters. Shorten it, or send by email only.'], 422);
         }
+        $results = self::reach($agencyId, $family, $centre, $child, $request->user(), $d['guardian_ids'], $d['channels'], $body, true, (string) $request->ip());
 
-        $guardians = $this->guardians((int) $family->id)->keyBy('id');
+        return response()->json(['sent' => count(array_filter($results, fn ($r) => $r['status'] === 'sent')), 'results' => $results]);
+    }
+
+    /**
+     * Send one message to some of a family's parents by text and/or email — shared by the
+     * child record (above) and Messenger ("also send by text / email", ChatController).
+     * $child may be null (a Messenger thread not tied to one child). $bell: write the
+     * parent's in-app notice (Messenger already does, through the chat message itself).
+     */
+    public static function reach(int $agencyId, object $family, object $centre, ?object $child, $sender, array $guardianIds, array $channels, string $body, bool $bell = true, string $ip = ''): array
+    {
+        $self = new self();
+        $senderName = trim($sender->first_name . ' ' . $sender->last_name) ?: 'Your educator';
+        $childName = $child ? ($child->preferred_name ?: $child->first_name) : null;
+        $about = $childName ? ' about ' . $childName : '';
+        $agency = DB::table('agencies')->where('id', $agencyId)->first(['name', 'contact_email', 'brand_support_email']);
+        $agencyName = (string) ($agency->name ?? 'Your child care agency');
+        $wantSms = in_array('sms', $channels, true);
+        $wantEmail = in_array('email', $channels, true);
+        $guardians = $self->guardians((int) $family->id)->keyBy('id');
         $results = [];
         $sms = app(SmsController::class);
-        foreach (array_unique(array_map('intval', $d['guardian_ids'])) as $gid) {
+        foreach (array_unique(array_map('intval', $guardianIds)) as $gid) {
             $g = $guardians[$gid] ?? null;
-            if (! $g) { $results[] = ['user_id' => $gid, 'channel' => '-', 'status' => 'refused', 'note' => 'Not a parent of this child']; continue; }
+            if (! $g) { $results[] = ['user_id' => $gid, 'channel' => '-', 'status' => 'refused', 'note' => 'Not a parent in this family']; continue; }
             $gname = trim($g->first_name . ' ' . $g->last_name);
 
             if ($wantSms) {
-                [$ok, $why] = $this->smsState($agencyId, $g);
-                $text = $agencyName . ': ' . $senderName . ' about ' . $childName . ': ' . $body;
+                [$ok, $why] = $self->smsState($agencyId, $g);
                 $status = 'skipped'; $note = $why;
+                if ($ok && mb_strlen($body) > self::SMS_MAX) { $ok = false; $note = 'Too long for a text (' . self::SMS_MAX . ' characters)'; }
                 if ($ok) {
+                    $text = $agencyName . ': ' . $senderName . $about . ': ' . $body;
                     $before = (int) DB::table('sms_messages')->max('id');
                     $sent = $sms->sendOne($agencyId, (int) $g->id, (string) $g->phone, $text, 'staff_message');
                     $row = DB::table('sms_messages')->where('id', '>', $before)->where('to_user_id', $g->id)->orderByDesc('id')->first(['status', 'error']);
                     $status = $sent ? 'sent' : ($row->status ?? 'failed');
                     $note = $sent ? null : ($row->error ?? 'Not sent');
                 }
-                $this->log($agencyId, $child, $family, (int) $sender->id, (int) $g->id, 'sms', (string) $g->phone, $body, $status, $note);
+                $self->log($agencyId, $child, $family, (int) $sender->id, (int) $g->id, 'sms', (string) $g->phone, $body, $status, $note);
                 $results[] = ['user_id' => (int) $g->id, 'name' => $gname, 'channel' => 'sms', 'status' => $status, 'note' => $note];
             }
 
@@ -141,14 +155,14 @@ final class ParentContactController extends Controller
                         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         $html = EmailTemplate::wrap($agencyId,
                             '<p style="margin:0 0 12px;font-size:15px;color:#334155;line-height:1.6">Hi ' . $e($g->first_name ?: 'there') . ',</p>'
-                            . '<div style="font-size:15px;color:#0F172A;line-height:1.65;white-space:pre-wrap">' . nl2br($e($body)) . '</div>'
+                            . '<div style="font-size:15px;color:#0F172A;line-height:1.65">' . nl2br($e($body)) . '</div>'
                             . '<p style="margin:16px 0 0;font-size:14px;color:#334155;line-height:1.6">— ' . $e($senderName) . ', ' . $e($centre->name) . '</p>'
                             . '<p style="margin:16px 0 0;font-size:12.5px;color:#64748B;line-height:1.55">To reply, use Messenger in the KiddieTrac app, or reply to this email and it will reach '
                             . $e($agencyName) . '.</p>',
-                            ['eyebrow' => 'A MESSAGE ABOUT ' . mb_strtoupper($childName), 'title' => 'A message from ' . $senderName, 'subtitle' => $centre->name,
-                             'preheader' => mb_substr($body, 0, 120)]);
+                            ['eyebrow' => $childName ? 'A MESSAGE ABOUT ' . mb_strtoupper($childName) : 'A MESSAGE FROM YOUR PROVIDER', 'title' => 'A message from ' . $senderName,
+                             'subtitle' => $centre->name, 'preheader' => mb_substr($body, 0, 120)]);
                         $replyTo = collect([$agency->contact_email ?? null, $agency->brand_support_email ?? null])->first(fn ($a) => filter_var((string) $a, FILTER_VALIDATE_EMAIL));
-                        $subject = $senderName . ' — a message about ' . $childName;
+                        $subject = $senderName . ' — ' . ($childName ? 'a message about ' . $childName : 'a message from ' . $centre->name);
                         $beforeE = (int) DB::table('email_logs')->max('id');
                         AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($email, $gname, $subject, $replyTo) {
                             $m->to($email, $gname ?: null)->subject($subject);
@@ -158,35 +172,37 @@ final class ParentContactController extends Controller
                         $status = $row ? (string) $row->status : 'sent';
                         $note = $status === 'sent' ? null : ($row->error ?? null);
                     } catch (\Throwable $ex) {
-                        Log::warning('educator parent email failed', ['child' => $childId, 'error' => $ex->getMessage()]);
+                        Log::warning('educator parent email failed', ['family' => $family->id, 'error' => $ex->getMessage()]);
                         $status = 'failed'; $note = 'The email could not be sent';
                     }
                 }
-                $this->log($agencyId, $child, $family, (int) $sender->id, (int) $g->id, 'email', $email, $body, $status, $note);
+                $self->log($agencyId, $child, $family, (int) $sender->id, (int) $g->id, 'email', $email, $body, $status, $note);
                 $results[] = ['user_id' => (int) $g->id, 'name' => $gname, 'channel' => 'email', 'status' => $status, 'note' => $note];
             }
 
-            // In the parent's app too, so a message is never only in a phone or an inbox.
-            try {
-                \App\Support\Notify::write(['user_id' => (int) $g->id, 'type' => 'staff_message', 'title' => '💬 ' . $senderName . ' about ' . $childName,
-                    'body' => mb_substr($body, 0, 300), 'data' => json_encode(['link' => '#messages']), 'created_at' => now()]);
-            } catch (\Throwable $ex) {}
+            if ($bell) {
+                try {
+                    \App\Support\Notify::write(['user_id' => (int) $g->id, 'type' => 'staff_message', 'title' => '💬 ' . $senderName . $about,
+                        'body' => mb_substr($body, 0, 300), 'data' => json_encode(['link' => '#messages']), 'created_at' => now()]);
+                } catch (\Throwable $ex) {}
+            }
         }
 
         $sentN = count(array_filter($results, fn ($r) => $r['status'] === 'sent'));
         try {
-            \App\Support\Audit::write(['user_id' => (int) $sender->id, 'agency_id' => $agencyId, 'action' => 'child.parent_message_sent', 'entity_type' => 'child', 'entity_id' => (int) $child->id,
-                'payload' => json_encode(['summary' => $senderName . ' messaged ' . $childName . '\'s parents (' . implode('+', $d['channels']) . '): ' . $sentN . ' sent of ' . count($results),
-                    'results' => $results, 'body' => mb_substr($body, 0, 500)]), 'ip_address' => substr((string) $request->ip(), 0, 45), 'created_at' => now()]);
+            \App\Support\Audit::write(['user_id' => (int) $sender->id, 'agency_id' => $agencyId, 'action' => 'child.parent_message_sent',
+                'entity_type' => $child ? 'child' : 'family', 'entity_id' => (int) ($child->id ?? $family->id),
+                'payload' => json_encode(['summary' => $senderName . ' messaged ' . ($family->family_name ?? 'a family') . $about . ' (' . implode('+', $channels) . '): ' . $sentN . ' sent of ' . count($results),
+                    'results' => $results, 'body' => mb_substr($body, 0, 500)]), 'ip_address' => substr($ip, 0, 45), 'created_at' => now()]);
         } catch (\Throwable $ex) {}
 
-        return response()->json(['sent' => $sentN, 'results' => $results]);
+        return $results;
     }
 
-    private function log(int $agencyId, object $child, object $family, int $senderId, int $guardianId, string $channel, string $to, string $body, string $status, ?string $note): void
+    private function log(int $agencyId, ?object $child, object $family, int $senderId, int $guardianId, string $channel, string $to, string $body, string $status, ?string $note): void
     {
         try {
-            DB::table('staff_parent_messages')->insert(['agency_id' => $agencyId, 'child_id' => (int) $child->id, 'family_id' => (int) $family->id,
+            DB::table('staff_parent_messages')->insert(['agency_id' => $agencyId, 'child_id' => $child ? (int) $child->id : null, 'family_id' => (int) $family->id,
                 'sender_id' => $senderId, 'guardian_user_id' => $guardianId, 'channel' => $channel, 'to_address' => mb_substr($to, 0, 190),
                 'body' => $body, 'status' => $status, 'error' => $note ? mb_substr($note, 0, 500) : null, 'created_at' => now()]);
         } catch (\Throwable $e) { Log::warning('staff_parent_messages insert failed', ['error' => $e->getMessage()]); }

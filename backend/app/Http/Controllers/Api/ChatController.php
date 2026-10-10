@@ -280,6 +280,10 @@ final class ChatController extends Controller
         $user = $request->user();
         $data = $request->validate([
             'body' => ['required_without:attachment', 'nullable', 'string', 'max:5000'],
+            // ALSO BY TEXT / EMAIL (2026-10-09, Anthony: "in messager under educator add the
+            // SMS, text and email as well or allow to choose all if required").
+            'also' => ['sometimes', 'array'],
+            'also.*' => ['in:sms,email'],
         ]);
 
         if (! $this->providerCanAccess($user->id, $conversationId)) {
@@ -289,7 +293,34 @@ final class ChatController extends Controller
         $attachments = $this->extractAttachment($request);
         // A family that has moved provider: this thread is the old provider's history now.
         if ($moved = $this->movedAway($conversationId)) { return $this->movedAwayRefusal($moved); }
-        return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments));
+        $msg = $this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments);
+
+        /* The message is in the thread either way; text and/or email carry the same words
+           to the family's parents through the agency's number and mailer (consent, logging,
+           replies-to-agency: ParentContactController::reach). Attachments stay in the app. */
+        $also = array_values(array_unique((array) ($data['also'] ?? [])));
+        $body = trim((string) ($data['body'] ?? ''));
+        if ($also && $body !== '') {
+            try {
+                $conv = DB::table('conversations')->where('id', $conversationId)->first();
+                $family = $conv ? DB::table('families')->where('id', $conv->family_id)->first() : null;
+                $centre = $family ? DB::table('centres')->where('id', $family->centre_id)->first() : null;
+                // An SMS thread already relays every message to the parent's phone (SmsChatBridge).
+                if ($conv && ($conv->channel ?? null) === 'sms') { $also = array_values(array_diff($also, ['sms'])); }
+                if ($also && $conv && $family && $centre) {
+                    $child = $conv->child_id ? DB::table('children')->where('id', $conv->child_id)->first() : null;
+                    $ids = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                        ->where('g.family_id', $family->id)->whereNull('u.deleted_at')->pluck('u.id')->all();
+                    $msg['reach'] = \App\Http\Controllers\Api\ParentContactController::reach(
+                        (int) $centre->agency_id, $family, $centre, $child, $user, $ids, $also, $body, false, (string) $request->ip());
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('chat also-send failed', ['conversation' => $conversationId, 'error' => $e->getMessage()]);
+                $msg['reach_error'] = 'The message is in Messenger, but the text/email could not be sent.';
+            }
+        }
+
+        return response()->json($msg);
     }
 
     /**

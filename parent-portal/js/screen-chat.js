@@ -2126,6 +2126,13 @@
             <button class="kt-attach-remove" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:14px;line-height:1;">✕</button>
           </div>
         </div>
+        ${myRole !== 'guardian' ? `<div class="kt-also-row" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 12px 0;background:white;border-top:1px solid #E5E7EB;flex-shrink:0;font-size:12px;color:#64748B;">
+          <span style="font-weight:700;">Also send by</span>
+          <button type="button" class="kt-also" data-also="sms" aria-pressed="false" style="height:26px;padding:0 10px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:12px;font-weight:700;cursor:pointer;">📱 Text</button>
+          <button type="button" class="kt-also" data-also="email" aria-pressed="false" style="height:26px;padding:0 10px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:12px;font-weight:700;cursor:pointer;">✉️ Email</button>
+          <button type="button" class="kt-also-all" style="height:26px;padding:0 10px;border-radius:999px;border:1px dashed #CBD5E1;background:#fff;color:#64748B;font-size:12px;font-weight:700;cursor:pointer;">All</button>
+          <span class="kt-also-note" style="font-size:11.5px;color:#94A3B8;">Messenger only</span>
+        </div>` : ''}
         <div class="kt-thread-compose" style="padding:10px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:4px;flex-shrink:0;align-items:center;position:relative;">
           <input class="kt-attach-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display:none;" />
           <button class="kt-emoji-btn" type="button" title="Emoji" style="background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;">😊</button>
@@ -2328,9 +2335,42 @@
     });
     attachRemove.addEventListener('click', () => setPending(null));
 
+    /* ALSO BY TEXT / EMAIL (2026-10-09, Anthony: "in messager under educator add the SMS,
+       text and email as well or allow to choose all if required"). The message always goes
+       in Messenger; the chips add a text and/or an email with the same words to the
+       family's parents, from the agency's number and mailer (consent respected, logged on
+       the family). The choice resets after each send so a text is never sent by accident. */
+    const alsoSel = new Set();
+    function paintAlso() {
+      container.querySelectorAll('.kt-also').forEach((b) => {
+        const on = alsoSel.has(b.getAttribute('data-also'));
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.style.background = on ? '#159FB4' : '#fff';
+        b.style.color = on ? '#fff' : '#334155';
+        b.style.borderColor = on ? '#159FB4' : '#CBD5E1';
+      });
+      const note = $('.kt-also-note', container);
+      if (note) note.textContent = alsoSel.size ? ('Messenger + ' + [...alsoSel].map((x) => x === 'sms' ? 'text' : 'email').join(' + ')) : 'Messenger only';
+    }
+    container.querySelectorAll('.kt-also').forEach((b) => b.addEventListener('click', () => {
+      const k = b.getAttribute('data-also');
+      if (alsoSel.has(k)) alsoSel.delete(k); else alsoSel.add(k);
+      paintAlso();
+    }));
+    const allBtn = $('.kt-also-all', container);
+    if (allBtn) allBtn.addEventListener('click', () => {
+      if (alsoSel.size === 2) alsoSel.clear(); else { alsoSel.add('sms'); alsoSel.add('email'); }
+      paintAlso();
+    });
+
     const doSend = async () => {
       const body = input.value.trim();
       if (!body && !pendingFile) return;
+      const also = [...alsoSel];
+      if (also.indexOf('sms') > -1 && body.length > 480) {
+        alert('A text can be at most 480 characters. Shorten the message, or untick Text.');
+        return;
+      }
       send.disabled = true;
       input.disabled = true;
       attachBtn.disabled = true;
@@ -2341,6 +2381,7 @@
           const fd = new FormData();
           fd.append('body', body);
           fd.append('attachment', pendingFile);
+          also.forEach((a) => fd.append('also[]', a));
           const res = await fetch(apiBase() + endpointBase() + '/' + c.id + '/send', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
@@ -2352,7 +2393,16 @@
           }
           msg = await res.json();
         } else {
-          msg = await api('POST', endpointBase() + '/' + c.id + '/send', { body: body });
+          msg = await api('POST', endpointBase() + '/' + c.id + '/send', also.length ? { body: body, also: also } : { body: body });
+        }
+        if (also.length && window.KT && KT.toast) {
+          const res = (msg && msg.reach) || [];
+          const ok = res.filter((r) => r.status === 'sent');
+          const not = res.filter((r) => r.status !== 'sent');
+          if (msg && msg.reach_error) KT.toast('⚠️', 'Sent in Messenger only', msg.reach_error, '#B45309');
+          else KT.toast(ok.length ? '💬' : '⚠️', ok.length ? ('Also sent: ' + ok.map((r) => (r.channel === 'sms' ? 'text' : 'email') + ' to ' + (r.name || 'parent')).join(', ')) : 'Only sent in Messenger',
+            not.length ? not.map((r) => (r.name || 'Parent') + ' — ' + (r.channel === 'sms' ? 'text' : 'email') + ': ' + (r.note || r.status)).join(' · ') : '', ok.length && !not.length ? '#16A34A' : '#B45309');
+          alsoSel.clear(); paintAlso();
         }
         input.value = '';
         setPending(null);
