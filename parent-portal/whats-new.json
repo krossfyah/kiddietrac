@@ -2,6 +2,41 @@
  "updated": "2026-10-10",
  "entries": [
   {
+   "type": "improved",
+   "date": "2026-10-10",
+   "icon": "🗂️",
+   "title": "Settings, one section per tab",
+   "body": "Settings → Notifications now has a tab for each section: counter-signature, provider bios, shared files and Message Centre. Data retention is split the same way. In your own Settings, notifications have their own tab, with Notify me about, Texts & calls, and Push & alerts each on a subtab.",
+   "roles": [
+    "agency_admin",
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "improved",
+   "date": "2026-10-10",
+   "icon": "🔔",
+   "title": "Your notifications have their own tab",
+   "body": "In Settings, what you are told about, texts and calls, and push alerts have moved off the Profile tab into a new Notifications tab, one subtab each.",
+   "roles": [
+    "centre_director",
+    "educator",
+    "home_visitor",
+    "guardian"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-10",
+   "icon": "👥",
+   "title": "RSVP headcount",
+   "body": "Event RSVPs now add up how many people are coming, from the how-many-people question, and show it as a People attending card on the event and on the events list.",
+   "roles": [
+    "agency_admin",
+    "platform_admin"
+   ]
+  },
+  {
    "type": "new",
    "date": "2026-10-10",
    "icon": "🏛️",

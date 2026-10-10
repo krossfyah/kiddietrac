@@ -43,19 +43,30 @@
       + ' style="width:72px;padding:6px 9px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">';
   }
 
+  /* ONE SECTION PER SUBTAB (2026-10-10, Anthony: "under notifications in settings there
+     are multiple settings on one page add the sections in its own substabs within
+     notifications to clean this up"). Four unrelated settings, each with its own Save, were
+     stacked in one long scroll. Each is now its own tab (KT.settingsTabs), painted when
+     first opened; #notification-settings?tab=bios opens one directly. */
+  function section(fn) {
+    return function (pane) {
+      return Promise.resolve(fn(pane)).then(function () {
+        // The painters return quietly when the API refuses (not this person's to change).
+        if (/^\s*Loading…\s*$/.test(pane.textContent || '')) {
+          pane.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Only agency administrators can change this.</div>';
+        }
+      });
+    };
+  }
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:900px;">'
-      + '<div id="ns-body"><div class="kt-card" style="max-width:680px;color:#64748B;">Loading…</div></div>'
-      + '<div id="ns-bio" style="margin-top:16px;"></div><div id="ns-files" style="margin-top:16px;"></div><div id="ns-msg" style="margin-top:16px;"></div></div>';
-    var body = main.querySelector('#ns-body');
-    try { await paintCountersign(body); }
-    catch (e) {
-      body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#B91C1C;">Could not load: ' + esc((e && e.message) || 'error') + '</div>';
-    }
-    try { await paintBio(main.querySelector('#ns-bio')); } catch (e) {}
-    try { await paintFiles(main.querySelector('#ns-files')); } catch (e) {}
-    try { await paintMessaging(main.querySelector('#ns-msg')); } catch (e) {}
+    main.innerHTML = '<div style="padding:14px 24px;max-width:900px;"><div id="ns-host"></div></div>';
+    KT.settingsTabs(main.querySelector('#ns-host'), 'notification-settings', [
+      { key: 'countersign', label: '✍️ Counter-signature', paint: section(paintCountersign) },
+      { key: 'bios', label: '🧑‍🏫 Provider bios', paint: section(paintBio) },
+      { key: 'files', label: '📎 Shared files', paint: section(paintFiles) },
+      { key: 'messaging', label: '💬 Message Centre', paint: section(paintMessaging) },
+    ]);
   }
 
   /* ── Message Centre: who educators and home visitors may message (2026-10-09) ──

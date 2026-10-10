@@ -976,7 +976,7 @@
     'calendar': 'Closures, trips, conferences, time off, birthdays and shifts across the agency.',
     'auto-signoff': 'Close shifts and days somebody forgot to close.',
     'clock-settings': 'Reminders about the time clock, and closing what somebody forgot.',
-    'notification-settings': 'Reminders your admins and directors get, and how often — such as forms waiting for counter-signature.',
+    'notification-settings': 'Reminders and notices, one tab each: counter-signature reminders, provider bios, shared files and who staff can message.',
     'payment-providers': 'Your own Zum Rails and Stripe accounts, per agency.',
     'billing-settings': 'Tax rate and other invoicing defaults.',
     'phone-voicemail': 'The toll-free greeting (voice and wording) and the voicemails callers leave.',

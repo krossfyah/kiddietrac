@@ -78,38 +78,51 @@
 
     main.innerHTML = '<div style="padding:14px 24px;max-width:840px;">'
       + '<div class="kt-page-hero"><h2>🗄️ Data retention &amp; compliance</h2><p>Control how long ' + esc(data.agency_name || 'your agency') + ' keeps each type of data, and how you handle privacy and consent. These settings record your agency’s data-retention policy.</p></div>'
+      + '<div id="dr-tabs"></div>'
+      + '<div style="display:flex;align-items:center;gap:14px;justify-content:flex-end;">'
+      + '<span id="c-status" style="font-size:13px;color:#1E8E60;"></span>'
+      + '<button id="c-save" style="font-size:14px;font-weight:700;padding:11px 22px;border:0;border-radius:10px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;cursor:pointer;">Save changes</button></div>'
+      + '</div>';
 
-      + card('Retention periods', 'How long records are kept before they become eligible for removal. Childcare regulations often set minimums — check your jurisdiction.',
+    /* ONE SECTION PER SUBTAB (2026-10-10, Anthony: "add the sections in its own substabs ...
+       looks for other setting sections and do the same"). Four cards stacked in one scroll
+       are now four tabs. Painted up front (eager) because the single Save below reads the
+       fields on every tab: a tab never opened must still send its stored values, not blanks. */
+    var SECTIONS = {
+      periods: card('Retention periods', 'How long records are kept before they become eligible for removal. Childcare regulations often set minimums — check your jurisdiction.',
           numField('child_record_years', 'Child & enrolment records (after departure)', 'years', c.child_record_years)
           + numField('document_years', 'Uploaded documents', 'years', c.document_years)
           + numField('daily_log_months', 'Attendance & daily logs', 'months', c.daily_log_months)
           + numField('message_months', 'Parent–educator messages (chat)', 'months', c.message_months)
           + numField('announcement_months', 'Announcements & news', 'months', c.announcement_months)
           + numField('suspended_family_months', 'Suspended families', 'months', c.suspended_family_months, 'Set to 0 to keep suspended families indefinitely.', 0)
-          + numField('audit_log_months', 'Security & audit trail', 'months', c.audit_log_months))
+          + numField('audit_log_months', 'Security & audit trail', 'months', c.audit_log_months)),
 
-      + card('Automatic enforcement', 'Off by default. When on, records past their retention period are handled automatically by a nightly review. Deletion is permanent — anonymising keeps aggregate stats while removing identifying details.',
+      enforce: card('Automatic enforcement', 'Off by default. When on, records past their retention period are handled automatically by a nightly review. Deletion is permanent — anonymising keeps aggregate stats while removing identifying details.',
           toggle('auto_enforce', 'Automatically enforce retention', 'Runs nightly and applies only the periods marked ENFORCED above — messages, announcements and suspended families. The rest are recorded as policy and are never deleted automatically.', c.auto_enforce)
           + '<div style="display:flex;align-items:center;gap:12px;padding:10px 0 2px;"><label for="c_enforce_mode" style="font-size:14px;color:#334155;font-weight:600;">When enforcing, records are</label>'
           + '<select id="c_enforce_mode" style="' + INP + 'width:auto;">'
           + '<option value="anonymize"' + (c.enforce_mode !== 'delete' ? ' selected' : '') + '>Anonymised</option>'
-          + '<option value="delete"' + (c.enforce_mode === 'delete' ? ' selected' : '') + '>Permanently deleted</option></select></div>')
+          + '<option value="delete"' + (c.enforce_mode === 'delete' ? ' selected' : '') + '>Permanently deleted</option></select></div>'),
 
-      + card('Privacy & consent', '',
+      privacy: card('Privacy & consent', '',
           toggle('require_consent', 'Require parent consent at enrolment', 'Parents must acknowledge your privacy terms before a child is enrolled.', c.require_consent)
           + '<div style="padding:10px 0;"><label for="c_privacy_policy_url" style="display:block;font-size:13px;font-weight:700;color:#475569;margin-bottom:5px;">Privacy policy URL</label>'
           + '<input id="c_privacy_policy_url" type="url" placeholder="https://…" value="' + esc(c.privacy_policy_url || '') + '" style="' + WIDE + '"></div>'
           + '<div style="padding:2px 0;"><label for="c_data_contact_email" style="display:block;font-size:13px;font-weight:700;color:#475569;margin-bottom:5px;">Data-protection contact email</label>'
           + '<input id="c_data_contact_email" type="email" placeholder="privacy@youragency.com" value="' + esc(c.data_contact_email || '') + '" style="' + WIDE + '">'
-          + '<div style="font-size:12.5px;color:#64748B;margin-top:5px;">Where parents send data-access or deletion requests.</div></div>')
+          + '<div style="font-size:12.5px;color:#64748B;margin-top:5px;">Where parents send data-access or deletion requests.</div></div>'),
 
-      + card('Notes', 'Internal notes on your retention/compliance obligations (visible to your admins only).',
-          '<textarea id="c_notes" rows="3" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;font-family:inherit;resize:vertical;">' + esc(c.notes || '') + '</textarea>')
-
-      + '<div style="display:flex;align-items:center;gap:14px;justify-content:flex-end;">'
-      + '<span id="c-status" style="font-size:13px;color:#1E8E60;"></span>'
-      + '<button id="c-save" style="font-size:14px;font-weight:700;padding:11px 22px;border:0;border-radius:10px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;cursor:pointer;">Save changes</button></div>'
-      + '</div>';
+      notes: card('Notes', 'Internal notes on your retention/compliance obligations (visible to your admins only).',
+          '<textarea id="c_notes" rows="3" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;font-family:inherit;resize:vertical;">' + esc(c.notes || '') + '</textarea>'),
+    };
+    var sec = function (k) { return function (p) { p.innerHTML = SECTIONS[k]; }; };
+    KT.settingsTabs(main.querySelector('#dr-tabs'), 'data-retention', [
+      { key: 'periods', label: '🗓 Retention periods', paint: sec('periods') },
+      { key: 'enforce', label: '⚙️ Automatic enforcement', paint: sec('enforce') },
+      { key: 'privacy', label: '🔒 Privacy & consent', paint: sec('privacy') },
+      { key: 'notes', label: '📝 Notes', paint: sec('notes') },
+    ], { eager: true });
 
     var btn = main.querySelector('#c-save');
     btn.onclick = function () {

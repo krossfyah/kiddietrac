@@ -656,6 +656,12 @@
       .indexOf(activeRole) !== -1;
     var tabBar = el('div', { style: 'display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid #E5E7EB;margin-bottom:16px;-webkit-overflow-scrolling:touch;' });
     var paneProfile = el('div', { class: 'kt-st-pane kt-st-cols' });
+    /* NOTIFICATIONS IS ITS OWN TAB (2026-10-10, Anthony: "under notifications in settings
+       there are multiple settings on one page add the sections in its own substabs within
+       notifications to clean this up"). Profile carried the push test, "Notify me about…"
+       and "Texts and phone calls" under the person's name and photo. They now live here,
+       one subtab each (KT.settingsTabs); #settings?tab=notifications&sub=texts opens one. */
+    var paneNotif = el('div', { class: 'kt-st-pane', style: 'display:none;max-width:980px;' });
     var paneDocs = el('div', { class: 'kt-st-pane kt-st-docs', style: 'display:none;' });
     // Payments holds Autopay and the Wallet, which draw their own cards and hero; framing
     // them again in a settings card doubled the border and padding.
@@ -670,6 +676,7 @@
       _stabs.push({ b: b, p: pane, key: String(label).toLowerCase() }); tabBar.appendChild(b); return b;
     }
     var _t0 = stab('Profile', paneProfile);
+    stab('Notifications', paneNotif);
     stab('Documents', paneDocs);
     if (isGuardian) stab('Payments', panePay);
     if (isPaidStaff) stab('Payroll', panePayroll);
@@ -677,6 +684,7 @@
     stab('About', paneAbout);
     wrap.appendChild(tabBar);
     wrap.appendChild(paneProfile);
+    wrap.appendChild(paneNotif);
     wrap.appendChild(paneDocs);
     if (isGuardian) wrap.appendChild(panePay);
     if (isPaidStaff) wrap.appendChild(panePayroll);
@@ -939,7 +947,7 @@
       } catch (e) {}
 
       nd.appendChild(ntBtn); nd.appendChild(ntMsg);
-      paneProfile.appendChild(nd);
+      var _notifPush = nd;
 
       // ── What you get told about, and how ──
       // Sign-in/out alerts: email and in-app on by default, SMS off — every text
@@ -950,7 +958,7 @@
         var prefsBody = el('div', {});
         pc2.appendChild(prefsBody);
         prefsBody.appendChild(el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;' }, ['Loading…']));
-        paneProfile.appendChild(pc2);
+        var _notifAbout = pc2;
 
         // Consent to be texted at all — a different question from which events you
         // want, and the one that has to be asked explicitly. Loaded in parallel so a
@@ -1099,7 +1107,27 @@
 
     /* ── Texts and phone calls ── built by buildContactPrefsCard(), shared with the
        "My profile" dialog in User management (KT.renderContactPrefs). */
-    try { if (paneProfile) { paneProfile.appendChild(buildContactPrefsCard()); } } catch (e) {}
+    var _notifTexts = null;
+    try { _notifTexts = buildContactPrefsCard(); } catch (e) {}
+
+    // The Notifications tab: one subtab per section (see paneNotif above).
+    try {
+      var _nHost = el('div', {});
+      paneNotif.appendChild(_nHost);
+      var _card = function (node) {
+        return function (p) {
+          p.classList.add('kt-st-full');   // the same card styling as every other settings tab
+          p.innerHTML = '';
+          if (node) { p.appendChild(node); }
+          else { p.appendChild(el('div', { style: CARD }, ['Not available.'])); }
+        };
+      };
+      KT.settingsTabs(_nHost, 'settings-notifications', [
+        typeof _notifAbout !== 'undefined' && _notifAbout ? { key: 'about', label: '🔔 Notify me about', paint: _card(_notifAbout) } : null,
+        _notifTexts ? { key: 'texts', label: '📱 Texts & calls', paint: _card(_notifTexts) } : null,
+        typeof _notifPush !== 'undefined' && _notifPush ? { key: 'push', label: '📲 Push & alerts', paint: _card(_notifPush) } : null,
+      ], { param: 'sub' });
+    } catch (e) {}
 
     // Diagnostics: if the native app captured a crash (e.g. biometrics), show it
     // here so it can be screenshotted for support. Populated by MainActivity.
