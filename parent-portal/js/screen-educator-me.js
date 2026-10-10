@@ -329,7 +329,12 @@
       + '<div><div style="font-weight:800;font-size:17px;color:#0F172A;">' + esc(name) + '</div>'
       + '<div style="font-size:12.5px;color:#64748B;">'
       + esc([c.age_human, genderLabel(c.gender), c.room_name, c.pronouns].filter(Boolean).join(' · ') || '—')
-      + '</div></div></div>';
+      + '</div></div>'
+      /* EMERGENCY CARD (2026-10-09, Anthony: "educators should be able to see the emergency
+         card for their children"). The same printable card directors open, for a child
+         in this educator's own rooms; every view is audited. */
+      + '<button type="button" data-ecard style="margin-left:auto;background:#B91C1C;color:#fff;border:0;border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🆘 Emergency card</button>'
+      + '</div>';
 
     // Safety first — this is the reason an educator opens a record mid-room.
     var alerts = [
@@ -366,7 +371,9 @@
     }
 
     var guardians = d.guardians || [];
-    html += '<div style="' + CARD + '"><div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">Parents / guardians</div>';
+    html += '<div style="' + CARD + '"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="font-weight:800;font-size:14px;color:#0F172A;flex:1;">Parents / guardians</div>'
+      + (guardians.length ? '<button type="button" data-msg="all" style="background:#fff;color:' + TEAL + ';border:1px solid ' + TEAL + ';border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:800;cursor:pointer;">💬 Message parents</button>' : '')
+      + '</div>';
     if (!guardians.length) html += '<div style="color:#64748B;font-size:13px;">No guardians on file.</div>';
     guardians.forEach(function (g, i) {
       var gname = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
@@ -375,8 +382,11 @@
         + '<div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + esc(gname)
         + (g.is_primary ? ' <span style="font-size:10px;background:#E1F3F6;color:#0E7C90;border-radius:5px;padding:1px 5px;font-weight:800;">PRIMARY</span>' : '') + '</div>'
         + '<div style="font-size:11.5px;color:#64748B;">' + esc(g.relationship || 'Guardian') + (g.can_pickup ? ' · may collect' : '') + '</div></div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">'
         + (g.phone ? '<a href="tel:' + esc(g.phone) + '" style="background:' + TEAL + ';color:#fff;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;text-decoration:none;">Call</a>' : '')
-        + '</div>';
+        + (g.id ? '<button type="button" data-msg="' + esc(g.id) + '" data-ch="sms" style="background:#fff;color:' + TEAL + ';border:1px solid ' + TEAL + ';border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:800;cursor:pointer;">Text</button>'
+          + '<button type="button" data-msg="' + esc(g.id) + '" data-ch="email" style="background:#fff;color:' + TEAL + ';border:1px solid ' + TEAL + ';border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:800;cursor:pointer;">Email</button>' : '')
+        + '</div></div>';
     });
     if (c.primary_phone || c.primary_email) {
       html += '<div style="border-top:1px solid #F1F5F9;margin-top:8px;padding-top:8px;font-size:12px;color:#64748B;">'
@@ -465,6 +475,123 @@
     ov.querySelector('#cr-body').innerHTML = html;
     renderHistory();
     makeCollapsible(ov);
+
+    var ecBtn = ov.querySelector('[data-ecard]');
+    if (ecBtn) ecBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openEmergencyCard(childId, name); });
+    ov.querySelectorAll('[data-msg]').forEach(function (b) {
+      b.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        var who = b.getAttribute('data-msg');
+        openParentMessage(childId, c.first_name || name, who === 'all' ? null : +who, b.getAttribute('data-ch') || null);
+      });
+    });
+  }
+
+  function authHeaders(accept) {
+    var h = { Accept: accept || 'application/json' };
+    var t = (window.KT && KT.Auth && KT.Auth.token && KT.Auth.token()) || sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+    if (t) h.Authorization = 'Bearer ' + t;
+    var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa;
+    return h;
+  }
+
+  /* The child's emergency card in the portal's own viewer, with Print (same as directors). */
+  function openEmergencyCard(childId, name) {
+    var base = apiBase();
+    fetch(base + '/provider/children/' + childId + '/emergency-card', { headers: authHeaders('text/html') })
+      .then(function (r) { if (!r.ok) throw new Error(r.status === 403 ? 'This card is only for children in your rooms.' : 'HTTP ' + r.status); return r.text(); })
+      .then(function (htmlDoc) {
+        if (window.KT && KT.viewHtml) {
+          KT.viewHtml(htmlDoc, {
+            title: (name || 'Child') + ' — emergency card', label: 'Emergency card', hide: '.toolbar',
+            externalPrint: function () {
+              return fetch(base + '/provider/children/' + childId + '/emergency-card/print-link', { headers: authHeaders() })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (d) { return d && d.url; });
+            },
+          });
+          return;
+        }
+        var w = window.open('', '_blank');
+        if (w) { w.document.open(); w.document.write(htmlDoc); w.document.close(); }
+      })
+      .catch(function (e) { if (KT.toast) KT.toast('⚠️', 'Could not open the emergency card', (e && e.message) || '', '#DC2626'); });
+  }
+
+  /* TEXT OR EMAIL A CHILD'S PARENTS THROUGH KIDDIETRAC (2026-10-09). Sent from the agency's
+     number and mailer — never the educator's own — and logged on the child. A parent who
+     has not agreed to texts is shown as such and can still be emailed. */
+  async function openParentMessage(childId, childFirst, onlyId, channel) {
+    var M = window.KT && KT.Shell && KT.Shell.Modal;
+    if (!M) return;
+    var d;
+    try { d = await Api.get('/provider/children/' + childId + '/parent-contacts'); }
+    catch (e) { if (KT.toast) KT.toast('⚠️', 'Could not load parents', (e && e.message) || '', '#DC2626'); return; }
+    var gs = d.guardians || [];
+    var max = d.sms_max || 480;
+    var box = document.createElement('div');
+    var wantSms = channel ? channel === 'sms' : gs.some(function (g) { return g.sms_ok; });
+    var wantEmail = channel ? channel === 'email' : true;
+    box.innerHTML = '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-2px 0 10px;">Sent from the agency\'s number and email, not yours, and kept on ' + esc(childFirst) + '\'s record. Parents also see it in their app.</div>'
+      + '<div style="font-size:11.5px;font-weight:800;letter-spacing:.4px;color:#334155;text-transform:uppercase;margin-bottom:4px;">To</div>'
+      + gs.map(function (g) {
+          var on = onlyId ? g.user_id === onlyId : true;
+          return '<label style="display:flex;gap:9px;align-items:flex-start;padding:7px 0;border-top:1px solid #F1F5F9;cursor:pointer;">'
+            + '<input type="checkbox" data-g="' + g.user_id + '"' + (on ? ' checked' : '') + ' style="margin-top:3px;">'
+            + '<span style="flex:1;min-width:0;"><b style="font-size:13.5px;color:#0F172A;">' + esc(g.name) + '</b>'
+            + '<span style="font-size:12px;color:#64748B;"> · ' + esc(g.relationship || 'Parent') + '</span><br>'
+            + '<span style="font-size:12px;color:' + (g.sms_ok ? '#047857' : '#B45309') + ';">📱 ' + (g.sms_ok ? 'Can be texted' : esc(g.sms_note || 'Cannot be texted')) + '</span>'
+            + '<span style="font-size:12px;color:' + (g.email_ok ? '#047857' : '#B45309') + ';"> · ✉️ ' + (g.email_ok ? 'Can be emailed' : 'No email on file') + '</span></span></label>';
+        }).join('')
+      + '<div style="display:flex;gap:16px;margin:10px 0 6px;font-size:13.5px;">'
+      + '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" data-ch="sms"' + (wantSms ? ' checked' : '') + '> 📱 Text</label>'
+      + '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" data-ch="email"' + (wantEmail ? ' checked' : '') + '> ✉️ Email</label></div>'
+      + '<textarea data-body rows="5" placeholder="e.g. ' + esc(childFirst) + ' had a great morning but is a little warm — could you call us when you can?" style="width:100%;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>'
+      + '<div data-count style="font-size:11.5px;color:#64748B;text-align:right;margin-top:3px;"></div>'
+      + '<div data-out style="font-size:13px;margin-top:6px;"></div>'
+      + (d.recent && d.recent.length ? '<details style="margin-top:10px;"><summary style="font-size:12.5px;color:#475569;cursor:pointer;">Recent messages about ' + esc(childFirst) + '</summary>'
+          + d.recent.map(function (r) {
+              return '<div style="font-size:12px;color:#334155;padding:5px 0;border-top:1px solid #F1F5F9;">' + (r.channel === 'sms' ? '📱' : '✉️') + ' '
+                + esc(KT.fmtDateTime ? KT.fmtDateTime(r.created_at) : r.created_at) + ' · ' + esc(r.sender || '') + ' · <span style="color:' + (r.status === 'sent' ? '#047857' : '#B45309') + ';">' + esc(r.status) + '</span><br>'
+                + esc(String(r.body || '').slice(0, 160)) + '</div>';
+            }).join('') + '</details>' : '');
+    var ta = box.querySelector('[data-body]'), cnt = box.querySelector('[data-count]'), out = box.querySelector('[data-out]');
+    function upd() {
+      var n = (ta.value || '').trim().length, sms = box.querySelector('[data-ch="sms"]').checked;
+      cnt.textContent = n + (sms ? ' / ' + max + ' (text)' : ' characters');
+      cnt.style.color = sms && n > max ? '#B91C1C' : '#64748B';
+    }
+    ta.addEventListener('input', upd); box.querySelector('[data-ch="sms"]').addEventListener('change', upd); upd();
+    var done = false;
+    M.open({
+      title: '💬 Message ' + childFirst + '\'s parents', body: box,
+      actions: [
+        { label: 'Close' },
+        { label: 'Send', primary: true, busyLabel: 'Sending…', handler: function () {
+            if (done) return;   // already sent: Send now just closes
+            var ids = [].map.call(box.querySelectorAll('[data-g]:checked'), function (x) { return +x.getAttribute('data-g'); });
+            var chs = [].map.call(box.querySelectorAll('[data-ch]:checked'), function (x) { return x.getAttribute('data-ch'); });
+            var body = (ta.value || '').trim();
+            out.style.color = '#B91C1C';
+            if (!ids.length) { out.textContent = 'Choose at least one parent.'; return false; }
+            if (!chs.length) { out.textContent = 'Choose Text, Email or both.'; return false; }
+            if (body.length < 2) { out.textContent = 'Write a message.'; ta.focus(); return false; }
+            if (chs.indexOf('sms') > -1 && body.length > max) { out.textContent = 'A text can be at most ' + max + ' characters — shorten it or send by email only.'; return false; }
+            return Api.post('/provider/children/' + childId + '/message-parents', { guardian_ids: ids, channels: chs, body: body }).then(function (r) {
+              var res = (r && r.results) || [];
+              out.style.color = '#0F172A';
+              out.innerHTML = res.map(function (x) {
+                var ok = x.status === 'sent';
+                return '<div style="color:' + (ok ? '#047857' : '#B45309') + ';">' + (ok ? '✓ ' : '• ') + esc(x.name || '') + ' — ' + (x.channel === 'sms' ? 'text' : 'email') + ': '
+                  + (ok ? 'sent' : esc(x.status) + (x.note ? ' (' + esc(x.note) + ')' : '')) + '</div>';
+              }).join('');
+              done = true;
+              if (KT.toast) KT.toast('💬', r.sent ? 'Message sent' : 'Nothing was sent', r.sent ? (r.sent + ' delivered to the carrier/mailer') : 'See the reasons in the window', r.sent ? '#16A34A' : '#B45309');
+              return false;   // keep the window open so the results can be read
+            }).catch(function (e) { out.style.color = '#B91C1C'; out.textContent = (e && e.message) || 'Could not send.'; return false; });
+          } },
+      ],
+    });
   }
 
   // Every card on the child record collapses. On a phone the record is a long

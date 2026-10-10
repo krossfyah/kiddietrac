@@ -1868,6 +1868,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
     // Staff-to-staff direct messaging (#38) — colleagues within an agency. {thread}
     // is numeric-constrained so /team-threads/unread-count is never captured as an id.
+    // Educators: their own children's emergency cards, and texting/emailing those children's
+    // parents through KiddieTrac (2026-10-09). Room-scoped in the controllers (canAccessChildId).
+    Route::middleware('role:educator,centre_director,agency_admin,home_visitor,platform_admin')->prefix('provider')->group(function () {
+        Route::get ('/children/{child}/emergency-card',            [\App\Http\Controllers\Api\EmergencyCardController::class, 'forCarer'])->whereNumber('child');
+        Route::get ('/children/{child}/emergency-card/print-link', [\App\Http\Controllers\Api\EmergencyCardController::class, 'printLinkForCarer'])->whereNumber('child');
+        Route::get ('/children/{child}/parent-contacts',           [\App\Http\Controllers\Api\ParentContactController::class, 'contacts'])->whereNumber('child');
+        Route::post('/children/{child}/message-parents',           [\App\Http\Controllers\Api\ParentContactController::class, 'send'])->whereNumber('child')->middleware('throttle:20,1');
+    });
+
     Route::middleware('role:educator,centre_director,agency_admin,home_visitor,platform_admin,auditor')->prefix('provider')->group(function () {
         Route::get ('/team-contacts',              [\App\Http\Controllers\Api\TeamChatController::class, 'contacts']);
         Route::get ('/team-threads',               [\App\Http\Controllers\Api\TeamChatController::class, 'threads']);

@@ -142,6 +142,71 @@ final class EmergencyCardController extends Controller
         return $this->renderChild($child, $family);
     }
 
+    /**
+     * EDUCATORS OPEN THEIR OWN CHILDREN'S CARDS (2026-10-09, Anthony: "educators should be
+     * able to see the emergency card for their children"). The director routes above check
+     * the centre; these check the CHILD with the same room-scoped rule as the child record
+     * (canAccessChildId): an educator who holds rooms reaches the children in those rooms,
+     * nothing else. Every view is audited — directors' views were not, and an educator
+     * reading a card is exactly the read an auditor asks about.
+     *
+     * GET /provider/children/{child}/emergency-card
+     */
+    public function forCarer(Request $request, int $childId): SymfonyResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) {
+            return response('Not found', 404);
+        }
+        if (! $this->canAccessChildId($request->user(), $childId)) {
+            return response('Forbidden', 403);
+        }
+        $family = DB::table('families')->where('id', $child->family_id)->first();
+        if (! $family) {
+            return response('Not found', 404);
+        }
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id ?? null,
+            'agency_id' => \App\Support\AuditScope::resolve((int) ($request->user()->id ?? 0), $request),
+            'action' => 'emergency_card.viewed',
+            'entity_type' => 'child',
+            'entity_id' => $childId,
+            'payload' => json_encode(['summary' => 'Opened a child\'s emergency card', 'child_id' => $childId]),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 500),
+            'created_at' => now(),
+        ]);
+
+        return $this->renderChild($child, $family);
+    }
+
+    /** GET /provider/children/{child}/emergency-card/print-link — same rule, five-minute link. */
+    public function printLinkForCarer(Request $request, int $childId): JsonResponse
+    {
+        $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
+        if (! $child) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! $this->canAccessChildId($request->user(), $childId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $minutes = 5;
+        $url = \Illuminate\Support\Facades\URL::temporarySignedRoute('emergency.card.signed', now()->addMinutes($minutes), ['child' => $childId]);
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id ?? null,
+            'agency_id' => \App\Support\AuditScope::resolve((int) ($request->user()->id ?? 0), $request),
+            'action' => 'emergency_card.print_link_issued',
+            'entity_type' => 'child',
+            'entity_id' => $childId,
+            'payload' => json_encode(['summary' => 'Issued a ' . $minutes . '-minute printable link for an emergency card', 'child_id' => $childId, 'expires_in_minutes' => $minutes]),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 500),
+            'created_at' => now(),
+        ]);
+
+        return response()->json(['url' => $url, 'expires_in_minutes' => $minutes]);
+    }
+
     /** The render both entry points share, so the two can never drift apart. */
     private function renderChild(object $child, object $family): SymfonyResponse
     {
