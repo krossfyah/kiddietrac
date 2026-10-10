@@ -280,7 +280,10 @@
           + s.children.map(function (c) { return '<tr><td>' + esc(c.child) + '</td><td>' + esc(c.case_number || '—') + '</td><td>' + esc(c.weeks) + '</td><td>' + money(c.state) + '</td><td>' + money(c.copay) + '</td></tr>'; }).join('')
           + '</tbody></table>' : '<div class="oh-warn">No child on this invoice has an authorization for its period.</div>')
         + '<div style="margin-top:8px;font-size:13.5px;"><b>State share: ' + money(s.state) + '</b> · family copay ' + money(s.copay) + (s.capped ? ' <span style="color:#B45309;">(capped at the invoice subtotal)</span>' : '') + '</div>'
-        + '<div class="oh-note">After the split, the family owes the invoice total less the state share. Where your tuition is higher than the authorized amount, that difference stays on the family\'s invoice as well as the copay; check this fits your agreement with the family.</div>'
+        + '<div style="margin-top:4px;font-size:13.5px;">Family owes after the split: <b>' + money(s.family_owes) + '</b>' + (s.write_off ? ' · written off ' + money(s.write_off) : '') + '</div>'
+        + '<div class="oh-note">' + (s.family_billing === 'copay_plus_difference'
+            ? 'Your agency bills the family the copay plus any tuition above what the state pays (Limits &amp; alerts).'
+            : 'Your agency bills the family only the copay; tuition above what the state pays is written off on this invoice (Limits &amp; alerts).') + '</div>'
         + '<div class="oh-msg" style="font-size:13px;margin-top:8px;"></div>');
       var actions = [{ label: 'Close' }];
       if (inv.status === 'draft' && p.applied) actions.push({ label: 'Undo the split', busyLabel: 'Undoing…', handler: function () { return Api.delete('/pfcc/invoices/' + id + '/split').then(function () { toast('↩️', 'Split removed', '', '#16A34A'); renderPfcc(main); }, function (e) { w.querySelector('.oh-msg').textContent = errMsg(e); return false; }); } });
@@ -295,6 +298,9 @@
     var h = '<div class="oh-card"><div style="font-weight:800;font-size:15px;margin-bottom:8px;">Limits and alerts</div><div class="oh-g">'
       + '<div><label class="oh-l">Absent days allowed per half-year</label><input class="oh-i" id="s-cap" type="number" min="1" max="60" value="' + esc(s.absent_cap) + '"' + dis + ' style="width:100%;"></div>'
       + '<div><label class="oh-l">Alert after unpaid copay weeks</label><input class="oh-i" id="s-wk" type="number" min="1" max="8" value="' + esc(s.alert_unpaid_weeks) + '"' + dis + ' style="width:100%;"></div>'
+      + '<div><label class="oh-l">After a split, the family pays</label><select class="oh-i" id="s-bill"' + dis + ' style="width:100%;">'
+      +   '<option value="copay_only"' + (s.family_billing !== 'copay_plus_difference' ? ' selected' : '') + '>Only the copay (the gap is written off)</option>'
+      +   '<option value="copay_plus_difference"' + (s.family_billing === 'copay_plus_difference' ? ' selected' : '') + '>The copay plus tuition above what the state pays</option></select></div>'
       + '<div><label class="oh-l">Step Up To Quality rating</label><select class="oh-i" id="s-lvl"' + dis + ' style="width:100%;">' + ['bronze', 'silver', 'gold'].map(function (l) { return '<option value="' + l + '"' + (l === s.sutq_level ? ' selected' : '') + '>' + l.charAt(0).toUpperCase() + l.slice(1) + '</option>'; }).join('') + '</select></div>'
       + '</div><div class="oh-note">Absent days: Ohio sources give 10 and 20 days per half-year for different cases, so this starts at 10. Check it against your authorizations. Half-years run January–June and July–December. Directors and admins get a bell (never an email or text, and nothing to families) when a child is 2 days from the limit, and when a copay has been unpaid for the weeks set here.</div>'
       + (d.ohio ? '' : '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;margin-top:10px;"><input type="checkbox" id="s-pf"' + (s.pfcc_enabled ? ' checked' : '') + dis + '> Show publicly funded child care for this agency (not in Ohio)</label>'
@@ -304,7 +310,7 @@
     body.innerHTML = h;
     var sv = body.querySelector('#s-save');
     if (sv) sv.addEventListener('click', function () {
-      var p = { absent_cap: +val(body, 's-cap'), alert_unpaid_weeks: +val(body, 's-wk'), sutq_level: val(body, 's-lvl') };
+      var p = { absent_cap: +val(body, 's-cap'), alert_unpaid_weeks: +val(body, 's-wk'), sutq_level: val(body, 's-lvl'), family_billing: val(body, 's-bill') };
       if (body.querySelector('#s-pf')) { p.pfcc_enabled = val(body, 's-pf'); p.sutq_enabled = val(body, 's-sq'); }
       Api.patch('/pfcc/settings', p).then(function () { toast('⚙️', 'Settings saved', '', '#16A34A'); probedFor = null; probe(); renderPfcc(main); })
         .catch(function (e) { body.querySelector('#s-msg').textContent = errMsg(e); });

@@ -30,6 +30,10 @@ final class OhioPfcc
         'absent_cap' => 10,           // per child per half-year (unverified: 10 vs 20)
         'alert_unpaid_weeks' => 2,
         'sutq_level' => 'bronze',     // bronze | silver | gold — assessments twice a year from silver
+        /* What the family is billed after a split (2026-10-10, Anthony: "Let each agency choose").
+           copay_only: the family owes only the copay; tuition above what the state pays is written
+           off on the invoice. copay_plus_difference: the family also owes that difference. */
+        'family_billing' => 'copay_only',
     ];
 
     public static function settings(int $agencyId): array
@@ -45,6 +49,7 @@ final class OhioPfcc
     {
         $clean = array_merge(self::settings($agencyId), array_intersect_key($next, self::DEFAULTS));
         $clean['absent_cap'] = max(1, min(60, (int) $clean['absent_cap']));
+        if (! in_array($clean['family_billing'] ?? '', ['copay_only', 'copay_plus_difference'], true)) $clean['family_billing'] = 'copay_only';
         $clean['alert_unpaid_weeks'] = max(1, min(8, (int) $clean['alert_unpaid_weeks']));
         $clean['pfcc_enabled'] = (bool) $clean['pfcc_enabled'];
         $clean['sutq_enabled'] = (bool) $clean['sutq_enabled'];

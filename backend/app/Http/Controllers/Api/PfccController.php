@@ -350,8 +350,14 @@ final class PfccController extends Controller
                 'weekly' => $w, 'state' => $s, 'copay' => $c];
         }
         $cap = max(0, (float) $inv->subtotal - (float) $inv->discount_amount);
+        $stateCapped = round(min($state, $cap), 2);
+        /* Family billing (agency setting). copay_only: whatever the state does not pay beyond the
+           copay is written off on the invoice, so the family owes the copay alone. */
+        $mode = OhioPfcc::settings((int) (DB::table('centres')->where('id', $inv->centre_id)->value('agency_id') ?? 0))['family_billing'] ?? 'copay_only';
+        $writeOff = $mode === 'copay_only' && $detail ? max(0, round($cap - $stateCapped - $copay, 2)) : 0.0;
 
-        return ['state' => round(min($state, $cap), 2), 'copay' => round($copay, 2), 'capped' => $state > $cap, 'children' => $detail];
+        return ['state' => $stateCapped, 'copay' => round($copay, 2), 'capped' => $state > $cap, 'children' => $detail,
+            'family_billing' => $mode, 'write_off' => $writeOff, 'family_owes' => round(max(0, $cap - $stateCapped - $writeOff) + (float) $inv->tax_amount, 2)];
     }
 
     private function invoice(Request $request, int $id): array
@@ -387,8 +393,9 @@ final class PfccController extends Controller
         $sp = $this->split($inv);
         abort_unless($sp['children'], 422, 'No child on this invoice has a PFCC authorization for its period.');
         DB::transaction(function () use ($inv, $sp, $agencyId, $request) {
-            $total = round((float) $inv->subtotal - $sp['state'] - (float) $inv->discount_amount + (float) $inv->tax_amount, 2);
-            DB::table('invoices')->where('id', $inv->id)->update(['subsidy_amount' => $sp['state'], 'total' => $total,
+            $disc = round((float) $inv->discount_amount + (float) ($sp['write_off'] ?? 0), 2);
+            $total = round((float) $inv->subtotal - $sp['state'] - $disc + (float) $inv->tax_amount, 2);
+            DB::table('invoices')->where('id', $inv->id)->update(['subsidy_amount' => $sp['state'], 'discount_amount' => $disc, 'total' => $total,
                 'balance_due' => round($total - (float) $inv->amount_paid, 2), 'updated_at' => now()]);
             DB::table('pfcc_invoice_splits')->insert(['agency_id' => $agencyId, 'invoice_id' => (int) $inv->id, 'state_amount' => $sp['state'], 'copay_amount' => $sp['copay'],
                 'detail' => json_encode($sp), 'applied_by' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
@@ -408,8 +415,10 @@ final class PfccController extends Controller
         abort_unless($s, 404);
         DB::transaction(function () use ($inv, $s) {
             $sub = max(0, round((float) $inv->subsidy_amount - (float) $s->state_amount, 2));
-            $total = round((float) $inv->subtotal - $sub - (float) $inv->discount_amount + (float) $inv->tax_amount, 2);
-            DB::table('invoices')->where('id', $inv->id)->update(['subsidy_amount' => $sub, 'total' => $total, 'balance_due' => round($total - (float) $inv->amount_paid, 2), 'updated_at' => now()]);
+            $wo = (float) ((json_decode((string) $s->detail, true) ?: [])['write_off'] ?? 0);
+            $disc = max(0, round((float) $inv->discount_amount - $wo, 2));
+            $total = round((float) $inv->subtotal - $sub - $disc + (float) $inv->tax_amount, 2);
+            DB::table('invoices')->where('id', $inv->id)->update(['subsidy_amount' => $sub, 'discount_amount' => $disc, 'total' => $total, 'balance_due' => round($total - (float) $inv->amount_paid, 2), 'updated_at' => now()]);
             DB::table('pfcc_invoice_splits')->where('id', $s->id)->delete();
         });
         $this->audit($request, $agencyId, 'pfcc.invoice_split_removed', 'invoice', (int) $inv->id, 'Ohio PFCC split removed from draft invoice ' . $inv->invoice_number);
@@ -438,7 +447,8 @@ final class PfccController extends Controller
         if ($request->isMethod('patch')) {
             abort_unless($this->isAdmin($request, $agencyId), 403, 'Only agency admins can change these settings.');
             $d = $request->validate(['pfcc_enabled' => 'sometimes|boolean', 'sutq_enabled' => 'sometimes|boolean', 'absent_cap' => 'sometimes|integer|min:1|max:60',
-                'alert_unpaid_weeks' => 'sometimes|integer|min:1|max:8', 'sutq_level' => 'sometimes|in:bronze,silver,gold']);
+                'alert_unpaid_weeks' => 'sometimes|integer|min:1|max:8', 'sutq_level' => 'sometimes|in:bronze,silver,gold',
+                'family_billing' => 'sometimes|in:copay_only,copay_plus_difference']);
             $s = OhioPfcc::saveSettings($agencyId, $d);
             $this->audit($request, $agencyId, 'pfcc.settings_changed', 'agency', $agencyId, 'Ohio PFCC / SUTQ settings changed: ' . json_encode($d));
 
