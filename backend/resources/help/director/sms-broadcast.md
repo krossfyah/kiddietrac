@@ -71,7 +71,7 @@ is also a staff member. KiddieTrac handles that per **phone**, within your agenc
 
 ## When people reply
 
-A reply to a broadcast is not lost in a carrier log. It arrives in **Messenger** as a chat
+A reply to a broadcast is not lost in a carrier log. It arrives in **Message Centre** as a chat
 from that person (marked as an SMS thread), the right staff are told, and a reply you type
 in that thread goes back out to their phone as a text.
 

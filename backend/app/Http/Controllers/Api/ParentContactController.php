@@ -157,7 +157,7 @@ final class ParentContactController extends Controller
                             '<p style="margin:0 0 12px;font-size:15px;color:#334155;line-height:1.6">Hi ' . $e($g->first_name ?: 'there') . ',</p>'
                             . '<div style="font-size:15px;color:#0F172A;line-height:1.65">' . nl2br($e($body)) . '</div>'
                             . '<p style="margin:16px 0 0;font-size:14px;color:#334155;line-height:1.6">— ' . $e($senderName) . ', ' . $e($centre->name) . '</p>'
-                            . '<p style="margin:16px 0 0;font-size:12.5px;color:#64748B;line-height:1.55">To reply, use Messenger in the KiddieTrac app, or reply to this email and it will reach '
+                            . '<p style="margin:16px 0 0;font-size:12.5px;color:#64748B;line-height:1.55">To reply, use Message Centre in the KiddieTrac app, or reply to this email and it will reach '
                             . $e($agencyName) . '.</p>',
                             ['eyebrow' => $childName ? 'A MESSAGE ABOUT ' . mb_strtoupper($childName) : 'A MESSAGE FROM YOUR PROVIDER', 'title' => 'A message from ' . $senderName,
                              'subtitle' => $centre->name, 'preheader' => mb_substr($body, 0, 120)]);

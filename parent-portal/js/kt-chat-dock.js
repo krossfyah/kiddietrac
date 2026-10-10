@@ -557,7 +557,7 @@
     /* Other conversations, without leaving the dock.
        Overlays the body rather than splitting it: at 400px wide a permanent sidebar
        would leave neither pane usable, and this keeps the thread at full width while
-       you are reading it. The list is whatever the Messenger screen already fetched —
+       you are reading it. The list is whatever the Message Centre screen already fetched —
        no second source of truth to drift. */
     var listBtn = dock.querySelector('.kt-cd-list');
     if (listBtn) {
@@ -580,7 +580,7 @@
         var api = (w.KT && KT.Chat && KT.Chat.conversationsForSwitcher);
         Promise.resolve(api ? api() : []).then(function (rows) {
           if (!rows || !rows.length) {
-            body.innerHTML = '<div style="padding:14px 12px;">Open Messenger once to load your conversations.</div>';
+            body.innerHTML = '<div style="padding:14px 12px;">Open Message Centre once to load your conversations.</div>';
             return;
           }
           body.innerHTML = '';
@@ -873,7 +873,7 @@
     var list = dock.querySelector('.kt-cd-side-list');
     if (!list) { return; }
     var provider = w.KT && w.KT.Chat && w.KT.Chat.conversationsForSwitcher;
-    if (!provider) { list.innerHTML = '<div style="padding:12px 10px;font-size:12px;color:#94A3B8;">Open Messenger once.</div>'; return; }
+    if (!provider) { list.innerHTML = '<div style="padding:12px 10px;font-size:12px;color:#94A3B8;">Open Message Centre once.</div>'; return; }
     Promise.resolve(provider()).then(function (rows) {
       if (!rows || !rows.length) { list.innerHTML = '<div style="padding:12px 10px;font-size:12px;color:#94A3B8;">No conversations yet.</div>'; return; }
       list.innerHTML = '';
@@ -885,7 +885,7 @@
           + (String(c.id) === String(session.key) ? ' on' : '');
         var unread = c.unread_count > 0;
         /* A face, or coloured initials when there is no photo — the same fallback
-           the Messenger list uses, so the two look like one product. */
+           the Message Centre list uses, so the two look like one product. */
         var initials = String(c.name || '?').trim().split(/\s+/)
           .map(function (x) { return x[0]; }).slice(0, 2).join('').toUpperCase();
         var hue = 0;

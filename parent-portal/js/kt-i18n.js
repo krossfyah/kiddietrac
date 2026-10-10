@@ -73,6 +73,7 @@
     'Daily log': { fr: 'Journal quotidien', es: 'Registro diario', hi: 'दैनिक लॉग' },
     'Messages': { fr: 'Messages', es: 'Mensajes', hi: 'संदेश' },
     'Messenger': { fr: 'Messagerie', es: 'Mensajería', hi: 'संदेशवाहक' },
+    'Message Centre': { fr: 'Centre de messages', es: 'Centro de mensajes', hi: 'संदेश केंद्र' },
     'Announcements': { fr: 'Annonces', es: 'Anuncios', hi: 'घोषणाएँ' },
     'Lesson plans': { fr: 'Plans de leçon', es: 'Planes de clase', hi: 'पाठ योजनाएँ' },
     'AI Lesson Plans': { fr: 'Plans de leçon IA', es: 'Planes de clase con IA', hi: 'एआई पाठ योजनाएँ' },

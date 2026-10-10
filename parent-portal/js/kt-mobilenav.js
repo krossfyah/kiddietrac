@@ -530,7 +530,7 @@
       var scanBtn = btn('📷', 'Check in', function () { go('#scan'); }, null, 'scan');
       scanBtn.classList.add('scan');
       nav.appendChild(scanBtn);
-      nav.appendChild(btn('💬', 'Messenger', function () { go('#messages'); }, 'kt-mnav-msg', 'messages'));
+      nav.appendChild(btn('💬', 'Message Centre', function () { go('#messages'); }, 'kt-mnav-msg', 'messages'));
       nav.appendChild(btn('💳', 'Billing', function () { go('#billing'); }, 'kt-b-billing', 'billing'));
     } else {
       // No Menu button for anyone now. The dashboard carries the tile launcher
@@ -573,7 +573,7 @@
       }
 
       /* Third of five, so it lands in the middle — the raised slot the parent bar
-         uses for its camera. Order: Home · Children · Add · Messenger · Inbox. */
+         uses for its camera. Order: Home · Children · Add · Message Centre · Inbox. */
       if (_adminRole) {
         var qaBtn = btn('\u26A1', 'Add', function () { openAdminQuickAdd(); }, null, '__qadd');
         qaBtn.classList.add('scan');   // the raised centre treatment the parent bar uses
@@ -588,7 +588,7 @@
         qrBtn.classList.add('scan');
         nav.appendChild(qrBtn);
       }
-      nav.appendChild(btn('💬', 'Messenger', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
+      nav.appendChild(btn('💬', 'Message Centre', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
       // Alerts folded INTO the Inbox: an announcement already lands in the inbox
       // as a notification, so a separate Alerts tab showed the same thing twice.
       // (Composing an alert lives on the Home launcher, under Alerts.)

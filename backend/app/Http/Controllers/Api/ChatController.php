@@ -316,7 +316,7 @@ final class ChatController extends Controller
                 }
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('chat also-send failed', ['conversation' => $conversationId, 'error' => $e->getMessage()]);
-                $msg['reach_error'] = 'The message is in Messenger, but the text/email could not be sent.';
+                $msg['reach_error'] = 'The message is in Message Centre, but the text/email could not be sent.';
             }
         }
 

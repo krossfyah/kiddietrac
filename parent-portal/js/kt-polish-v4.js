@@ -25,13 +25,13 @@
     const items = isParent ? [
       { hash: 'today', icon: '✨', label: 'Today' },
       { hash: 'photos', icon: '📷', label: 'Photos' },
-      { hash: 'messages', icon: '💬', label: 'Messenger' },
+      { hash: 'messages', icon: '💬', label: 'Message Centre' },
       { hash: 'notifications', icon: '🔔', label: 'Inbox' },
       { hash: 'more', icon: '☰', label: 'More' },
     ] : [
       { hash: 'dashboard', icon: '🏠', label: 'Home' },
       { hash: 'children', icon: '🧒', label: 'Children' },
-      { hash: 'chat', icon: '💬', label: 'Messenger' },
+      { hash: 'chat', icon: '💬', label: 'Message Centre' },
       { hash: 'notifications', icon: '🔔', label: 'Inbox' },
       { hash: 'more', icon: '☰', label: 'More' },
     ];

@@ -405,8 +405,8 @@
    "type": "new",
    "date": "2026-09-24",
    "icon": "💬",
-   "title": "Text replies arrive in Messenger",
-   "body": "When a parent replies to a text from your agency, the reply appears in Messenger as a conversation, and your answer goes back to their phone as a text. STOP from a phone now stops texts to every account on that phone.",
+   "title": "Text replies arrive in Message Centre",
+   "body": "When a parent replies to a text from your agency, the reply appears in Message Centre as a conversation, and your answer goes back to their phone as a text. STOP from a phone now stops texts to every account on that phone.",
    "roles": [
     "agency_admin",
     "centre_director"
@@ -565,7 +565,7 @@
    "type": "new",
    "date": "2026-09-10",
    "icon": "🎙️",
-   "title": "Voice notes in Messenger",
+   "title": "Voice notes in Message Centre",
    "body": "Record a voice note right inside a conversation and send it — handy when your hands are full.",
    "roles": [
     "agency_admin",
@@ -666,7 +666,7 @@
    "type": "new",
    "date": "2026-08-30",
    "icon": "👥",
-   "title": "Group conversations in Messenger",
+   "title": "Group conversations in Message Centre",
    "body": "Start a group with several colleagues from + New chat → New group, or add people to a conversation you are already in — adding a third person turns a one-to-one into a group. Anyone added can read the whole history, so they arrive with the context. Rename a group, remove someone or leave from the member list at the top of the thread.",
    "roles": [
     "educator",

@@ -264,7 +264,7 @@
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
-          { hash: 'chat',           label: 'Messenger',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -452,7 +452,7 @@
           { hash: 'today',          label: 'Today',            icon: '✨' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
-          { hash: 'chat',           label: 'Messenger',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
@@ -542,7 +542,7 @@
           { hash: 'care-log',      label: 'Daily log',     icon: '✅' },
           { hash: 'observations',  label: 'Observations',  icon: '👀' },
           { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
-          { hash: 'chat',          label: 'Messenger',      icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'chat',          label: 'Message Centre',      icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
           { hash: 'late-pickups',  label: 'Late pickups',  icon: '⏰' },
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
@@ -634,7 +634,7 @@
         { hash: 'home',               label: 'Home',       icon: '🏠' },
         { hash: 'today',              label: 'Today',      icon: '✨' },
         { hash: 'photos',             label: 'Photos & video', icon: '📸' },
-        { hash: 'messages',           label: 'Messenger',   icon: '💬', badgeKey: 'chat_unread' },
+        { hash: 'messages',           label: 'Message Centre',   icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
         /* Forms sent from the Forms Manager land here — the same fill-and-sign the
            emailed link opens, and a form leaves the list the moment it is signed.
@@ -1469,7 +1469,7 @@
        marks itself data-kt-inpage and the shell leaves it alone.
 
        Found via the archived chat list: "Back to inbox" was silently doing a history
-       back — it left Messenger for whatever screen you were on before, instead of
+       back — it left Message Centre for whatever screen you were on before, instead of
        returning to the active conversations. (Anthony, 2026-09-09) */
     if (el.hasAttribute && el.hasAttribute('data-kt-inpage')) return false;
 

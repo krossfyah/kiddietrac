@@ -86,7 +86,7 @@ final class PermissionMap
         'email_templates.manage' => 'Edit email templates, preview and send tests',
         'help.assign' => 'Assign training videos and guides to staff and parents',
         'dashboard.view' => 'Staff dashboards, search and activity feed',
-        'messages.use' => 'Messenger: chat with families and staff',
+        'messages.use' => 'Message Centre: chat with families and staff',
         'contacts.view' => 'All contacts directory',
         'photos.view' => 'View photos and videos',
         'photos.manage' => 'Upload and tag photos and videos',

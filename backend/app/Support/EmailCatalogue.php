@@ -274,7 +274,7 @@ final class EmailCatalogue
             [
                 'key' => 'announcement', 'audience' => 'parents',
                 'name' => 'Announcement / campaign',
-                'fires' => 'When an admin sends a broadcast from Messenger.',
+                'fires' => 'When an admin sends a broadcast from Message Centre.',
                 'to' => 'The chosen audience',
                 'subject' => 'A message from {agency}',
                 'source' => 'Console/Commands/SendCampaignEmailsCommand.php:79',

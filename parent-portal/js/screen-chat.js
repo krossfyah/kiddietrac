@@ -65,7 +65,7 @@
   /* WHO THIS PERSON IS — resolvable at any moment, not only once a screen mounts.
 
      `myRole` is declared 'guardian' at the top of this file and was assigned in exactly
-     ONE place: mount(), which runs when the Messenger screen renders. Everything else in
+     ONE place: mount(), which runs when the Message Centre screen renders. Everything else in
      here branches on it, including the two functions that choose an ENDPOINT:
 
          endpointBase() -> /parent/chats   vs /provider/chats
@@ -377,7 +377,7 @@
 
      Only the digits form existed, which is why a colleague notification could not link
      to its own thread — and why TeamChatController had settled for '#team-messages', a
-     screen that is HIDDEN (the colleague UI lives here, in Messenger). Tapping a team
+     screen that is HIDDEN (the colleague UI lives here, in Message Centre). Tapping a team
      message therefore landed nowhere. The id shape mirrors the conversation list, where
      a staff row is already 'staff:' + id so that conversation 7 and thread 7 stay
      distinct. (Anthony, 2026-09-09) */
@@ -391,7 +391,7 @@
 
   async function renderList(container) {
     /* Tell the global refreshers to leave this screen alone.
-       Messenger polls its own list and its open thread; kt-live.js used to tear the
+       Message Centre polls its own list and its open thread; kt-live.js used to tear the
        whole screen down 600ms after every send (a POST rings its bus) and
        kt-auto-refresh.js did it again every 45s. That is the flashing — and on desktop
        the re-mount orphaned the thread held in the floating dock, so the message you
@@ -501,7 +501,7 @@
       if (convs.length === 0) {
         container.innerHTML = `
           <div class="kt-chat-header" style="padding:16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;">
-            <h2 style="font-size:20px;margin:0;">💬 Messenger</h2>
+            <h2 style="font-size:20px;margin:0;">💬 Message Centre</h2>
             <div style="display:flex;gap:8px;align-items:center;">${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}</div>
           </div>
           <div style="text-align:center;padding:48px 16px;color:#6B7280;">
@@ -540,7 +540,7 @@
         const start = total ? ((state.page - 1) * per + 1) : 0;
         const end = Math.min(total, state.page * per);
         /* The SAME button as every other pager in the portal (kt-table-filter's pageBtn,
-           and kt-card-pager). Messenger had its own metrics and, uniquely, a "25 / page"
+           and kt-card-pager). Message Centre had its own metrics and, uniquely, a "25 / page"
            dropdown — so pagination looked like two different products depending on which
            screen you were on (Anthony, 2026-08-30: "some pages it has it numbered in
            pages and some has a drop down"). Numbered pages is the portal's answer
@@ -677,7 +677,7 @@
          so a bare `<= 600` is false in the app and the DESKTOP TABLE rendered on a
          phone. Measured at 700px: the MESSAGE column gets 153px with nowrap +
          ellipsis, so the newest message is cut to a few characters and an ellipsis.
-         That is the "Messenger doesn't show the last message received" report: the
+         That is the "Message Centre doesn't show the last message received" report: the
          message was there, clipped to nothing, in a five-column table on a phone.
 
          kt-native is set by dashboard.html for native AND phone-sized, which is the
@@ -688,7 +688,7 @@
         container.innerHTML = `
           <div style="padding:12px 12px 4px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">
-              <h2 style="font-size:19px;font-weight:800;color:#0D1B2A;margin:0;">💬 Messenger</h2>
+              <h2 style="font-size:19px;font-weight:800;color:#0D1B2A;margin:0;">💬 Message Centre</h2>
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}</div>
             </div>
             <input id="kt-msg-filter" type="search" placeholder="🔍 Search messages…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D1D5DB;border-radius:12px;font-size:14px;margin-bottom:10px;">
@@ -760,7 +760,7 @@
       container.innerHTML = `
         <div style="display:flex;flex-direction:column;">
           <div class="kt-chat-header" style="padding:14px 16px;border-bottom:1px solid #E5E7EB;background:white;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-            <h2 style="font-size:20px;margin:0;">💬 Messenger</h2>
+            <h2 style="font-size:20px;margin:0;">💬 Message Centre</h2>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <input id="kt-msg-filter" type="search" placeholder="🔍 Filter…" style="padding:8px 11px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;min-width:180px;">
               ${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}
@@ -1358,7 +1358,7 @@
     var cleanup = function () { stopStaffPoll(); closeThreadCleanup(); };
 
     /* Tell kt-back a full-screen thread is open, so Android's hardware/gesture back
-       returns to the conversation LIST instead of leaving Messenger. kt-back's own
+       returns to the conversation LIST instead of leaving Message Centre. kt-back's own
        header lists "chat thread" as the case it exists for; the family thread registers
        and this one never did.
 
@@ -1848,7 +1848,7 @@
   /* The dock's contact list. Registered at MODULE scope, not inside the Messenger
      screen's load() — that only runs when the screen itself renders, so opening a
      chat from a notification or the login pop-out left the list unregistered and the
-     panel stuck on "Open Messenger once". It fetches its own data, and reuses the
+     panel stuck on "Open Message Centre once". It fetches its own data, and reuses the
      screen's rows when they happen to be there. */
   KT.Chat = KT.Chat || {};
   KT.Chat.conversationsForSwitcher = async function () {
@@ -2131,7 +2131,7 @@
           <button type="button" class="kt-also" data-also="sms" aria-pressed="false" style="height:26px;padding:0 10px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:12px;font-weight:700;cursor:pointer;">📱 Text</button>
           <button type="button" class="kt-also" data-also="email" aria-pressed="false" style="height:26px;padding:0 10px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:12px;font-weight:700;cursor:pointer;">✉️ Email</button>
           <button type="button" class="kt-also-all" style="height:26px;padding:0 10px;border-radius:999px;border:1px dashed #CBD5E1;background:#fff;color:#64748B;font-size:12px;font-weight:700;cursor:pointer;">All</button>
-          <span class="kt-also-note" style="font-size:11.5px;color:#94A3B8;">Messenger only</span>
+          <span class="kt-also-note" style="font-size:11.5px;color:#94A3B8;">Message Centre only</span>
         </div>` : ''}
         <div class="kt-thread-compose" style="padding:10px;border-top:1px solid #E5E7EB;background:white;display:flex;gap:4px;flex-shrink:0;align-items:center;position:relative;">
           <input class="kt-attach-input" type="file" accept="image/jpeg,image/jpg,image/png,image/webp,image/gif" style="display:none;" />
@@ -2337,7 +2337,7 @@
 
     /* ALSO BY TEXT / EMAIL (2026-10-09, Anthony: "in messager under educator add the SMS,
        text and email as well or allow to choose all if required"). The message always goes
-       in Messenger; the chips add a text and/or an email with the same words to the
+       in Message Centre; the chips add a text and/or an email with the same words to the
        family's parents, from the agency's number and mailer (consent respected, logged on
        the family). The choice resets after each send so a text is never sent by accident. */
     const alsoSel = new Set();
@@ -2350,7 +2350,7 @@
         b.style.borderColor = on ? '#159FB4' : '#CBD5E1';
       });
       const note = $('.kt-also-note', container);
-      if (note) note.textContent = alsoSel.size ? ('Messenger + ' + [...alsoSel].map((x) => x === 'sms' ? 'text' : 'email').join(' + ')) : 'Messenger only';
+      if (note) note.textContent = alsoSel.size ? ('Message Centre + ' + [...alsoSel].map((x) => x === 'sms' ? 'text' : 'email').join(' + ')) : 'Message Centre only';
     }
     container.querySelectorAll('.kt-also').forEach((b) => b.addEventListener('click', () => {
       const k = b.getAttribute('data-also');
@@ -2399,8 +2399,8 @@
           const res = (msg && msg.reach) || [];
           const ok = res.filter((r) => r.status === 'sent');
           const not = res.filter((r) => r.status !== 'sent');
-          if (msg && msg.reach_error) KT.toast('⚠️', 'Sent in Messenger only', msg.reach_error, '#B45309');
-          else KT.toast(ok.length ? '💬' : '⚠️', ok.length ? ('Also sent: ' + ok.map((r) => (r.channel === 'sms' ? 'text' : 'email') + ' to ' + (r.name || 'parent')).join(', ')) : 'Only sent in Messenger',
+          if (msg && msg.reach_error) KT.toast('⚠️', 'Sent in Message Centre only', msg.reach_error, '#B45309');
+          else KT.toast(ok.length ? '💬' : '⚠️', ok.length ? ('Also sent: ' + ok.map((r) => (r.channel === 'sms' ? 'text' : 'email') + ' to ' + (r.name || 'parent')).join(', ')) : 'Only sent in Message Centre',
             not.length ? not.map((r) => (r.name || 'Parent') + ' — ' + (r.channel === 'sms' ? 'text' : 'email') + ': ' + (r.note || r.status)).join(' · ') : '', ok.length && !not.length ? '#16A34A' : '#B45309');
           alsoSel.clear(); paintAlso();
         }
@@ -2776,7 +2776,7 @@
   window.KT = window.KT || {};
   /* openThread is exposed so an incoming message can pop its own conversation open
      (kt-toasts calls it). It needs a container; the dock is the right home on desktop,
-     and mount() has already put one there whenever Messenger has been visited. */
+     and mount() has already put one there whenever Message Centre has been visited. */
   /* Preserve anything already on KT.Chat — this used to be a plain assignment,
      which wiped the dock's contact-list provider defined above. */
   window.KT.Chat = Object.assign({}, window.KT.Chat || {}, {

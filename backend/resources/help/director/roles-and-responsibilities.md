@@ -29,7 +29,7 @@ Runs the KiddieTrac platform itself. Everything an agency admin can do, in **any
 Runs one agency, across every centre in it:
 
 - **Overview** — agency overview, centres, daily overview, provider map, agency profile
-- **Operations** — contacts, Safe Arrival, calendar, daily log, Messenger, email client, announcements, lesson plans, observations, awards, schedule, certifications, timesheets, incidents, withdrawals, medications, immunizations
+- **Operations** — contacts, Safe Arrival, calendar, daily log, Message Centre, email client, announcements, lesson plans, observations, awards, schedule, certifications, timesheets, incidents, withdrawals, medications, immunizations
 - **Staff** — **Tasks** (assign and track work for staff and parents), time off, background checks, substitutes
 - **Home visitors** — review home-visit reports and inspection forms
 - **Finance** — **Late pickups** (approve & charge, waive, decline), invoice and payment runs, billing schedules, payment plans, refunds, tuition increases, expenses, accounting, account ledgers, donations, grants, payroll
@@ -41,7 +41,7 @@ Runs one agency, across every centre in it:
 Runs **their own centre** — everything below is limited to it:
 
 - Dashboard, children, families and staff at their centre
-- Operations — Safe Arrival, calendar, closures, daily log, Messenger, announcements, lesson plans, observations, awards, schedule, certifications, timesheets, audit log, incidents (review, add internal notes, notify parents), medications, immunizations
+- Operations — Safe Arrival, calendar, closures, daily log, Message Centre, announcements, lesson plans, observations, awards, schedule, certifications, timesheets, audit log, incidents (review, add internal notes, notify parents), medications, immunizations
 - **Tasks** for their educators and their centre's parents; time clock, time off, background checks, substitutes
 - Home-visit reports and inspection forms for their centre
 - **Late pickups** — approve & charge, waive or decline; emailed when one is waiting
@@ -58,7 +58,7 @@ Works in the classroom:
 - Clock in / out, time off
 - Daily log, observations, lesson plans, incidents (file and sign), medications
 - **Late pickups** — log a late pickup or arrival for a director to decide
-- Messenger with parents and staff, news, parent feedback, reports
+- Message Centre with parents and staff, news, parent feedback, reports
 - Forms to sign and their own documents
 
 ## Home visitor
@@ -73,7 +73,7 @@ Visits families and centres and files reports:
 Sees **only their own family**:
 
 - Home, **Today**, photos & video
-- Messenger with the centre
+- Message Centre with the centre
 - **My tasks** and **forms to sign**
 - **Check-in** (including the QR code), attendance
 - **Billing** — invoices, autopay, payment plans

@@ -297,7 +297,7 @@
     const tabs = [
       { id: 'today',    label: 'Today' },
       { id: 'photos',   label: 'Photos' },
-      { id: 'messages', label: 'Messenger' },
+      { id: 'messages', label: 'Message Centre' },
       { id: 'billing',  label: 'Billing' },
     ];
     tabs.forEach(t => {
