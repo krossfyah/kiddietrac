@@ -1093,7 +1093,15 @@ final class AuthController extends Controller
         // Provider identity: in this system a home-daycare "provider" IS a centre,
         // linked to the person by a matching email. Surface a flag + the current
         // bio so the onboarding wizard can require a full bio from providers.
-        $providerCentre = $user->email
+        /* EDUCATORS ONLY (2026-10-10, Anthony: "why are bio's a requirement for
+           admin/director/home visitors - pls remove this requirement as I am now getting
+           prompted"). A matching centre email alone made an admin, director or home visitor
+           a "provider" — and so asked for a bio. The bio (card, reminders, onboarding) is for
+           an educator who runs the home; anyone holding a role above or beside that is not
+           asked. */
+        $bioApplies = in_array('educator', $roles, true)
+            && ! array_intersect($roles, ['agency_admin', 'centre_director', 'platform_admin', 'home_visitor', 'auditor', 'sales_rep']);
+        $providerCentre = ($user->email && $bioApplies)
             ? DB::table('centres')
                 ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
                 ->whereNull('deleted_at')
@@ -1522,7 +1530,11 @@ final class AuthController extends Controller
         // write a full bio during onboarding so families know who will care for
         // their child. Required when completing; saved to their centre. Checked
         // BEFORE the user update so a missing bio doesn't mark them onboarded.
-        $providerCentre = $user->email
+        // Educators only — never admins, directors or home visitors (2026-10-10).
+        $obRoles = DB::table('role_assignments')->where('user_id', $user->id)->where('active', true)->pluck('role')->unique()->all();
+        $obBio = in_array('educator', $obRoles, true)
+            && ! array_intersect($obRoles, ['agency_admin', 'centre_director', 'platform_admin', 'home_visitor', 'auditor', 'sales_rep']);
+        $providerCentre = ($user->email && $obBio)
             ? DB::table('centres')
                 ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
                 ->whereNull('deleted_at')

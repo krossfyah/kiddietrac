@@ -127,7 +127,12 @@ final class BioReminders
             $u = DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
                 ->whereRaw('LOWER(u.email) = ?', [mb_strtolower(trim((string) $c->email))])
                 ->whereNull('u.deleted_at')->where('ra.active', true)->where('ra.agency_id', $agencyId)
-                ->whereIn('ra.role', ['educator', 'centre_director'])
+                ->where('ra.role', 'educator')
+                // Educators only: an admin, director or home visitor is never asked for a bio (2026-10-10).
+                ->whereNotExists(function ($q) use ($agencyId) {
+                    $q->from('role_assignments as r2')->whereColumn('r2.user_id', 'u.id')->where('r2.active', true)
+                      ->whereIn('r2.role', ['agency_admin', 'centre_director', 'platform_admin', 'home_visitor']);
+                })
                 ->select('u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.photo_url')->first();
             if (! $u || ChatAudience::isServiceEmail($u->email)) continue;
             $count = (int) (DB::table('bio_reminder_people')->where(['agency_id' => $agencyId, 'user_id' => $u->id])->value('reminders') ?? 0);
