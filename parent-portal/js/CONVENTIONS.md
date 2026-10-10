@@ -381,3 +381,16 @@ A Download button downloads (`a[download]`); it does not window.open.
 - **Single files → `KT.openFile`.** A document or a lone file opens in the document panel.
 - kt-doc-viewer's click delegate leaves alone any click already handled (`defaultPrevented`)
   and any link inside a photo set; never remove that, or galleries lose next/previous.
+
+## Phone width: one gutter, the shell's (2026-10-10)
+
+On a phone (≤768px) the only side gutter is `.app-main`'s 10px. A screen must not add its own
+page padding or `max-width` on phones — cards fill the width (370px of a 390px screen).
+`js/kt-phone-gutter.js` enforces this by what an element IS: transparent wrappers in the top two
+levels of `#appMain` (no background, border or shadow) lose side padding, side margins and
+max-width on phones; cards keep theirs. Grids or flex rows that run past the screen edge (outside
+an `overflow-x` scroller) are made to fit. Desktop is untouched; widening past 768px restores
+everything.
+- Opt a wrapper out: `data-kt-keep-gutter`. Opt a deliberately wide block out: `data-kt-allow-overflow`
+  (or put it in an `overflow-x:auto` scroller, as wide tables already are).
+- Debug: `KT.phoneGutter.report()`; switch off with `window.__ktNoPhoneGutter = true`.
