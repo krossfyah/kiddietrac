@@ -1864,6 +1864,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/chats/{conversation}/nudge',  [ChatController::class, 'providerNudge']);
         Route::post('/chats/{conversation}/typing', [ChatController::class, 'providerTyping'])->where('conversation','[0-9]+');
         Route::post('/chats/start',                [ChatController::class, 'providerStart']);
+        // Families this person may start a conversation with (Message Centre rules, 2026-10-09).
+        Route::get ('/chat-families',              [ChatController::class, 'providerFamilies']);
     });
 
     // Staff-to-staff direct messaging (#38) — colleagues within an agency. {thread}
@@ -2279,6 +2281,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/bio-reminders',         [\App\Http\Controllers\Api\BioRemindersController::class, 'update']);
         Route::post ('/admin/bio-reminders/preview', [\App\Http\Controllers\Api\BioRemindersController::class, 'preview']);
         Route::post ('/admin/bio-reminders/test',    [\App\Http\Controllers\Api\BioRemindersController::class, 'test'])->middleware('throttle:6,1,bioremtest');
+        // Settings → Notifications → Message Centre: who educators and home visitors may message (2026-10-09).
+        Route::get  ('/admin/messaging-rules',       [\App\Http\Controllers\Api\MessagingRulesController::class, 'show']);
+        Route::post ('/admin/messaging-rules',       [\App\Http\Controllers\Api\MessagingRulesController::class, 'update']);
         // Prospect NDAs (platform admins + sales reps; checked in the controller).
         Route::get   ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'index']);
         Route::post  ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'store'])->middleware('throttle:20,1,ndasend');

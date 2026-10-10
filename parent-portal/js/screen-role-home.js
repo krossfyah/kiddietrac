@@ -93,6 +93,7 @@
         { hash: 'awards',             icon: '🏆', label: 'Awards' },
         { hash: 'my-forms',           icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'messages',           icon: '💬', label: 'Message Centre' },
+        { hash: 'files',              icon: '📎', label: 'Files' },
         { hash: 'my-tasks',           icon: '📋', label: 'My tasks' },
         { hash: 'menu',               icon: '🍽️', label: 'Menu' },
         { hash: 'notifications',      icon: '🔔', label: 'Inbox' },
@@ -135,6 +136,7 @@
         { hash: 'my-forms',      icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'menu',          icon: '🍽️', label: 'Weekly menu' },
         { hash: 'chat',          icon: '💬', label: 'Message Centre' },
+        { hash: 'files',         icon: '📎', label: 'Files' },
         { hash: 'forms',         icon: '📄', label: 'Documents' },   // their filed documents (+ any staff forms) — 2026-10-09
         { hash: 'incidents',     icon: '⚠️', label: 'Incidents' },
         { hash: 'late-pickups',  icon: '⏰', label: 'Late pickup' },

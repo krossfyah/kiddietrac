@@ -1,6 +1,20 @@
 {
  "updated": "2026-10-09",
  "entries": [
+    {
+      "type": "new",
+      "date": "2026-10-09",
+      "icon": "📎",
+      "title": "Files: share printables and homework",
+      "body": "A new Files section lets educators send printables, homework and notes to the families they work with — one family, several, or everyone in their room — and lets parents send files back. Files stay private in KiddieTrac: families get a notification (and an email saying a file is waiting, which your agency can switch off), and every download is recorded.",
+      "roles": [
+        "educator",
+        "home_visitor",
+        "centre_director",
+        "agency_admin",
+        "guardian"
+      ]
+    },
   {
    "type": "new",
    "date": "2026-10-09",

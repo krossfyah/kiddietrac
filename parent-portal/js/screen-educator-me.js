@@ -377,6 +377,7 @@
     var guardians = d.guardians || [];
     html += '<div style="' + CARD + '"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="font-weight:800;font-size:14px;color:#0F172A;flex:1;">Parents / guardians</div>'
       + (guardians.length ? '<button type="button" data-msg="all" style="background:#fff;color:' + TEAL + ';border:1px solid ' + TEAL + ';border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:800;cursor:pointer;">💬 Message parents</button>' : '')
+      + (guardians.length ? '<button type="button" data-sendfile style="margin-left:6px;background:#fff;color:' + TEAL + ';border:1px solid ' + TEAL + ';border-radius:9px;padding:6px 11px;font-size:12.5px;font-weight:800;cursor:pointer;">📎 Send a file</button>' : '')
       + '</div>';
     if (!guardians.length) html += '<div style="color:#64748B;font-size:13px;">No guardians on file.</div>';
     guardians.forEach(function (g, i) {
@@ -482,6 +483,13 @@
     renderHistory();
     makeCollapsible(ov);
 
+    // Files to this child's family (screen-files.js), with the family already picked.
+    var sfBtn = ov.querySelector('[data-sendfile]');
+    if (sfBtn) sfBtn.addEventListener('click', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      if (KT.sendFamilyFile) KT.sendFamilyFile({ familyId: c.family_id, childId: childId, childName: c.first_name });
+      else location.hash = '#files';
+    });
     var ecBtn = ov.querySelector('[data-ecard]');
     if (ecBtn) ecBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openEmergencyCard(childId, name); });
     ov.querySelectorAll('[data-msg]').forEach(function (b) {

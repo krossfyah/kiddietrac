@@ -47,13 +47,34 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:14px 24px;max-width:900px;">'
       + '<div id="ns-body"><div class="kt-card" style="max-width:680px;color:#64748B;">Loading…</div></div>'
-      + '<div id="ns-bio" style="margin-top:16px;"></div></div>';
+      + '<div id="ns-bio" style="margin-top:16px;"></div><div id="ns-files" style="margin-top:16px;"></div></div>';
     var body = main.querySelector('#ns-body');
     try { await paintCountersign(body); }
     catch (e) {
       body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#B91C1C;">Could not load: ' + esc((e && e.message) || 'error') + '</div>';
     }
     try { await paintBio(main.querySelector('#ns-bio')); } catch (e) {}
+    try { await paintFiles(main.querySelector('#ns-files')); } catch (e) {}
+  }
+
+  /* ── Files between educators and families (2026-10-09) ── */
+  async function paintFiles(body) {
+    var res;
+    try { res = await Api.get('/provider/files/settings'); } catch (e) { return; }
+    var s = res.settings || {};
+    body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">📎 Shared files</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">When an educator sends a family a file (Files), or a family sends one back, the people it is for always get a notification in the app. '
+      + 'These choose whether an email is sent too — it only says a file is waiting; the file is never attached.</div>'
+      + row('Email parents about new files', '', toggle('ff-ep', s.email_parents))
+      + row('Email staff when a family sends a file', 'Off: staff see it in their notifications only.', toggle('ff-es', s.email_staff))
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;"><button id="ff-save" class="kt-btn kt-btn-primary">Save</button><span id="ff-msg" style="font-size:13px;"></span></div></div>';
+    body.querySelector('#ff-save').addEventListener('click', function () {
+      var msg = body.querySelector('#ff-msg'); msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      Api.post('/provider/files/settings', { email_parents: body.querySelector('#ff-ep').checked, email_staff: body.querySelector('#ff-es').checked })
+        .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved'; })
+        .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
   }
 
   /* ── Provider bios (2026-10-09) ──────────────────────────────────────────

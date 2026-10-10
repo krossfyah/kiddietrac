@@ -265,6 +265,7 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
@@ -453,6 +454,7 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
@@ -543,6 +545,7 @@
           { hash: 'observations',  label: 'Observations',  icon: '👀' },
           { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
           { hash: 'chat',          label: 'Message Centre',      icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
           { hash: 'late-pickups',  label: 'Late pickups',  icon: '⏰' },
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
@@ -585,6 +588,7 @@
              Terms/Privacy/NDA and anything an admin attached to their record.
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
+          { hash: 'files',          label: 'Files',          icon: '📎' },
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
@@ -635,6 +639,7 @@
         { hash: 'today',              label: 'Today',      icon: '✨' },
         { hash: 'photos',             label: 'Photos & video', icon: '📸' },
         { hash: 'messages',           label: 'Message Centre',   icon: '💬', badgeKey: 'chat_unread' },
+        { hash: 'files',          label: 'Files',          icon: '📎' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
         /* Forms sent from the Forms Manager land here — the same fill-and-sign the
            emailed link opens, and a form leaves the list the moment it is signed.
@@ -1048,6 +1053,7 @@
     'expenses': 'Suppliers, purchase orders and bills.',
     'quickbooks': 'Sync invoices and payments with QuickBooks.',
     'xero': 'Send invoices, voids and payments to your Xero organisation.',
+    'files': 'Printables, homework and notes between educators and families.',
     'sage': 'Sync with Sage Accounting, or export import files for Sage 50.',
     'forecast': 'Projected enrolment and revenue.',
     'reports': 'Ready-made reports you can print or export.',
