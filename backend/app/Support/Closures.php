@@ -201,31 +201,81 @@ final class Closures
      */
     public static function noticeForUser(int $userId): ?array
     {
-        foreach (self::centreIdsForUser($userId) as $centreId) {
-            $today = self::todayFor($centreId);
+        /* WHO IS READING (2026-10-09, Anthony: "the popup that shows that the educator will be
+           closed when the educator logs into their own account should be towards them and not
+           from a parents point of view"). It used to say the same thing to everyone — "Enjoy
+           the day — there is nothing you need to do here, and we will see you when we reopen"
+           — so a provider opening the app was told about their OWN closure as if they were a
+           family. Staff centres are checked first and worded for staff; a person who is both
+           (a provider with a child elsewhere) hears about their own centre as staff. */
+        $staff = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->whereNotNull('centre_id')->whereIn('role', ['educator', 'centre_director', 'home_visitor'])
+            ->pluck('centre_id')->map(fn ($i) => (int) $i)->unique()->values()->all();
+        $family = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+            ->where('g.user_id', $userId)->whereNull('f.deleted_at')->whereNotNull('f.centre_id')
+            ->pluck('f.centre_id')->map(fn ($i) => (int) $i)->unique()->values()->all();
+        $email = mb_strtolower(trim((string) DB::table('users')->where('id', $userId)->value('email')));
 
-            if ($row = self::forDate($centreId, $today)) {
-                return self::notice($row, $centreId, true);
-            }
+        foreach ([['staff', $staff], ['family', array_values(array_diff($family, $staff))]] as [$audience, $ids]) {
+            foreach ($ids as $centreId) {
+                $today = self::todayFor($centreId);
 
-            $soon = DB::table('centre_closures')
-                ->where('centre_id', $centreId)
-                ->whereDate('closure_date', '>', $today)
-                ->whereDate('closure_date', '<=', Carbon::parse($today)->addDays(14)->toDateString())
-                ->orderBy('closure_date')->first();
-            if ($soon) {
-                return self::notice($soon, $centreId, false);
+                if ($row = self::forDate($centreId, $today)) {
+                    return self::notice($row, $centreId, true, $audience, $email);
+                }
+
+                $soon = DB::table('centre_closures')
+                    ->where('centre_id', $centreId)
+                    ->whereDate('closure_date', '>', $today)
+                    ->whereDate('closure_date', '<=', Carbon::parse($today)->addDays(14)->toDateString())
+                    ->orderBy('closure_date')->first();
+                if ($soon) {
+                    return self::notice($soon, $centreId, false, $audience, $email);
+                }
             }
         }
 
         return null;
     }
 
-    private static function notice(object $row, int $centreId, bool $isToday): array
+    private static function notice(object $row, int $centreId, bool $isToday, string $audience = 'family', string $email = ''): array
     {
-        $centre = DB::table('centres')->where('id', $centreId)->value('name');
+        $c = DB::table('centres')->where('id', $centreId)->first(['name', 'email']);
+        $centre = $c->name ?? null;
         $reason = self::reason($row);
         $dates = self::dateLabel($row);
+        $span = str_contains($dates, '–') ? 'those days' : 'that day';
+        $base = [
+            'id' => (int) $row->id,
+            'centre_id' => $centreId,
+            'centre_name' => (string) ($centre ?: 'Your centre'),
+            'is_today' => $isToday,
+            'dates' => $dates,
+            'reason' => $reason,
+            'closure_type' => (string) ($row->closure_type ?? ''),
+            'audience' => $audience,
+        ];
+
+        if ($audience === 'staff') {
+            // The provider IS the centre in home child care: their email is the centre's.
+            $own = $email !== '' && mb_strtolower(trim((string) ($c->email ?? ''))) === $email;
+            if ($own) {
+                return $base + [
+                    'title' => $isToday ? 'You are closed today' : 'Your closure is coming up',
+                    'message' => $isToday
+                        ? sprintf('You are closed today for %s. No children are expected, so there is no attendance to take. Families see this notice too when they open the app. Enjoy your day!', $reason)
+                        : sprintf('A reminder that you are closed %s for %s. No children will be expected ' . $span . ', and families see this notice too when they open the app. If your dates change, let the office know so families get the right ones.', $dates, $reason),
+                ];
+            }
+            $name = $centre ?: 'Your centre';
+
+            return $base + [
+                'title' => $isToday ? $name . ' is closed today' : 'Closure coming up at ' . $name,
+                'message' => $isToday
+                    ? sprintf('%s is closed today for %s. No children are expected, so there is no attendance to take there.', $name, $reason)
+                    : sprintf('%s will be closed %s for %s. No children will be expected ' . $span . ', and families see this notice in the app too.', $name, $dates, $reason),
+            ];
+        }
 
         return [
             'id' => (int) $row->id,
