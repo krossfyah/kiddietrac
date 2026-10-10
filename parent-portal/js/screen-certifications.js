@@ -156,7 +156,15 @@
     `;
   }
 
-  const CERT_TYPES = ['RECE', 'First_Aid', 'CPR', 'Vulnerable_Sector_Check', 'Health_Card', 'Other'];
+  /* From the agency's province/state (GET /admin/jurisdiction, 2026-10-09); this list until it loads. */
+  let CERT_TYPES = ['RECE', 'First_Aid', 'CPR', 'Vulnerable_Sector_Check', 'Health_Card', 'Other'];
+  let CERT_LABELS = {};
+  try {
+    KT.Api.get('/admin/jurisdiction').then(function (j) {
+      const list = (j && j.certifications) || [];
+      if (list.length) { CERT_TYPES = list.map(function (c) { return c.code; }); list.forEach(function (c) { CERT_LABELS[c.code] = c.label + (c.within_days_of_hire ? ' (within ' + c.within_days_of_hire + ' days of hire)' : ''); }); }
+    }).catch(function () {});
+  } catch (e) {}
 
   // View (read-only) or Edit a certification. Edit PATCHes /director/certifications/{id}.
   function openCertModal(container, c, readOnly) {

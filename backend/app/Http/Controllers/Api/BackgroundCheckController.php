@@ -47,7 +47,8 @@ final class BackgroundCheckController extends Controller
         $data = $request->validate([
             'id'           => 'nullable|integer',
             'user_id'      => 'required|integer',
-            'check_type'   => 'required|string|in:vss,criminal,driver,reference,other',
+            // From the jurisdiction catalogues (2026-10-09) + 'vulnerable_sector', which existing rows use.
+            'check_type'   => 'required|string|in:' . implode(',', array_unique(array_merge(['vss', 'criminal', 'driver', 'reference', 'other', 'vulnerable_sector'], \App\Support\Jurisdictions::allBackgroundCheckCodes()))),
             'reference'    => 'nullable|string|max:120',
             'issued_at'    => 'nullable|date',
             'expires_at'   => 'required|date',

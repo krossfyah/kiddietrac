@@ -196,8 +196,13 @@ final class CurrencyController extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         $p = \App\Support\Jurisdictions::forAgency($agencyId);
+        $on = \App\Support\Jurisdictions::profile('CA-ON');
         return response()->json(['jurisdiction' => $p['code'], 'profile' => $this->profileSummary($p), 'incident' => $p['incident'] ?? null,
-            'drills' => $p['drills'] ?? [], 'immunization_schedule' => $p['immunization_schedule'] ?? null]);
+            'drills' => $p['drills'] ?? [], 'immunization_schedule' => $p['immunization_schedule'] ?? null,
+            // A jurisdiction with no verified catalogue offers Ontario's (the product's original list).
+            'certifications' => $p['certifications'] ?? null ?: $on['certifications'],
+            'background_checks' => $p['background_checks'] ?? null ?: $on['background_checks'],
+            'pd_hours' => $p['pd_hours'] ?? null]);
     }
 
     /**

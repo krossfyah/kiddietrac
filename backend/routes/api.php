@@ -1868,12 +1868,35 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
     // Staff-to-staff direct messaging (#38) — colleagues within an agency. {thread}
     // is numeric-constrained so /team-threads/unread-count is never captured as an id.
+    // Files between educators and families (2026-10-09). Scoped in the controller: staff reach the
+    // families of the children they can access (room scope); parents only their own family.
+    Route::middleware('role:educator,centre_director,agency_admin,home_visitor,platform_admin')->prefix('provider')->group(function () {
+        Route::get   ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'staffList']);
+        Route::get   ('/files/recipients',       [\App\Http\Controllers\Api\FamilyFilesController::class, 'recipients']);
+        Route::post  ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'staffSend'])->middleware('throttle:30,1');
+        Route::get   ('/files/settings',         [\App\Http\Controllers\Api\FamilyFilesController::class, 'showSettings']);
+        Route::post  ('/files/settings',         [\App\Http\Controllers\Api\FamilyFilesController::class, 'saveSettings']);
+        Route::get   ('/files/{id}/download',    [\App\Http\Controllers\Api\FamilyFilesController::class, 'download'])->whereNumber('id');
+        Route::delete('/files/{id}',             [\App\Http\Controllers\Api\FamilyFilesController::class, 'destroy'])->whereNumber('id');
+    });
+    Route::middleware('role:guardian')->prefix('parent')->group(function () {
+        Route::get   ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'parentList']);
+        Route::post  ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'parentSend'])->middleware('throttle:20,1');
+        Route::get   ('/files/{id}/download',    [\App\Http\Controllers\Api\FamilyFilesController::class, 'download'])->whereNumber('id');
+        Route::delete('/files/{id}',             [\App\Http\Controllers\Api\FamilyFilesController::class, 'destroy'])->whereNumber('id');
+    });
+
     // Educators: their own children's emergency cards, and texting/emailing those children's
     // parents through KiddieTrac (2026-10-09). Room-scoped in the controllers (canAccessChildId).
     Route::middleware('role:educator,centre_director,agency_admin,home_visitor,platform_admin')->prefix('provider')->group(function () {
         Route::get ('/children/{child}/emergency-card',            [\App\Http\Controllers\Api\EmergencyCardController::class, 'forCarer'])->whereNumber('child');
         Route::get ('/children/{child}/emergency-card/print-link', [\App\Http\Controllers\Api\EmergencyCardController::class, 'printLinkForCarer'])->whereNumber('child');
         Route::get ('/children/{child}/parent-contacts',           [\App\Http\Controllers\Api\ParentContactController::class, 'contacts'])->whereNumber('child');
+        // Staff notes on a child's record (2026-10-09); room-scoped in the controller.
+        Route::get  ('/children/{child}/notes',            [\App\Http\Controllers\Api\ChildNotesController::class, 'index'])->whereNumber('child');
+        Route::post ('/children/{child}/notes',            [\App\Http\Controllers\Api\ChildNotesController::class, 'store'])->whereNumber('child')->middleware('throttle:30,1');
+        Route::patch('/child-notes/{id}',                  [\App\Http\Controllers\Api\ChildNotesController::class, 'update'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::get  ('/child-notes/{id}/history',          [\App\Http\Controllers\Api\ChildNotesController::class, 'history'])->whereNumber('id');
         Route::post('/children/{child}/message-parents',           [\App\Http\Controllers\Api\ParentContactController::class, 'send'])->whereNumber('child')->middleware('throttle:20,1');
     });
 
@@ -2722,6 +2745,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
         Route::get   ('/immunization/schedule',           [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'listSchedule']);
         Route::post  ('/immunization/schedule',           [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'upsertSchedule']);
+        // Replace the schedule with a standard one: Canada (NACI) or US (ACIP, covers Ohio) — 2026-10-09.
+        Route::post  ('/immunization/schedule/preset',    [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'loadPreset']);
         Route::delete('/immunization/schedule/{id}',      [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'removeSchedule']);
         Route::get   ('/immunization/due-report',         [\App\Http\Controllers\Api\ImmunizationScheduleController::class, 'agencyDueReport']);
     });

@@ -115,6 +115,24 @@ final class DataRetentionController extends Controller
             'notes'              => ['nullable', 'string', 'max:2000'],
         ]);
 
+        /* LEGAL FLOORS (2026-10-09, App\Support\Jurisdictions). A setting may never purge below
+           what the agency's province/state requires. Mapped onto the settings that hold those
+           records; a jurisdiction with no known floor (null) is not enforced. */
+        $floorOf = fn (string $k) => \App\Support\Jurisdictions::retentionFloor($agencyId, $k);
+        $floors = [
+            'daily_log_months' => [$floorOf('attendance'), 1, 'attendance records'],
+            'child_record_years' => [max((int) $floorOf('incidents'), (int) $floorOf('medication_permissions'), (int) $floorOf('trip_permissions')) ?: null, 12, 'incident reports and permissions'],
+            'document_years' => [$floorOf('staff_records_after_leaving'), 12, 'staff records'],
+        ];
+        $jur = \App\Support\Jurisdictions::forAgency($agencyId);
+        foreach ($floors as $k => [$min, $unit, $what]) {
+            if ($min && isset($data[$k]) && $data[$k] !== null && (int) $data[$k] * $unit < $min) {
+                $need = (int) ceil($min / $unit);
+                return response()->json(['message' => $jur['label'] . ' requires ' . $what . ' to be kept at least ' . $min . ' months, so this can be no lower than ' . $need . ($unit === 12 ? ' year' . ($need === 1 ? '' : 's') : ' months') . '.',
+                    'errors' => [$k => ['Below the ' . $jur['label'] . ' minimum (' . $need . ').']]], 422);
+            }
+        }
+
         $current = $this->read($agencyId);
         foreach (self::DEFAULTS as $k => $def) {
             if (is_bool($def)) {

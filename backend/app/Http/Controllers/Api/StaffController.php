@@ -196,7 +196,8 @@ final class StaffController extends Controller
     public function addCertification(Request $request, int $userId): JsonResponse
     {
         $data = $request->validate([
-            'cert_type' => ['required', 'in:RECE,First_Aid,CPR,Vulnerable_Sector_Check,Health_Card,Other'],
+            // From the jurisdiction catalogues (App\Support\Jurisdictions) plus every type already in use.
+            'cert_type' => ['required', 'in:' . implode(',', array_unique(array_merge(['RECE', 'ECE_Assistant', 'First_Aid', 'CPR', 'Food_Handler', 'VSC', 'WHMIS', 'custom', 'Vulnerable_Sector_Check', 'Health_Card', 'Other'], \App\Support\Jurisdictions::allCertificationCodes())))],
             'certifier' => ['nullable', 'string', 'max:120'],
             'issued_at' => ['required', 'date'],
             'expires_at' => ['nullable', 'date', 'after:issued_at'],
@@ -221,7 +222,7 @@ final class StaffController extends Controller
         }
         // NOTE: staff_certifications has no updated_at column — do not set it.
         $data = $request->validate([
-            'cert_type'    => ['sometimes', 'in:RECE,First_Aid,CPR,Vulnerable_Sector_Check,Health_Card,Other'],
+            'cert_type'    => ['sometimes', 'in:' . implode(',', array_unique(array_merge(['RECE', 'ECE_Assistant', 'First_Aid', 'CPR', 'Food_Handler', 'VSC', 'WHMIS', 'custom', 'Vulnerable_Sector_Check', 'Health_Card', 'Other'], \App\Support\Jurisdictions::allCertificationCodes())))],
             'certifier'    => ['nullable', 'string', 'max:120'],
             'issued_at'    => ['sometimes', 'date'],
             'expires_at'   => ['nullable', 'date'],

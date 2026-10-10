@@ -444,7 +444,9 @@
         </select></label>
       <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Type
         <select id="bgc-type" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;">
-          ${['vss', 'criminal', 'driver', 'reference', 'other'].map(t => `<option value="${t}" ${row && row.check_type === t ? 'selected' : ''}>${t.toUpperCase()}</option>`).join('')}
+          ${((window.KT && KT._jurChecks) || [{code:'vss',label:'VSS'},{code:'criminal',label:'Criminal'},{code:'driver',label:'Driver'},{code:'reference',label:'Reference'},{code:'other',label:'Other'}])
+              .concat(row && row.check_type && !((window.KT && KT._jurChecks) || []).some(c => c.code === row.check_type) && !['vss','criminal','driver','reference','other'].includes(row.check_type) ? [{code: row.check_type, label: row.check_type.replace(/_/g, ' ')}] : [])
+              .map(t => `<option value="${t.code}" ${row && row.check_type === t.code ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
         </select></label>
       <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Reference / cert #
         <input id="bgc-ref" value="${row ? escapeHtml(row.reference || '') : ''}" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>

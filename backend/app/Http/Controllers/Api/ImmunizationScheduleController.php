@@ -37,6 +37,57 @@ final class ImmunizationScheduleController extends Controller
         ['DTaP-IPV', '5th dose (booster)', 60],
     ];
 
+    /* US childhood schedule (CDC / ACIP recommended), months, for the vaccines Ohio requires in
+       child care (ORC 5104.014: varicella, diphtheria, Hib, hepatitis A, hepatitis B, influenza,
+       measles, mumps, pertussis, pneumococcal, polio, rotavirus, rubella, tetanus). Added
+       2026-10-09 as a preset next to NACI; review it against the current CDC schedule before
+       relying on it — agencies can edit every row. */
+    private const ACIP = [
+        ['Hepatitis B', '1st dose', 0],
+        ['Hepatitis B', '2nd dose', 1],
+        ['DTaP', '1st dose', 2], ['Hib', '1st dose', 2], ['IPV (polio)', '1st dose', 2], ['Pneumococcal (PCV)', '1st dose', 2], ['Rotavirus', '1st dose', 2],
+        ['DTaP', '2nd dose', 4], ['Hib', '2nd dose', 4], ['IPV (polio)', '2nd dose', 4], ['Pneumococcal (PCV)', '2nd dose', 4], ['Rotavirus', '2nd dose', 4],
+        ['DTaP', '3rd dose', 6], ['Hepatitis B', '3rd dose', 6], ['IPV (polio)', '3rd dose', 6], ['Pneumococcal (PCV)', '3rd dose', 6], ['Influenza', 'yearly from 6 months', 6],
+        ['MMR', '1st dose', 12], ['Varicella', '1st dose', 12], ['Hepatitis A', '1st dose', 12], ['Hib', 'booster', 12], ['Pneumococcal (PCV)', 'booster', 12],
+        ['DTaP', '4th dose', 15],
+        ['Hepatitis A', '2nd dose', 18],
+        ['DTaP', '5th dose', 48], ['IPV (polio)', '4th dose', 48], ['MMR', '2nd dose', 48], ['Varicella', '2nd dose', 48],
+    ];
+
+    private static function presetRows(string $key): array
+    {
+        return $key === 'acip' || $key === 'acip_ohio' ? self::ACIP : self::DEFAULTS;
+    }
+
+    /**
+     * POST /immunization/schedule/preset { preset: naci|acip } — replace the agency's schedule
+     * with a standard one. The current rows are switched off (active = 0), not deleted, so the
+     * old schedule is still in the database if anyone asks what it was.
+     */
+    public function loadPreset(Request $request): JsonResponse
+    {
+        $data = $request->validate(['preset' => 'required|in:naci,acip']);
+        $agencyId = $this->resolveAgencyId($request);
+        /* A row per (vaccine, dose) is unique, so a preset that shares a row with the old
+           schedule must switch THAT row back on rather than insert a twin (insertOrIgnore
+           silently skipped them: NACI -> ACIP -> NACI ended with no active rows). */
+        DB::transaction(function () use ($agencyId, $data) {
+            DB::table('immunization_schedule')->where('agency_id', $agencyId)->where('active', 1)->update(['active' => 0, 'updated_at' => now()]);
+            foreach (self::presetRows($data['preset']) as $i => [$v, $d, $m]) {
+                $key = ['agency_id' => $agencyId, 'vaccine' => $v, 'dose_label' => $d];
+                $vals = ['due_at_age_months' => $m, 'is_required' => 1, 'display_order' => $i + 1, 'active' => 1, 'updated_at' => now()];
+                if (DB::table('immunization_schedule')->where($key)->exists()) DB::table('immunization_schedule')->where($key)->update($vals);
+                else DB::table('immunization_schedule')->insert($key + $vals + ['created_at' => now()]);
+            }
+        });
+        try {
+            \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $agencyId, 'action' => 'immunization.schedule_preset', 'entity_type' => 'agency', 'entity_id' => $agencyId,
+                'payload' => json_encode(['summary' => 'Immunization schedule replaced with the ' . strtoupper($data['preset']) . ' preset']), 'ip_address' => substr((string) $request->ip(), 0, 45), 'created_at' => now()]);
+        } catch (\Throwable $e) {}
+
+        return response()->json(['ok' => true, 'preset' => $data['preset']]);
+    }
+
     public function listSchedule(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
@@ -44,7 +95,7 @@ final class ImmunizationScheduleController extends Controller
             ->where('active', 1)
             ->orderBy('due_at_age_months')->orderBy('vaccine')->orderBy('dose_label')->get();
         if ($rows->isEmpty()) {
-            $this->seedDefaults($agencyId);
+            $this->seedDefaults($agencyId, (string) (\App\Support\Jurisdictions::forAgency($agencyId)['immunization_schedule'] ?? 'naci'));
             $rows = DB::table('immunization_schedule')->where('agency_id', $agencyId)->where('active', 1)
                 ->orderBy('due_at_age_months')->orderBy('vaccine')->orderBy('dose_label')->get();
         }
@@ -270,10 +321,10 @@ final class ImmunizationScheduleController extends Controller
         return response()->json(['data' => $rows]);
     }
 
-    private function seedDefaults(int $agencyId): void
+    private function seedDefaults(int $agencyId, string $preset = 'naci'): void
     {
         $rows = [];
-        foreach (self::DEFAULTS as $i => [$v, $d, $m]) {
+        foreach (self::presetRows($preset) as $i => [$v, $d, $m]) {
             $rows[] = [
                 'agency_id' => $agencyId,
                 'vaccine' => $v, 'dose_label' => $d,

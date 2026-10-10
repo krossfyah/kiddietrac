@@ -1060,7 +1060,24 @@
     }));
 
     const addBtn = main.querySelector('#ims-add');
-    if (addBtn) { addBtn.addEventListener('click', () => imsEdit(null, reload)); }
+    if (addBtn) {
+      addBtn.addEventListener('click', () => imsEdit(null, reload));
+      /* STANDARD SCHEDULES (2026-10-09): replace this agency's schedule with Canada's (NACI) or
+         the US one (ACIP, which covers Ohio's required vaccines). The old rows are switched off,
+         not deleted. */
+      const preset = document.createElement('select');
+      preset.style.cssText = 'height:34px;padding:0 10px;border:1px solid #CBD5E1;border-radius:10px;font-size:13px;background:#fff;color:#334155;font-weight:700;';
+      preset.innerHTML = '<option value="">Load a standard schedule…</option><option value="naci">Canada (NACI)</option><option value="acip">United States (ACIP — covers Ohio)</option>';
+      addBtn.parentNode.insertBefore(preset, addBtn);
+      preset.addEventListener('change', async () => {
+        const v = preset.value; if (!v) return;
+        const name = v === 'naci' ? 'Canada (NACI)' : 'United States (ACIP)';
+        const ok = KT.confirm ? await KT.confirm({ title: 'Replace the schedule?', description: 'Every row in this schedule is replaced with the ' + name + ' schedule. Your current rows are switched off, not deleted. Children\'s due dates are recalculated from it.', okLabel: 'Replace' }) : window.confirm('Replace the schedule with ' + name + '?');
+        if (!ok) { preset.value = ''; return; }
+        try { await Api.post('/immunization/schedule/preset', { preset: v }); if (KT.toast) KT.toast('💉', 'Schedule replaced', name, '#16A34A'); reload(); }
+        catch (e) { preset.value = ''; if (KT.toast) KT.toast('⚠️', 'Could not load the schedule', (e && e.message) || '', '#DC2626'); }
+      });
+    }
 
     const byId = {};
     rows.forEach(r => { byId[String(r.id)] = r; });

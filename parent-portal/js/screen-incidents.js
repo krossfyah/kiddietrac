@@ -205,12 +205,17 @@
     return '<span class="tag ' + (map[s] || 'tag-info') + '">' + (s || 'low').toUpperCase() + '</span>';
   }
 
+  /* Serious-incident wording from the agency's province/state (kt-jurisdiction.js). */
+  function jurSerious() {
+    return (window.KT && KT.jurSerious) ? KT.jurSerious() : { short: 'Serious Occurrence', label: 'Serious occurrence (CCEYA)' };
+  }
+
   function typeLabel(t) {
     return {
       general: 'General',
       injury: 'Injury',
       illness: 'Illness',
-      serious_occurrence: 'Serious Occurrence',
+      serious_occurrence: jurSerious().short,
       behavioural: 'Behavioural',
       medication_error: 'Medication Error',
       other: 'Other',
@@ -533,7 +538,7 @@
         '<div class="actions">' +
           severityBadge(inc.severity) + ' ' +
           statusBadge(inc.status) + ' ' +
-          (inc.is_serious_occurrence ? '<span class="tag tag-danger">SERIOUS OCCURRENCE</span>' : '') +
+          (inc.is_serious_occurrence ? '<span class="tag tag-danger">' + esc(jurSerious().label.toUpperCase()) + '</span>' : '') +
         '</div>' +
       '</div>' +
 
@@ -1308,7 +1313,7 @@
               '<option value="illness">Illness</option>' +
               '<option value="behavioural">Behavioural</option>' +
               '<option value="medication_error">Medication error</option>' +
-              '<option value="serious_occurrence">Serious occurrence (CCEYA)</option>' +
+              '<option value="serious_occurrence">' + esc(jurSerious().label) + '</option>' +
               '<option value="other">Other</option>' +
             '</select>' +
           '</div>' +

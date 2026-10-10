@@ -37,7 +37,12 @@ final class AgencyTime
         $arr = $settings ? (json_decode($settings, true) ?: []) : [];
         $tz = $arr['timezone'] ?? null;
         if (! $tz || ! in_array($tz, timezone_identifiers_list(), true)) {
-            $tz = self::DEFAULT_TZ;
+            /* No timezone set: the jurisdiction's (2026-10-09, App\Support\Jurisdictions) rather
+               than always Toronto — an Ohio agency with none set is on Eastern time, a Texas one
+               on Central. Every agency before this change is CA-ON, so their fallback is the
+               same America/Toronto it always was. Never writes the agency's setting. */
+            $jtz = \App\Support\Jurisdictions::forAgency($agencyId)['timezone'] ?? null;
+            $tz = ($jtz && in_array($jtz, timezone_identifiers_list(), true)) ? $jtz : self::DEFAULT_TZ;
         }
         return self::$cache[$agencyId] = $tz;
     }
