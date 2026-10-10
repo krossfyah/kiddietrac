@@ -98,16 +98,26 @@
         currentRoomId = rooms[0].id;
       }
 
+      /* ONE HEADER, NOT TWO (2026-10-09, Anthony: "where it shows natasha name combine
+         this to where it shows you're all set - have a great day Natasha and move the ratio
+         to where it shows light day bar"). The provider's name (and the room/provider
+         picker, when there is more than one) now sits in the "Today at a glance" banner
+         beside the greeting, and the live ratio card sits at the right of the day-score
+         card. The separate row that repeated the name in a pill is gone. */
+      const header = buildHeaderBits(rooms, centreLabel, providerMode);
+      const ratioWrap = Dom.el('div', { id: 'ratioIndicator', style: 'margin-left:auto;flex:0 0 auto;' });
+
       // "Today at a glance" brief FIRST — the day's headline + chips (Attendance,
       // Lesson plan, Meals logged …) sit at the very top where the old hero was.
       const briefBox = Dom.el('div', { id: 'kt-day-brief' });
       shell.appendChild(briefBox);
-      renderDayBrief(briefBox);
+      renderDayBrief(briefBox, header);
 
       // How the day is going — the same score the evening email sends, but live.
       const scoreBox = Dom.el('div', { id: 'kt-day-score' });
       shell.appendChild(scoreBox);
-      renderDayScore(scoreBox);
+      renderDayScore(scoreBox, ratioWrap);
+      refreshRatio(ratioWrap);
 
       /* The daily forms. Submitting one used to leave no trace anywhere an educator
          could see — the signoff went into the database and no screen mentioned it — so
@@ -115,10 +125,6 @@
       const formsBox = Dom.el('div', { id: 'kt-forms-today' });
       shell.appendChild(formsBox);
       renderFormsToday(formsBox);
-
-      // Room topbar (centre name + room selector + ratio) — now BELOW the brief.
-      const topbar = buildTopbar(rooms, centreLabel, providerMode);
-      shell.appendChild(topbar);
 
       // Roster
       const rosterContainer = Dom.el('div', { id: 'educatorRoster' });
@@ -156,11 +162,20 @@
      Deliberately quiet when there is nothing to say: an educator who has just walked in
      does not need a 0 out of 100 in red, and a day the centre does not run should not be
      scored at all. In both cases the card simply is not there. */
-  async function renderDayScore(container) {
+  async function renderDayScore(container, ratioWrap) {
+    // No score card today (not an operating day, or it failed): the ratio must still show.
+    function ratioAlone() {
+      container.innerHTML = '';
+      if (ratioWrap) {
+        const row = Dom.el('div', { style: 'display:flex;justify-content:flex-end;margin:0 0 14px;' });
+        row.appendChild(ratioWrap);
+        container.appendChild(row);
+      }
+    }
     let d;
     try { d = await Api.get('/educator/day-score'); }
-    catch (e) { container.innerHTML = ''; return; }      // never break Today for a tile
-    if (!d || d.operating_day === false) { container.innerHTML = ''; return; }
+    catch (e) { ratioAlone(); return; }      // never break Today for a tile
+    if (!d || d.operating_day === false) { ratioAlone(); return; }
 
     const score = Math.max(0, Math.min(100, parseInt(d.score, 10) || 0));
     const colour = d.colour || '#7C3AED';
@@ -205,7 +220,12 @@
             (st.minutes ? chip('⏱', (hours ? hours + 'h ' : '') + mins + 'm', 'on the floor') : '') +
           '</div>' +
         '</div>' +
+        '<div data-ratio-slot style="margin-left:auto;flex:0 0 auto;"></div>' +
       '</div>';
+    if (ratioWrap) {
+      const slot = container.querySelector('[data-ratio-slot]');
+      if (slot) { slot.replaceWith(ratioWrap); } else { container.appendChild(ratioWrap); }
+    }
 
     // Animated from empty on the next frame, so the arc is seen to fill rather than
     // appearing already full — the movement is what makes it read as today's, not a
@@ -292,11 +312,11 @@
       + '</div>';
   }
 
-  async function renderDayBrief(container) {
+  async function renderDayBrief(container, header) {
+    let b = null;
+    try { b = await Api.get('/provider/day-brief'); } catch (e) { b = null; }
     try {
-      const b = await Api.get('/provider/day-brief');
       const items = (b && b.items) || [];
-      if (!items.length) { container.innerHTML = ''; return; }
       const TONE = { good: ['#15803D', '#F0FDF4', '#BBF7D0'], warn: ['#B45309', '#FFFBEB', '#FDE68A'], info: ['#334155', '#F8FAFC', '#E2E8F0'] };
       const chips = items.map(function (it) {
         const t = TONE[it.tone] || TONE.info;
@@ -309,16 +329,67 @@
           (it.detail ? '<span style="display:block;font-size:11.5px;color:' + t[0] + ';opacity:.72;margin-top:1px;">' + _briefEsc(it.detail) + '</span>' : '') +
           '</span></button>';
       }).join('');
+      const name = (header && header.label) || '';
       container.innerHTML =
-        '<div style="background:linear-gradient(135deg,#1F6080,#2c7894);border-radius:16px;padding:15px 18px;margin:2px 0 14px;color:#fff;box-shadow:0 2px 10px rgba(31,96,128,.18);">' +
-          '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;opacity:.82;">☀️ Today at a glance</div>' +
-          '<div style="font-size:18px;font-weight:800;margin-top:3px;">' + _briefEsc(b.headline || '') + '</div>' +
+        '<div style="background:linear-gradient(135deg,#1F6080,#2c7894);border-radius:16px;padding:15px 18px;margin:2px 0 14px;color:#fff;box-shadow:0 2px 10px rgba(31,96,128,.18);'
+          + 'display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
+          '<div style="flex:1;min-width:220px;">' +
+            '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;opacity:.82;">☀️ Today at a glance</div>' +
+            (name ? '<div style="font-size:21px;font-weight:800;margin-top:3px;line-height:1.2;">' + _briefEsc(name) + '</div>' : '') +
+            ((b && b.headline) ? '<div style="font-size:' + (name ? '14.5px;font-weight:700;opacity:.92;margin-top:2px' : '18px;font-weight:800;margin-top:3px') + ';">' + _briefEsc(b.headline) + '</div>' : '') +
+          '</div>' +
+          '<div data-picker-slot style="flex:0 0 auto;"></div>' +
         '</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:18px;">' + chips + '</div>';
+        (items.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:18px;">' + chips + '</div>' : '');
+      if (header && header.picker) {
+        const slot = container.querySelector('[data-picker-slot]');
+        if (slot) { slot.appendChild(header.picker); }
+      }
       container.querySelectorAll('.kt-brief-chip[data-hash]').forEach(function (btn) {
         btn.addEventListener('click', function () { const h = btn.getAttribute('data-hash'); if (h) location.hash = h; });
       });
     } catch (e) { container.innerHTML = ''; }
+  }
+
+  function buildHeaderBits(rooms, centreLabel, providerMode) {
+    let picker = null;
+    if (providerMode || rooms.length > 5) {
+      if (rooms.length > 1) {
+        picker = Dom.el('div', { class: 'room-selector', style: 'display:flex;align-items:center;gap:8px;' });
+        picker.appendChild(Dom.el('label', { style: 'font-size:12px;font-weight:800;color:#E0F2F7;' }, providerMode ? 'Provider' : 'Room'));
+        const sel = Dom.el('select', {
+          style: 'height:32px;padding:0 10px;border:1px solid rgba(255,255,255,.45);border-radius:8px;font-size:13.5px;background:#fff;color:#0F172A;font-weight:600;min-width:180px;max-width:300px;',
+          onChange: async (e) => {
+            currentRoomId = parseInt(e.target.value, 10);
+            await renderEducatorScreen(Dom.$('#appMain'), {});
+          },
+        });
+        rooms.slice().sort((a, b) => roomLabel(a, providerMode).localeCompare(roomLabel(b, providerMode))).forEach(room => {
+          const opt = Dom.el('option', { value: String(room.id) }, roomLabel(room, providerMode));
+          if (room.id === currentRoomId) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        picker.appendChild(sel);
+      }
+    } else if (rooms.length > 1) {
+      picker = Dom.el('div', { class: 'room-selector', style: 'display:flex;gap:6px;flex-wrap:wrap;' });
+      rooms.forEach(room => {
+        const on = room.id === currentRoomId;
+        picker.appendChild(Dom.el('button', {
+          type: 'button',
+          style: 'height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;'
+            + (on ? 'background:#fff;color:#1F6080;border:1px solid #fff;' : 'background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.45);'),
+          onClick: async () => {
+            currentRoomId = room.id;
+            await renderEducatorScreen(Dom.$('#appMain'), {});
+          },
+        }, room.name));
+      });
+    }
+    // The name shown in the banner: the provider/room being looked at, else the centre.
+    const cur = rooms.find(r => r.id === currentRoomId);
+    const label = providerMode && cur ? roomLabel(cur, providerMode) : (centreLabel || (cur && cur.name) || 'My classroom');
+    return { label: label, picker: picker };
   }
 
   function buildTopbar(rooms, centreLabel, providerMode) {
