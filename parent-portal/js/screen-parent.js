@@ -1360,9 +1360,9 @@
         try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; } catch (e) {}
         var r = await fetch(base + '/invoices/external/' + i.id + '/document', { headers: h });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        var url = URL.createObjectURL(await r.blob());
-        window.open(url, '_blank');
-        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        var invBlob = await r.blob();
+        if (window.KT && KT.openFile) { KT.openFile(invBlob, { title: 'Invoice', filename: 'invoice.pdf', label: 'Invoice' }); }
+        else { var url = URL.createObjectURL(invBlob); window.open(url, '_blank'); setTimeout(function () { URL.revokeObjectURL(url); }, 60000); }
       } catch (e) {
         // Quick print below still works, so say what happened and leave them a way on.
         if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open the official invoice — use Quick print instead', 'error');

@@ -1457,6 +1457,9 @@ ${t.body ? esc(t.body) : '<em style="color:#94A3B8;">Nothing was written in the 
             prev.innerHTML = '<img alt="" style="max-width:100%;border-radius:10px;'
               + 'border:1px solid #E2E8F0;">';
             prev.firstChild.src = url;
+          } else if (window.KT && KT.openFile) {
+            prev.innerHTML = '';
+            KT.openFile(fetch(url).then((r) => r.blob()), { title: btn.dataset.name || btn.textContent.trim() || 'Attachment', filename: btn.dataset.name || btn.textContent.trim() || 'attachment', label: 'Ticket file' });
           } else {
             window.open(url, '_blank');
             prev.innerHTML = '';

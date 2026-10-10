@@ -30,6 +30,10 @@
 
   var IMAGE_RE = /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i;
   var VIEWABLE_RE = /\.(pdf|png|jpe?g|gif|webp|bmp|svg|txt)(\?|#|$)/i;
+  /* Files a browser cannot draw in a frame (2026-10-09). Framed, a .docx is a blank white
+     panel or a silent download; they get a card with the name and a Download button. */
+  var OFFICE_RE = /\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf|zip|csv)(\?|#|$)/i;
+  var OFFICE_MIME_RE = /(msword|officedocument|ms-excel|ms-powerpoint|opendocument|rtf|zip|text\/csv)/i;
 
   function isImage(url) { return IMAGE_RE.test(String(url || '')); }
 
@@ -195,14 +199,36 @@
        is unchanged — its iframe shows PDFs natively. */
     var mime = String(opts.mime || '');
     var native = nativePrintUnavailable();
-    var plainImage = !/pdf/i.test(mime) && (isImage(url) || opts.image);
-    var usePdfJs = native && !plainImage;
+    var fname = String(opts.filename || opts.name || title || 'file');
+    // A signed link has no extension; the file's name or type says it is a picture.
+    var plainImage = !/pdf/i.test(mime) && (isImage(url) || opts.image || /^image\//i.test(mime) || isImage(fname));
+    var office = !opts.image && !/pdf|^image\//i.test(mime)
+      && (OFFICE_RE.test(String(url)) || OFFICE_RE.test(fname) || OFFICE_MIME_RE.test(mime));
+    var usePdfJs = native && !plainImage && !office;
+    /* DOWNLOAD IN THE PANEL (2026-10-09, Anthony: viewing a file "should be a popup and not a
+       new window"). The panel is now where every file opens, so saving it starts here too.
+       Not in the app: its WebView has nowhere to save, and the app's own net turns a
+       download into this same panel. */
+    var dlBtn = native ? '' : '<a class="ktdv-dl" href="' + esc(url) + '" download="' + esc(fname) + '" data-kt-no-viewer="1" data-kt-download="1" target="_blank" rel="noopener" data-kt-iconized="1" '
+      + 'style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;text-decoration:none;">⬇ Download</a>';
+    var officeIcon = /xls|ods|csv/i.test(fname + mime) ? '📊' : /ppt|odp/i.test(fname + mime) ? '📽️' : /zip/i.test(fname + mime) ? '🗜️' : '📝';
 
-    var inner = usePdfJs
+    var inner = office
+      ? '<div style="flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;">'
+        + '<div style="max-width:420px;width:100%;background:#fff;border-radius:14px;padding:24px;text-align:center;color:#334155;">'
+        + '<div style="font-size:44px;line-height:1;margin-bottom:10px;">' + officeIcon + '</div>'
+        + '<div style="font-weight:800;color:#0F172A;font-size:15px;overflow-wrap:anywhere;">' + esc(fname) + '</div>'
+        + '<div style="font-size:13px;color:#64748B;margin:6px 0 16px;line-height:1.5;">This type of file can\'t be previewed here. '
+        + (native ? 'Open it with an app on your device.' : 'Download it to open it in Word, Excel or another app.') + '</div>'
+        + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">'
+        + (native ? '' : '<a class="ktdv-dl2" href="' + esc(url) + '" download="' + esc(fname) + '" data-kt-no-viewer="1" data-kt-download="1" target="_blank" rel="noopener" data-kt-iconized="1" style="background:#1F6080;color:#fff;border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:800;text-decoration:none;">⬇ Download</a>')
+        + '<button type="button" class="ktdv-ext" data-kt-iconized="1" style="background:#fff;color:#1F6080;border:1px solid #1F6080;border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:800;cursor:pointer;">' + (native ? 'Open with an app' : 'Open in a new tab') + '</button>'
+        + '</div></div></div>'
+      : usePdfJs
       ? '<div class="ktdv-pdf" data-kt-scroll="1" style="flex:1;overflow:auto;background:#0B1220;padding:14px 12px;">'
         + '<div style="color:#94A3B8;font-size:13px;text-align:center;padding:18px;">Opening the document…</div>'
         + '</div>'
-      : (isImage(url) || opts.image)
+      : plainImage
       ? '<div style="flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;">'
         + '<img src="' + esc(url) + '" alt="' + esc(title) + '" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;">'
         + '</div>'
@@ -216,7 +242,8 @@
       +     '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">' + esc(label) + '</div>'
       +     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
       +   '</div>'
-      +   '<button class="ktdv-fprint" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🖨 Print</button>'
+      +   dlBtn
+      +   '<button class="ktdv-fprint" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;' + (office ? 'display:none;' : '') + '">🖨 Print</button>'
       +   '<button class="ktdv-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
       + '</div>'
       + inner
@@ -301,6 +328,8 @@
     }
 
     ov.querySelector('.ktdv-close').addEventListener('click', close);
+    var extBtn = ov.querySelector('.ktdv-ext');
+    if (extBtn) { extBtn.addEventListener('click', function () { openExternally(url); }); }
     /* PRINT, WHERE "OPEN IN NEW TAB" USED TO BE.
 
        In the APK there was no way to print a record at all: the panel offered a new tab,
@@ -570,7 +599,8 @@
     try { abs = new URL(href, w.location.href); } catch (e) { return null; }
     // Only OUR files. A link out to another site is that site's business.
     if (abs.origin !== w.location.origin && !/kiddietrac\.com$/i.test(abs.hostname)) return null;
-    if (VIEWABLE_RE.test(abs.pathname) || /\/storage\//i.test(abs.pathname)) return abs.href;
+    if (VIEWABLE_RE.test(abs.pathname) || OFFICE_RE.test(abs.pathname) || /\/storage\//i.test(abs.pathname)
+        || /\/api\/v1\/media\//i.test(abs.pathname)) return abs.href;
     return null;
   }
 
@@ -779,6 +809,41 @@
       if (handleAnchor(a)) { e.preventDefault(); e.stopPropagation(); }
     }, true);
   }());
+
+  /* ONE WAY TO VIEW A FILE (2026-10-09).
+     KT.openFile(src, { title, label, filename, mime })
+       src: a URL, a Blob, a Promise of either, or a function returning one.
+     Always the in-portal panel — never a new window — with Download in its header and a
+     card for files that cannot be drawn (Word, Excel…). Errors become a toast.
+     KT.fetchFileBlob(url) fetches a protected file with the session's token and agency. */
+  function fetchFileBlob(url) {
+    var h = { Accept: '*/*' };
+    try {
+      var t = (w.KT && w.KT.Auth && w.KT.Auth.token && w.KT.Auth.token()) || w.sessionStorage.getItem('kt_token') || w.localStorage.getItem('kt_token');
+      if (t) h.Authorization = 'Bearer ' + t;
+      var ag = w.sessionStorage.getItem('kt_active_agency_id'); if (ag) h['X-Active-Agency-Id'] = ag;
+    } catch (e) {}
+    return w.fetch(url, { headers: h }).then(function (r) {
+      if (!r.ok) { throw new Error(r.status === 403 ? 'You do not have access to this file.' : r.status === 404 ? 'That file is no longer available.' : 'HTTP ' + r.status); }
+      return r.blob();
+    });
+  }
+  function openFile(src, opts) {
+    opts = opts || {};
+    function fail(e) {
+      if (w.KT && w.KT.toast) { w.KT.toast('⚠️', 'Could not open the file', (e && e.message) || '', '#DC2626'); }
+      return null;
+    }
+    try {
+      if (!src) { return fail(new Error('There is no file to open.')); }
+      if (typeof src === 'function') { return Promise.resolve().then(src).then(function (r) { return openFile(r, opts); }, fail); }
+      if (typeof src.then === 'function') { return src.then(function (r) { return openFile(r, opts); }, fail); }
+      if (typeof Blob !== 'undefined' && src instanceof Blob) { return viewBlob(src, opts); }
+      return view(String(src), opts);
+    } catch (e) { return fail(e); }
+  }
+  w.KT.openFile = openFile;
+  w.KT.fetchFileBlob = fetchFileBlob;
 
   w.KT.viewDocument = view;
   w.KT.renderDocumentInto = renderDocumentInto;

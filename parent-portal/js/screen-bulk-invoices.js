@@ -675,7 +675,10 @@
           host.style.display = 'block';
           var frame = Dom.el('iframe', { src: objUrl, style: 'width:100%;height:100%;border:0;display:block;' });
           host.appendChild(frame);
-          m.querySelector('#iv-dl').addEventListener('click', function () { window.open(objUrl, '_blank'); });
+          m.querySelector('#iv-dl').addEventListener('click', function () {
+            var a = document.createElement('a'); a.href = objUrl; a.download = 'invoice-' + iv.id + '.pdf';
+            document.body.appendChild(a); a.click(); a.remove();
+          });
         })
         .catch(function (e) {
           m.querySelector('#iv-doc').textContent = 'Could not load the invoice: ' + ((e && e.message) || 'error');

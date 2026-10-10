@@ -638,7 +638,7 @@
         el('span', { style: 'color:#94A3B8' }, [fmtBytes(f.size)]),
       ]);
       if (f.url) {
-        row.appendChild(chip('👁 View', function () { window.open(f.url, '_blank', 'noopener'); }));
+        row.appendChild(chip('👁 View', function () { if (window.KT && KT.openFile) { KT.openFile(f.url, { title: f.name, filename: f.name, label: 'Lead file' }); } else { window.open(f.url, '_blank', 'noopener'); } }));
         row.appendChild(chip('⬇️ Download', function () {
           var a2 = document.createElement('a'); a2.href = f.url; a2.target = '_blank'; a2.rel = 'noopener'; a2.download = f.name;
           document.body.appendChild(a2); a2.click(); a2.remove();
@@ -1756,9 +1756,9 @@
 
     function openDoc(d) {
       if (!d.open_url) { toast('⚠️', 'Unavailable', 'That file has no link.', '#DC2626'); return; }
-      try {
-        if (window.KT && KT.openDocumentExternally) { KT.openDocumentExternally(d.open_url, d.file_name || d.title); return; }
-      } catch (e) {}
+      /* In the portal's viewer, not a new window (2026-10-09, Anthony: "when viewing file in
+         file repository it should be a popup and not a new window"). */
+      if (window.KT && KT.openFile) { KT.openFile(d.open_url, { title: d.title || d.file_name, filename: d.file_name || d.title, label: 'Files repository', mime: d.mime_type || d.mime || '' }); return; }
       window.open(d.open_url, '_blank', 'noopener');
     }
 

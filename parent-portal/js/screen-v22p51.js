@@ -671,9 +671,9 @@
           const r = await fetch(`${(KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'}/payroll-documents/${b.getAttribute('data-pd-view')}/pdf`,
             { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token')), Accept: 'application/pdf' } });
           if (!r.ok) throw new Error('HTTP ' + r.status);
-          const url = URL.createObjectURL(await r.blob());
-          window.open(url, '_blank');
-          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          const blob = await r.blob();
+          if (window.KT && KT.openFile) { KT.openFile(blob, { title: 'Payroll document', filename: 'payroll-document.pdf', label: 'Payroll' }); }
+          else { const url = URL.createObjectURL(blob); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000); }
         } catch (e) {
           if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open that document', 'error');
         }
@@ -2054,7 +2054,14 @@
     const id = b.getAttribute('data-doc');
     try {
       if (act === 'pdf' || act === 'print') {
-        const url = URL.createObjectURL(await payslipBlob(id));
+        const slip = await payslipBlob(id);
+        if (window.KT && KT.openFile) {
+          KT.openFile(slip, { title: 'Payslip', filename: 'payslip-' + id + '.pdf', label: 'Payslip' });
+          // Print = the viewer's own Print button, pressed for you.
+          if (act === 'print') { setTimeout(() => { const all = document.querySelectorAll('.ktdv-fprint'); const p = all[all.length - 1]; if (p) p.click(); }, 700); }
+          return;
+        }
+        const url = URL.createObjectURL(slip);
         const w = window.open(url, '_blank');
         if (!w) { URL.revokeObjectURL(url); return say('Allow pop-ups for this site to open the payslip.'); }
         if (act === 'print') { w.addEventListener('load', () => { try { w.print(); } catch (e) {} }); }

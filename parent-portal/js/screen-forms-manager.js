@@ -870,7 +870,8 @@
     btn.textContent = save ? 'Saving…' : 'Opening…';
     /* Opened on the click, before any await — a popup blocker rejects a window.open()
        that is not a direct result of one. Not needed for a save. */
-    var win = save ? null : window.open('', '_blank');
+    var inPanel = !save && !!(window.KT && KT.openFile);
+    var win = (save || inPanel) ? null : window.open('', '_blank');
 
     fetch(API_HOST + '/api/v1/admin/file-requests/' + reqId + '/files/' + btn.getAttribute('data-d') + '/download', {
       headers: {
@@ -889,6 +890,8 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
+      } else if (inPanel) {
+        KT.openFile(blob, { title: String(btn.getAttribute('data-t') || 'File'), filename: String(btn.getAttribute('data-t') || 'file'), label: 'Uploaded file' });
       } else if (win) {
         win.location = u;
       } else {
@@ -2215,7 +2218,8 @@
           }));
         }
         menu.appendChild(item('⬇️', r.filled_file_url ? 'Download completed form' : 'Download blank form (not completed)', false, function () {
-          openUrl(fileUrl(r.filled_file_url || r.file_url));
+          if (window.KT && KT.openFile) { KT.openFile(fileUrl(r.filled_file_url || r.file_url), { title: r.title || r.form_title || 'Form', label: 'Form' }); }
+          else { openUrl(fileUrl(r.filled_file_url || r.file_url)); }
         }));
         /* RETURN IT, rather than opening a blank mailto.
 

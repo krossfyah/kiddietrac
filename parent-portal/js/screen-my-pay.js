@@ -141,9 +141,9 @@
     try {
       var r = await fetch(apiBase() + '/payroll-documents/' + id + '/pdf', { headers: { Authorization: 'Bearer ' + tok() } });
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      var blob = await r.blob(); var url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(function () { URL.revokeObjectURL(url); }, 20000);
+      var blob = await r.blob();
+      if (window.KT && KT.openFile) { KT.openFile(blob, { title: 'Pay document', filename: 'pay-document.pdf', label: 'Pay' }); }
+      else { var url = URL.createObjectURL(blob); window.open(url, '_blank'); setTimeout(function () { URL.revokeObjectURL(url); }, 20000); }
     } catch (e) { if (KT.toast) KT.toast('⚠️', 'Could not open', e.message || '', '#DC2626'); }
     finally { btn.disabled = false; btn.textContent = label; }
   }

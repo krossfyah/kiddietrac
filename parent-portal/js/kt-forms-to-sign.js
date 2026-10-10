@@ -11,7 +11,9 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   var API_HOST = ((KT.API_BASE || 'https://api.kiddietrac.com/api/v1')).replace(/\/api\/v1\/?$/, '');
   function fileUrl(u) { return u ? (/^https?:/.test(u) ? u : API_HOST + u) : ''; }
+  // Viewing a form opens the portal's panel (pdf.js in the app), not a new window.
   function openUrl(u) {
+    if (window.KT && KT.openFile) { KT.openFile(u, { title: 'Form', label: 'Form' }); return; }
     try { if (window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Browser) { Capacitor.Plugins.Browser.open({ url: u }); return; } } catch (e) {}
     window.open(u, '_blank');
   }

@@ -738,6 +738,7 @@
               if (!res.ok) { throw new Error('HTTP ' + res.status); }
               return res.blob();
             }).then(function (blob) {
+              if (window.KT && KT.openFile) { KT.openFile(blob, { title: 'Invoice ' + id, filename: 'invoice-' + id + '.pdf', label: 'Platform invoice' }); b.disabled = false; return; }
               var url = URL.createObjectURL(blob);
               window.open(url, '_blank');
               /* Released once the tab has had time to read it — holding every blob

@@ -355,3 +355,17 @@ buttons may be detached, and each one's click is what runs. The menu draws on `<
 at `position:fixed`, flips above near the bottom, and closes on outside click, scroll
 and Escape. Give the anchor class `kt-ka-kebab` so it looks and behaves like every
 other ⋮.
+
+## Viewing a file is KT.openFile, never window.open (2026-10-09)
+
+Anthony: "when viewing file in file repository it should be a popup and not a new window".
+Every "View" of a file goes through `KT.openFile(src, { title, filename, label, mime })`
+in kt-doc-viewer.js. `src` can be a URL, a Blob, a Promise of either, or a function that
+returns one. It opens the in-portal panel: an iframe on desktop, pdf.js in the app, and
+`<img>` for images. The header has Download, Print and ✕. Word, Excel, CSV and zip files
+get a card with Download and "Open in a new tab" ("Open with an app" in the APK).
+For a protected file, `KT.fetchFileBlob(url)` adds the token and X-Active-Agency-Id.
+Do not pre-open a blank window before an await. A new window is right only for real
+navigation: OAuth, checkout, app store, another site's page, an explicit
+"Open in new tab" escape hatch, or a fallback when KT.openFile is missing.
+A Download button downloads (`a[download]`); it does not window.open.

@@ -1322,6 +1322,7 @@
       if (b.dataset.bound) { return; }
       b.dataset.bound = '1';
       b.addEventListener('click', function () {
+        if (window.KT && KT.openFile) { KT.openFile(b.getAttribute('data-url'), { title: b.getAttribute('data-title') || b.textContent.trim() || 'Document', label: 'Document' }); return; }
         var w = window.open(b.getAttribute('data-url'), '_blank', 'noopener');
         if (!w && Dom.toast) { Dom.toast('Your browser blocked the pop-up — allow pop-ups for this site.', 'error'); }
       });
@@ -1399,6 +1400,8 @@
         var a = document.createElement('a');
         a.href = url; a.download = 'invoice-' + id + '.pdf';
         a.click();
+      } else if (window.KT && KT.openFile) {
+        KT.openFile(blob, { title: 'Invoice ' + id, filename: 'invoice-' + id + '.pdf', label: 'Invoice' });
       } else {
         var w = window.open(url, '_blank');
         if (!w) { say('Your browser blocked the pop-up — allow pop-ups for this site.', 'error'); }
@@ -1620,6 +1623,7 @@
       fetchStatementPdf(userId, qs(), this, function (blob) {
         /* The real document, not a preview of it: the endpoint needs an auth header so
            a plain link would 401, and this is the same blob Download saves. */
+        if (window.KT && KT.openFile) { KT.openFile(blob, { title: 'Account statement', filename: 'statement.pdf', label: 'Statement' }); return; }
         var url = URL.createObjectURL(blob);
         var w = window.open(url, '_blank');
         if (!w) {

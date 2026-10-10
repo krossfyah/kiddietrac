@@ -31,6 +31,8 @@
   // use the in-app Browser plugin when present; else a new tab; else same-window.
   function openDocUrl(url) {
     if (!url) return;
+    // The portal's viewer first (pdf.js in the app, a card for Word/Excel), never a new window.
+    if (window.KT && KT.openFile) { KT.openFile(url, { title: 'Document', label: 'Document' }); return; }
     var C = window.Capacitor;
     var native = C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative);
     var B = C && C.Plugins && C.Plugins.Browser;

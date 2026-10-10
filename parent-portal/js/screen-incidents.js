@@ -37,7 +37,8 @@
   async function openReportPdf(inc, role, btn) {
     var was = btn ? btn.textContent : null;
     if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
-    var win = window.open('', '_blank');
+    var inPanel = !!(window.KT && KT.openFile);
+    var win = inPanel ? null : window.open('', '_blank');
     try {
       var h = { Authorization: 'Bearer ' + authToken() };
       var ag = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id');
@@ -45,7 +46,9 @@
 
       var r = await fetch(apiHost() + apiBase(role) + '/incidents/' + inc.id + '/report.pdf', { headers: h });
       if (!r.ok) { throw new Error('HTTP ' + r.status); }
-      var u = URL.createObjectURL(await r.blob());
+      var repBlob = await r.blob();
+      if (inPanel) { KT.openFile(repBlob, { title: 'Incident report', filename: 'incident-' + inc.id + '.pdf', label: 'Incident report' }); return true; }
+      var u = URL.createObjectURL(repBlob);
       if (win) { win.location = u; } else { window.open(u, '_blank'); }
       setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
       return true;
