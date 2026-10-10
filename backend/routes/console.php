@@ -44,6 +44,8 @@ Schedule::command('timeoff:remind-approvers')->everyFifteenMinutes()->withoutOve
 // Counter-signature reminders: one digest per admin/director of completed forms still
 // waiting for review, on each agency's schedule (Settings → Notifications). 2026-10-09.
 Schedule::command('forms:remind-countersign')->everyFifteenMinutes()->withoutOverlapping(14);
+/* Providers without a bio: each agency's schedule (Settings → Notifications → Provider bios). */
+Schedule::command('providers:remind-bio')->everyFifteenMinutes()->withoutOverlapping(14);
 
 /* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
    had accumulated, 281 of them already expired: full-access credentials (`["*"]`) sitting

@@ -1097,7 +1097,7 @@ final class AuthController extends Controller
             ? DB::table('centres')
                 ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
                 ->whereNull('deleted_at')
-                ->select('id', 'provider_bio')
+                ->select('id', 'provider_bio', 'agency_id')
                 ->first()
             : null;
 
@@ -1204,6 +1204,16 @@ final class AuthController extends Controller
             'is_provider' => (bool) $providerCentre,
             'provider_centre_id' => $providerCentre->id ?? null,
             'provider_bio' => $providerCentre->provider_bio ?? null,
+            /* Show the "write your bio" card (2026-10-09): a provider whose bio is missing or
+               short, in an agency that has not switched the card off. */
+            'bio_nudge' => (function () use ($providerCentre) {
+                if (! $providerCentre || ! $providerCentre->agency_id) return false;
+                try {
+                    $bs = \App\Support\BioReminders::read((int) $providerCentre->agency_id);
+                    return ! empty($bs['enabled']) && ! empty($bs['banner'])
+                        && mb_strlen(trim((string) $providerCentre->provider_bio)) < max(40, (int) $bs['min_chars']);
+                } catch (\Throwable $e) { return false; }
+            })(),
             'profile_extras' => is_string($user->profile_extras ?? null)
                 ? json_decode($user->profile_extras, true)
                 : ($user->profile_extras ?? null),

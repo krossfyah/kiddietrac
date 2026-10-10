@@ -746,11 +746,24 @@
         if (v.length < 40) { bStatus.style.color = '#B91C1C'; bStatus.textContent = 'Please write at least a sentence or two (40+ characters).'; bio.focus(); return; }
         bSave.disabled = true; bSave.textContent = 'Saving…'; bStatus.textContent = '';
         Api.patch('/auth/me/provider-bio', { provider_bio: v })
-          .then(function () { bSave.disabled = false; bSave.textContent = 'Save bio'; bStatus.style.color = '#16A34A'; bStatus.textContent = '✓ Saved — families will see this on your card.'; try { var ku = cachedUser(); ku.provider_bio = v; sessionStorage.setItem('kt_user', JSON.stringify(ku)); } catch (e) {} })
+          .then(function () { bSave.disabled = false; bSave.textContent = 'Save bio'; bStatus.style.color = '#16A34A'; bStatus.textContent = '✓ Saved — families will see this on your card.'; try { var ku = cachedUser(); ku.provider_bio = v; if (v.length >= 40) ku.bio_nudge = false; sessionStorage.setItem('kt_user', JSON.stringify(ku)); } catch (e) {} try { if (KT.bioNudge) KT.bioNudge.hide(); } catch (e) {} })
           .catch(function (e) { bSave.disabled = false; bSave.textContent = 'Save bio'; bStatus.style.color = '#B91C1C'; bStatus.textContent = 'Could not save: ' + (e && e.message ? e.message : 'try again'); });
       });
       bc.appendChild(bStatus); bc.appendChild(bSave);
       paneProfile.appendChild(bc);
+      /* THE REMINDER'S LINK LANDS HERE (2026-10-09): bio reminders, the bell notification and
+         the "write your bio" card open #settings?tab=profile&focus=bio, so the box is brought
+         into view, outlined and focused instead of leaving the provider to find it. */
+      if (String((ctx && ctx.params && ctx.params.focus) || '').toLowerCase() === 'bio') {
+        setTimeout(function () {
+          try {
+            bc.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            bc.style.boxShadow = '0 0 0 3px #2EA9AC'; bc.style.transition = 'box-shadow .6s';
+            setTimeout(function () { bc.style.boxShadow = ''; }, 4000);
+            if (!(bio.value || '').trim()) bio.focus({ preventScroll: true });
+          } catch (e) {}
+        }, 350);
+      }
     }
 
     // ── MY DOCUMENTS & AGREEMENTS (v23) ──

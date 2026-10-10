@@ -2239,6 +2239,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/countersign-reminders',         [\App\Http\Controllers\Api\CountersignRemindersController::class, 'update']);
         Route::post ('/admin/countersign-reminders/preview', [\App\Http\Controllers\Api\CountersignRemindersController::class, 'preview']);
         Route::post ('/admin/countersign-reminders/test',    [\App\Http\Controllers\Api\CountersignRemindersController::class, 'test'])->middleware('throttle:6,1,csremtest');
+        // Settings → Notifications: reminders for providers to write their bio (2026-10-09).
+        Route::get  ('/admin/bio-reminders',         [\App\Http\Controllers\Api\BioRemindersController::class, 'show']);
+        Route::post ('/admin/bio-reminders',         [\App\Http\Controllers\Api\BioRemindersController::class, 'update']);
+        Route::post ('/admin/bio-reminders/preview', [\App\Http\Controllers\Api\BioRemindersController::class, 'preview']);
+        Route::post ('/admin/bio-reminders/test',    [\App\Http\Controllers\Api\BioRemindersController::class, 'test'])->middleware('throttle:6,1,bioremtest');
         // Prospect NDAs (platform admins + sales reps; checked in the controller).
         Route::get   ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'index']);
         Route::post  ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'store'])->middleware('throttle:20,1,ndasend');

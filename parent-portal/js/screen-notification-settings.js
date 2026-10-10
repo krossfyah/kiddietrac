@@ -46,12 +46,114 @@
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:14px 24px;max-width:900px;">'
-      + '<div id="ns-body"><div class="kt-card" style="max-width:680px;color:#64748B;">Loading…</div></div></div>';
+      + '<div id="ns-body"><div class="kt-card" style="max-width:680px;color:#64748B;">Loading…</div></div>'
+      + '<div id="ns-bio" style="margin-top:16px;"></div></div>';
     var body = main.querySelector('#ns-body');
     try { await paintCountersign(body); }
     catch (e) {
       body.innerHTML = '<div class="kt-card" style="max-width:680px;color:#B91C1C;">Could not load: ' + esc((e && e.message) || 'error') + '</div>';
     }
+    try { await paintBio(main.querySelector('#ns-bio')); } catch (e) {}
+  }
+
+  /* ── Provider bios (2026-10-09) ──────────────────────────────────────────
+     Anthony: "add reminders for educators to write a bio and show them where to do this
+     ... and have this configurable in the settings as well". See App\Support\BioReminders. */
+  async function paintBio(body) {
+    var res;
+    try { res = await Api.get('/admin/bio-reminders'); } catch (e) { return; }
+    var s = res.settings || {};
+    var miss = res.missing || [];
+    var DAYS = [[1, 'Monday'], [2, 'Tuesday'], [3, 'Wednesday'], [4, 'Thursday'], [5, 'Friday'], [6, 'Saturday'], [7, 'Sunday']];
+    var list = miss.length
+      ? '<div style="margin:6px 0 4px;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;">' + miss.map(function (p, i) {
+          return '<div style="display:flex;gap:8px;align-items:center;padding:7px 10px;font-size:13px;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + '">'
+            + '<b style="flex:1;min-width:0;">' + esc(p.name) + '</b>'
+            + '<span style="color:#64748B;">' + (p.length ? p.length + ' characters' : 'no bio') + (p.has_photo ? '' : ' · no photo') + '</span>'
+            + '<span style="color:#94A3B8;">reminded ' + p.reminders + '×</span></div>';
+        }).join('') + '</div>'
+      : '';
+    body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">✍️ Provider bios</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">A provider\'s bio goes in every new family\'s welcome email and on their provider card in the parents\' app. '
+      + 'Providers without one are reminded why it matters and given a link straight to <b>Settings → Profile → Your bio</b>. Reminders stop once the bio is saved. '
+      + (miss.length ? '<b>' + miss.length + '</b> provider' + (miss.length === 1 ? ' has' : 's have') + ' no bio yet:' : 'Every provider has a bio.')
+      + (res.last_sent_at ? ' Last sent ' + esc(res.last_sent_at) + '.' : '') + '</div>'
+      + list
+      + row('Send reminders', 'Off means no emails or bell notifications about bios.', toggle('bio-on', s.enabled))
+      + row('How often', '', sel('bio-freq', [['daily', 'Every day'], ['weekdays', 'Weekdays only'], ['weekly', 'Once a week'], ['every_n_days', 'Every few days']], s.frequency)
+          + '<span id="bio-wd-wrap">' + sel('bio-wd', DAYS, s.weekly_day) + '</span>'
+          + '<span id="bio-n-wrap">every ' + num('bio-n', s.every_n_days, 1, 30) + ' days</span>')
+      + row('Time of day', 'In ' + esc(res.tz || 'your agency’s timezone') + '.', timeInput('bio-time', s.time))
+      + row('A bio counts once it has at least', 'The bio box asks for 40 at least.', num('bio-min', s.min_chars, 40, 400) + ' characters')
+      + row('Stop after', 'How many reminders one provider gets before they stop. 0 = keep reminding.', num('bio-max', s.max_reminders, 0, 52) + ' reminders')
+      + row('Send by email', 'Explains why it matters, where to write it, and what to say.', toggle('bio-email', s.email))
+      + row('Show in the app', 'A notification in their bell that opens the bio box.', toggle('bio-app', s.in_app))
+      + row('Push to phones', '', toggle('bio-push', s.push))
+      + row('Show a reminder card', 'A small "Families would love to meet you" card on every screen until the bio is written. They can hide it for the day.', toggle('bio-banner', s.banner))
+      + row('Send admins a summary', 'One email to agency admins listing who still has no bio, when reminders go out.', toggle('bio-cc', s.cc_summary))
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;">'
+      + '<button id="bio-save" class="kt-btn kt-btn-primary">Save</button>'
+      + '<button id="bio-prev" class="kt-btn">👁 Preview</button>'
+      + '<button id="bio-test" class="kt-btn">📤 Send test…</button>'
+      + '<span id="bio-msg" style="font-size:13px;"></span></div>'
+      + '</div>';
+    function q(id) { return body.querySelector('#' + id); }
+    function vals() {
+      return { enabled: q('bio-on').checked, frequency: q('bio-freq').value, weekly_day: +q('bio-wd').value, every_n_days: +q('bio-n').value || 3,
+        time: q('bio-time').value || '09:00', min_chars: Math.max(40, +q('bio-min').value || 40), max_reminders: Math.max(0, +q('bio-max').value || 0),
+        email: q('bio-email').checked, in_app: q('bio-app').checked, push: q('bio-push').checked, banner: q('bio-banner').checked, cc_summary: q('bio-cc').checked };
+    }
+    function syncFreq() {
+      var f = q('bio-freq').value;
+      q('bio-wd-wrap').style.display = f === 'weekly' ? '' : 'none';
+      q('bio-n-wrap').style.display = f === 'every_n_days' ? '' : 'none';
+    }
+    q('bio-freq').addEventListener('change', syncFreq); syncFreq();
+    var msg = q('bio-msg');
+    function say(t, c) { msg.style.color = c || '#64748B'; msg.textContent = t; }
+    q('bio-save').addEventListener('click', function () {
+      say('Saving…');
+      Api.post('/admin/bio-reminders', vals()).then(function () { say('✓ Saved', '#1E8E60'); }).catch(function (e) { say((e && e.message) || 'Could not save', '#B91C1C'); });
+    });
+    q('bio-prev').addEventListener('click', function () {
+      say('Building preview…');
+      Api.post('/admin/bio-reminders/preview', vals()).then(function (r) {
+        say('');
+        showPreview(r.subject, r.html, r.sample ? 'Every provider has a bio, so this uses a sample provider.' : (r.missing + ' provider(s) would get a reminder like this one.'));
+      }).catch(function (e) { say((e && e.message) || 'Could not build the preview', '#B91C1C'); });
+    });
+    q('bio-test').addEventListener('click', async function () {
+      var to = await KT.prompt({ title: 'Send a test reminder', description: 'One copy of the bio reminder, marked [Test], to the address you enter.', placeholder: 'name@example.com', type: 'email', okLabel: 'Send test' });
+      if (to === null) { return; }
+      to = String(to || '').trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) { say('Enter an email address.', '#B91C1C'); return; }
+      say('Sending…');
+      Api.post('/admin/bio-reminders/test', Object.assign({ to: to }, vals())).then(function (r) {
+        if (r.sent) { say('✓ Sent to ' + to, '#1E8E60'); } else { say('Not sent (' + (r.status || 'failed') + ')' + (r.reason ? ': ' + r.reason : ''), '#B45309'); }
+      }).catch(function (e) { say((e && e.message) || 'Could not send', '#B91C1C'); });
+    });
+  }
+
+  function showPreview(subject, html, note) {
+    var ov = document.createElement('div');
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.className = 'kt-scrim';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;width:100%;max-width:700px;height:min(88vh,900px);display:flex;flex-direction:column;overflow:hidden;">'
+      + '<div style="padding:12px 16px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;gap:10px;">'
+      + '<div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:800;color:#64748B;letter-spacing:.5px;">PREVIEW — NOTHING IS SENT</div>'
+      + '<div data-subj style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>'
+      + '<div data-note style="font-size:12px;color:#64748B;"></div></div>'
+      + '<button type="button" class="kt-btn" data-close>Close</button></div>'
+      + '<iframe sandbox="" style="flex:1;width:100%;border:0;background:#F4F6F8;"></iframe></div>';
+    ov.querySelector('[data-subj]').textContent = subject || '';
+    ov.querySelector('[data-note]').textContent = note || '';
+    ov.querySelector('iframe').srcdoc = html || '';
+    function close() { ov.remove(); }
+    ov.querySelector('[data-close]').addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) { close(); } });
+    document.body.appendChild(ov);
   }
 
   /* ── Forms waiting for counter-signature ─────────────────────────────── */
