@@ -369,3 +369,15 @@ Do not pre-open a blank window before an await. A new window is right only for r
 navigation: OAuth, checkout, app store, another site's page, an explicit
 "Open in new tab" escape hatch, or a fallback when KT.openFile is missing.
 A Download button downloads (`a[download]`); it does not window.open.
+
+## Photo sets vs single files (2026-10-10)
+
+- **Photo sets → the gallery (`KT.mediaViewer`).** Anywhere several photos/videos are shown
+  together (Daily Overview, Live feed, child photo tabs, chat threads, portfolios), opening
+  one opens the gallery over the whole set: ‹ › arrows, ←/→ keys, swipe and an "n / N"
+  counter. Either call `KT.mediaViewer.open(items, index)` / `fromElements(...)`, or mark the
+  images `<img data-kt-media-group="<set>" data-kt-media-src="<full url>">` and the delegate
+  in kt-media-viewer.js does it. A link wrapping a photo in a set carries `data-kt-gallery`.
+- **Single files → `KT.openFile`.** A document or a lone file opens in the document panel.
+- kt-doc-viewer's click delegate leaves alone any click already handled (`defaultPrevented`)
+  and any link inside a photo set; never remove that, or galleries lose next/previous.

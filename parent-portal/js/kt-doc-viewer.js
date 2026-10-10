@@ -611,6 +611,17 @@
       t = t.parentElement; hops++;
     }
     if (!a) return;
+    /* PHOTO SETS ARE NOT DOCUMENTS (2026-10-10, Anthony: "viewing photos in daily overview
+       apparently doesnt allow to move to next and previous pictures like it once did").
+       18c1fa7f taught this delegate to claim /api/v1/media/ links, and it runs in the
+       capture phase on document and stops propagation — so the Daily Overview grid's own
+       handler (one gallery over the whole day, with ‹ › and swipe) never saw the tap, and
+       each photo opened alone in the document panel. A click another handler already took
+       (e.defaultPrevented: kt-media-viewer's chat-photo delegate runs first), or a link that
+       is part of a photo set, is left to the gallery (KT.mediaViewer). */
+    if (e.defaultPrevented) return;
+    if (a.closest && a.closest('[data-kt-gallery],[data-pd-media],[data-kt-media-group],[data-kt-media-src],[data-pf-media],[data-kt-thread-photo]')) return;
+    if (a.querySelector && a.querySelector('[data-kt-gallery],[data-kt-media-group],[data-kt-media-src],[data-pf-media],[data-kt-thread-photo]')) return;
     // Downloading is not viewing — leave every save/download path exactly as it was.
     if (a.hasAttribute('download') || a.hasAttribute('data-kt-download') || a.hasAttribute('data-kt-no-viewer')) return;
     if (a.closest && a.closest('.kt-doc-viewer')) return;        // the panel's own controls

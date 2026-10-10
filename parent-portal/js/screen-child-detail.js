@@ -1413,7 +1413,14 @@
         media.forEach(function (m) {
           var url = m.url || m.file_url || m.media_url || m.thumbnail_url; if (!url) return;
           var fig = Dom.el('div', {});
-          fig.appendChild(Dom.el('img', { src: mediaUrl(url), style: 'width:100%;height:130px;object-fit:cover;border-radius:10px;background:#F3F4F6;' }));
+          /* One gallery over the tab (2026-10-10): kt-media-viewer opens every img of the
+             group with ‹ ›, swipe and a counter, starting at the one tapped. */
+          var isVid = /video/i.test(String(m.media_type || m.type || m.mime || ''));
+          var full = mediaUrl(url);
+          fig.appendChild(Dom.el('img', { src: mediaUrl(m.thumbnail_url || url), alt: m.caption || 'Photo', loading: 'lazy',
+            'data-kt-media-group': 'cd-feed-' + child.id, 'data-kt-media-src': full,
+            'data-kt-media-type': isVid ? 'video' : 'image', 'data-kt-media-caption': m.caption || '',
+            style: 'width:100%;height:130px;object-fit:cover;border-radius:10px;background:#F3F4F6;cursor:zoom-in;' }));
           if (m.caption) fig.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:4px;' }, m.caption));
           fig.appendChild(Dom.el('div', { style: 'font-size:11px;color:#64748B;' }, fmtDate(m.created_at)));
           grid.appendChild(fig);

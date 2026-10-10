@@ -584,7 +584,7 @@
           /* data-pd-media: opened IN-APP by the handler below. The href stays so a
              desktop right-click / middle-click still works, but the click itself is
              intercepted — see openMedia(). */
-          return '<a href="' + esc(p.url) + '" target="_blank" rel="noopener"'
+          return '<a href="' + esc(p.url) + '" target="_blank" rel="noopener" data-kt-gallery="pd-day"'
             + ' data-pd-media="' + esc(p.url) + '"'
             + (isVid ? ' data-pd-vid="1"' : '')
             + ' data-pd-cap="' + esc(p.caption || '') + '"'
