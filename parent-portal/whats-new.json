@@ -1,6 +1,8 @@
 {
  "updated": "2026-10-09",
  "entries": [
+    {"type": "new", "date": "2026-10-09", "icon": "🚒", "title": "Drill log", "body": "Record fire, severe-weather, lockdown, vehicle and shelter drills, and see which are due or were missed under your province's or state's rules (Ohio: fire monthly, weather monthly March–September, lockdown quarterly; Ontario and the other provinces: fire monthly). Admins can switch on weekday reminders to directors.", "roles": ["agency_admin", "platform_admin", "centre_director", "educator"]},
+    {"type": "new", "date": "2026-10-09", "icon": "📍", "title": "Province / state rules", "body": "Set your province or state under Agency overview → Edit agency → Country & compliance. It sets the drills owed, the background-check and certification types offered (including Ohio's BCI/FBI, registries, SACWIS and training deadlines), serious-incident wording, a standard immunization schedule (Canada NACI or US ACIP) and legal minimums for data retention. Available for Ontario, Alberta, British Columbia, Nova Scotia, Ohio, Texas and New York.", "roles": ["agency_admin", "platform_admin"]},
     {
       "type": "new",
       "date": "2026-10-09",

@@ -2190,6 +2190,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get('/admin/country',  [\App\Http\Controllers\Api\CurrencyController::class, 'showCountry']);
     // Province / state profile (2026-10-09, App\Support\Jurisdictions) — read by screens for wording and rules.
     Route::get('/admin/jurisdiction', [\App\Http\Controllers\Api\CurrencyController::class, 'showJurisdiction']);
+    // Drill log (2026-10-09): admins, directors and educators; scoped to their centres in the controller.
+    Route::middleware('role:agency_admin,platform_admin,centre_director,educator')->group(function () {
+        Route::get   ('/drills',           [\App\Http\Controllers\Api\DrillController::class, 'index']);
+        Route::post  ('/drills',           [\App\Http\Controllers\Api\DrillController::class, 'store']);
+        Route::delete('/drills/{id}',      [\App\Http\Controllers\Api\DrillController::class, 'destroy'])->whereNumber('id');
+        Route::post  ('/drills/reminders', [\App\Http\Controllers\Api\DrillController::class, 'reminders']);
+    });
 
     // ---- Agency billing config (late-fee + SMS + locale) ----
     /* TUITION / FEE PLANS, OWN CENTRE (2026-10-05): a centre director manages their own
