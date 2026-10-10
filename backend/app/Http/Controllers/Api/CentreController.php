@@ -325,52 +325,20 @@ final class CentreController extends Controller
 
     private function getRoomStats(object $room, string $date): array
     {
-        // That day's instants in the room's own centre zone — see AgencyTime::dayRange.
-        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForCentre((int) $room->centre_id, $date);
+        /* RATIO ENGINE v2 (2026-10-09): the same answer as the educator card (App\Support\RatioRules).
+           Every caller asks about "today" and passed now()->toDateString() — the UTC date, which
+           after 8 pm in Toronto is already tomorrow, so the old query read an empty day each
+           evening. A ratio is a live question: it is evaluated now. */
+        $v = \App\Support\RatioRules::evaluate($room);
+        $childrenPresent = (int) $v['children_present'];
+        $educatorsPresent = (int) $v['educators_present'];
+        $required = (int) $v['required_educators'];
 
-        $childrenPresent = DB::table('check_events as ci')
-            ->where('ci.room_id', $room->id)
-            ->where('ci.event_type', 'check_in')
-            ->where('ci.occurred_at', '>=', $dayFrom)->where('ci.occurred_at', '<', $dayTo)
-            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
-                ->from('check_events as co')
-                ->whereColumn('co.child_id', 'ci.child_id')
-                ->where('co.event_type', 'check_out')
-                ->where('co.occurred_at', '>', DB::raw('ci.occurred_at')))
-            ->distinct('ci.child_id')
-            ->count('ci.child_id');
-
-        $educatorsPresent = DB::table('shifts')
-            ->where('room_id', $room->id)
-            ->where('starts_at', '<=', now())
-            ->where('ends_at', '>', now())
-            ->where('status', 'active')
-            ->count();
-
-        if ($educatorsPresent === 0) {
-            // Same correction as RoomController's copy of this fallback, which was
-            // fixed earlier; this second copy was missed and stayed on the dead table.
-            // Agency-day instants — the same correction as RoomController's copy.
-            [$ciFrom, $ciTo] = \App\Support\AgencyTime::dayRangeForCentre((int) $room->centre_id, $date);
-            $clockedIn = DB::table('time_punches')
-                ->where('centre_id', $room->centre_id)
-                ->where('punched_in_at', '>=', $ciFrom)->where('punched_in_at', '<', $ciTo)
-                ->whereNull('punched_out_at')
-                ->count();
-            $totalRooms = DB::table('rooms')
-                ->where('centre_id', $room->centre_id)
-                ->where('active', true)
-                ->count();
-            $educatorsPresent = $totalRooms > 0 ? (int) ceil($clockedIn / $totalRooms) : $clockedIn;
-        }
-
-        $required = $childrenPresent === 0
-            ? 0
-            : (int) ceil($childrenPresent / max(1, (int) $room->ratio_children));
-
-        $compliant = $educatorsPresent >= $required;
+        $overGroup = ! empty($v['over_group']) || ! empty($v['home']['over_cap']);
+        $compliant = $educatorsPresent >= $required && ! $overGroup;
         $status = match (true) {
-            ! $compliant => 'breach',
+            $educatorsPresent < $required => 'breach',
+            $overGroup => 'over_group',
             $educatorsPresent - $required <= 0 && $childrenPresent > 0 => 'tight',
             default => 'ok',
         };
@@ -384,9 +352,12 @@ final class CentreController extends Controller
             'children_present' => $childrenPresent,
             'educators_present' => $educatorsPresent,
             'required_educators' => $required,
-            'ratio_target' => "{$room->ratio_educators}:{$room->ratio_children}",
+            'ratio_target' => $v['ratio_target'],
             'compliant' => $compliant,
             'status' => $status,
+            'rule' => $v['rule'],
+            'reason' => $v['reason'],
+            'warnings' => $v['warnings'],
             'utilization_pct' => $room->capacity > 0
                 ? (int) round($childrenPresent / $room->capacity * 100)
                 : 0,

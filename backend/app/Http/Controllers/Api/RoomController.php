@@ -311,57 +311,14 @@ final class RoomController extends Controller
             abort(403);
         }
 
-        [$ratioFrom, $ratioTo] = AgencyTime::dayRangeForCentre((int) $room->centre_id);
-        $childrenPresent = DB::table('check_events as ci')
-            ->where('ci.room_id', $roomId)
-            ->where('ci.event_type', 'check_in')
-            // Agency day as instants — see AgencyTime::dayRange.
-            ->where('ci.occurred_at', '>=', $ratioFrom)->where('ci.occurred_at', '<', $ratioTo)
-            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
-                ->from('check_events as co')
-                ->whereColumn('co.child_id', 'ci.child_id')
-                ->where('co.event_type', 'check_out')
-                // A check-out is "later" if its timestamp is greater OR the same
-                // second but a higher id — otherwise a same-second check-in→check-out
-                // (rapid re-scan/toggle) wrongly reads as still-present and triggers a
-                // phantom ratio breach even though the child is signed out.
-                ->where(fn ($w) => $w->whereColumn('co.occurred_at', '>', 'ci.occurred_at')
-                    ->orWhere(fn ($w2) => $w2->whereColumn('co.occurred_at', 'ci.occurred_at')
-                        ->whereColumn('co.id', '>', 'ci.id'))))
-            ->distinct('ci.child_id')
-            ->count('ci.child_id');
-
-        $educatorsPresent = DB::table('shifts')
-            ->where('room_id', $roomId)
-            ->where('starts_at', '<=', now())
-            ->where('ends_at', '>', now())
-            ->where('status', 'active')
-            ->count();
-
-        if ($educatorsPresent === 0) {
-            // No scheduled shift rows — fall back to who is actually CLOCKED IN.
-            // The time clock writes `time_punches` (user_id, centre_id, punched_in_at,
-            // punched_out_at); the old code read `time_entries`, which the clock never
-            // populates, so a clocked-in educator counted as 0 and one checked-in child
-            // showed a FALSE ratio breach. Count open punches for this centre today.
-            // Agency-day instants: on the UTC date this read zero every evening and
-            // reported a false ratio breach with staff actually on the floor.
-            [$shiftFrom, $shiftTo] = AgencyTime::dayRangeForCentre((int) $room->centre_id);
-            $clockedIn = DB::table('time_punches')
-                ->where('centre_id', $room->centre_id)
-                ->where('punched_in_at', '>=', $shiftFrom)->where('punched_in_at', '<', $shiftTo)
-                ->whereNull('punched_out_at')
-                ->count();
-            $totalRooms = DB::table('rooms')
-                ->where('centre_id', $room->centre_id)
-                ->where('active', true)
-                ->count();
-            $educatorsPresent = $totalRooms > 0 ? (int) ceil($clockedIn / $totalRooms) : $clockedIn;
-        }
-
-        $required = $childrenPresent === 0
-            ? 0
-            : (int) ceil($childrenPresent / max(1, (int) $room->ratio_children));
+        /* RATIO ENGINE v2 (2026-10-09): one shared answer — App\Support\RatioRules. Ontario and every
+           jurisdiction without an age-mapped table keep the room's own ratio, so the numbers
+           here are the ones this card always showed; Ohio (and later others) use the
+           jurisdiction's bands, group sizes and home rules. */
+        $v = \App\Support\RatioRules::evaluate($room);
+        $childrenPresent = (int) $v['children_present'];
+        $educatorsPresent = (int) $v['educators_present'];
+        $required = (int) $v['required_educators'];
 
         // Two independent safety limits: the educator:child RATIO, and the room's
         // licensed CAPACITY (max children regardless of staffing). A room can be
@@ -375,11 +332,14 @@ final class RoomController extends Controller
         // "Tight" = the room is exactly at that limit (one more child would breach),
         // NOT merely at the minimum educator count — 1 educator on a 1:3 ratio with
         // 1 child has headroom for 2 more and should read OK, not "at the limit".
-        $coverage = $educatorsPresent * max(1, (int) $room->ratio_children);
-        $compliant = $educatorsPresent >= $required && ! $overCapacity;
+        $perEducator = preg_match('/^1:(\d+)/', (string) $v['ratio_target'], $m) && $v['rule'] !== 'room' ? (int) $m[1] : max(1, (int) $room->ratio_children);
+        $coverage = $educatorsPresent * max(1, $perEducator);
+        $overGroup = ! empty($v['over_group']) || ! empty($v['home']['over_cap']);
+        $compliant = $educatorsPresent >= $required && ! $overCapacity && ! $overGroup;
         $status = match (true) {
             $educatorsPresent < $required => 'breach',
             $overCapacity => 'over_capacity',
+            $overGroup => 'over_group',
             ($childrenPresent > 0 && $childrenPresent >= $coverage) || $atCapacity => 'tight',
             default => 'ok',
         };
@@ -390,8 +350,19 @@ final class RoomController extends Controller
             'children_present' => $childrenPresent,
             'educators_present' => $educatorsPresent,
             'required_educators' => $required,
-            'ratio_target' => "{$room->ratio_educators}:{$room->ratio_children}",
+            'ratio_target' => $v['ratio_target'],
             'capacity' => $capacity,
+            // v2: why this many, and anything else the rules found.
+            'rule' => $v['rule'],
+            'jurisdiction' => $v['jurisdiction'],
+            'reason' => $v['reason'],
+            'group_limit' => $v['group_limit'],
+            'over_group' => $overGroup,
+            'home' => $v['home'],
+            'nap' => $v['nap'],
+            'second_adult' => $v['second_adult'],
+            'warnings' => $v['warnings'],
+            'educator_source' => $v['educator_source'],
             'over_capacity' => $overCapacity,
             'at_capacity' => $atCapacity,
             'over_capacity_by' => $overBy,

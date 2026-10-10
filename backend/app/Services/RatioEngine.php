@@ -54,14 +54,15 @@ class RatioEngine
     {
         $now = $at;
 
-        // Count children currently checked in to this room
-        $childrenPresent = $this->presentChildrenCount($room, $now);
-
-        // Count educators currently clocked in & assigned to this room
-        $educatorsPresent = $this->presentEducatorsCount($room, $now);
-
-        $required = $this->requiredEducators($room, $childrenPresent);
-        $compliant = $educatorsPresent >= $required;
+        /* RATIO ENGINE v2 (2026-10-09): App\Support\RatioRules. Its clock-in count also fixes
+           presentEducatorsCount() below, which read $dayFrom/$dayTo it never defined — the
+           query compared against NULL, counted nobody, and so a corrected day evaluated with
+           clock-ins but no shifts reported every occupied minute as a breach. */
+        $v = \App\Support\RatioRules::evaluate($room, $now);
+        $childrenPresent = (int) $v['children_present'];
+        $educatorsPresent = (int) $v['educators_present'];
+        $required = (int) $v['required_educators'];
+        $compliant = $educatorsPresent >= $required && empty($v['over_group']) && empty($v['home']['over_cap']);
 
         return [
             'room_id' => $room->id,
@@ -71,7 +72,10 @@ class RatioEngine
             'children_present' => $childrenPresent,
             'educators_present' => $educatorsPresent,
             'required_educators' => $required,
-            'ratio_target' => "{$room->ratio_educators}:{$room->ratio_children}",
+            'ratio_target' => $v['ratio_target'],
+            'rule' => $v['rule'],
+            'reason' => $v['reason'],
+            'warnings' => $v['warnings'],
             'compliant' => $compliant,
             'status' => match(true) {
                 ! $compliant => 'breach',
@@ -411,7 +415,7 @@ class RatioEngine
     protected function requiredEducators(Room $room, int $childrenPresent): int
     {
         if ($childrenPresent === 0) return 0;
-        return (int) ceil($childrenPresent / $room->ratio_children);
+        return (int) ceil($childrenPresent / max(1, (int) $room->ratio_children));
     }
 
     protected function expectedChildrenAt(Room $room, Carbon $at): int

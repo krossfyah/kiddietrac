@@ -461,10 +461,12 @@
       // Two independent limits: the educator:child RATIO and the room's licensed
       // CAPACITY (headcount). Either one being exceeded is a red alert.
       const ratioBreached = short > 0 || ['over', 'breach', 'danger'].indexOf(ratio.status) !== -1;
-      const breached = ratioBreached || overCap;
+      // v2 (2026-10-09): over the group-size or home limit is a breach too.
+      const overGroup = !!ratio.over_group || ratio.status === 'over_group';
+      const breached = ratioBreached || overCap || overGroup;
       const tight = !breached && (ratio.status === 'warning' || ratio.status === 'tight' || atCap);
 
-      const label = ratioBreached ? 'RATIO BREACH' : overCap ? 'OVER CAPACITY' : tight ? 'AT THE LIMIT' : 'RATIO OK';
+      const label = ratioBreached ? 'RATIO BREACH' : overCap ? 'OVER CAPACITY' : overGroup ? (ratio.home ? 'OVER HOME LIMIT' : 'OVER GROUP SIZE') : tight ? 'AT THE LIMIT' : 'RATIO OK';
       const theme = breached
         ? { bg: '#FEF2F2', border: '#DC2626', text: '#991B1B', chipBg: '#DC2626', icon: ratioBreached ? '🚨' : '⛔' }
         : tight
@@ -475,6 +477,8 @@
         ? `${short} more educator${short === 1 ? '' : 's'} needed`
         : overCap
           ? `${overBy} child${overBy === 1 ? '' : 'ren'} over room capacity`
+          : overGroup
+            ? ((ratio.warnings && ratio.warnings[0]) || 'Over the group size limit')
           : `${kids} ${kids === 1 ? 'child' : 'children'} · ${have}/${need || 1} educator${(need || 1) === 1 ? '' : 's'}`;
 
       // Always surface BOTH limits so an educator sees at a glance which is at risk.
@@ -500,6 +504,17 @@
       txt.appendChild(Dom.el('div', {
         style: `font-size:11.5px;color:${theme.text};opacity:.85;margin-top:2px;`,
       }, sub));
+      /* RATIO ENGINE v2 (2026-10-09): why this many — the jurisdiction's rule when one applies
+         ("Youngest child: Under 12 months → 1:5 (Ohio)") — and anything else the rules found
+         (group size, home limits, a second adult on site, nap-time relief). One line each. */
+      const notes = [];
+      if (ratio.reason) notes.push(ratio.reason);
+      (ratio.warnings || []).forEach((w) => { if (!overGroup || w !== ratio.warnings[0]) notes.push('⚠️ ' + w); });
+      if (ratio.home && ratio.home.own_children_note) notes.push(ratio.home.own_children_note);
+      if (ratio.nap && ratio.nap.note) notes.push('😴 ' + ratio.nap.note);
+      notes.slice(0, 4).forEach((n) => txt.appendChild(Dom.el('div', {
+        style: `font-size:11px;color:${theme.text};opacity:.8;margin-top:2px;line-height:1.35;`,
+      }, n)));
       bar.appendChild(txt);
 
       // Chip shows children-in-room over the licensed capacity (the headcount cap).

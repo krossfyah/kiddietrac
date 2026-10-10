@@ -387,6 +387,20 @@ final class OperationsV2Controller extends Controller
             ->select('r.id', 'r.name', 'r.centre_id', 'c.name as centre_name', 'r.capacity as licensed_capacity')
             ->get();
 
+        /* v2 (2026-10-09): an agency whose jurisdiction has an age-mapped table (Ohio) plans
+           against those bands and group sizes; everyone else keeps the defaults above. */
+        $prof = \App\Support\Jurisdictions::forAgency((int) $agencyId);
+        $jb = $prof['ratios']['centre'] ?? null;
+        $usable = is_array($jb) && $jb && ! array_filter($jb, fn ($b) => ! array_key_exists('min_months', $b));
+        if ($usable) {
+            $standards = [];
+            foreach ($jb as $b) {
+                if ($b['min_months'] === null) continue;
+                $max = $b['max_months'] ?? 72;
+                $standards[$max] = ['ratio' => (int) $b['ratio'], 'max_group' => (int) ($b['group'] ?? 999), 'label' => $b['label']];
+            }
+            ksort($standards);
+        }
         $rows = $rooms->map(function ($room) use ($standards) {
             $childCount = DB::table('children')
                 ->where('primary_room_id', $room->id)

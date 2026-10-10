@@ -1,35 +1,71 @@
 {
  "updated": "2026-10-09",
  "entries": [
-    {"type": "new", "date": "2026-10-09", "icon": "🚒", "title": "Drill log", "body": "Record fire, severe-weather, lockdown, vehicle and shelter drills, and see which are due or were missed under your province's or state's rules (Ohio: fire monthly, weather monthly March–September, lockdown quarterly; Ontario and the other provinces: fire monthly). Admins can switch on weekday reminders to directors.", "roles": ["agency_admin", "platform_admin", "centre_director", "educator"]},
-    {"type": "new", "date": "2026-10-09", "icon": "📍", "title": "Province / state rules", "body": "Set your province or state under Agency overview → Edit agency → Country & compliance. It sets the drills owed, the background-check and certification types offered (including Ohio's BCI/FBI, registries, SACWIS and training deadlines), serious-incident wording, a standard immunization schedule (Canada NACI or US ACIP) and legal minimums for data retention. Available for Ontario, Alberta, British Columbia, Nova Scotia, Ohio, Texas and New York.", "roles": ["agency_admin", "platform_admin"]},
-    {
-      "type": "new",
-      "date": "2026-10-09",
-      "icon": "💬",
-      "title": "Choose who educators can message",
-      "body": "Educators and home visitors now message the families of children in their own rooms, plus admins, directors and the super admin. Conversations outside that become read-only history. Agency admins can change all of this in Settings → Notifications → Message Centre: allow all families at the centre, allow messaging other educators or home visitors, or hide old conversations instead.",
-      "roles": [
-        "educator",
-        "home_visitor",
-        "centre_director",
-        "agency_admin"
-      ]
-    },
-    {
-      "type": "new",
-      "date": "2026-10-09",
-      "icon": "📎",
-      "title": "Files: share printables and homework",
-      "body": "A new Files section lets educators send printables, homework and notes to the families they work with — one family, several, or everyone in their room — and lets parents send files back. Files stay private in KiddieTrac: families get a notification (and an email saying a file is waiting, which your agency can switch off), and every download is recorded.",
-      "roles": [
-        "educator",
-        "home_visitor",
-        "centre_director",
-        "agency_admin",
-        "guardian"
-      ]
-    },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "⚖️",
+   "title": "Ratios follow your province or state",
+   "body": "The ratio card now checks your jurisdiction's rules where they are known in detail: the youngest child sets the ratio, group-size limits, home child care limits (Ohio: 7 per caregiver, no more than 3 under 2), a second adult on site, and nap-time relief. The card says which rule it used. Ontario rooms keep their own ratio, unchanged.",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director",
+    "educator",
+    "home_visitor"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "🚒",
+   "title": "Drill log",
+   "body": "Record fire, severe-weather, lockdown, vehicle and shelter drills, and see which are due or were missed under your province's or state's rules (Ohio: fire monthly, weather monthly March–September, lockdown quarterly; Ontario and the other provinces: fire monthly). Admins can switch on weekday reminders to directors.",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director",
+    "educator"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📍",
+   "title": "Province / state rules",
+   "body": "Set your province or state under Agency overview → Edit agency → Country & compliance. It sets the drills owed, the background-check and certification types offered (including Ohio's BCI/FBI, registries, SACWIS and training deadlines), serious-incident wording, a standard immunization schedule (Canada NACI or US ACIP) and legal minimums for data retention. Available for Ontario, Alberta, British Columbia, Nova Scotia, Ohio, Texas and New York.",
+   "roles": [
+    "agency_admin",
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "💬",
+   "title": "Choose who educators can message",
+   "body": "Educators and home visitors now message the families of children in their own rooms, plus admins, directors and the super admin. Conversations outside that become read-only history. Agency admins can change all of this in Settings → Notifications → Message Centre: allow all families at the centre, allow messaging other educators or home visitors, or hide old conversations instead.",
+   "roles": [
+    "educator",
+    "home_visitor",
+    "centre_director",
+    "agency_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-09",
+   "icon": "📎",
+   "title": "Files: share printables and homework",
+   "body": "A new Files section lets educators send printables, homework and notes to the families they work with — one family, several, or everyone in their room — and lets parents send files back. Files stay private in KiddieTrac: families get a notification (and an email saying a file is waiting, which your agency can switch off), and every download is recorded.",
+   "roles": [
+    "educator",
+    "home_visitor",
+    "centre_director",
+    "agency_admin",
+    "guardian"
+   ]
+  },
   {
    "type": "new",
    "date": "2026-10-09",
