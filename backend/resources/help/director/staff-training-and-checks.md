@@ -28,8 +28,8 @@ their training-hours progress. Press **Open** beside a person to:
 
 - set their **hire date** and **registry number**;
 - see each requirement and its status;
-- review the training hours they logged (**Approve** or **Not approve**), or add hours for them
-  (hours you add are approved straight away).
+- see the training hours they logged (they count straight away), remove an entry that is wrong,
+  or add hours for them.
 
 Certificates and background checks are still recorded on the staff record (Certifications and
 Background checks); the list updates from them.

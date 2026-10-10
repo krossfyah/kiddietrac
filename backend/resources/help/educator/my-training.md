@@ -25,7 +25,7 @@ Certificates and checks are recorded by your director on your staff record, and 
 2. Attach the **certificate** if you have one (PDF or photo).
 3. Press **Add hours**.
 
-Hours you add show **Waiting for review** until your director or admin approves them; then they count
-toward the year's total. The bar shows your approved hours against what your rules require.
+Hours you add count toward the year's total straight away. The bar shows your hours against what your rules require.
+Your director or admin can remove an entry that is wrong, and you can remove your own.
 
 You'll get a reminder in your bell when something is due soon or overdue.
