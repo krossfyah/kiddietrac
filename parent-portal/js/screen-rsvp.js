@@ -440,7 +440,7 @@
         + '<div class="rv-evc-meta"><div>📅 ' + esc(e.when || 'No date set') + '</div>'
         + (e.location ? '<div>📍 ' + esc(String(e.location).split('\n')[0]) + '</div>' : '')
         + (e.branding === 'none' ? '<div>🏷️ Unbranded</div>' : '') + '</div>'
-        + '<div class="rv-evc-counts"><span><b>' + (s.invited || 0) + '</b>invited</span><span><b>' + (s.registered || 0) + '</b>signed up</span><span><b>' + (s.opted_out || 0) + '</b>opted out</span></div></div>'
+        + '<div class="rv-evc-counts"><span><b>' + (s.invited || 0) + '</b>invited</span><span><b>' + (s.registered || 0) + '</b>signed up</span>' + (s.headcount_field ? '<span><b>' + (s.headcount || 0) + (s.headcount_plus ? '+' : '') + '</b>attending</span>' : '') + '<span><b>' + (s.opted_out || 0) + '</b>opted out</span></div></div>'
         + '<div class="rv-evc-foot"><button type="button" class="rv-btn pri" data-kt-iconized="1" data-pa="' + pa[0] + '" data-id="' + e.id + '">' + esc(pa[1]) + '</button>'
         + (e.status === 'open' ? '<button type="button" class="rv-btn ghost" data-kt-iconized="1" data-pa="report" data-id="' + e.id + '">View report</button>' : '')
         + '<span class="sp"></span><button type="button" class="kt-ka-kebab" data-kt-iconized="1" data-menu="' + e.id + '" title="More actions" aria-label="More actions for ' + esc(e.title) + '">⋮</button></div></article>';
@@ -932,7 +932,11 @@
       + '<div class="rv-link"><code>' + esc(ev.public_url) + '</code>' + btn('data-copy="' + esc(ev.public_url) + '"', 'Copy link')
       + '<a class="rv-btn" data-kt-iconized="1" href="' + esc(ev.public_url) + '" target="_blank" rel="noopener">Open page</a></div></div></div>'
       + '<div class="rv-stats">' + stat(s.invited, 'Invited') + stat(s.sent, 'Sent') + stat((s.pending || 0) + (s.queued || 0), 'Waiting to send') + stat(s.not_delivered, 'Not delivered')
-      + stat(s.email_opened, 'Opened email') + stat(s.opened, 'Clicked link') + stat(s.registered, 'Signed up') + stat(s.opted_out, 'Opted out') + stat(s.no_response, 'No response') + '</div>'
+      + stat(s.email_opened, 'Opened email') + stat(s.opened, 'Clicked link') + stat(s.registered, 'Signed up') + stat(s.opted_out, 'Opted out') + stat(s.no_response, 'No response')
+      + (s.headcount_field ? stat(s.headcount + (s.headcount_plus ? '+' : ''), '👥 People attending') : '') + '</div>'
+      + (s.headcount_field ? '<div class="rv-hint" style="margin:-4px 0 10px">People attending adds up “' + esc(s.headcount_field) + '” for everyone signed up'
+          + (s.headcount_unanswered ? '; ' + s.headcount_unanswered + ' sign-up(s) with no answer count as 1 each' : '')
+          + (s.headcount_plus ? '; “more than” answers count as the number given, so the real total may be higher' : '') + '.</div>' : '')
       + (s.queued ? '<div class="rv-hint" style="margin:-4px 0 10px">' + s.queued + ' invitation(s) are going out now — they are sent within about a minute. Press Refresh to see the result.</div>' : '')
       + '<div class="rv-secs">'
       + sec('Details', btn('data-edit', 'Edit'), dl([['When', esc(ev.when || 'No date set')], ['Where', esc(ev.location || '—')],

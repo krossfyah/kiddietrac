@@ -1107,7 +1107,8 @@ class RsvpController extends Controller
 
     private function emptyStats(): array
     {
-        return ['invited' => 0, 'queued' => 0, 'sent' => 0, 'not_delivered' => 0, 'opened' => 0, 'email_opened' => 0, 'registered' => 0, 'opted_out' => 0, 'no_response' => 0, 'pending' => 0];
+        return ['invited' => 0, 'queued' => 0, 'sent' => 0, 'not_delivered' => 0, 'opened' => 0, 'email_opened' => 0, 'registered' => 0, 'opted_out' => 0, 'no_response' => 0, 'pending' => 0,
+            'headcount' => 0, 'headcount_plus' => false, 'headcount_field' => null, 'headcount_unanswered' => 0];
     }
 
     /** @param int[] $ids */
@@ -1138,6 +1139,50 @@ class RsvpController extends Controller
             ->groupBy('i.event_id')->selectRaw('i.event_id, COUNT(*) n')->pluck('n', 'event_id');
         foreach ($out as $eid => $v) {
             $out[$eid]['email_opened'] = (int) ($opened[$eid] ?? 0);
+        }
+        foreach ($this->headcounts($agencyId, $ids) as $eid => $h) {
+            if (isset($out[$eid])) $out[$eid] += $h;
+        }
+
+        return $out;
+    }
+
+    /* PEOPLE ATTENDING (2026-10-10, Anthony: "we allowed signee's to add number of people
+       attending, can you add a card to calculate the RSVP's number of people to tally this
+       up"). Adds up the "how many people" answer across everyone signed up. The question is
+       found by its key (attending_count) or, on an event built differently, a number/select
+       question whose label asks how many. A reply without an answer (signed up before the
+       question existed, or left blank) counts as 1, the person who signed up, and is reported
+       as such. "More than 8"-style answers count the number given and mark the total as "+".
+       Anyone who opted out after signing up is not counted. */
+    private function headcounts(int $agencyId, array $ids): array
+    {
+        $out = [];
+        $events = DB::table('rsvp_events')->where('agency_id', $agencyId)->whereIn('id', $ids)->get(['id', 'fields']);
+        foreach ($events as $e) {
+            $field = null;
+            foreach ((json_decode((string) $e->fields, true) ?: []) as $f) {
+                $key = (string) ($f['key'] ?? '');
+                $isCount = $key === 'attending_count'
+                    || (in_array($f['type'] ?? '', ['number', 'select'], true)
+                        && preg_match('/how many|number of (people|guests|attendees)|party size|guests attending/i', (string) ($f['label'] ?? '')));
+                if ($isCount) { $field = $f; break; }
+            }
+            if (! $field) continue;
+            $total = 0; $plus = false; $blank = 0;
+            $rows = DB::table('rsvp_responses as r')->leftJoin('rsvp_invites as i', 'i.id', '=', 'r.invite_id')
+                ->where('r.agency_id', $agencyId)->where('r.event_id', $e->id)->whereNull('i.opted_out_at')->pluck('r.answers');
+            foreach ($rows as $json) {
+                $a = (json_decode((string) $json, true) ?: [])[$field['key']] ?? null;
+                $v = is_array($a) ? ($a['value'] ?? '') : $a;
+                if (preg_match('/\d+/', (string) $v, $m) && (int) $m[0] > 0) {
+                    $total += (int) $m[0];
+                    if (preg_match('/more|\+|over/i', (string) $v)) $plus = true;
+                } else {
+                    $total += 1; $blank++;
+                }
+            }
+            $out[(int) $e->id] = ['headcount' => $total, 'headcount_plus' => $plus, 'headcount_field' => (string) ($field['label'] ?? ''), 'headcount_unanswered' => $blank];
         }
 
         return $out;
