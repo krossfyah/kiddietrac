@@ -10,10 +10,13 @@
      KT.passkeys.signIn()      usernameless sign-in → the same body /auth/login returns
      KT.passkeys.list()/remove(id)
 
-   NOT OFFERED IN THE ANDROID APP. Its web view has no WebAuthn at all
-   (PublicKeyCredential is undefined — Anthony's device test, 2026-09-22), so the
-   option is hidden there rather than shown as a button that cannot work. Those
-   users keep password + fingerprint unlock.
+   THE ANDROID APP. Up to 3.10.2 its web view had no WebAuthn at all
+   (PublicKeyCredential undefined — Anthony's device test, 2026-09-22), so the option
+   is hidden there rather than shown as a button that cannot work. From 3.10.3
+   (2026-10-10) the app turns WebAuthn on (WebSettingsCompat, FOR_APP), kiddietrac.com
+   links the app in /.well-known/assetlinks.json and the server accepts the app's
+   apk-key-hash origin, so supported() is simply true there and everything below works
+   unchanged. Older apps keep password + fingerprint unlock.
 
    A passkey is an ADDITIONAL way in: the password still works and still expires
    on the normal schedule (Anthony, 2026-09-22).

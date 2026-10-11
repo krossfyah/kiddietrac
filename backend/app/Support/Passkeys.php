@@ -45,8 +45,21 @@ final class Passkeys
            the key is real and the user was verified. Asking for attestation means handling
            certificate chains and metadata for no gain here, and it is a privacy cost the
            reader did not agree to. */
-        return new WebAuthn(self::RP_NAME, self::rpId(), ['none']);
+        $w = new WebAuthn(self::RP_NAME, self::rpId(), ['none']);
+        /* THE ANDROID APP (2026-10-10, Anthony: "does passkey work in mobile and apk mode?").
+           From 3.10.3 the app's WebView does WebAuthn through Android's Credential Manager
+           (WebSettingsCompat WEB_AUTHENTICATION_SUPPORT_FOR_APP). A ceremony made that way
+           can carry the APP as its origin, android:apk-key-hash:<base64url SHA-256 of the
+           signing certificate>, instead of https://app.kiddietrac.com. This is the release
+           key's hash (CN=KiddieTrac, the key every hosted APK is signed with). The app is
+           tied to kiddietrac.com by /.well-known/assetlinks.json on the apex. */
+        $w->addAndroidKeyHashes(self::ANDROID_KEY_HASHES);
+
+        return $w;
     }
+
+    /** base64url(SHA-256) of the Android app's signing certificates. */
+    private const ANDROID_KEY_HASHES = ['nhgy6btAL8WKqLRsZR-VzshtOub8dFDuBaIYsG9pv8E'];
 
     /**
      * Stash a challenge and hand back the opaque handle the client must return with it.

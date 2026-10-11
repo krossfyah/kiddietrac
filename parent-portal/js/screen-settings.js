@@ -339,10 +339,17 @@
     (function () {
       var PK = window.KT && KT.passkeys;
       var can = !!(PK && PK.supported());
+      /* The Android app does passkeys from 3.10.3 (2026-10-10): the app turns WebAuthn on
+         in its WebView. An older app, or a phone whose WebView is too old, still has none,
+         so say what fixes it rather than "not available". */
+      var inApp = false;
+      try { inApp = !!(window.Capacitor && (Capacitor.isNativePlatform ? Capacitor.isNativePlatform() : Capacitor.isNative)); } catch (e) {}
       var head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
       var sub = el('div', { style: 'font-size:12px;color:#64748B;' }, [can
         ? 'Sign in with your face, fingerprint or device PIN — no password to type. Your password still works.'
-        : 'Not available in the Android app. Add a passkey from Chrome or Safari (or a computer) and use it there; fingerprint unlock works here.']);
+        : (inApp
+          ? 'Update the KiddieTrac app to use passkeys here (version 3.10.3 or later), and keep Android System WebView up to date in the Play Store. Fingerprint unlock works meanwhile.'
+          : 'This browser cannot use passkeys. Use an up-to-date Chrome, Safari or Edge.')]);
       head.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['🔑 Passkeys']), sub]));
       var add = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;' }, ['Add a passkey']);
       if (can) head.appendChild(add);
