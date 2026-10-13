@@ -373,6 +373,7 @@
       <h3 style="margin:0 0 18px;color:#0F172A;">⌨ Keyboard shortcuts</h3>
       <div style="display:grid;grid-template-columns:auto 1fr;gap:10px 18px;font-size:14px;">
         <kbd style="background:#F1F5F9;padding:3px 9px;border-radius:5px;font-family:ui-monospace,monospace;font-size:12px;">⌘K</kbd><span>Open command palette</span>
+        <kbd style="background:#F1F5F9;padding:3px 9px;border-radius:5px;font-family:ui-monospace,monospace;font-size:12px;">Alt+C</kbd><span>Calculator</span>
         <kbd style="background:#F1F5F9;padding:3px 9px;border-radius:5px;font-family:ui-monospace,monospace;font-size:12px;">/</kbd><span>Focus table filter</span>
         <kbd style="background:#F1F5F9;padding:3px 9px;border-radius:5px;font-family:ui-monospace,monospace;font-size:12px;">Esc</kbd><span>Clear filter / close modal</span>
         <kbd style="background:#F1F5F9;padding:3px 9px;border-radius:5px;font-family:ui-monospace,monospace;font-size:12px;">?</kbd><span>This help</span>

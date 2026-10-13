@@ -596,6 +596,10 @@
     } else {
       right.appendChild(iconBtn('🔔', 'Notifications', function () { go('#notifications'); }, 'kt-tb-notif-badge')); startStaffNotif();
     }
+    // Calculator (kt-calculator.js): the popup, and Alt+C / ⌥C from anywhere.
+    var calcBtn = iconBtn('🧮', 'Calculator (Alt+C)', function () { if (window.KT && window.KT.toggleCalculator) window.KT.toggleCalculator(); });
+    calcBtn.id = 'kt-tb-calc'; calcBtn.setAttribute('aria-pressed', 'false');
+    right.appendChild(calcBtn);
     right.appendChild(iconBtn('🤖', 'AI assistant', openAI));
     if (effAdmin) right.appendChild(iconBtn('🎁', "What's new", function () { if (window.KT && window.KT.openWhatsNew) window.KT.openWhatsNew(); }, 'kt-tb-wn-badge'));
     var sep = document.createElement('div'); sep.className = 'kt-tb-sep'; right.appendChild(sep);
