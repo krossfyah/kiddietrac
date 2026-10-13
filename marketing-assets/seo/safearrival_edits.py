@@ -58,12 +58,16 @@ def shield(size=40, cls='sa-ic'):
     hidden page does not paint for a copy that references it from another page."""
     _n[0] += 1
     g = 'saG%d' % _n[0]
-    return ('<svg class="%s" width="%d" height="%d" viewBox="0 0 48 48" aria-hidden="true" focusable="false">'
-            '<defs><linearGradient id="%s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a7f3d0"/>'
-            '<stop offset=".55" stop-color="#34d399"/><stop offset="1" stop-color="#059669"/></linearGradient></defs>'
-            '<path d="M24 2.5 6 9v12.6C6 33.4 13.6 42.6 24 45.5c10.4-2.9 18-12.1 18-23.9V9L24 2.5z" fill="url(#%s)"/>'
-            '<path d="M24 2.5V45.5c10.4-2.9 18-12.1 18-23.9V9z" fill="#022c22" opacity=".12"/>'
-            '<path d="M15 24.5l6.2 6.2L33.5 18" fill="none" stroke="#022c22" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/>'
+    # The "Arrived" mark (concept 2, chosen by Anthony 2026-10-13): the check doubles as a child
+    # with arms up, safe inside the shield; the amber dot is the alert.
+    return ('<svg class="%s" width="%d" height="%d" viewBox="0 0 100 100" aria-hidden="true" focusable="false">'
+            '<defs><linearGradient id="%s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d399"/>'
+            '<stop offset="1" stop-color="#047857"/></linearGradient></defs>'
+            '<path d="M50 4 88 18v30c0 25-16 41-38 49C28 89 12 73 12 48V18z" fill="url(#%s)"/>'
+            '<path d="M50 4 88 18v30c0 25-16 41-38 49" fill="none" stroke="#065f46" stroke-opacity=".25" stroke-width="3"/>'
+            '<circle cx="58" cy="31" r="8.5" fill="#fff"/>'
+            '<path d="M30 54l15 15 27-27" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>'
+            '<circle cx="78" cy="22" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2.5"/>'
             '</svg>') % (cls, size, size, g, g)
 
 
