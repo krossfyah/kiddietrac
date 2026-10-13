@@ -94,7 +94,7 @@
     wrap.insertAdjacentHTML('beforeend',
       '<div class="kt-hero" style="background:linear-gradient(135deg,#1F6080 0%,#3BBBBE 60%,#7C3AED 100%);">' +
         '<div class="kt-hero-greet">🗺️ REFERENCE</div><h1>Provider map</h1>' +
-        '<div class="kt-hero-sub">Every provider (centre) in your agency, plotted by address.</div>' +
+        '<div class="kt-hero-sub">Every location in your agency, plotted by address.</div>' +
       '</div>');
 
     var statusBar = document.createElement('div');
@@ -136,11 +136,56 @@
     mapPanel.appendChild(mapEl);
     layout.appendChild(mapPanel);
 
-    // Responsive: stack on narrow screens
-    if (window.matchMedia && window.matchMedia('(max-width: 900px)').matches) {
-      layout.style.gridTemplateColumns = '1fr';
-      mapEl.style.height = '420px';
+    /* FIT THE WINDOW (2026-10-13, Anthony: "provider maps scrolls down to far with alot of
+       white space"). The map was a fixed 640px beside a list column that grew past it (list
+       + search + count bar ~760px), and on a phone the whole list came first with the map
+       at the very bottom. Now on a desktop the map fills the height left in the window and
+       the list scrolls inside its own panel, so the page itself does not scroll past the map;
+       on a phone the map comes first at about half the screen, with the list under it. */
+    listCol.style.cssText = 'display:flex;flex-direction:column;min-height:0;';
+    listPanel.style.maxHeight = 'none';
+    listPanel.style.flex = '1 1 auto';
+    listPanel.style.minHeight = '0';
+    var _pmMap = null;
+    function fitPm() {
+      var narrow = window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
+      if (narrow) {
+        layout.style.gridTemplateColumns = '1fr';
+        mapPanel.style.order = '-1';
+        mapEl.style.height = Math.max(260, Math.round(window.innerHeight * 0.48)) + 'px';
+        listCol.style.height = 'auto';
+        listPanel.style.overflow = 'visible';
+      } else {
+        layout.style.gridTemplateColumns = '320px 1fr';
+        mapPanel.style.order = '';
+        var top = layout.getBoundingClientRect().top + (window.scrollY || 0);
+        // What is left of the window below the list header, never smaller than a usable map.
+        var avail = Math.max(420, Math.min(1100, window.innerHeight - Math.max(0, layout.getBoundingClientRect().top) - 28));
+        if (!isFinite(avail)) avail = 640;
+        mapEl.style.height = avail + 'px';
+        listCol.style.height = avail + 'px';
+        listPanel.style.overflow = 'auto';
+        // Whatever still overflows (page padding, the count bar) comes off the map, so the
+        // page ends with the map instead of scrolling into empty space.
+        try {
+          var se = document.scrollingElement || document.documentElement;
+          var over = se.scrollHeight - window.innerHeight;
+          var mainEl = document.getElementById('appMain');
+          if (mainEl && mainEl.scrollHeight > mainEl.clientHeight + 2 && getComputedStyle(mainEl).overflowY !== 'visible') {
+            over = Math.max(over, mainEl.scrollHeight - mainEl.clientHeight);
+          }
+          if (over > 0) {
+            var h2 = Math.max(420, avail - over);
+            mapEl.style.height = h2 + 'px';
+            listCol.style.height = h2 + 'px';
+          }
+        } catch (e) {}
+      }
+      if (_pmMap) { try { _pmMap.invalidateSize(); } catch (e) {} }
     }
+    fitPm();
+    var _pmResize = function () { if (!layout.isConnected) { window.removeEventListener('resize', _pmResize); return; } fitPm(); };
+    window.addEventListener('resize', _pmResize);
 
     var centres, L;
     try {
@@ -160,6 +205,9 @@
     }
 
     var map = L.map(mapEl, { scrollWheelZoom: true }).setView([43.9, -80.1], 9); // Dufferin County-ish default
+    _pmMap = map;
+    // The status line above may have changed height by now; fit again once loaded.
+    setTimeout(fitPm, 60);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
