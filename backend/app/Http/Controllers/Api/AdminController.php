@@ -3572,16 +3572,22 @@ final class AdminController extends Controller
         $agencyId = $this->getAgencyId($request);
         if (! $agencyId) return response()->json(['message' => 'No agency context'], 403);
 
+        /* THE ADD-FAMILY WIZARD (it sends `guardians`) requires the family's email and
+           address (2026-10-13, Anthony: "primary email when entering a family needs to be
+           mandatory … also make the address fields mandatory"). Other callers of this
+           endpoint keep the old optional rules. */
+        $wiz = $request->has('guardians');
+        $need = $wiz ? 'required' : 'nullable';
         $data = $request->validate([
             'family_name' => ['required', 'string', 'max:120'],
             'centre_id' => ['required', 'integer'],
-            'primary_email' => ['nullable', 'email', 'max:180'],
+            'primary_email' => [$need, 'email', 'max:180'],
             'primary_phone' => ['nullable', 'string', 'max:40'],
-            'address_line1' => ['nullable', 'string', 'max:200'],
+            'address_line1' => [$need, 'string', 'max:200'],
             'address_line2' => ['nullable', 'string', 'max:200'],
-            'city' => ['nullable', 'string', 'max:80'],
-            'province' => ['nullable', 'string', 'max:40'],
-            'postal_code' => ['nullable', 'string', 'max:12'],
+            'city' => [$need, 'string', 'max:80'],
+            'province' => [$need, 'string', 'max:40'],
+            'postal_code' => [$need, 'string', 'max:12'],
             'preferred_lang' => ['nullable', 'string', 'max:10'],
             'billing_split' => ['nullable', 'in:single,split_50_50,custom'],
             'notes' => ['nullable', 'string'],
@@ -3594,7 +3600,10 @@ final class AdminController extends Controller
             // v22p36: optional nested guardians + children for the multi-step wizard.
             // Omitting them keeps the legacy single-step behaviour (family only).
             'guardians' => ['nullable', 'array'],
-            'guardians.*.email' => ['required_with:guardians', 'email', 'max:180'],
+            // The FIRST guardian needs an email (their login); any other guardian may
+            // have none — they are then on the family without a login (2026-10-13).
+            'guardians.*.email' => ['nullable', 'email', 'max:180'],
+            'guardians.0.email' => ['required_with:guardians', 'email', 'max:180'],
             'guardians.*.first_name' => ['required_with:guardians', 'string', 'max:80'],
             'guardians.*.last_name' => ['nullable', 'string', 'max:80'],
             'guardians.*.phone' => ['nullable', 'string', 'max:40'],
@@ -3712,7 +3721,8 @@ final class AdminController extends Controller
         // not create two guardian rows that collapse onto one user.
         $seenEmails = [];
         foreach ($guardians as $g) {
-            $em = strtolower(trim($g['email']));
+            $em = strtolower(trim((string) ($g['email'] ?? '')));
+            if ($em === '') { continue; }   // a guardian with no email is not a duplicate of anybody
             if (isset($seenEmails[$em])) {
                 return response()->json([
                     'message' => 'Duplicate guardian email in submission: '.$g['email'],
@@ -3752,7 +3762,7 @@ final class AdminController extends Controller
 
                 $guardianIds = [];
                 foreach (array_values($guardians) as $i => $g) {
-                    $email = strtolower(trim($g['email']));
+                    $email = strtolower(trim((string) ($g['email'] ?? '')));
                     /* Reuse an existing (non-deleted) account with this email — but only
                        one that ALREADY BELONGS TO THIS AGENCY, and never by rewriting who
                        they are.
@@ -3781,7 +3791,8 @@ final class AdminController extends Controller
                          correcting the record of someone who already has a login. Filling
                          in a BLANK field is safe and still helpful; overwriting a set one
                          never is. */
-                    $existing = DB::table('users as u')
+                    // No email: nobody to match — always a new, login-less guardian.
+                    $existing = $email === '' ? null : DB::table('users as u')
                         ->whereRaw('LOWER(u.email) = ?', [$email])
                         ->whereNull('u.deleted_at')
                         ->where(function ($q) use ($agencyId) {
@@ -3823,18 +3834,22 @@ final class AdminController extends Controller
                     } else {
                         $temp = Str::random(12);
                         $uid = (int) DB::table('users')->insertGetId([
-                            'email' => $g['email'],
+                            // users.email is NOT NULL: a guardian without one is stored blank.
+                            'email' => $email === '' ? '' : $g['email'],
                             'password' => Hash::make($temp),
                             'first_name' => $g['first_name'],
                             'last_name' => $g['last_name'] ?? '',
                             'phone' => $g['phone'] ?? null,
                             'locale' => 'en-CA',
                             'timezone' => 'America/Toronto',
-                            'status' => 'invited',
+                            // No email = no login to invite them to.
+                            'status' => $email === '' ? 'not_invited' : 'invited',
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
-                        $newGuardians[] = ['uid' => $uid, 'email' => $g['email'], 'first_name' => $g['first_name'], 'temp' => $temp];
+                        if ($email !== '') {
+                            $newGuardians[] = ['uid' => $uid, 'email' => $g['email'], 'first_name' => $g['first_name'], 'temp' => $temp];
+                        }
                     }
 
                     DB::table('role_assignments')->updateOrInsert(
@@ -4009,7 +4024,7 @@ final class AdminController extends Controller
                they were never sent. An empty recipient list rather than an early return,
                so the audit/logging below behaves identically either way. */
             $allGuardianEmails = ! $sendWelcome ? [] : DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
-                ->where('g.family_id', $result['family_id'])->whereNotNull('u.email')
+                ->where('g.family_id', $result['family_id'])->whereNotNull('u.email')->where('u.email', '!=', '')
                 ->get(['u.email', 'u.first_name'])
                 ->map(fn ($r) => ['email' => $r->email, 'first_name' => $r->first_name])->all();
             $this->sendProviderWelcomeToFamily(

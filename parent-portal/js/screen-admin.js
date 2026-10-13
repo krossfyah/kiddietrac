@@ -5997,20 +5997,22 @@
       });
       var r1 = fieldRow('1fr 1fr');
       r1.appendChild(wrap('Primary phone', bindPhone(state.family, 'primary_phone')));
-      r1.appendChild(wrap('Primary email', bindInput(state.family, 'primary_email', { type: 'email' })));
+      // Email and address are required for a new family (2026-10-13).
+      r1.appendChild(wrap('Primary email *', bindInput(state.family, 'primary_email', { type: 'email' })));
       bodyEl.appendChild(r1);
-      bodyEl.appendChild(wrap('Street address', bindInput(state.family, 'address_line1')));
+      bodyEl.appendChild(wrap('Street address *', bindInput(state.family, 'address_line1')));
       var r2 = fieldRow('2fr 1fr 1fr');
-      r2.appendChild(wrap('City', bindInput(state.family, 'city')));
-      r2.appendChild(wrap('Province', bindInput(state.family, 'province')));
-      r2.appendChild(wrap('Postal code', bindInput(state.family, 'postal_code')));
+      r2.appendChild(wrap('City *', bindInput(state.family, 'city')));
+      r2.appendChild(wrap('Province *', bindInput(state.family, 'province')));
+      r2.appendChild(wrap('Postal code *', bindInput(state.family, 'postal_code')));
       bodyEl.appendChild(r2);
       bodyEl.appendChild(wrap('Billing split', bindSelect(state.family, 'billing_split', [
         { value: 'single', label: 'Single payer' },
         { value: 'split_50_50', label: 'Split 50 / 50 between guardians' },
         { value: 'custom', label: 'Custom split' },
       ])));
-      var notes = Dom.el('textarea', { style: inStyle + 'min-height:60px;font-family:inherit;' });
+      // Room to write (2026-10-13: "internal notes field should be bigger").
+      var notes = Dom.el('textarea', { rows: '6', style: inStyle + 'min-height:150px;font-family:inherit;line-height:1.5;resize:vertical;' });
       notes.value = state.family.notes || '';
       notes.addEventListener('input', function () { state.family.notes = notes.value; });
       bodyEl.appendChild(wrap('Internal notes', notes));
@@ -6018,7 +6020,7 @@
 
     function renderGuardiansStep() {
       bodyEl.innerHTML = '';
-      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 14px;' }, 'Add one or more parents / guardians. The first is the primary contact and billing payer. Each gets an invited login they can activate later.'));
+      bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 14px;' }, 'Add one or more parents / guardians. The first is the primary contact and billing payer and needs an email. Others can be added without one — anyone with an email gets an invited login they can activate later.'));
       state.guardians.forEach(function (g, idx) {
         var card = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:10px;padding:14px;margin-bottom:12px;background:#FBFDFE;' });
         var head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
@@ -6035,7 +6037,8 @@
         card.appendChild(r1);
         var r2 = fieldRow('1fr 1fr');
         var emailIn = bindInput(g, 'email', { type: 'email' });
-        r2.appendChild(wrap('Email *', emailIn));
+        // Only the first guardian's email is required; the others' is optional (2026-10-13).
+        r2.appendChild(wrap(idx === 0 ? 'Email *' : 'Email (optional)', emailIn));
         r2.appendChild(wrap('Phone', bindPhone(g, 'phone')));
         card.appendChild(r2);
         /* A FORMS-ONLY PARENT ALREADY? (2026-10-13, Anthony: "when adding a new family and
@@ -6554,14 +6557,22 @@
       if (step === 0) {
         if (!state.family.centre_id) { status.textContent = 'Please choose a centre.'; return false; }
         if (!state.family.family_name.trim()) { status.textContent = 'Family name is required.'; return false; }
+        var pe = String(state.family.primary_email || '').trim();
+        if (!pe || pe.indexOf('@') < 1) { status.textContent = 'A valid primary email is required.'; return false; }
+        if (!String(state.family.address_line1 || '').trim()) { status.textContent = 'Street address is required.'; return false; }
+        if (!String(state.family.city || '').trim()) { status.textContent = 'City is required.'; return false; }
+        if (!String(state.family.province || '').trim()) { status.textContent = 'Province is required.'; return false; }
+        if (!String(state.family.postal_code || '').trim()) { status.textContent = 'Postal code is required.'; return false; }
         if (state._famDup && !state._famDupOk) { status.style.color = '#B45309'; status.textContent = 'This family name looks like an existing record — tick “This is a different family”, or open the existing family instead.'; return false; }
       } else if (step === 1) {
         for (var i = 0; i < state.guardians.length; i++) {
           var g = state.guardians[i];
           if (!g.first_name.trim() || !g.last_name.trim()) { status.textContent = 'Guardian ' + (i + 1) + ': first and last name are required.'; return false; }
-          if (!g.email.trim() || g.email.indexOf('@') < 1) { status.textContent = 'Guardian ' + (i + 1) + ': a valid email is required.'; return false; }
+          var ge = String(g.email || '').trim();
+          if (i === 0 && (!ge || ge.indexOf('@') < 1)) { status.textContent = 'Guardian 1: a valid email is required.'; return false; }
+          if (i > 0 && ge && ge.indexOf('@') < 1) { status.textContent = 'Guardian ' + (i + 1) + ': that email does not look right (or leave it blank).'; return false; }
         }
-        var emails = state.guardians.map(function (x) { return x.email.trim().toLowerCase(); });
+        var emails = state.guardians.map(function (x) { return String(x.email || '').trim().toLowerCase(); }).filter(Boolean);
         for (var a = 0; a < emails.length; a++) { for (var b = a + 1; b < emails.length; b++) { if (emails[a] === emails[b]) { status.textContent = 'Each guardian needs a unique email address.'; return false; } } }
       } else if (step === 2) {
         for (var j = 0; j < state.children.length; j++) {
@@ -6635,7 +6646,7 @@
         billing_split: state.family.billing_split,
         notes: state.family.notes.trim() || null,
         guardians: state.guardians.map(function (g) {
-          return { email: g.email.trim(), first_name: g.first_name.trim(), last_name: g.last_name.trim(), phone: g.phone.trim() || null, relationship: g.relationship, is_primary: !!g.is_primary, can_pickup: g.can_pickup !== false };
+          return { email: String(g.email || '').trim() || null, first_name: g.first_name.trim(), last_name: g.last_name.trim(), phone: g.phone.trim() || null, relationship: g.relationship, is_primary: !!g.is_primary, can_pickup: g.can_pickup !== false };
         }),
         children: state.children.map(function (c) {
           return { first_name: c.first_name.trim(), last_name: c.last_name.trim(), preferred_name: c.preferred_name.trim() || null, date_of_birth: c.date_of_birth, gender: c.gender, enrollment_status: c.enrollment_status,
