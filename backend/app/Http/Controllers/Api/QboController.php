@@ -241,6 +241,10 @@ final class QboController extends Controller
         $agencyId = $this->agencyAdmin($request);
         try {
             $r = QboClient::row($agencyId);
+            // Not connected: say so (422) rather than fail reading realm_id off nothing (500).
+            if (! $r || empty($r->realm_id)) {
+                return response()->json(['message' => 'Connect QuickBooks first.'], 422);
+            }
             $info = QboClient::call($agencyId, 'GET', 'companyinfo/' . $r->realm_id)['CompanyInfo'] ?? [];
             $items = QboClient::query($agencyId, "select * from Item where Active = true and Type in ('Service', 'NonInventory') maxresults 1000", 'Item');
             $accts = QboClient::query($agencyId, "select * from Account where Active = true and AccountType in ('Bank', 'Other Current Asset') maxresults 1000", 'Account');
