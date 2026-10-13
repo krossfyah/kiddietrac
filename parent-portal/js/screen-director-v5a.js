@@ -128,15 +128,19 @@
     form.appendChild(field('Family name', 'family_name', { type: 'text', required: true, placeholder: 'e.g. "The Smith Family"', maxlength: 160 }));
 
     const contactRow = Dom.el('div', { style: 'display: grid; grid-template-columns: 1fr 1fr; gap: 12px;' });
-    contactRow.appendChild(field('Primary email', 'primary_email', { type: 'email', maxlength: 180 }));
+    /* Email and the full address are required (2026-10-13). The server already required
+       street, city, PROVINCE and postal code here — but the form had no province box, so
+       this dialog could not save a family at all. */
+    contactRow.appendChild(field('Primary email *', 'primary_email', { type: 'email', maxlength: 180, required: true }));
     contactRow.appendChild(field('Primary phone', 'primary_phone', { type: 'tel', maxlength: 40 }));
     form.appendChild(contactRow);
 
-    form.appendChild(field('Street address', 'address_line1', { type: 'text', maxlength: 200 }));
+    form.appendChild(field('Street address *', 'address_line1', { type: 'text', maxlength: 200, required: true }));
 
-    const addrRow = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr; gap: 12px;' });
-    addrRow.appendChild(field('City', 'city', { type: 'text', value: 'Caledon', maxlength: 80 }));
-    addrRow.appendChild(field('Postal code', 'postal_code', { type: 'text', maxlength: 12, placeholder: 'L7C 1A1' }));
+    const addrRow = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;' });
+    addrRow.appendChild(field('City *', 'city', { type: 'text', maxlength: 80, required: true }));
+    addrRow.appendChild(field('Province *', 'province', { type: 'text', maxlength: 40, required: true, placeholder: 'ON' }));
+    addrRow.appendChild(field('Postal code *', 'postal_code', { type: 'text', maxlength: 12, placeholder: 'L7C 1A1', required: true }));
     form.appendChild(addrRow);
 
     form.appendChild(selectField('Preferred language', 'preferred_lang', [
@@ -443,6 +447,8 @@
     btn.addEventListener('click', async (ev) => {
       ev.preventDefault();
       const form = btn.closest('form');
+      // Say which required field is empty here, rather than after a round trip.
+      if (form && form.reportValidity && !form.reportValidity()) return;
       const fd = new FormData(form);
       const data = {};
       fd.forEach((v, k) => { if (v !== '') data[k] = v; });

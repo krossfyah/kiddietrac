@@ -129,7 +129,7 @@ final class FamilyController extends Controller
 
         $data = $request->validate([
             'family_name' => ['required', 'string', 'max:160'],
-            'primary_email' => ['nullable', 'email', 'max:180'],
+            'primary_email' => ['required', 'email', 'max:180'],   // required on create (2026-10-13)
             'primary_phone' => ['nullable', 'string', 'max:40'],
             /* Required on CREATE only. A partial address propagates everywhere
                downstream — iLearn mirrors whatever KiddieTrac holds, so a family
