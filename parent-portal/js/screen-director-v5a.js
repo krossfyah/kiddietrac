@@ -24,6 +24,8 @@
   // instant. The cold backend call (~0.3–0.5s on shared hosting) then happens
   // while the user is still moving the mouse, not after they click.
   function prefetchQa() {
+    // Director and admin lists: an educator loading this script was refused every time (2026-10-13).
+    if (!/\brole-(centre-director|agency-admin|platform-admin)\b/.test(document.body ? document.body.className : '')) return;
     cachedGet('/director/families').catch(function () {});
     cachedGet('/director/rooms').catch(function () {});
   }

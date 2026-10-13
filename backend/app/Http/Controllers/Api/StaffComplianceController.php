@@ -251,7 +251,12 @@ final class StaffComplianceController extends Controller
     {
         $agencyId = $this->agencyId($request);
         $ids = $this->householdCentres($request, $agencyId);
-        abort_unless($ids, 403, 'Only directors, admins and the provider can see a household.');
+        /* Staff with no home of their own (an educator at a centre) have nothing to see here:
+           say so, rather than refuse. The menu check asks on every page load, and a 403 here
+           filled the audit log with "household (failed)" for every such educator (2026-10-13). */
+        if (! $ids) {
+            return response()->json(['homes' => [], 'check_types' => [], 'required_checks' => [], 'note' => null]);
+        }
         $p = \App\Support\Jurisdictions::forAgency($agencyId);
         $checkTypes = array_values(array_map(fn ($c) => ['code' => $c['code'], 'label' => $c['label'], 'renew_years' => $c['renew_years'] ?? null],
             (array) (($p['background_checks'] ?? null) ?: \App\Support\Jurisdictions::profile('CA-ON')['background_checks'])));

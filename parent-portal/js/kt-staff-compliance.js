@@ -45,7 +45,14 @@
     if (probed || !KT.Api || !KT.Api.get) return;
     var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
     if (!tok) return;
+    /* STAFF ONLY (2026-10-13, Anthony: Rachel, a parent, signed in and the audit log showed
+       "Get:api/v1/household (failed)" and "Get:api/v1/my-compliance (failed)"). Both routes
+       are for staff, so every parent made two refused requests on every page load. No role
+       class yet (still booting): wait for the next timer rather than decide now. */
+    var cls = document.body ? (document.body.className || '') : '';
+    if (!/\brole-/.test(cls)) return;
     probed = true;
+    if (!/\brole-(educator|home-visitor|centre-director|agency-admin|platform-admin)\b/.test(cls)) return;
     KT.Api.get('/my-compliance').then(function (d) {
       if (d && d.enabled) document.body.classList.add('kt-jur-staff');
     }).catch(function () {});
