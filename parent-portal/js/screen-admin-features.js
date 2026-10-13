@@ -155,16 +155,21 @@
         </div>
       </div>
 
-      <div style="background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px;">
-        <h3 style="margin:0 0 4px;font-size:15px;">Feature overrides</h3>
-        <p style="margin:0 0 12px;color:#6B7280;font-size:12px;">Auto = follow plan default · On = force enabled · Off = force disabled. Switching a feature off hides its screens from everyone at this agency and refuses its API.</p>
-        ${groupOrder.map(g => `
-          <div style="margin:0 0 6px;">
-            <div style="font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#1F6080;margin:14px 0 8px;">${esc(g)}</div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
+      <div class="kt-ff-panel">
+        <div class="kt-ff-head">
+          <div>
+            <h3>Feature overrides</h3>
+            <p><b>Auto</b> follows the plan · <b class="on">On</b> forces it on · <b class="off">Off</b> hides its screens from everyone at this agency and refuses its API.</p>
+          </div>
+          <div class="kt-ff-sum" id="kt-ff-sum"></div>
+        </div>
+        ${groupOrder.map((g, gi) => `
+          <section class="kt-ff-group" style="--c:${GROUP_COLOURS[gi % GROUP_COLOURS.length][0]};--t:${GROUP_COLOURS[gi % GROUP_COLOURS.length][1]};">
+            <div class="kt-ff-gh"><span class="kt-ff-gname">${esc(g)}</span><span class="kt-ff-gcount">${byGroup[g].length}</span></div>
+            <div class="kt-ff-grid">
               ${byGroup[g].map(f => featureRow(f, flags[f.code])).join('')}
             </div>
-          </div>`).join('')}
+          </section>`).join('')}
       </div>
 
       <div style="display:flex;gap:10px;justify-content:flex-end;">
@@ -173,6 +178,24 @@
       </div>
       <div id="kt-save-msg" style="margin-top:10px;text-align:right;font-size:13px;"></div>
     `;
+
+    // Auto / On / Off switch: drives the (hidden) select the save reads, and recolours the card.
+    function refreshSummary() {
+      var n = { auto: 0, on: 0, off: 0 };
+      container.querySelectorAll('.kt-ff-card select').forEach(function (sel) { n[sel.value] = (n[sel.value] || 0) + 1; });
+      var el = $('#kt-ff-sum', container);
+      if (el) el.innerHTML = '<span class="s-on">' + n.on + ' forced on</span><span class="s-off">' + n.off + ' forced off</span><span class="s-auto">' + n.auto + ' auto</span>';
+    }
+    container.querySelectorAll('.kt-ff-seg button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var card = b.closest('.kt-ff-card'), sel = card.querySelector('select');
+        sel.value = b.getAttribute('data-v');
+        card.setAttribute('data-state', sel.value);
+        card.querySelectorAll('.kt-ff-seg button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        refreshSummary();
+      });
+    });
+    refreshSummary();
 
     $('#kt-cancel', container).addEventListener('click', () => loadAndRenderAgency(container, agencyId));
     $('#kt-save',   container).addEventListener('click', async () => {
@@ -200,21 +223,70 @@
     });
   }
 
+  /* COLOUR, SO IT CAN BE READ (2026-10-13, Anthony: "the boxes for each feature should be
+     colourized as this page is all white right now and hard to read"). Each group has its
+     own colour — header, card tint and accent edge — and a card's STATE shows at a glance:
+     forced off turns rose, forced on turns green, auto keeps the group's colour. The
+     Auto/On/Off switch drives the same select the save has always read. */
+  var GROUP_COLOURS = [
+    ['#0E7C90', '#ECF8FA'], ['#7C3AED', '#F4F0FE'], ['#D97706', '#FEF7EC'], ['#2563EB', '#EEF4FE'],
+    ['#DB2777', '#FDF0F6'], ['#059669', '#ECFAF4'], ['#4F46E5', '#F0F0FE'], ['#EA580C', '#FEF2EB'],
+    ['#0891B2', '#EBF8FB'], ['#9333EA', '#F7EFFE'], ['#65A30D', '#F3F9EA'], ['#E11D48', '#FEF0F2'],
+  ];
+  function ffCss() {
+    if (document.getElementById('kt-ff-css')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-ff-css';
+    st.textContent = [
+      '.kt-ff-panel{background:#fff;border-radius:16px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px;}',
+      '.kt-ff-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:4px;}',
+      '.kt-ff-head h3{margin:0 0 4px;font-size:15px;color:#0F172A;}',
+      '.kt-ff-head p{margin:0;color:#64748B;font-size:12px;max-width:640px;}',
+      '.kt-ff-head b{color:#334155;}.kt-ff-head b.on{color:#15803D;}.kt-ff-head b.off{color:#BE123C;}',
+      '.kt-ff-sum{display:flex;gap:6px;flex-wrap:wrap;}',
+      '.kt-ff-sum span{font-size:11.5px;font-weight:800;border-radius:999px;padding:4px 10px;}',
+      '.kt-ff-sum .s-on{background:#DCFCE7;color:#166534;}.kt-ff-sum .s-off{background:#FFE4E6;color:#9F1239;}.kt-ff-sum .s-auto{background:#F1F5F9;color:#475569;}',
+      '.kt-ff-group{margin-top:16px;}',
+      '.kt-ff-gh{display:flex;align-items:center;gap:8px;margin:0 0 8px;}',
+      '.kt-ff-gname{display:inline-flex;align-items:center;background:var(--c);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:8px;padding:4px 10px;}',
+      '.kt-ff-gcount{font-size:11.5px;font-weight:800;color:var(--c);background:var(--t);border-radius:999px;padding:2px 8px;}',
+      '.kt-ff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}',
+      '.kt-ff-card{position:relative;background:var(--t);border:1px solid color-mix(in srgb,var(--c) 22%,#fff);border-left:4px solid var(--c);border-radius:12px;padding:11px 12px 10px;transition:background .15s,border-color .15s;}',
+      '.kt-ff-card[data-state="on"]{background:#F0FDF4;border-color:#BBF7D0;border-left-color:#16A34A;}',
+      '.kt-ff-card[data-state="off"]{background:#FFF1F2;border-color:#FECDD3;border-left-color:#E11D48;}',
+      '.kt-ff-name{font-weight:800;font-size:13.5px;color:#0F172A;}',
+      '.kt-ff-card[data-state="off"] .kt-ff-name{color:#9F1239;}',
+      '.kt-ff-meta{font-size:11px;color:#64748B;margin-top:2px;}',
+      '.kt-ff-meta code{font:600 10.5px ui-monospace,Consolas,monospace;background:rgba(255,255,255,.75);border:1px solid rgba(15,23,42,.08);border-radius:5px;padding:0 5px;color:#334155;}',
+      '.kt-ff-plan{display:inline-block;margin-left:4px;font-size:10.5px;font-weight:800;color:var(--c);}',
+      '.kt-ff-hides{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;}',
+      '.kt-ff-hides span{font-size:10.5px;font-weight:600;color:#475569;background:rgba(255,255,255,.8);border:1px solid rgba(15,23,42,.08);border-radius:6px;padding:1px 6px;}',
+      '.kt-ff-hides em{font-size:11px;color:#94A3B8;font-style:normal;}',
+      '.kt-ff-seg{display:flex;margin-top:9px;background:rgba(255,255,255,.85);border:1px solid rgba(15,23,42,.1);border-radius:9px;padding:2px;gap:2px;}',
+      '.kt-ff-seg button{flex:1;height:28px;border:0;border-radius:7px;background:transparent;color:#475569;font:700 12px inherit;font-family:inherit;cursor:pointer;}',
+      '.kt-ff-seg button:hover{background:rgba(15,23,42,.05);}',
+      '.kt-ff-seg button[data-v="auto"][aria-pressed="true"]{background:var(--c);color:#fff;}',
+      '.kt-ff-seg button[data-v="on"][aria-pressed="true"]{background:#16A34A;color:#fff;}',
+      '.kt-ff-seg button[data-v="off"][aria-pressed="true"]{background:#E11D48;color:#fff;}',
+      '.kt-ff-card select{display:none;}',
+    ].join('\n');
+    document.head.appendChild(st);
+  }
+
   function featureRow(feature, currentFlag) {
+    ffCss();
     let initial = 'auto';
     if (currentFlag === true)  initial = 'on';
     if (currentFlag === false) initial = 'off';
-    return `<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:700;font-size:13px;color:#111827;">${esc(feature.name || feature.code)}</div>
-          <div style="font-size:11px;color:#64748B;margin-top:2px;">code: ${esc(feature.code)}${feature.plan_min ? ' · plan ≥ ' + esc(feature.plan_min) : ''}</div>
-          ${(feature.hashes && feature.hashes.length)
-            ? `<div style="font-size:11px;color:#94A3B8;margin-top:4px;line-height:1.5;">Hides: ${feature.hashes.map(esc).join(', ')}</div>`
-            : '<div style="font-size:11px;color:#94A3B8;margin-top:4px;">No menu item — gates the API only.</div>'}
-        </div>
-      </div>
-      <select id="kt-flag-${esc(feature.code)}" style="width:100%;margin-top:8px;padding:6px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;background:white;">
+    const seg = (v, label) => `<button type="button" data-v="${v}" aria-pressed="${initial === v ? 'true' : 'false'}">${label}</button>`;
+    return `<div class="kt-ff-card" data-state="${initial}">
+      <div class="kt-ff-name">${esc(feature.name || feature.code)}</div>
+      <div class="kt-ff-meta"><code>${esc(feature.code)}</code>${feature.plan_min ? '<span class="kt-ff-plan">plan ≥ ' + esc(feature.plan_min) + '</span>' : ''}</div>
+      <div class="kt-ff-hides">${(feature.hashes && feature.hashes.length)
+        ? feature.hashes.map(h => '<span>' + esc(h) + '</span>').join('')
+        : '<em>No menu item — gates the API only.</em>'}</div>
+      <div class="kt-ff-seg" role="group" aria-label="${esc(feature.name || feature.code)}">${seg('auto', 'Auto')}${seg('on', '✓ On')}${seg('off', '✗ Off')}</div>
+      <select id="kt-flag-${esc(feature.code)}" aria-hidden="true" tabindex="-1">
         <option value="auto" ${initial=='auto'?'selected':''}>Auto (plan default)</option>
         <option value="on"   ${initial=='on'?'selected':''}>✓ Force on</option>
         <option value="off"  ${initial=='off'?'selected':''}>✗ Force off</option>
