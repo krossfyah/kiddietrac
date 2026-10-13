@@ -133,6 +133,10 @@
     "safe-arrival": {
       "t": "Safe Arrival : alertes quand un enfant n’est pas arrivé | KiddieTrac",
       "d": "Quand un enfant attendu aujourd’hui n’a pas été inscrit à l’arrivée, KiddieTrac demande aux parents, puis alerte les éducatrices et la direction. Un tableau en direct et un registre de chaque vérification."
+    },
+    "referrals": {
+      "t": "Programme de recommandation : offrez un mois, recevez 200 $ | KiddieTrac",
+      "d": "Recommandez un service de garde à KiddieTrac. Il obtient son premier mois gratuit, et vous recevez 200 $ CA une seule fois par virement électronique après 60 jours comme client payant. Tout le monde peut recommander."
     }
   },
   "es": {
@@ -263,6 +267,10 @@
     "safe-arrival": {
       "t": "Safe Arrival: alertas cuando un niño no ha llegado | KiddieTrac",
       "d": "Cuando un niño esperado hoy no ha sido registrado, KiddieTrac pregunta a los padres y luego alerta a los educadores del aula y a la dirección. Un tablero en vivo y un registro de cada verificación."
+    },
+    "referrals": {
+      "t": "Programa de referidos: regala un mes, recibe $200 | KiddieTrac",
+      "d": "Recomienda un programa de cuidado infantil a KiddieTrac. Recibe su primer mes gratis y tú recibes un pago único de $200 CAD por transferencia electrónica después de 60 días como cliente de pago. Cualquiera puede recomendar."
     }
   },
   "hi": {
@@ -393,6 +401,10 @@
     "safe-arrival": {
       "t": "Safe Arrival: जब बच्चा नहीं पहुँचा हो तो अलर्ट | KiddieTrac",
       "d": "जब आज अपेक्षित किसी बच्चे का साइन-इन नहीं हुआ हो, तो KiddieTrac माता-पिता से पूछता है, फिर कक्षा के शिक्षकों और डायरेक्टर को अलर्ट करता है। लाइव बोर्ड और हर जाँच का रिकॉर्ड।"
+    },
+    "referrals": {
+      "t": "रेफ़रल प्रोग्राम: एक महीना दें, $200 पाएँ | KiddieTrac",
+      "d": "किसी चाइल्डकेयर प्रोग्राम को KiddieTrac के लिए रेफ़र करें। उन्हें पहला महीना मुफ़्त मिलता है, और 60 दिन तक भुगतान करने वाला ग्राहक रहने के बाद आपको ई-ट्रांसफ़र से एक बार $200 CAD मिलते हैं। कोई भी रेफ़र कर सकता है।"
     }
   }
 }

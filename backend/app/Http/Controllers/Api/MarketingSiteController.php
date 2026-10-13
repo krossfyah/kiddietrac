@@ -166,6 +166,10 @@ final class MarketingSiteController extends Controller
                 return response()->json(['ok' => false, 'error' => 'recaptcha_failed'], 422)->header('Access-Control-Allow-Origin', '*');
             }
         }
+        // The referral program form (www.kiddietrac.com/referrals) arrives here as source=referral.
+        if (strtolower(trim((string) ($data['source'] ?? ''))) === 'referral') {
+            return $this->submitReferral($request);
+        }
         $email = strtolower(trim($data['email']));
         $name  = trim((string) ($data['name'] ?? ''));
         $agency = trim((string) ($data['agency'] ?? ''));
@@ -247,6 +251,119 @@ final class MarketingSiteController extends Controller
             // never fail the subscribe because email delivery hiccuped
         }
         return response()->json(['ok' => true])->header('Access-Control-Allow-Origin', '*');
+    }
+
+    /**
+     * The referral program (www.kiddietrac.com/referrals, 2026-10-13), posted to
+     * /marketing-site/lead with source=referral.
+     *
+     * Terms (Anthony): the referrer earns a one-time $200 CAD per referred program that becomes a
+     * paying customer, paid by e-transfer after 60 paying days; the program's first month is free.
+     * Sales needs BOTH sides, so: a Sales pipeline lead for the REFERRED program (source
+     * "Referral", the referrer in its notes) and an email to sales@ with every field, Reply-To the
+     * referrer. Referring someone is not newsletter consent, so the referrer is NOT added to
+     * site_subscribers and gets no subscriber welcome. Nothing is emailed to the referred contact.
+     */
+    private function submitReferral(Request $request): JsonResponse
+    {
+        $cors = fn (JsonResponse $r) => $r->header('Access-Control-Allow-Origin', '*');
+        if (trim((string) $request->input('website', '')) !== '') {            // honeypot
+            return $cors(response()->json(['ok' => true]));
+        }
+        $d = $request->validate([
+            'email'         => 'required|email|max:160',
+            'name'          => 'required|string|max:120',
+            'phone'         => 'nullable|string|max:40',
+            'relationship'  => 'required|string|in:customer,educator,consultant,parent,other',
+            'program'       => 'required|string|max:160',
+            'contact_name'  => 'required|string|max:120',
+            'contact_email' => 'nullable|email|max:160|required_without:contact_phone',
+            'contact_phone' => 'nullable|string|max:40|required_without:contact_email',
+            'city'          => 'nullable|string|max:120',
+            'notes'         => 'nullable|string|max:3000',
+            'consent_share' => 'accepted',
+            'accept_terms'  => 'accepted',
+            'terms_version' => 'nullable|string|max:40',
+        ]);
+        $email = strtolower(trim($d['email']));
+        $name = trim($d['name']);
+        $phone = trim((string) ($d['phone'] ?? ''));
+        $rel = ['customer' => 'KiddieTrac customer', 'educator' => 'Educator', 'consultant' => 'Consultant',
+            'parent' => 'Parent', 'other' => 'Other'][$d['relationship']];
+        $program = trim($d['program']);
+        $cName = trim($d['contact_name']);
+        $cEmail = strtolower(trim((string) ($d['contact_email'] ?? '')));
+        $cPhone = trim((string) ($d['contact_phone'] ?? ''));
+        $city = trim((string) ($d['city'] ?? ''));
+        $notes = trim((string) ($d['notes'] ?? ''));
+        $terms = trim((string) ($d['terms_version'] ?? '')) ?: 'October 2026';
+        if ($cEmail !== '' && $cEmail === $email) {
+            return $cors(response()->json(['ok' => false, 'error' => 'self_referral',
+                'message' => 'The program’s email is the same as yours. Self-referrals aren’t eligible.'], 422));
+        }
+        $ip = substr((string) $request->ip(), 0, 45);
+        $this->appendLead(['email' => $email, 'name' => $name, 'agency' => 'Referral: ' . $program, 'source' => 'referral', 'ip' => $ip]);
+
+        $referrer = $name . ' (' . $rel . ') <' . $email . '>' . ($phone ? ', ' . $phone : '');
+        $summary = "Referral from www.kiddietrac.com/referrals (program terms effective {$terms}).\n"
+            . "Referred by: {$referrer}\n"
+            . "Reward: one-time \$200 CAD to the referrer by e-transfer once this program has been a paying customer for 60 days. "
+            . "The program's first month is free (first monthly subscription fee, not add-ons).";
+        $leadId = null;
+        try {
+            $lead = $cEmail !== '' ? \App\Models\SalesLead::where('email', $cEmail)->where('status', 'open')->first() : null;
+            if (! $lead) {
+                $lead = \App\Models\SalesLead::create([
+                    'name' => $cName, 'company' => $program, 'email' => $cEmail ?: null, 'phone' => $cPhone ?: null,
+                    'city' => $city ?: null, 'source' => 'Referral', 'stage' => 'new', 'status' => 'open',
+                    'last_activity_at' => now(), 'notes' => $summary,
+                ]);
+            } else {
+                $lead->update(['last_activity_at' => now()]);
+            }
+            \App\Models\SalesActivity::create(['lead_id' => $lead->id, 'type' => 'note', 'done' => false,
+                'body' => $summary . "\nProgram: {$program}" . ($city ? " ({$city})" : '')
+                    . "\nContact: {$cName}" . ($cEmail ? " <{$cEmail}>" : '') . ($cPhone ? ", {$cPhone}" : '')
+                    . "\nReferrer confirmed they have permission to share this contact's details."
+                    . "\nNotes: " . ($notes ?: '(none)')]);
+            $leadId = $lead->id;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Referral lead failed', ['email' => $email, 'error' => $e->getMessage()]);
+        }
+
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $table = function (string $title, array $rows) use ($e) {
+            $t = '<h3 style="margin:16px 0 6px;font-size:15px;color:#0f172a">' . $e($title) . '</h3><table style="border-collapse:collapse">';
+            foreach ($rows as $k => $v) {
+                $t .= '<tr><td style="padding:4px 14px 4px 0;color:#64748b;font-size:13px">' . $e($k) . '</td><td style="padding:4px 0;font-size:14px;font-weight:600">' . $e($v ?: '—') . '</td></tr>';
+            }
+            return $t . '</table>';
+        };
+        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px">'
+            . '<h2 style="margin:0 0 4px;font-size:19px;color:#0f172a">New referral: ' . $e($program) . '</h2>'
+            . '<p style="margin:0 0 8px;color:#64748b;font-size:13.5px">From the referral program page. Reply to this email to answer the referrer.'
+            . ($leadId ? ' The referred program is in Sales → Pipeline (source: Referral).' : '') . '</p>'
+            . $table('Referred program', ['Program' => $program, 'Contact person' => $cName, 'Email' => $cEmail, 'Phone' => $cPhone,
+                'City / province' => $city, 'Permission to share' => 'Yes, confirmed by the referrer'])
+            . $table('Referrer (gets the reward)', ['Name' => $name, 'Email' => $email, 'Phone' => $phone, 'Relationship' => $rel,
+                'Agreed to program terms' => 'Yes (effective ' . $terms . ')'])
+            . '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-top:14px;font-size:14px;color:#0f172a">' . $e($notes ?: '(no notes)') . '</div>'
+            . '<p style="margin:14px 0 0;color:#64748b;font-size:12.5px">Reward: one-time $200 CAD to the referrer by e-transfer once the program has been a paying customer for 60 days. '
+            . 'The program gets its first month free (first monthly subscription fee, not add-ons). One reward per new program: the first valid referral wins.</p></div>';
+        $sent = false;
+        try {
+            Mail::html($html, function ($m) use ($email, $name, $program) {
+                $m->to('sales@kiddietrac.com')->subject('New referral: ' . $program . ' (from ' . $name . ')')->replyTo($email, $name);
+                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            });
+            $sent = true;
+        } catch (\Throwable $ex) {
+            \Illuminate\Support\Facades\Log::error('Referral email failed', ['email' => $email, 'error' => $ex->getMessage()]);
+        }
+        if (! $leadId && ! $sent) {
+            return $cors(response()->json(['ok' => false, 'message' => 'We could not send your referral. Please email sales@kiddietrac.com or call 1-855-400-9996.'], 500));
+        }
+        return $cors(response()->json(['ok' => true]));
     }
 
     /**
