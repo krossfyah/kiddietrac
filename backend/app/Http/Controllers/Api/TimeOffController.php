@@ -46,7 +46,134 @@ final class TimeOffController extends Controller
             )
             ->leftJoin('users as d', 'd.id', '=', 'tor.decided_by_id');
         if ($status) $q->where('tor.status', $status);
-        return response()->json(['data' => $q->get()]);
+        $rows = $q->get();
+        // Which centre each request would close, and whether it already is closed for those
+        // dates — so the screen can offer "Mark closed" on an approved request (2026-10-13).
+        foreach ($rows as $r) {
+            $cid = $this->centreFor($r);
+            $r->close_centre_id = $cid;
+            $r->close_centre_name = $cid ? DB::table('centres')->where('id', $cid)->value('name') : null;
+            $r->closed_for_dates = $cid ? $this->closureFor($cid, $r) !== null : false;
+        }
+        return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * The centre a request belongs to: its own, or the one centre the person works at.
+     * Somebody at several centres has no single centre to close, so null.
+     */
+    private function centreFor(object $row): ?int
+    {
+        $centreId = (int) ($row->centre_id ?? 0);
+        if ($centreId) {
+            return $centreId;
+        }
+        $centreIds = DB::table('role_assignments')
+            ->where('user_id', $row->user_id)->where('active', true)
+            ->whereNotNull('centre_id')->distinct()->pluck('centre_id');
+
+        return $centreIds->count() === 1 ? (int) $centreIds->first() : null;
+    }
+
+    /** A closure already covering any of the request's dates at this centre, if there is one. */
+    private function closureFor(int $centreId, object $row): ?object
+    {
+        return DB::table('centre_closures')
+            ->where('centre_id', $centreId)
+            ->whereDate('closure_date', '<=', $row->end_at)
+            // A null end_date is ONE day (App\Support\Closures), not an open range: two
+            // old single-day closures made a centre look closed on every later date.
+            ->where(function ($q) use ($row) {
+                $q->where(fn ($one) => $one->whereNull('end_date')->whereDate('closure_date', '>=', $row->start_at))
+                  ->orWhere(fn ($rng) => $rng->whereNotNull('end_date')->whereDate('end_date', '>=', $row->start_at));
+            })
+            ->first();
+    }
+
+    /** Families at a centre who should hear about a closure: open families with a child still here. */
+    private function closureParentIds(int $centreId)
+    {
+        $familyIds = \App\Support\Live::families(DB::table('families as f'), 'f')
+            ->where('f.centre_id', $centreId)
+            ->whereExists(fn ($q) => \App\Support\Live::children($q->from('children as ch'), 'ch')
+                ->whereColumn('ch.family_id', 'f.id')->select(DB::raw(1)))
+            ->pluck('f.id');
+
+        return DB::table('users as u')->join('guardians as g', 'g.user_id', '=', 'u.id')
+            ->whereIn('g.family_id', $familyIds)->whereNull('u.deleted_at')
+            ->where(fn ($w) => $w->whereNull('u.status')->orWhereNotIn('u.status', ['suspended', 'deactivated']))
+            ->distinct()->pluck('u.id');
+    }
+
+    /**
+     * GET /admin/time-off/{id}/closure-options — what closing for this request would mean,
+     * for the approval dialog: which centre, who else works there, how many parents hear.
+     */
+    public function closureOptions(Request $request, int $id): JsonResponse
+    {
+        $row = DB::table('time_off_requests')->where('id', $id)->first();
+        abort_unless($row, 404);
+        $this->assertAgencyAccess($request, (int) $row->agency_id);
+        $cid = $this->centreFor($row);
+        $staff = $cid ? DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.centre_id', $cid)->where('ra.active', true)
+            ->whereIn('ra.role', ['educator', 'centre_director'])->whereNull('u.deleted_at')
+            ->where('u.id', '!=', $row->user_id)
+            ->distinct()->selectRaw("u.id, TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as name")
+            ->get() : collect();
+
+        return response()->json([
+            'centre_id' => $cid,
+            'centre_name' => $cid ? DB::table('centres')->where('id', $cid)->value('name') : null,
+            'other_staff' => $staff->pluck('name')->values(),
+            'sole_staff' => $cid && $staff->isEmpty(),
+            'parents' => $cid ? $this->closureParentIds($cid)->count() : 0,
+            'already_closed' => $cid ? $this->closureFor($cid, $row) !== null : false,
+            'all_day' => (bool) $row->all_day,
+            'when' => self::whenPhrase($row),
+        ]);
+    }
+
+    /**
+     * POST /admin/time-off/{id}/close — close the centre for an already-approved request.
+     *
+     * Anthony, 2026-10-13: "when approving time off requests for educators add option to
+     * flag this educator/centre etc closed which will trigger emails out to parents,
+     * admins/directors". Amna's leave was approved without a closure because Safia also
+     * holds an educator role at her centre, so the sole-staff rule said "someone covers".
+     * This is the same closure and the same parent / admin emails, chosen by a person.
+     */
+    public function closeForRequest(Request $request, int $id): JsonResponse
+    {
+        $row = DB::table('time_off_requests')->where('id', $id)->first();
+        abort_unless($row, 404);
+        $this->assertAgencyAccess($request, (int) $row->agency_id);
+        abort_unless($row->status === 'approved', 422, 'Only an approved request can close the centre.');
+        $d = $request->validate(['centre_id' => 'nullable|integer']);
+        $centre = $this->checkedCentre($row, $d['centre_id'] ?? null);
+        abort_unless($centre, 422, 'This person is not at a single centre, so choose the centre to close.');
+        if ($this->closureFor($centre, $row)) {
+            return response()->json(['message' => 'The centre is already closed for these dates.'], 422);
+        }
+        $closed = $this->closeCentreIfSoleStaff($row, (int) $request->user()->id, 'centre', $centre);
+        abort_unless($closed, 500, 'The closure could not be saved.');
+        $this->announceApproval($row, $closed, $request->user(), 'closure');
+
+        return response()->json(['closure_created' => true, 'closure_centre_id' => $closed,
+            'parents' => $this->closureParentIds($closed)->count()]);
+    }
+
+    /** A centre id from the client, accepted only if it is an open centre of the request's agency. */
+    private function checkedCentre(object $row, $centreId): ?int
+    {
+        $cid = $centreId ? (int) $centreId : $this->centreFor($row);
+        if (! $cid) {
+            return null;
+        }
+        $ok = \App\Support\Live::centres(DB::table('centres'), 'centres')
+            ->where('id', $cid)->where('agency_id', $row->agency_id)->exists();
+
+        return $ok ? $cid : null;
     }
 
     public function create(Request $request): JsonResponse
@@ -159,27 +286,30 @@ final class TimeOffController extends Controller
      *
      * @return int|null the centre closed, or null if nothing was closed
      */
-    private function closeCentreIfSoleStaff($row, int $actorId): ?int
+    private function closeCentreIfSoleStaff($row, int $actorId, string $mode = 'auto', ?int $centreOverride = null): ?int
     {
+        /* THE APPROVER CAN DECIDE (2026-10-13). 'auto' is the rule below (all-day leave by
+           the only staff member closes the centre). 'centre' closes it because the approver
+           said so — the rule cannot see that an admin who holds an educator role at a home
+           daycare is not actually there. 'none' never closes. */
+        if ($mode === 'none') {
+            return null;
+        }
+        $forced = $mode === 'centre';
+
         // Away for part of a day is not a closure. The provider is still there for the
         // rest of it, and telling every family the centre is shut because of a two-hour
         // appointment is worse than telling them nothing.
-        if (empty($row->all_day)) {
+        if (! $forced && empty($row->all_day)) {
             return null;
         }
 
         // The request's own centre if it carries one; otherwise the single centre this
         // person is staff at. Somebody attached to several centres is by definition not
         // the sole staff member of one, so there is nothing to close.
-        $centreId = (int) ($row->centre_id ?? 0);
+        $centreId = $centreOverride ?: $this->centreFor($row);
         if (! $centreId) {
-            $centreIds = DB::table('role_assignments')
-                ->where('user_id', $row->user_id)->where('active', true)
-                ->whereNotNull('centre_id')->distinct()->pluck('centre_id');
-            if ($centreIds->count() !== 1) {
-                return null;
-            }
-            $centreId = (int) $centreIds->first();
+            return null;
         }
 
         // Sole staff, or someone covers.
@@ -189,7 +319,7 @@ final class TimeOffController extends Controller
             ->whereIn('ra.role', ['educator', 'centre_director'])
             ->whereNull('u.deleted_at')
             ->distinct()->count('ra.user_id');
-        if ($staffCount > 1) {
+        if (! $forced && $staffCount > 1) {
             return null;
         }
 
@@ -198,8 +328,11 @@ final class TimeOffController extends Controller
         $exists = DB::table('centre_closures')
             ->where('centre_id', $centreId)
             ->whereDate('closure_date', '<=', $row->end_at)
+            // A null end_date is ONE day (App\Support\Closures), not an open range: two
+            // old single-day closures made a centre look closed on every later date.
             ->where(function ($q) use ($row) {
-                $q->whereNull('end_date')->orWhereDate('end_date', '>=', $row->start_at);
+                $q->where(fn ($one) => $one->whereNull('end_date')->whereDate('closure_date', '>=', $row->start_at))
+                  ->orWhere(fn ($rng) => $rng->whereNotNull('end_date')->whereDate('end_date', '>=', $row->start_at));
             })
             ->exists();
         if ($exists) {
@@ -266,12 +399,18 @@ final class TimeOffController extends Controller
         $data = $request->validate([
             'status' => 'required|string|in:approved,denied',
             'decision_notes' => 'nullable|string|max:1000',
+            // auto = the sole-staff rule; centre = close it; none = someone covers.
+            'close' => 'nullable|string|in:auto,centre,none',
+            'close_centre_id' => 'nullable|integer',
         ]);
         $row = DB::table('time_off_requests')->where('id', $id)->first();
         abort_unless($row, 404);
         $this->assertAgencyAccess($request, (int) $row->agency_id);
+        $mode = $data['close'] ?? 'auto';
+        $centre = $mode === 'centre' ? $this->checkedCentre($row, $data['close_centre_id'] ?? null) : null;
+        abort_if($mode === 'centre' && ! $centre, 422, 'Choose the centre to close.');
 
-        $result = $this->applyDecision($row, $data['status'], $data['decision_notes'] ?? null, $request->user());
+        $result = $this->applyDecision($row, $data['status'], $data['decision_notes'] ?? null, $request->user(), $mode, $centre);
 
         return response()->json($result);
     }
@@ -284,7 +423,7 @@ final class TimeOffController extends Controller
      * "approve time off" is how they drift until one of them quietly stops closing the
      * centre.
      */
-    private function applyDecision(object $row, string $status, ?string $notes, $actor): array
+    private function applyDecision(object $row, string $status, ?string $notes, $actor, string $closeMode = 'auto', ?int $closeCentre = null): array
     {
         DB::table('time_off_requests')->where('id', $row->id)->update([
             'status'        => $status,
@@ -314,7 +453,7 @@ final class TimeOffController extends Controller
         // parents need telling on the usual reminder schedule.
         $closure = null;
         if ($status === 'approved') {
-            $closure = $this->closeCentreIfSoleStaff($row, $actor->id);
+            $closure = $this->closeCentreIfSoleStaff($row, $actor->id, $closeMode, $closeCentre);
             // Told now, not only 5 days before it happens. The scheduled reminders still
             // run on top of this — this is the confirmation, those are the nudges.
             $this->announceApproval($row, $closure, $actor);
@@ -473,8 +612,10 @@ final class TimeOffController extends Controller
 
         $status = $request->input('decision') === 'denied' ? 'denied' : 'approved';
         $notes = trim((string) $request->input('decision_notes', '')) ?: null;
+        // The page shows the closure box only when there is one centre to close.
+        $mode = $request->has('close_shown') ? ($request->input('close') === '1' ? 'centre' : 'none') : 'auto';
 
-        $res = $this->applyDecision($row, $status, $notes, $approver);
+        $res = $this->applyDecision($row, $status, $notes, $approver, $mode, $mode === 'centre' ? $this->centreFor($row) : null);
 
         $msg = $status === 'approved' ? 'Approved.' : 'Declined.';
         $sub = 'We have let them know'.($notes ? ', along with your note' : '').'.'
@@ -510,6 +651,29 @@ final class TimeOffController extends Controller
     }
 
     /** The decision form. */
+    /** The "close the centre" choice on the email approval page — ticked when the rule would close it. */
+    private function actCloseBox(object $row): string
+    {
+        $cid = $this->centreFor($row);
+        if (! $cid || $this->closureFor($cid, $row)) {
+            return '';
+        }
+        $name = DB::table('centres')->where('id', $cid)->value('name');
+        $others = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.centre_id', $cid)->where('ra.active', true)->whereIn('ra.role', ['educator', 'centre_director'])
+            ->whereNull('u.deleted_at')->where('u.id', '!=', $row->user_id)->distinct()->count('u.id');
+        $tick = $others === 0 && ! empty($row->all_day);
+        $parents = $this->closureParentIds($cid)->count();
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+
+        return '<input type="hidden" name="close_shown" value="1">'
+            .'<label style="display:flex;gap:10px;align-items:flex-start;background:#FEF3C7;border:1px solid #FCD34D;'
+            .'border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:14px;line-height:1.5;color:#78350F;cursor:pointer;">'
+            .'<input type="checkbox" name="close" value="1"'.($tick ? ' checked' : '').' style="margin-top:3px;width:18px;height:18px;">'
+            .'<span><strong>Close '.$e($name).' for these dates</strong><br>'
+            .'Emails '.$parents.' parent'.($parents === 1 ? '' : 's').', admins and directors (only if you approve).</span></label>';
+    }
+
     private function actForm(Request $request, object $row, string $who, string $action): string
     {
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
@@ -539,6 +703,7 @@ final class TimeOffController extends Controller
             .'<textarea name="decision_notes" rows="3" placeholder="Anything they should know…" '
             .'style="width:100%;box-sizing:border-box;padding:11px;border:1px solid #CBD5E1;border-radius:10px;'
             .'font-family:inherit;font-size:15px;margin-bottom:16px;"></textarea>'
+            .$this->actCloseBox($row)
             .'<button type="submit" name="decision" value="approved" '
             .'style="width:100%;padding:15px;border:0;border-radius:12px;background:#16A34A;color:#fff;'
             .'font-size:16px;font-weight:700;cursor:pointer;margin-bottom:10px;">Approve</button>'
@@ -564,7 +729,7 @@ final class TimeOffController extends Controller
      *
      * @param int|null $closedCentreId the centre this closed, or null if it closed none
      */
-    private function announceApproval(object $row, ?int $closedCentreId, $actor): void
+    private function announceApproval(object $row, ?int $closedCentreId, $actor, ?string $only = null): void
     {
         $when = self::whenPhrase($row).', '.Carbon::parse($row->start_at)->format('Y');
         $who = DB::table('users')->where('id', $row->user_id)
@@ -618,11 +783,8 @@ final class TimeOffController extends Controller
 
         // ── PARENTS — only when the doors are actually shut ─────────────────
         if ($closedCentreId) {
-            $familyIds = DB::table('families')->where('centre_id', $closedCentreId)
-                ->whereNull('deleted_at')->pluck('id');
-            $parents = DB::table('users as u')->join('guardians as g', 'g.user_id', '=', 'u.id')
-                ->whereIn('g.family_id', $familyIds)->whereNull('u.deleted_at')
-                ->distinct()->pluck('u.email')->all();
+            // Open families with a child still here — never a family that has left.
+            $parents = DB::table('users')->whereIn('id', $this->closureParentIds($closedCentreId))->pluck('email')->all();
 
             $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
                 .'<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
@@ -653,7 +815,8 @@ final class TimeOffController extends Controller
         }
 
         // ── EDUCATORS — the rota, not the doors ─────────────────────────────
-        if ($centreId) {
+        // (Not on a closure added afterwards: they were told about the leave already.)
+        if ($centreId && $only !== 'closure') {
             $educators = DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
                 ->where('ra.centre_id', $centreId)->where('ra.active', true)
                 ->whereIn('ra.role', ['educator', 'home_visitor'])
@@ -688,12 +851,7 @@ final class TimeOffController extends Controller
             ->whereNull('u.deleted_at')
             ->distinct()->pluck('u.email')->all();
 
-        $parentCount = $closedCentreId
-            ? DB::table('users as u')->join('guardians as g', 'g.user_id', '=', 'u.id')
-                ->whereIn('g.family_id', DB::table('families')->where('centre_id', $closedCentreId)
-                    ->whereNull('deleted_at')->pluck('id'))
-                ->whereNull('u.deleted_at')->distinct()->count('u.id')
-            : 0;
+        $parentCount = $closedCentreId ? $this->closureParentIds($closedCentreId)->count() : 0;
 
         $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
             .'<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
@@ -710,6 +868,28 @@ final class TimeOffController extends Controller
                   .'. Reminders follow on the usual schedule.'
                 : 'No closure was created — the centre has other staff, so cover applies.')
             .'</td></tr></table>';
+
+        if ($only === 'closure') {
+            // A closure added to leave that was already approved: say that, and who did it.
+            $by = trim(($actor->first_name ?? '').' '.($actor->last_name ?? ''));
+            $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+                .'<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
+                .($centreName ? '<strong>'.$e($centreName).'</strong>' : 'The centre').' has been marked <strong>closed</strong>'
+                .($by ? ' by '.$e($by) : '').' for <strong>'.$e($who).'</strong>’s approved time off.</td></tr>'
+                .$panel('#FEF3C7', '#B45309', 'Closed', $when)
+                .'<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#334155;">'
+                .$parentCount.' parent'.($parentCount === 1 ? '' : 's').' '
+                .($parentCount ? 'have been told' : 'were found to tell').'. Reminders follow on the usual schedule.'
+                .'</td></tr></table>';
+            $send($admins, 'Closed: '.($centreName ?: 'centre').' — '.$when, $body, [
+                'eyebrow' => 'CENTRE CLOSURE',
+                'title' => ($centreName ?: 'Centre').' closed',
+                'subtitle' => $when,
+                'preheader' => ($centreName ?: 'The centre').' is closed '.$when.' — parents notified.',
+            ]);
+
+            return;
+        }
 
         $send($admins, 'Approved: '.$who.' off '.$when, $body, [
             'eyebrow' => 'TIME OFF APPROVED',

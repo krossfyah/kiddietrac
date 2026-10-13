@@ -2171,6 +2171,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get  ('/admin/time-off',        [\App\Http\Controllers\Api\TimeOffController::class, 'listAgency']);
         Route::patch('/admin/time-off/{id}',   [\App\Http\Controllers\Api\TimeOffController::class, 'decide']);
+        // Close the centre for a request: what it would mean, and doing it after approval (2026-10-13).
+        Route::get  ('/admin/time-off/{id}/closure-options', [\App\Http\Controllers\Api\TimeOffController::class, 'closureOptions'])->whereNumber('id');
+        Route::post ('/admin/time-off/{id}/close',           [\App\Http\Controllers\Api\TimeOffController::class, 'closeForRequest'])->whereNumber('id');
     });
 
     // ---- Staff pay / payslips (educators = hourly, home visitors = per visit) ----

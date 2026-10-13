@@ -130,8 +130,78 @@
       : { bg: '#FEF3C7', fg: '#B45309' };
   }
   async function actOnTor(id, status) {
+    if (status === 'approved') { return approveTor(id); }
     await Api.patch('/admin/time-off/' + id, { status: status });
     renderTimeOff(document.getElementById('appMain') || document.querySelector('main'));
+  }
+
+  /* APPROVE, AND SAY WHETHER THE CENTRE CLOSES (2026-10-13, Anthony: "when approving time off
+     requests for educators add option to flag this educator/centre etc closed which will
+     trigger emails out to parents, admins/directors"). The server's own rule only closes a
+     centre when the person is its ONLY staff member, and it cannot tell that an admin who
+     holds an educator role at a home daycare is not actually there — so the approver
+     chooses. Pre-ticked when the rule would close it anyway. */
+  function torEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function torReload() { renderTimeOff(document.getElementById('appMain') || document.querySelector('main')); }
+  async function approveTor(id) {
+    var o = null;
+    try { o = await Api.get('/admin/time-off/' + id + '/closure-options'); } catch (e) {}
+    var M = window.KT && KT.Shell && KT.Shell.Modal;
+    if (!o || !o.centre_id || !M) {
+      await Api.patch('/admin/time-off/' + id, { status: 'approved' });
+      return torReload();
+    }
+    var closeDefault = !o.already_closed && o.sole_staff && o.all_day;
+    var box = document.createElement('div');
+    var parents = o.parents + ' parent' + (o.parents === 1 ? '' : 's');
+    box.innerHTML = '<div style="font-size:13.5px;color:#334155;margin-bottom:10px;">' + torEsc(o.when) + ' &middot; <b>' + torEsc(o.centre_name || 'their centre') + '</b></div>'
+      + (o.already_closed
+        ? '<div style="background:#F1F5F9;border-radius:10px;padding:10px 12px;font-size:13px;color:#475569;">The centre is already closed for these dates, so nothing more is needed.</div>'
+        : '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:10px;margin-bottom:8px;cursor:pointer;">'
+          + '<input type="radio" name="tor-close" value="none"' + (closeDefault ? '' : ' checked') + ' style="margin-top:3px;">'
+          + '<span><b>Someone covers</b> &mdash; ' + torEsc(o.centre_name || 'the centre') + ' stays open<br><span style="font-size:12.5px;color:#64748B;">'
+          + (o.other_staff && o.other_staff.length ? 'Also at this centre: ' + torEsc(o.other_staff.join(', ')) + '.' : 'Nobody else works at this centre.') + '</span></span></label>'
+          + '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid #FCD34D;background:#FFFBEB;border-radius:10px;cursor:pointer;">'
+          + '<input type="radio" name="tor-close" value="centre"' + (closeDefault ? ' checked' : '') + ' style="margin-top:3px;">'
+          + '<span><b>Close ' + torEsc(o.centre_name || 'the centre') + '</b> for these dates<br><span style="font-size:12.5px;color:#92400E;">Emails ' + parents
+          + ' now, and admins and directors. Closure reminders follow on your usual schedule.</span></span></label>')
+      + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;margin:12px 0 4px;">Note back to them (optional)</label>'
+      + '<textarea data-note rows="2" style="width:100%;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:9px;padding:8px 10px;font-family:inherit;font-size:13.5px;"></textarea>'
+      + '<div data-out style="font-size:13px;color:#B91C1C;margin-top:6px;"></div>';
+    M.open({
+      title: 'Approve time off', body: box,
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Approve', primary: true, busyLabel: 'Approving…', handler: function () {
+            var pick = box.querySelector('input[name="tor-close"]:checked');
+            var payload = { status: 'approved', close: pick ? pick.value : 'none' };
+            var note = (box.querySelector('[data-note]').value || '').trim();
+            if (note) payload.decision_notes = note;
+            if (payload.close === 'centre') payload.close_centre_id = o.centre_id;
+            return Api.patch('/admin/time-off/' + id, payload).then(function (r) {
+              if (window.KT && KT.toast) KT.toast('✅', 'Approved', r && r.closure_created ? (o.centre_name || 'Centre') + ' marked closed; parents emailed.' : '', '#16A34A');
+              torReload();
+            }).catch(function (e) { box.querySelector('[data-out]').textContent = (e && e.message) || 'Could not approve.'; return false; });
+          } },
+      ],
+    });
+  }
+
+  /* Close the centre for leave that is already approved (the same emails as at approval). */
+  async function closeTor(r) {
+    var msg = 'Mark ' + (r.close_centre_name || 'the centre') + ' closed for ' + torWhen(r) + '? Parents, admins and directors are emailed now.';
+    var ok = window.KT && KT.confirm ? await KT.confirm(msg, { okLabel: 'Close centre', tone: 'default' }) : window.confirm(msg);
+    if (!ok) return;
+    try {
+      var res = await Api.post('/admin/time-off/' + r.id + '/close', { centre_id: r.close_centre_id });
+      if (window.KT && KT.toast) KT.toast('🔒', 'Centre closed', (res && res.parents != null ? res.parents + ' parent(s) emailed.' : ''), '#16A34A');
+    } catch (e) {
+      if (window.KT && KT.toast) KT.toast('⚠️', 'Not closed', (e && e.message) || '', '#B91C1C'); else alert((e && e.message) || 'Could not close.');
+    }
+    torReload();
+  }
+  function torCanClose(r, isApprover) {
+    return isApprover && (r.status || '').toLowerCase() === 'approved' && r.close_centre_id && !r.closed_for_dates;
   }
   function torCard(r, isApprover) {
     var status = (r.status || 'pending').toLowerCase();
@@ -161,6 +231,14 @@
       deny.onclick = function () { actOnTor(r.id, 'denied'); };
       actions.appendChild(appr); actions.appendChild(deny);
       card.appendChild(actions);
+    }
+    if (r.closed_for_dates && status === 'approved') {
+      card.appendChild(el('div', { style: 'font-size:12px;font-weight:700;color:#92400E;margin-top:8px;' }, '🔒 ' + (r.close_centre_name || 'Centre') + ' closed for these dates'));
+    }
+    if (torCanClose(r, isApprover)) {
+      var cl = el('button', { type: 'button', style: 'width:100%;margin-top:10px;background:#FFFBEB;color:#92400E;border:1.5px solid #FCD34D;padding:10px;border-radius:11px;font-size:13.5px;font-weight:800;cursor:pointer;' }, '🔒 Mark ' + (r.close_centre_name || 'centre') + ' closed');
+      cl.onclick = function () { closeTor(r); };
+      card.appendChild(cl);
     }
     // Your own request — you can take it back, approved or not.
     if (!isApprover && canWithdraw(r)) {
@@ -196,11 +274,13 @@
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-transform:capitalize;">${escapeHtml(r.request_type)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(torWhen(r))}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span></td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span>${r.closed_for_dates && status === 'approved' ? '<div style="font-size:11.5px;color:#92400E;font-weight:700;">🔒 Centre closed</div>' : ''}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && status === 'pending'
           ? `<button data-act="approved" data-id="${r.id}" class="kt-btn kt-btn-success kt-btn-sm" style="margin-right:6px;">Approve</button><button data-act="denied" data-id="${r.id}" class="kt-btn kt-btn-danger kt-btn-sm">Deny</button>`
-          : (!isApprover && canWithdraw(r)
-            ? `<button data-withdraw="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Withdraw</button>` : '')}</td>`;
+          : (torCanClose(r, isApprover)
+            ? `<button data-closetor="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Mark centre closed</button>`
+            : (!isApprover && canWithdraw(r)
+              ? `<button data-withdraw="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Withdraw</button>` : ''))}</td>`;
       tb.appendChild(tr);
     });
     card.appendChild(tbl);
@@ -213,8 +293,15 @@
     });
     host.querySelectorAll('button[data-act]').forEach(b => {
       b.onclick = async () => {
+        if (b.dataset.act === 'approved') { return approveTor(b.dataset.id); }
         await Api.patch(`/admin/time-off/${b.dataset.id}`, { status: b.dataset.act });
         renderTimeOff(document.getElementById('main') || document.querySelector('main'));
+      };
+    });
+    host.querySelectorAll('button[data-closetor]').forEach(b => {
+      b.onclick = function () {
+        var row = rows.filter(function (x) { return String(x.id) === b.dataset.closetor; })[0];
+        if (row) closeTor(row);
       };
     });
   }
