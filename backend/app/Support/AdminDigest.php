@@ -55,7 +55,7 @@ final class AdminDigest
             'emergency' => 'emergencyContacts',
             'openDays' => 'openDays', 'scorecard' => 'scorecard',
             'educators' => 'educators', 'newFamilies' => 'newFamilies',
-            'onboarding' => 'onboarding',
+            'onboarding' => 'onboarding', 'tempGuardians' => 'tempGuardians',
         ] as $key => $method) {
             try {
                 $v = self::$method($ctx);
@@ -403,6 +403,23 @@ final class AdminDigest
                 'detail' => $n === 1 ? '1 child' : $n . ' children',
             ];
         })->all()];
+    }
+
+    /** Temporary (forms-only) parents not on a family yet — App\Support\TempGuardians.
+        Agency-wide, so the admin digest only (a centre director's is scoped). */
+    private static function tempGuardians(array $c): ?array
+    {
+        if (! empty($c['scoped'])) return null;
+        $all = \App\Support\TempGuardians::list((int) $c['agency'], null, 200);
+        if (! $all) return null;
+
+        return ['count' => count($all), 'rows' => array_map(fn ($r) => [
+            'who' => $r['name'],
+            'what' => $r['email'] . ($r['forms_assigned'] ? ' · ' . $r['forms_signed'] . '/' . $r['forms_assigned'] . ' forms signed' : ''),
+            'detail' => $r['removes_on']
+                ? 'unused · removed ' . \Carbon\Carbon::parse($r['removes_on'])->format('M j') . ' unless added to a family'
+                : 'since ' . \Carbon\Carbon::parse($r['created_at'])->format('M j') . ' · add their family',
+        ], array_slice($all, 0, 8))];
     }
 
     private static function welcome(array $c): ?array

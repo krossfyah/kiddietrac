@@ -24,7 +24,7 @@ final class AdminDigestHtml
         'incidents' => '#DC2626', 'immunisations' => '#F59E0B', 'tickets' => '#64748B',
         // Amber, not red: it is somebody's work to do, not an incident.
         'immunRecords' => '#F59E0B',
-        'welcome' => '#16A34A', 'week' => '#1F6FB2', 'reportCards' => '#7C3AED',
+        'welcome' => '#16A34A', 'tempGuardians' => '#D97706', 'week' => '#1F6FB2', 'reportCards' => '#7C3AED',
         'emergency' => '#DC2626',
         'newFamilies' => '#16A34A',
     ];
@@ -82,6 +82,8 @@ final class AdminDigestHtml
             $s['immunRecords'] ?? null, 'immunRecords');
         $html .= self::section('💉 Children with no immunisation record', $s['immunisations'] ?? null, 'immunisations');
         $html .= self::section('📅 The week ahead', $s['week'] ?? null, 'week');
+        $html .= self::section('🧾 Parents with forms but no family yet', $s['tempGuardians'] ?? null, 'tempGuardians',
+            'Forms were sent to these parents before their family was in KiddieTrac. Add the family using the same email to link them (their forms come too), or remove the account in Settings → Notifications → Forms-only parents. Unused accounts are removed automatically after the number of days set in Settings → Notifications → Forms.');
         $html .= self::section('✉️ Families still to invite', $s['welcome'] ?? null, 'welcome',
             'These families have no guardian account yet, so they cannot see anything you post.');
         $html .= self::section('📝 Report cards due', $s['reportCards'] ?? null, 'reportCards',

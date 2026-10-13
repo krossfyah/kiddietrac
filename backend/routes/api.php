@@ -2406,6 +2406,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/countersign-reminders',         [\App\Http\Controllers\Api\CountersignRemindersController::class, 'update']);
         Route::post ('/admin/countersign-reminders/preview', [\App\Http\Controllers\Api\CountersignRemindersController::class, 'preview']);
         Route::post ('/admin/countersign-reminders/test',    [\App\Http\Controllers\Api\CountersignRemindersController::class, 'test'])->middleware('throttle:6,1,csremtest');
+        // Temporary (forms-only) parents not on a family yet — App\Support\TempGuardians (2026-10-13).
+        Route::get   ('/admin/temp-guardians/settings', [\App\Http\Controllers\Api\TempGuardianController::class, 'settings']);
+        Route::post  ('/admin/temp-guardians/settings', [\App\Http\Controllers\Api\TempGuardianController::class, 'saveSettings']);
+        Route::get   ('/admin/temp-guardians',          [\App\Http\Controllers\Api\TempGuardianController::class, 'index'])->middleware('throttle:120,1');
+        Route::delete('/admin/temp-guardians/{user}',   [\App\Http\Controllers\Api\TempGuardianController::class, 'destroy'])->whereNumber('user');
         // Settings → Notifications: reminders for providers to write their bio (2026-10-09).
         Route::get  ('/admin/bio-reminders',         [\App\Http\Controllers\Api\BioRemindersController::class, 'show']);
         Route::post ('/admin/bio-reminders',         [\App\Http\Controllers\Api\BioRemindersController::class, 'update']);

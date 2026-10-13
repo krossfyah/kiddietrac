@@ -63,6 +63,7 @@
     main.innerHTML = '<div style="padding:14px 24px;max-width:900px;"><div id="ns-host"></div></div>';
     KT.settingsTabs(main.querySelector('#ns-host'), 'notification-settings', [
       { key: 'countersign', label: '✍️ Counter-signature', paint: section(paintCountersign) },
+      { key: 'formparents', label: '🧾 Forms-only parents', paint: section(paintTempParents) },
       { key: 'bios', label: '🧑‍🏫 Provider bios', paint: section(paintBio) },
       { key: 'files', label: '📎 Shared files', paint: section(paintFiles) },
       { key: 'messaging', label: '💬 Message Centre', paint: section(paintMessaging) },
@@ -243,6 +244,72 @@
     ov.querySelector('[data-close]').addEventListener('click', close);
     ov.addEventListener('click', function (e) { if (e.target === ov) { close(); } });
     document.body.appendChild(ov);
+  }
+
+  /* ── Forms-only (temporary) parents ─────────────────────────────────────
+     Accounts the forms feature made for parents who are not on a family yet
+     (App\Support\TempGuardians). Adding their family with the same email links them;
+     unused ones are removed after the days set here (2026-10-13). */
+  async function paintTempParents(body) {
+    var res, list;
+    try { res = await Api.get('/admin/temp-guardians/settings'); list = await Api.get('/admin/temp-guardians'); }
+    catch (e) {
+      body.innerHTML = '<div class="kt-card" style="max-width:760px;color:#64748B;">Only agency administrators can change this.</div>';
+      return;
+    }
+    var days = (res.settings && res.settings.remove_after_days != null) ? res.settings.remove_after_days : 30;
+    var rows = (list && list.temp_guardians) || [];
+    function esc2(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function fmt(d) { try { return new Date(String(d).replace(' ', 'T') + (String(d).length <= 10 ? 'T12:00:00' : 'Z')).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d; } }
+    body.innerHTML = '<div class="kt-card" style="max-width:760px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">🧾 Parents with forms but no family yet</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.55;margin:-4px 0 12px;">When forms are sent to a parent who is not in KiddieTrac, a temporary account is made for them. '
+      + 'Add their family with the <b>same email</b> (or pick them from the suggestion in Add family) and the account — with its signed forms — joins the family. '
+      + 'They are listed in the daily and weekly summary until then.</div>'
+      + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;margin-bottom:14px;">'
+      + '<label for="kt-tp-days" style="font-size:13px;font-weight:700;color:#334155;">Remove unused accounts after</label>'
+      + '<input id="kt-tp-days" type="number" min="0" max="365" value="' + esc2(days) + '" style="width:72px;height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font:inherit;font-size:13px;">'
+      + '<span style="font-size:13px;color:#334155;">days</span>'
+      + '<button type="button" id="kt-tp-save" style="height:30px;padding:0 14px;border:0;border-radius:8px;background:#0E7C90;color:#fff;font-weight:700;font-size:13px;cursor:pointer;">Save</button>'
+      + '<span id="kt-tp-msg" style="font-size:12.5px;color:#64748B;"></span>'
+      + '<div style="flex-basis:100%;font-size:12px;color:#64748B;">Unused = never signed in and never signed a form. 0 = never remove. An account somebody has used is never removed automatically.</div>'
+      + '</div>'
+      + (rows.length ? '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        + '<thead><tr style="text-align:left;color:#64748B;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;"><th style="padding:6px 8px;">Parent</th><th style="padding:6px 8px;">Forms</th><th style="padding:6px 8px;">Status</th><th></th></tr></thead><tbody>'
+        + rows.map(function (r) {
+          return '<tr data-id="' + r.id + '" style="border-top:1px solid #EEF2F7;">'
+            + '<td style="padding:8px;"><div style="font-weight:700;color:#0F172A;">' + esc2(r.name) + '</div><div style="color:#64748B;font-size:12px;">' + esc2(r.email) + ' · since ' + esc2(fmt(r.created_at)) + '</div></td>'
+            + '<td style="padding:8px;color:#334155;">' + r.forms_signed + ' / ' + r.forms_assigned + ' signed</td>'
+            + '<td style="padding:8px;">' + (r.used
+              ? '<span style="background:#DCFCE7;color:#166534;font-weight:700;font-size:11.5px;border-radius:999px;padding:2px 8px;">In use — add their family</span>'
+              : '<span style="background:#FEF3C7;color:#92400E;font-weight:700;font-size:11.5px;border-radius:999px;padding:2px 8px;">Unused' + (r.removes_on ? ' · removed ' + esc2(fmt(r.removes_on)) : '') + '</span>') + '</td>'
+            + '<td style="padding:8px;text-align:right;"><button type="button" data-remove="' + r.id + '" style="height:28px;padding:0 10px;border:1px solid #FECACA;background:#FFF5F5;color:#B91C1C;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;">Remove</button></td>'
+            + '</tr>';
+        }).join('') + '</tbody></table>'
+        : '<div style="padding:16px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:10px;">No parents waiting — everyone with forms is on a family.</div>')
+      + '</div>';
+
+    body.querySelector('#kt-tp-save').addEventListener('click', function () {
+      var v = parseInt(body.querySelector('#kt-tp-days').value, 10);
+      var m = body.querySelector('#kt-tp-msg');
+      if (isNaN(v) || v < 0 || v > 365) { m.style.color = '#B91C1C'; m.textContent = 'Enter 0 to 365.'; return; }
+      m.style.color = '#64748B'; m.textContent = 'Saving…';
+      Api.post('/admin/temp-guardians/settings', { remove_after_days: v })
+        .then(function () { m.style.color = '#15803D'; m.textContent = '✓ Saved'; paintTempParents(body); })
+        .catch(function (e) { m.style.color = '#B91C1C'; m.textContent = (e && e.message) || 'Could not save'; });
+    });
+    body.querySelectorAll('[data-remove]').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        var row = rows.filter(function (r) { return String(r.id) === b.getAttribute('data-remove'); })[0] || {};
+        var ok = window.KT && KT.confirm ? await KT.confirm({ title: 'Remove ' + (row.name || 'this account') + '?',
+          description: 'Their login is removed. Forms they already signed stay on record. Do this only if they are not joining — adding their family links them instead.',
+          okLabel: 'Remove account' }) : window.confirm('Remove this account?');
+        if (!ok) return;
+        b.disabled = true;
+        try { await Api.delete('/admin/temp-guardians/' + row.id); paintTempParents(body); }
+        catch (e) { b.disabled = false; if (KT.toast) KT.toast('⚠️', 'Not removed', (e && e.message) || '', '#DC2626'); }
+      });
+    });
   }
 
   /* ── Forms waiting for counter-signature ─────────────────────────────── */

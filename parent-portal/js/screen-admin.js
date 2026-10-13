@@ -6034,9 +6034,56 @@
         r1.appendChild(wrap('Last name *', bindInput(g, 'last_name')));
         card.appendChild(r1);
         var r2 = fieldRow('1fr 1fr');
-        r2.appendChild(wrap('Email *', bindInput(g, 'email', { type: 'email' })));
+        var emailIn = bindInput(g, 'email', { type: 'email' });
+        r2.appendChild(wrap('Email *', emailIn));
         r2.appendChild(wrap('Phone', bindPhone(g, 'phone')));
         card.appendChild(r2);
+        /* A FORMS-ONLY PARENT ALREADY? (2026-10-13, Anthony: "when adding a new family and
+           entering the name or email it should find if the temporary user exists and link
+           the two"). As the name or email is typed, look for a temporary account
+           (App\Support\TempGuardians) and offer it. Linking = using its email, which
+           createFamily matches to the existing account — so the signed forms come along. */
+        var tpBox = Dom.el('div', { style: 'display:none;margin:2px 0 10px;' });
+        card.appendChild(tpBox);
+        (function (g, emailIn, tpBox, card) {
+          var timer = null, lastQ = '';
+          function show(match) {
+            if (!match) { tpBox.style.display = 'none'; tpBox.innerHTML = ''; return; }
+            var linked = String(g.email || '').toLowerCase() === String(match.email || '').toLowerCase();
+            tpBox.style.display = 'block';
+            tpBox.innerHTML = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid ' + (linked ? '#86EFAC' : '#FCD34D') + ';background:' + (linked ? '#F0FDF4' : '#FFFBEB') + ';border-radius:10px;padding:9px 12px;font-size:13px;">'
+              + '<span style="font-size:18px;">' + (linked ? '✅' : '🧾') + '</span>'
+              + '<div style="flex:1;min-width:180px;"><b></b><div style="color:#64748B;font-size:12px;"></div></div>'
+              + (linked ? '' : '<button type="button" style="height:30px;padding:0 12px;border:0;border-radius:8px;background:#D97706;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;">Link to this family</button>')
+              + '</div>';
+            tpBox.querySelector('b').textContent = linked ? ('Will link ' + match.name + '\u2019s forms account') : ('Forms-only account found: ' + match.name);
+            tpBox.querySelector('div > div').textContent = match.email + ' \u00b7 ' + match.forms_signed + '/' + match.forms_assigned + ' forms signed' + (linked ? ' \u00b7 their forms join this family' : '');
+            var btn = tpBox.querySelector('button');
+            if (btn) btn.addEventListener('click', function () {
+              g.email = match.email;
+              if (!String(g.first_name || '').trim() && match.first_name) g.first_name = match.first_name;
+              if (!String(g.last_name || '').trim() && match.last_name) g.last_name = match.last_name;
+              card.querySelectorAll('input').forEach(function (inp) {
+                // Reflect the filled values in the inputs bindInput made.
+                if (inp === emailIn || inp.type === 'email') inp.value = g.email;
+              });
+              renderGuardiansStep();
+            });
+          }
+          function look() {
+            var q = String(g.email || '').trim();
+            if (q.length < 4) q = (String(g.first_name || '') + ' ' + String(g.last_name || '')).trim();
+            if (q.length < 3 || q === lastQ) return;
+            lastQ = q;
+            Api.get('/admin/temp-guardians?q=' + encodeURIComponent(q)).then(function (r) {
+              var list = (r && r.temp_guardians) || [];
+              var mine = String(g.email || '').toLowerCase();
+              show(list.filter(function (m) { return String(m.email).toLowerCase() === mine; })[0] || list[0] || null);
+            }).catch(function () {});
+          }
+          card.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(look, 350); });
+          if (g.email || g.first_name) look();
+        })(g, emailIn, tpBox, card);
         var r3 = fieldRow('1fr 1fr');
         r3.appendChild(wrap('Relationship', bindSelect(g, 'relationship', [
           { value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' },

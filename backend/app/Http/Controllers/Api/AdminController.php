@@ -3725,7 +3725,8 @@ final class AdminController extends Controller
         $newGuardians = [];   // freshly-created guardians to invite by email
         try {
             $unplaced = [];
-            $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId, $centreRooms, &$newGuardians, &$unplaced) {
+            $linkedTemp = [];   // temporary (forms-only) accounts this family took in — App\Support\TempGuardians
+            $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId, $centreRooms, &$newGuardians, &$unplaced, &$linkedTemp) {
                 /* BUG (fixed 2026-09-09): this merged the WHOLE validated payload into the
                    insert, so every validated key had to also be a `families` column. It
                    stopped being true the moment `send_welcome` was added to the rules —
@@ -3796,6 +3797,19 @@ final class AdminController extends Controller
                         ->first();
                     if ($existing) {
                         $uid = (int) $existing->id;
+                        /* A TEMPORARY PARENT joins this family (2026-10-13). The account the
+                           forms feature made for this address is the same person, so it is
+                           linked here — its signed forms come with it — rather than a second
+                           login being created. One that was never invited (no usable
+                           password) is invited now exactly like a brand-new guardian. */
+                        if (\App\Support\TempGuardians::isTemporary((int) $agencyId, $uid)) {
+                            $linkedTemp[] = ['id' => $uid, 'email' => $existing->email, 'name' => trim(($existing->first_name ?? '') . ' ' . ($existing->last_name ?? ''))];
+                            if (($existing->status ?? '') === 'not_invited') {
+                                $temp = Str::random(12);
+                                DB::table('users')->where('id', $uid)->update(['password' => Hash::make($temp), 'status' => 'invited', 'updated_at' => now()]);
+                                $newGuardians[] = ['uid' => $uid, 'email' => $existing->email, 'first_name' => $existing->first_name ?: ($g['first_name'] ?? ''), 'temp' => $temp];
+                            }
+                        }
                         // Blanks only. A value that is already set is never overwritten.
                         $fill = [];
                         foreach (['first_name', 'last_name', 'phone'] as $col) {
@@ -4006,7 +4020,21 @@ final class AdminController extends Controller
             \Illuminate\Support\Facades\Log::warning('Provider welcome email failed: ' . $e->getMessage());
         }
 
+        foreach ($linkedTemp as $lt) {
+            try {
+                \App\Support\Audit::write([
+                    'user_id' => $request->user()->id ?? null, 'agency_id' => $agencyId,
+                    'action' => 'user.temp_linked', 'entity_type' => 'family', 'entity_id' => (int) $result['family_id'],
+                    'payload' => json_encode(['user_id' => $lt['id'], 'email' => $lt['email'],
+                        'summary' => 'Linked the temporary (forms-only) parent account ' . $lt['email'] . ' to this new family; their forms stay with them.']),
+                    'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) {
+            }
+        }
+
         return response()->json([
+            'linked_temp_guardians' => $linkedTemp,
             'family' => DB::table('families')->where('id', $result['family_id'])->first(),
             'guardians' => count($result['guardian_ids']),
             'children' => count($result['child_ids']),

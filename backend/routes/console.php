@@ -467,3 +467,6 @@ Schedule::command('policies:remind')->hourlyAt(5)->withoutOverlapping(30)->onOne
 // OCCMS Record of Attendance (2026-10-13): hourly; sends at 8:00 agency time on the 1st (ready to review) and two days
 // before the due day (not signed off). Ontario agencies with fee-subsidized children only; once per month and kind.
 Schedule::command('occms:roa-remind')->hourlyAt(7)->withoutOverlapping(30)->onOneServer();
+
+// Unused temporary (forms-only) parent accounts past each agency's limit — App\Support\TempGuardians (2026-10-13).
+Schedule::command('kt:temp-guardians-expire')->dailyAt('03:45')->timezone('America/Toronto')->withoutOverlapping();
