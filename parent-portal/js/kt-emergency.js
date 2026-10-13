@@ -26,7 +26,7 @@
     s.id = 'kt-em-css';
     s.textContent = [
       '.kt-em-btn{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:34px;min-width:34px;padding:0 8px;',
-      '  border:1px solid #FECACA;border-radius:10px;background:#FFF5F5;color:#B91C1C;font:800 12.5px/1 inherit;font-family:inherit;cursor:pointer;',
+      '  border:1px solid #FECACA;border-radius:10px;background:#FFF5F5;color:#B91C1C;font-family:inherit;font-size:12.5px;font-weight:800;line-height:1;cursor:pointer;',
       '  transition:background .15s,color .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent;}',
       '.kt-em-btn:hover{background:#FEE2E2;}',
       /* Keep the composer on ONE line with the toggle in it: a global phone rule lets
@@ -41,7 +41,7 @@
       '@keyframes kt-em-pulse{0%,100%{box-shadow:0 0 0 3px rgba(220,38,38,.25);}50%{box-shadow:0 0 0 6px rgba(220,38,38,.12);}}',
       '@media (prefers-reduced-motion:reduce){.kt-em-btn[aria-pressed="true"]{animation:none;}}',
       '.kt-em-armed textarea,.kt-em-armed input[type="text"],.kt-em-armed input:not([type]){border-color:#DC2626 !important;box-shadow:0 0 0 2px rgba(220,38,38,.18) !important;}',
-      '.kt-em-tag{display:inline-flex;align-items:center;gap:4px;background:#DC2626;color:#fff;font:800 10.5px/1.6 inherit;font-family:inherit;',
+      '.kt-em-tag{display:inline-flex;align-items:center;gap:4px;background:#DC2626;color:#fff;font-family:inherit;font-size:10.5px;font-weight:800;line-height:1.6;',
       '  letter-spacing:.06em;text-transform:uppercase;border-radius:6px;padding:1px 7px;margin:0 0 5px;}',
     ].join('\n');
     document.head.appendChild(s);
