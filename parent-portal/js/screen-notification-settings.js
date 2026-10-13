@@ -66,6 +66,8 @@
       { key: 'bios', label: '🧑‍🏫 Provider bios', paint: section(paintBio) },
       { key: 'files', label: '📎 Shared files', paint: section(paintFiles) },
       { key: 'messaging', label: '💬 Message Centre', paint: section(paintMessaging) },
+      // Sleep checks (2026-10-13, Ontario O. Reg. 137/15 s.33.1): painted by screen-sleep-room.js.
+      { key: 'sleep', label: '😴 Sleep checks', paint: section(function (pane) { return (KT.sleepChecks && KT.sleepChecks.paintSettings) ? KT.sleepChecks.paintSettings(pane) : (pane.innerHTML = '<div class="kt-card">Reload the page to see this section.</div>'); }) },
     ]);
   }
 

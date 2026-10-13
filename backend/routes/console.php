@@ -52,7 +52,7 @@ Schedule::command('drills:remind')->everyFifteenMinutes()->withoutOverlapping(14
    signed in and no count within the agency's interval. Bell + push to clocked-in educators, never SMS. */
 Schedule::command('headcounts:remind')->everyFiveMinutes()->withoutOverlapping(10);
 // Overdue sleep checks (2026-10-13, Ontario O. Reg. 137/15 s.33.1): one cheap query a minute instead of phones polling.
-Schedule::command('sleep-checks:alert')->everyMinute()->withoutOverlapping(5);
+Schedule::command('sleep-checks:alert')->everyMinute()->withoutOverlapping(5)->runInBackground();
 /* Ontario drill schedule (O. Reg. 137/15 s.68 / s.68.2, 2026-10-13): missing-child drill due within 14 days or
    overdue, monthly fire drill overdue — directors (admins on overdue), once per change. CA-ON agencies only. */
 Schedule::command('drills:cadence-remind')->dailyAt('08:00')->timezone('America/Toronto')->withoutOverlapping();
