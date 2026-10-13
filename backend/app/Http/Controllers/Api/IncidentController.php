@@ -196,15 +196,24 @@ class IncidentController extends Controller
                 ->where('c.id', $incident->child_id)
                 ->value('f.centre_id');
 
-            $directorIds = DB::table('role_assignments')
-                ->whereIn('role', ['centre_director', 'agency_admin'])
-                ->where(function ($q) use ($incidentCentreId) {
-                    $q->where('centre_id', $incidentCentreId)
-                      ->orWhereNull('centre_id'); // agency_admin sees all
+            /* THIS AGENCY ONLY (2026-10-13, P0 leak). The null-centre branch had no agency
+               filter, so every agency_admin on the platform got the push — with the child's
+               name, the incident type and the room. Now: active directors of the child's
+               centre, plus active admins of the agency that centre belongs to. */
+            $incidentAgencyId = $incidentCentreId
+                ? (int) DB::table('centres')->where('id', $incidentCentreId)->value('agency_id') : 0;
+            $directorIds = $incidentAgencyId ? DB::table('role_assignments')
+                ->where('active', true)
+                ->where(function ($q) use ($incidentCentreId, $incidentAgencyId) {
+                    $q->where(function ($d) use ($incidentCentreId) {
+                        $d->where('role', 'centre_director')->where('centre_id', $incidentCentreId);
+                    })->orWhere(function ($ad) use ($incidentAgencyId) {
+                        $ad->where('role', 'agency_admin')->where('agency_id', $incidentAgencyId);
+                    });
                 })
                 ->pluck('user_id')
                 ->unique()
-                ->all();
+                ->all() : [];
 
             if (! empty($directorIds)) {
                 /* Say what it is on the lock screen. "An incident report awaiting
