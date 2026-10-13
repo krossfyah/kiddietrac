@@ -40,6 +40,8 @@
     var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa;
     return h;
   }
+  // "Singh family", not "Singh Family family" (many family names already end in it).
+  function famLabel(n) { n = String(n || '').trim(); return !n ? 'a family' : (/\bfamily$/i.test(n) ? n : n + ' family'); }
   function apiBase() { return (KT.API_BASE || 'https://api.kiddietrac.com/api/v1'); }
 
   var CSS = 'kt-files-css';
@@ -81,6 +83,8 @@
             ? 'Printables, homework and notes from your child\'s provider, and anything you send back.'
             : 'Send printables, homework and notes to the families you work with, and see what they send back.') + '</div></div>'
       + '<div class="ff-bar"><button type="button" class="ff-tab" data-box="received">Received</button><button type="button" class="ff-tab" data-box="sent">Sent</button>'
+      // Staff: every file exchanged with their families, whoever sent it (2026-10-13).
+      + (isParent ? '' : '<button type="button" class="ff-tab" data-box="all">' + (/agency_admin|centre_director|platform_admin/.test(role) ? 'All files' : 'All with my families') + '</button>')
       + '<span style="flex:1;"></span><button type="button" class="ff-b p" data-send>📤 Send files</button></div>'
       + '<div id="ff-list" class="ff-card"><div style="padding:18px;color:#64748B;">Loading…</div></div></div>';
     main.querySelectorAll('.ff-tab').forEach(function (b) { b.onclick = function () { state.box = b.getAttribute('data-box'); load(); }; });
@@ -98,9 +102,12 @@
             ? 'Nothing sent yet. Use <b>Send files</b> to share a printable or homework.' : 'No files yet.') + '</div>';
           return;
         }
-        box.innerHTML = '<div style="overflow-x:auto;"><table class="ff-tbl"><thead><tr><th>File</th><th class="ff-hide-sm">' + (state.box === 'sent' ? 'To' : 'From') + '</th><th class="ff-hide-sm">Date</th><th class="ff-hide-sm">Size</th><th></th></tr></thead><tbody>'
+        box.innerHTML = '<div style="overflow-x:auto;"><table class="ff-tbl"><thead><tr><th>File</th><th class="ff-hide-sm">' + (state.box === 'sent' ? 'To' : state.box === 'all' ? 'From &rarr; To' : 'From') + '</th><th class="ff-hide-sm">Date</th><th class="ff-hide-sm">Size</th><th></th></tr></thead><tbody>'
           + rows.map(function (f, i) {
-              var who = state.box === 'sent' ? ((f.family ? f.family + ' family' : 'Your provider') + (f.child ? ' · ' + f.child : '')) : (f.from + (!isParent && f.family ? ' · ' + f.family + ' family' : ''));
+              var fam = famLabel(f.family);
+              var who = state.box === 'all'
+                ? (f.direction === 'to_family' ? f.from + ' → ' + fam + (f.child ? ' · ' + f.child : '') : f.from + ' (' + fam + ') → provider')
+                : state.box === 'sent' ? ((f.family ? famLabel(f.family) : 'Your provider') + (f.child ? ' · ' + f.child : '')) : (f.from + (!isParent && f.family ? ' · ' + famLabel(f.family) : ''));
               return '<tr data-i="' + i + '"><td><div style="display:flex;gap:9px;align-items:flex-start;">'
                 + '<span style="font-size:20px;line-height:1;">' + icon(f.name, f.mime) + '</span><div style="min-width:0;">'
                 + '<div style="font-weight:700;color:#0F172A;">' + (f.new ? '<span class="ff-dot" title="New"></span>' : '') + esc(f.title) + '</div>'

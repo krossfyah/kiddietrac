@@ -127,6 +127,7 @@
         { hash: 'today',         icon: '✨', label: 'Today',        sub: 'Rooms & children' },
         { hash: 'my-tasks',      icon: '📋', label: 'My tasks' },
         { hash: 'children',      icon: '🧒', label: 'Child records' },
+        { hash: 'files',         icon: '📎', label: 'Files',        sub: 'To & from families' },
         { hash: 'care-log',      icon: '✅', label: 'Daily log' },
         { hash: 'walk',          icon: '🚶', label: 'Walk / outing', sub: 'Share live GPS' },
         { hash: 'observations',  icon: '👀', label: 'Observations' },
@@ -136,7 +137,6 @@
         { hash: 'my-forms',      icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'menu',          icon: '🍽️', label: 'Weekly menu' },
         { hash: 'chat',          icon: '💬', label: 'Message Centre' },
-        { hash: 'files',         icon: '📎', label: 'Files' },
         { hash: 'forms',         icon: '📄', label: 'Documents' },   // their filed documents (+ any staff forms) — 2026-10-09
         { hash: 'incidents',     icon: '⚠️', label: 'Incidents' },
         { hash: 'late-pickups',  icon: '⏰', label: 'Late pickup' },

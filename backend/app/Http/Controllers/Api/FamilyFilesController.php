@@ -38,7 +38,9 @@ final class FamilyFilesController extends Controller
     private const MAX_FILES = 10;
     private const EXT = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'rtf'];
     public const SETTINGS_KEY = 'family_files';
-    public const DEFAULTS = ['email_parents' => true, 'email_staff' => false];
+    /* Both on by default (2026-10-13, Anthony: "Notifications should be sent out if a file
+       was sent or received via email"). Staff were off unless an agency switched it on. */
+    public const DEFAULTS = ['email_parents' => true, 'email_staff' => true];
 
     /* ───────────── who can reach what ───────────── */
 
@@ -95,6 +97,14 @@ final class FamilyFilesController extends Controller
             foreach ($kids as $cid) { if ($this->canAccessChildId($u, $cid)) { $out[] = $uid; break; } }
         }
         return $out;
+    }
+
+    /** "Singh family" — but not "Singh Family family" (39 of 128 names already end in it). */
+    private static function famLabel(?string $name): string
+    {
+        $n = trim((string) $name);
+        if ($n === '') return 'a family';
+        return preg_match('/\bfamily$/i', $n) ? $n : $n . ' family';
     }
 
     private function name(?object $u): string
@@ -155,8 +165,15 @@ final class FamilyFilesController extends Controller
         $fams = $this->staffFamilyIds($request);
         $q = DB::table('family_files')->whereNull('deleted_at')->whereIn('family_id', $fams ?: [0]);
         if ($fid = (int) $request->input('family_id')) $q->where('family_id', $fid);
-        if ($request->input('box') === 'sent') $q->where('uploaded_by', $me);
-        else $q->where('direction', 'from_family');
+        /* ALL (2026-10-13, Anthony: "files are not shown for educators like it does for
+           parents and also admins/director view not there"). A parent sees every file for
+           their family whoever sent it; staff saw only what families sent and what they sent
+           themselves, so a file a colleague or the director sent their families was invisible,
+           and admins/directors had no view of the exchanges in their scope at all. "all" is
+           every file, both ways, for the families this person can reach. */
+        $box = (string) $request->input('box');
+        if ($box === 'sent') $q->where('uploaded_by', $me);
+        elseif ($box !== 'all') $q->where('direction', 'from_family');
         $rows = $q->orderByDesc('id')->limit(300)->get();
 
         return response()->json(['files' => $this->present($rows, $me), 'unread' => DB::table('family_files')->whereNull('deleted_at')
@@ -342,12 +359,12 @@ final class FamilyFilesController extends Controller
         } else {
             foreach ($this->staffForFamily((int) $family->id, (int) $me->id) as $uid) {
                 try {
-                    \App\Support\Notify::write(['user_id' => $uid, 'type' => 'family_file', 'title' => '📎 The ' . ($family->family_name ?: '') . ' family sent ' . $what,
+                    \App\Support\Notify::write(['user_id' => $uid, 'type' => 'family_file', 'title' => '📎 The ' . self::famLabel($family->family_name) . ' sent ' . $what,
                         'body' => $note ? mb_substr($note, 0, 200) : 'From ' . $sender . '. Open Files to view it.', 'data' => json_encode(['link' => '#files']), 'created_at' => now()]);
                 } catch (\Throwable $e) {}
                 if (empty($s['email_staff']) || \App\Support\Suppression::isUser($uid)) continue;
                 $u = DB::table('users')->where('id', $uid)->first(['id', 'email', 'first_name', 'last_name']);
-                if ($u && filter_var((string) $u->email, FILTER_VALIDATE_EMAIL)) $this->mail((int) $family->agency_id, $u, $sender . ' (' . ($family->family_name ?: 'a family') . ')', $what, $note, (string) $family->centre_name, false);
+                if ($u && filter_var((string) $u->email, FILTER_VALIDATE_EMAIL)) $this->mail((int) $family->agency_id, $u, $sender . ' (' . self::famLabel($family->family_name) . ')', $what, $note, (string) $family->centre_name, false);
             }
         }
     }

@@ -32,7 +32,7 @@
      row of twenty is just the menu again. */
   var QUICK = [
     'dashboard', 'admin-children', 'children', 'admin-families', 'families',
-    'room-ratios', 'chat', 'notifications', 'admin-users', 'staff',
+    'room-ratios', 'chat', 'files', 'notifications', 'admin-users', 'staff',
     'reports', 'incidents', 'audit-logs', 'care-log',
   ];
 
