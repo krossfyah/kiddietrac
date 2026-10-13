@@ -29,7 +29,7 @@
         tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
         values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = 'kt-20261010-pk1';
+const CACHE = 'kt-20261013-cssg2';
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -125,7 +125,13 @@ self.addEventListener('fetch', (e) => {
             if (res && res.status === 200) { try { c.put(e.request, res.clone()); } catch (err) {} }
             return res;
           }).catch(() => null);
-          return hit || network.then((r) => r || caches.match(e.request));
+          /* ONE MORE TRY BEFORE GIVING UP (2026-10-13). With no cached copy and the
+             refetch cut off, this resolved to nothing and the page rendered WITHOUT the
+             file: kt-topnav-fix.css missing = the Everything launcher stacked one tile per
+             row ("this sometimes happens"). A second, plain request usually gets through;
+             kt-css-guard.js reloads any stylesheet that still did not. */
+          return hit || network.then((r) => r || caches.match(e.request))
+            .then((r) => r || fetch(e.request));
         }))
       );
       return;
