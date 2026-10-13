@@ -222,7 +222,7 @@ class FcmService
      *        (ChatController, MessageController, CheckEventNotifier) — they build a
      *        richer payload, and a second send here would double the notification.
      */
-    public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false, bool $webFallback = true): array
+    public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false, bool $webFallback = true, array $extra = []): array
     {
         // Do-not-contact: a user at a suppressed (live) agency gets NOTHING while we
         // are testing. The email kill-switch didn't cover push, which is how 16
@@ -246,6 +246,9 @@ class FcmService
         $data = [];
         if ($link !== '') $data['link'] = $link;
         if ($urgent) $data['kt_urgent'] = '1';
+        // Extra keys for the app, e.g. kt_emergency + kt_ring_secs (App\Support\EmergencyMessage).
+        foreach ($extra as $k => $v) $data[(string) $k] = (string) $v;
+        $isEmergency = ($extra['kt_emergency'] ?? '') === '1';
 
         if (! $tokens) {
             // No registered handset. Worth recording: a parent who "never got a push"
@@ -257,12 +260,14 @@ class FcmService
             // The message still matters; only the transport was wrong.
             if ($webFallback) {
                 try {
-                    $n = app(\App\Services\WebPushService::class)->sendToUser($userId, [
+                    $wp = [
                         'title' => $title,
                         'body'  => $body,
                         'icon'  => '/icon-192.png',
                         'url'   => '/dashboard.html' . ($link ?: ''),
-                    ]);
+                    ];
+                    $n = app(\App\Services\WebPushService::class)->sendToUser($userId,
+                        $isEmergency ? \App\Support\EmergencyMessage::web($wp) : $wp);
                     if ($n > 0) {
                         return ['sent' => $n, 'failed' => 0, 'via' => 'web'];
                     }
@@ -285,12 +290,14 @@ class FcmService
         $viaWeb = 0;
         if (($result['sent'] ?? 0) === 0 && $webFallback) {
             try {
-                $viaWeb = app(\App\Services\WebPushService::class)->sendToUser($userId, [
+                $wp = [
                     'title' => $title,
                     'body'  => $body,
                     'icon'  => '/icon-192.png',
                     'url'   => '/dashboard.html' . ($link ?: ''),
-                ]);
+                ];
+                $viaWeb = app(\App\Services\WebPushService::class)->sendToUser($userId,
+                    $isEmergency ? \App\Support\EmergencyMessage::web($wp) : $wp);
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Web-push fallback failed', [
                     'user' => $userId, 'error' => $e->getMessage(),

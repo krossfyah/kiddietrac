@@ -1447,6 +1447,10 @@
     });
 
     function bubble(m) {
+      var html = bubbleBase(m);
+      return (m.is_emergency && !m.system) ? emergencyRow(!!m.mine) + html : html;
+    }
+    function bubbleBase(m) {
       var mine = !!m.mine;
       // Their photo beside their bubble, matching the family thread. Own messages get
       // none — you know who you are.
@@ -1733,10 +1737,13 @@
       });
 
       var sendBtn = target.querySelector('#kt-st-send');
+      var emBtn = (window.KT && KT.emergency && sendBtn) ? KT.emergency.button() : null;
+      if (emBtn) sendBtn.parentNode.insertBefore(emBtn, sendBtn);
       async function doSend() {
         var text = (input.value || '').trim();
         // An attachment on its own is a message — a photo of the rota needs no caption.
         if (!text && !pendingFile) { return; }
+        var emergency = !!(emBtn && KT.emergency.isOn(emBtn));
         sendBtn.disabled = true;
         try {
           if (pendingFile) {
@@ -1745,6 +1752,7 @@
             var fd = new FormData();
             fd.append('body', text);
             fd.append('attachment', pendingFile);
+            if (emergency) fd.append('emergency', '1');
             var res = await fetch(apiBase() + threadBase() + '/' + tid + '/send', {
               method: 'POST',
               headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
@@ -1755,10 +1763,11 @@
               throw new Error(err.message || ('Upload failed (HTTP ' + res.status + ')'));
             }
           } else {
-            await api('POST', threadBase() + '/' + tid + '/send', { body: text });
+            await api('POST', threadBase() + '/' + tid + '/send', emergency ? { body: text, emergency: true } : { body: text });
           }
           input.value = '';
           setPending(null);
+          if (emBtn) KT.emergency.reset(emBtn);
           lastCount = -1;          // force the next paint to show it
           /* Re-assert which thread is open before repainting. paint() returns SILENTLY
              when openThreadId does not match, so anything that reset it — a re-mount of
@@ -2356,6 +2365,9 @@
 
     const input = $('.kt-compose-input', container);
     const send = $('.kt-send-btn', container);
+    // 🚨 Emergency toggle (kt-emergency.js): this one message rings on their phones.
+    const emBtn = (window.KT && KT.emergency && send) ? KT.emergency.button() : null;
+    if (emBtn) send.parentNode.insertBefore(emBtn, send);
     let pendingFile = null;   // staged image/voice attachment (declared early so paintAction can read it)
 
     // Mic when there's nothing to send, send arrow the moment there is.
@@ -2433,6 +2445,7 @@
     const doSend = async () => {
       const body = input.value.trim();
       if (!body && !pendingFile) return;
+      const emergency = !!(emBtn && KT.emergency.isOn(emBtn));
       send.disabled = true;
       input.disabled = true;
       attachBtn.disabled = true;
@@ -2443,6 +2456,7 @@
           const fd = new FormData();
           fd.append('body', body);
           fd.append('attachment', pendingFile);
+          if (emergency) fd.append('emergency', '1');
           const res = await fetch(apiBase() + endpointBase() + '/' + c.id + '/send', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' },
@@ -2454,10 +2468,11 @@
           }
           msg = await res.json();
         } else {
-          msg = await api('POST', endpointBase() + '/' + c.id + '/send', { body: body });
+          msg = await api('POST', endpointBase() + '/' + c.id + '/send', emergency ? { body: body, emergency: true } : { body: body });
         }
         input.value = '';
         setPending(null);
+        if (emBtn) KT.emergency.reset(emBtn);
         // Append optimistically; re-fetch on next poll for read receipts etc
         const bodyEl = $('.kt-thread-body', container);
         bodyEl.insertAdjacentHTML('beforeend', bubble({
@@ -2467,6 +2482,7 @@
           sender_id: msg.sender_id,
           sender_name: getUser().first_name || 'You',
           is_me: true,
+          is_emergency: emergency,
           /* Your own message, just sent: deletable now, not after a reopen. The poll
              never redraws this bubble (lastThreadMsgId below), so without this the 🗑
              only appeared once the thread was opened again. The server still decides. */
@@ -2646,7 +2662,15 @@
     return ' <span title="Delivered" style="opacity:.85;">✓</span>';
   }
 
+  /* 🚨 label above an emergency message (KT.emergency, kt-emergency.js). */
+  function emergencyRow(mine) {
+    return (window.KT && KT.emergency) ? '<div style="display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';padding:0 38px;margin:6px 0 -4px;">' + KT.emergency.tagHtml() + '</div>' : '';
+  }
   function bubble(m) {
+    const html = bubbleBase(m);
+    return (m.is_emergency && !m.deleted) ? emergencyRow(!!m.is_me) + html : html;
+  }
+  function bubbleBase(m) {
     const mine = m.is_me;
     const attachments = Array.isArray(m.attachments) ? m.attachments : [];
     const attachmentsHtml = attachments.map(a => {

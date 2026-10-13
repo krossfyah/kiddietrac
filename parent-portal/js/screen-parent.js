@@ -168,13 +168,14 @@
   }
 
   // Send a parent message with an optional image — multipart (KT.Api is JSON-only).
-  function sendParentMessage(childId, body, file) {
+  function sendParentMessage(childId, body, file, emergency) {
     var t; try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
     var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
     var fd = new FormData();
     fd.append('child_id', childId);
     if (body) fd.append('body', body);
     if (file) fd.append('attachment', file);
+    if (emergency) fd.append('emergency', '1');   // App\Support\EmergencyMessage
     var h = { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' };
     try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; var va = sessionStorage.getItem('kt_view_as'); if (va) h['X-View-As-Role'] = va; } catch (e) {}
     return fetch(base + '/parent/messages', { method: 'POST', headers: h, body: fd }).then(function (r) {
@@ -1121,6 +1122,7 @@
             if (!mine) {
               bubble.appendChild(Dom.el('div', { style: 'font-size: 11px; font-weight: 700; opacity: 0.8; margin-bottom: 4px;' }, m.sender_name));
             }
+            if (m.is_emergency && window.KT && KT.emergency) bubble.insertBefore(KT.emergency.tagEl(), bubble.firstChild);
             bubble.appendChild(Dom.el('div', {}, m.body));
             bubble.appendChild(Dom.el('div', { style: 'font-size: 11px; opacity: 0.7; margin-top: 4px;' }, m.time_display));
             msgList.appendChild(bubble);
@@ -1173,14 +1175,18 @@
 
           compose.appendChild(fileInput);
           compose.appendChild(attachBtn);
-          compose.appendChild(input); compose.appendChild(sendBtn);
+          compose.appendChild(input);
+          const deskEm = (window.KT && KT.emergency) ? KT.emergency.button() : null;
+          if (deskEm) compose.appendChild(deskEm);
+          compose.appendChild(sendBtn);
           compose.addEventListener('submit', async (ev) => {
             ev.preventDefault();
             // A photo on its own is a message; it does not need a caption.
             if ((!input.value.trim() && !deskFile) || !childId) return;
             sendBtn.disabled = true;
             try {
-              await sendParentMessage(childId, input.value.trim(), deskFile);
+              await sendParentMessage(childId, input.value.trim(), deskFile, !!(deskEm && KT.emergency.isOn(deskEm)));
+              if (deskEm) KT.emergency.reset(deskEm);
               input.value = '';
               clearFile();
               loadThread(convo);
@@ -2891,7 +2897,11 @@
     const input = Dom.el('input', { class: 'kt-compose-input', type: 'text', placeholder: 'Message…', style: 'flex:1;min-width:0;padding:13px 15px;border:1px solid var(--ink-200);border-radius:24px;font-size:16px;min-height:46px;box-sizing:border-box;' });
     // One button that is Mic when empty, Send when there's text, Stop while recording.
     const action = Dom.el('button', { type: 'button', style: 'background:#159FB4;color:#fff;border:none;width:46px;height:46px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;' }, '🎤');
-    compose.appendChild(emojiBtn); compose.appendChild(attach); compose.appendChild(input); compose.appendChild(fileInput); compose.appendChild(action);
+    compose.appendChild(emojiBtn); compose.appendChild(attach); compose.appendChild(input); compose.appendChild(fileInput);
+    // 🚨 Emergency toggle (kt-emergency.js): rings on the centre's phones.
+    const mobEm = (window.KT && KT.emergency) ? KT.emergency.button() : null;
+    if (mobEm) compose.appendChild(mobEm);
+    compose.appendChild(action);
     tw.appendChild(compose);
 
     // Desktop: host the thread in the persistent, minimisable chat dock (survives
@@ -3021,6 +3031,7 @@
           // Two distinct filled bubbles, like a real chat.
           const b = Dom.el('div', { style: `position:relative;max-width:74%;padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.4;${mine ? 'background:#DCF1F4;color:#0D1B2A;border-bottom-right-radius:5px;' : 'background:#EFEAFB;color:#1E1B34;border-bottom-left-radius:5px;'}` });
           if (!mine) b.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:' + col + ';margin-bottom:3px;' }, m.sender_name));
+          if (m.is_emergency && !m.deleted && window.KT && KT.emergency) b.insertBefore(KT.emergency.tagEl(), b.firstChild);
           if (m.deleted) {
             b.appendChild(Dom.el('div', { style: `font-style:italic;opacity:.8;` }, '🚫 Message deleted'));
           } else {
@@ -3170,7 +3181,7 @@
       const prevPh = input.placeholder;
       if (file) input.placeholder = (file.type || '').indexOf('audio') === 0 ? 'Sending voice note…' : 'Sending photo…';
       emojiPanel.style.display = 'none';
-      try { await sendParentMessage(childId, input.value.trim(), file); bust('/parent/messages'); input.value = ''; input.placeholder = 'Message…'; updateAction(); await load(); }
+      try { await sendParentMessage(childId, input.value.trim(), file, !!(mobEm && KT.emergency.isOn(mobEm))); if (mobEm) KT.emergency.reset(mobEm); bust('/parent/messages'); input.value = ''; input.placeholder = 'Message…'; updateAction(); await load(); }
       catch (e) { input.placeholder = 'Could not send — try again'; }
       finally { action.disabled = false; attach.disabled = false; }
     };
@@ -3284,7 +3295,7 @@
       if (!ta.value.trim() && !pickedFile) { status.textContent = 'Write a message or add a photo first.'; return; }
       send.disabled = true; send.textContent = 'Sending…'; status.textContent = '';
       try {
-        await sendParentMessage(chosenChild.id, ta.value.trim(), pickedFile);
+        await sendParentMessage(chosenChild.id, ta.value.trim(), pickedFile, !!(newEm && KT.emergency.isOn(newEm)));
         bust('/parent/messages');
         if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove();
         if (location.hash === '#messages') Shell.renderScreen(); else location.hash = '#messages';
@@ -3293,6 +3304,8 @@
         status.textContent = 'Could not send: ' + (e.message || 'please try again.');
       }
     });
+    const newEm = (window.KT && KT.emergency) ? KT.emergency.button({ wide: true }) : null;
+    if (newEm) { newEm.style.margin = '6px 16px 0'; newEm.style.alignSelf = 'flex-start'; panel.appendChild(newEm); }
     panel.appendChild(send);
 
     appMain.appendChild(tw);

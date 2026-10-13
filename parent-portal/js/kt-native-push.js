@@ -242,7 +242,7 @@
 
           var urgent = n && n.data && (n.data.kt_urgent === '1' || n.data.kt_urgent === true);
           if (urgent && window.KT && KT.urgentAlert && KT.urgentAlert.fromPush) {
-            KT.urgentAlert.fromPush(title, body, link);
+            KT.urgentAlert.fromPush(title, body, link, n.data);
           }
         } catch (e) {}
       });

@@ -295,8 +295,8 @@
     var data;
     try { data = await Api.get('/provider/team-threads/' + threadId); }
     catch (e) { body.innerHTML = '<div style="color:#B91C1C;padding:20px;">Could not load: ' + esc(e.message) + '</div>'; return; }
-    threadView(container, data, threadId, async function (text) {
-      await Api.post('/provider/team-threads/' + threadId + '/send', { body: text });
+    threadView(container, data, threadId, async function (text, emergency) {
+      await Api.post('/provider/team-threads/' + threadId + '/send', emergency ? { body: text, emergency: true } : { body: text });
       return threadId;
     });
     // Poll for new messages while this thread is open.
@@ -339,12 +339,17 @@
       });
     }
     var input = body.querySelector('#tc-input'), btn = body.querySelector('#tc-send');
+    // 🚨 Emergency toggle (kt-emergency.js) — on an existing thread; a brand-new one starts plain.
+    var emBtn = (threadId !== null && window.KT && KT.emergency && btn) ? KT.emergency.button() : null;
+    if (emBtn) btn.parentNode.insertBefore(emBtn, btn);
     async function doSend() {
       var text = input.value.trim();
       if (! text) return;
+      var emergency = !!(emBtn && KT.emergency.isOn(emBtn));
       input.value = ''; btn.disabled = true;
       try {
-        var tid = await sendFn(text);
+        var tid = await sendFn(text, emergency);
+        if (emBtn) KT.emergency.reset(emBtn);
         if (threadId === null && tid) { openThread(container, tid, data.name); }   // new thread now exists
         else { var fresh = await Api.get('/provider/team-threads/' + (threadId || tid)); paintMessages(container, fresh.messages || [], fresh.is_group); }
       } catch (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast(e.message || 'Send failed', 'error'); input.value = text; }
@@ -377,6 +382,7 @@
       lastSender = mine ? null : m.sender;
       return '<div style="display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">'
         + '<div style="max-width:74%;">'
+        + ((m.is_emergency && window.KT && KT.emergency) ? '<div style="text-align:' + (mine ? 'right' : 'left') + ';">' + KT.emergency.tagHtml() + '</div>' : '')
         + (showName ? '<div style="font-size:11px;font-weight:700;color:#64748B;margin:0 0 2px 12px;">' + esc(m.sender) + '</div>' : '')
         + '<div style="padding:9px 13px;border-radius:16px;font-size:14px;line-height:1.45;'
         + (mine ? 'background:#1F6080;color:#fff;border-bottom-right-radius:5px;' : 'background:#fff;color:#0F172A;border:1px solid #E7EDF3;border-bottom-left-radius:5px;') + '">'

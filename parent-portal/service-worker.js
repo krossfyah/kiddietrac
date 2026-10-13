@@ -29,7 +29,7 @@
         tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
         values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = 'kt-20261013-updpop';
+const CACHE = 'kt-20261013-emergency';
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -199,10 +199,22 @@ self.addEventListener('push', (event) => {
     tag: payload.tag,
     data: { url: payload.url || '/dashboard.html' },
   };
+  /* EMERGENCY (App\Support\EmergencyMessage): stays until dealt with, long vibration, and
+     any open KiddieTrac window is told so it can ring (kt-urgent-alert.js). A browser
+     cannot loop a notification sound itself; the open page does the ringing. */
+  const em = !!payload.emergency;
+  if (em) {
+    options.requireInteraction = true;
+    options.renotify = !!payload.tag;
+    options.vibrate = [900, 300, 900, 300, 1200, 300, 1200];
+  }
 
-  event.waitUntil(
-    self.registration.showNotification(payload.title || 'Kiddietrac', options)
-  );
+  event.waitUntil(Promise.all([
+    self.registration.showNotification(payload.title || 'Kiddietrac', options),
+    em ? self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      list.forEach((c) => c.postMessage({ type: 'kt-emergency', title: payload.title, body: payload.body, url: payload.url }));
+    }) : Promise.resolve(),
+  ]));
 });
 
 /* TAPPING A NOTIFICATION MUST LAND ON THE THING IT ANNOUNCED.

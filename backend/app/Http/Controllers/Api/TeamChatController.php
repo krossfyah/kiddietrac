@@ -782,7 +782,7 @@ final class TeamChatController extends Controller
             ->where('m.thread_id', $thread)->orderBy('m.id')
             // attachments must be SELECTED to be readable — the mapper below reads it, and
             // without it every thread read 500'd on an undefined property.
-            ->get(['m.id', 'm.sender_id', 'm.body', 'm.attachments', 'm.is_system', 'm.created_at', 'u.first_name', 'u.last_name', 'u.photo_url'])
+            ->get(['m.id', 'm.sender_id', 'm.body', 'm.attachments', 'm.is_system', 'm.is_emergency', 'm.created_at', 'u.first_name', 'u.last_name', 'u.photo_url'])
             ->map(fn ($m) => [
                 'id'      => $m->id,
                 // A system line belongs to nobody, so it must not render as my own bubble
@@ -793,6 +793,7 @@ final class TeamChatController extends Controller
                 'photo'   => $m->photo_url,
                 'body'    => $m->body,
                 'attachments' => $m->attachments ? (json_decode($m->attachments, true) ?: []) : [],
+                'is_emergency' => (bool) ($m->is_emergency ?? false),
                 'at'      => $m->created_at,
             ])->values();
 
@@ -931,9 +932,11 @@ final class TeamChatController extends Controller
         // need a caption. required_without mirrors the family chat rule.
         $data = $request->validate([
             'body' => ['required_without:attachment', 'nullable', 'string', 'max:5000'],
+            'emergency' => ['sometimes', 'boolean'],   // App\Support\EmergencyMessage
         ]);
         $attachments = \App\Support\ChatAttachments::extract($request);
-        $id = $this->post($uid, $thread, (string) ($data['body'] ?? ''), now(), $attachments);
+        $id = $this->post($uid, $thread, (string) ($data['body'] ?? ''), now(), $attachments,
+            \App\Support\EmergencyMessage::requested($request));
         return response()->json(['id' => $id], 201);
     }
 
@@ -963,11 +966,12 @@ final class TeamChatController extends Controller
     }
 
     /** $attachments is optional, so start() — which never carries one — is untouched. */
-    private function post(int $uid, int $thread, string $body, $now, array $attachments = []): int
+    private function post(int $uid, int $thread, string $body, $now, array $attachments = [], bool $emergency = false): int
     {
         $id = DB::table('staff_messages')->insertGetId([
             'thread_id' => $thread, 'sender_id' => $uid, 'body' => trim($body),
             'attachments' => $attachments ? json_encode($attachments) : null,
+            'is_emergency' => $emergency,
             'created_at' => $now, 'updated_at' => $now,
         ]);
         DB::table('staff_threads')->where('id', $thread)->update(['last_message_at' => $now, 'updated_at' => $now]);
@@ -982,13 +986,18 @@ final class TeamChatController extends Controller
             $preview = trim($body) !== ''
                 ? mb_substr(strip_tags($body), 0, 140)
                 : ($attachments ? '📎 sent an attachment' : 'New message');
+            $pushTitle = $emergency ? \App\Support\EmergencyMessage::title($meName) : '💬 ' . $meName;
+            if ($emergency) {
+                \App\Support\EmergencyMessage::audit($uid, $this->agencyOfUser($uid), 'staff_thread', $thread, (int) $id,
+                    $others->map(fn ($v) => (int) $v)->all());
+            }
             foreach ($others as $oid) {
                 /* Push to the device. Until this existed a staff message reached
                    nobody until they next opened the portal: the notification row
                    below was written, but nothing ever told the phone about it. */
                 try {
-                    app(\App\Services\WebPushService::class)->sendToUsers([(int) $oid], [
-                        'title' => '💬 ' . $meName,
+                    $wp = [
+                        'title' => $pushTitle,
                         'body'  => $preview,
                         'icon'  => '/icon-192.png',
                         /* THE THREAD, in Messenger. This pointed at '#team-messages',
@@ -998,7 +1007,9 @@ final class TeamChatController extends Controller
                            (Anthony, 2026-09-09) */
                         'url'   => '/dashboard.html#chat?c=staff:' . $thread,
                         'tag'   => 'team-' . $thread,
-                    ]);
+                    ];
+                    app(\App\Services\WebPushService::class)->sendToUsers([(int) $oid],
+                        $emergency ? \App\Support\EmergencyMessage::web($wp) : $wp);
                 } catch (\Throwable $pe) {
                     \Illuminate\Support\Facades\Log::warning('Team-chat web push failed',
                         ['user' => (int) $oid, 'error' => $pe->getMessage()]);
@@ -1011,7 +1022,10 @@ final class TeamChatController extends Controller
                            A bare '#chat' was rightly reverted once — it opened the family
                            messenger, where this message does not exist — but the answer was
                            a deep link that NAMES the thread, not a hidden screen. */
-                        ->sendToUser((int) $oid, '💬 ' . $meName, $preview, '#chat?c=staff:' . $thread, true, true);
+                        /* Normal unless flagged (App\Support\EmergencyMessage) — this rang
+                           insistently for every colleague message. false: web push sent above. */
+                        ->sendToUser((int) $oid, $pushTitle, $preview, '#chat?c=staff:' . $thread,
+                            $emergency, $emergency, false, $emergency ? \App\Support\EmergencyMessage::pushExtra() : []);
                 } catch (\Throwable $fe) {
                     \Illuminate\Support\Facades\Log::warning('Team-chat FCM push failed',
                         ['user' => (int) $oid, 'error' => $fe->getMessage()]);
@@ -1021,7 +1035,7 @@ final class TeamChatController extends Controller
                     'user_id' => (int) $oid, 'type' => 'team_message',
                     // Who it is from, like a family chat row — "New team message" made
                     // every colleague in the inbox look identical.
-                    'title'   => '💬 ' . $meName,
+                    'title'   => $pushTitle,
                     'body'    => $meName . ': ' . (trim($body) !== ''
                         ? mb_substr(strip_tags($body), 0, 140)
                         : ($attachments ? '📎 sent an attachment' : 'New message')),
@@ -1031,6 +1045,8 @@ final class TeamChatController extends Controller
                     'data'    => json_encode([
                         'url' => '/dashboard.html#chat?c=staff:' . $thread,
                         'thread_id' => $thread,
+                        'emergency' => $emergency ? 1 : 0,
+                        'message_id' => (int) $id,
                     ]),
                     'created_at' => $now,
                 ]);

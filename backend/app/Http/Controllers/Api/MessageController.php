@@ -138,6 +138,7 @@ final class MessageController extends Controller
                     'sender_photo_url' => $m->sender_photo ?: null,
                     'is_mine' => $mine,
                     'is_system' => $system,
+                    'is_emergency' => (bool) ($m->is_emergency ?? false),
                     'body' => $deleted ? null : $m->body,
                     'attachments' => $atts,
                     'deleted' => $deleted,
@@ -208,7 +209,9 @@ final class MessageController extends Controller
             'body' => ['nullable', 'string', 'max:4000', 'required_without:attachment'],
             // Accept a photo OR a voice note (webm/ogg/mp4/mpeg audio from the browser recorder).
             'attachment' => ['nullable', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/gif,audio/webm,audio/ogg,audio/mp4,audio/mpeg,audio/aac,audio/wav,video/webm', 'max:16384'],
+            'emergency' => ['sometimes', 'boolean'],   // App\Support\EmergencyMessage
         ]);
+        $emergency = \App\Support\EmergencyMessage::requested($request);
 
         $child = DB::table('children')->where('id', $data['child_id'])->first();
         if (!$child) return response()->json(['message' => 'Child not found'], 404);
@@ -257,6 +260,7 @@ final class MessageController extends Controller
             'sender_id' => $user->id,
             'body' => $data['body'] ?? '',
             'attachments' => $attachments ? json_encode($attachments) : null,
+            'is_emergency' => $emergency,
             'created_at' => now(),
             'delivered_at' => now(),
         ]);
@@ -269,24 +273,32 @@ final class MessageController extends Controller
             : (($attachments[0]['type'] ?? '') === 'audio' ? '🎤 Voice note' : '📷 Photo');
         $staffIds = DB::table('role_assignments')->where('centre_id', $family->centre_id)->where('active', true)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])->pluck('user_id')->unique();
+        $who = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) . ' · ' . ($child->first_name ?? 'a child');
+        if ($emergency) {
+            \App\Support\EmergencyMessage::audit((int) $user->id, (int) (DB::table('centres')->where('id', $family->centre_id)->value('agency_id') ?: 0) ?: null,
+                'conversation', (int) $convoId, (int) $msgId, $staffIds->all());
+        }
         foreach ($staffIds as $sid) {
             if ((int) $sid === (int) $user->id) continue;
             \App\Support\Notify::write([
                 'user_id' => $sid, 'type' => 'message',
                 // Name the parent AND the child: "New message from a parent" tells
                 // an educator with thirty families nothing they can act on.
-                'title' => '💬 ' . trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''))
-                    . ' · ' . ($child->first_name ?? 'a child'),
+                'title' => ($emergency ? '🚨 EMERGENCY · ' : '💬 ') . $who,
                 'body' => $preview,
-                'data' => json_encode(['link' => '#chat', 'conversation_id' => $convoId]),
+                'data' => json_encode(['link' => '#chat', 'url' => '/dashboard.html#chat?c=' . $convoId, 'conversation_id' => $convoId,
+                    'emergency' => $emergency ? 1 : 0, 'message_id' => (int) $msgId]),
                 'created_at' => now(),
             ]);
             try {
-                app(\App\Services\FcmService::class)->sendToUser(
-                    (int) $sid,
-                    '💬 ' . trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) . ' · ' . ($child->first_name ?? 'a child'),
-                    $preview, '#chat', true
-                );
+                /* Normal unless flagged (App\Support\EmergencyMessage). This was urgent for
+                   every message, so the centre's phones rang insistently for each one. */
+                if ($emergency) {
+                    app(\App\Services\FcmService::class)->sendToUser((int) $sid, \App\Support\EmergencyMessage::title($who),
+                        $preview, '#chat?c=' . $convoId, true, true, true, \App\Support\EmergencyMessage::pushExtra());
+                } else {
+                    app(\App\Services\FcmService::class)->sendToUser((int) $sid, '💬 ' . $who, $preview, '#chat?c=' . $convoId, false);
+                }
             } catch (\Throwable $e) {}
         }
 
@@ -563,7 +575,9 @@ final class MessageController extends Controller
         $data = $request->validate([
             'conversation_id' => ['required', 'integer'],
             'body' => ['required', 'string', 'min:1', 'max:4000'],
+            'emergency' => ['sometimes', 'boolean'],   // App\Support\EmergencyMessage
         ]);
+        $emergency = \App\Support\EmergencyMessage::requested($request);
 
         $convo = DB::table('conversations')->where('id', $data['conversation_id'])->first();
         if (!$convo) return response()->json(['message' => 'Not found'], 404);
@@ -576,6 +590,7 @@ final class MessageController extends Controller
             'conversation_id' => $convo->id,
             'sender_id' => $user->id,
             'body' => $data['body'],
+            'is_emergency' => $emergency,
             'created_at' => now(),
             'delivered_at' => now(),
         ]);
@@ -599,26 +614,39 @@ final class MessageController extends Controller
                 $guardianIds[] = (int) $gid;
                 \App\Support\Notify::write([
                     'user_id' => $gid, 'type' => 'message',
-                    'title' => 'New message from your centre',
+                    'title' => $emergency ? '🚨 EMERGENCY from your centre' : 'New message from your centre',
                     'body' => $preview,
-                    'data' => json_encode(['link' => '#messages', 'conversation_id' => $convo->id]),
+                    'data' => json_encode(['link' => '#messages', 'url' => '/dashboard.html#messages', 'conversation_id' => $convo->id,
+                        'emergency' => $emergency ? 1 : 0, 'message_id' => (int) $msgId]),
                     'created_at' => now(),
                 ]);
-                /* false: web push for these guardians is sent as a batch below. */
-                try { app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New message from your centre 💬', $preview, '#messages', true, true, false); } catch (\Throwable $e) {}
+                /* false: web push for these guardians is sent as a batch below. Normal unless
+                   flagged (App\Support\EmergencyMessage) — this used to ring every time. */
+                try {
+                    if ($emergency) {
+                        app(\App\Services\FcmService::class)->sendToUser((int) $gid, '🚨 EMERGENCY from your centre', $preview, '#messages', true, true, false, \App\Support\EmergencyMessage::pushExtra());
+                    } else {
+                        app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New message from your centre 💬', $preview, '#messages', false, false, false);
+                    }
+                } catch (\Throwable $e) {}
+            }
+            if ($emergency) {
+                \App\Support\EmergencyMessage::audit((int) $user->id, null, 'conversation', (int) $convo->id, (int) $msgId, $guardianIds);
             }
 
             // Web push — the transport the parents on this platform actually have.
             // Separate try so an FCM fault cannot suppress it, and vice versa.
             if ($guardianIds) {
                 try {
-                    app(\App\Services\WebPushService::class)->sendToUsers($guardianIds, [
-                        'title' => '💬 New message from your centre',
+                    $wp = [
+                        'title' => $emergency ? '🚨 EMERGENCY from your centre' : '💬 New message from your centre',
                         'body'  => $preview,
                         'icon'  => '/icon-192.png',
                         'url'   => '/dashboard.html#messages',
                         'tag'   => 'msg-' . $convo->id,
-                    ]);
+                    ];
+                    app(\App\Services\WebPushService::class)->sendToUsers($guardianIds,
+                        $emergency ? \App\Support\EmergencyMessage::web($wp) : $wp);
                 } catch (\Throwable $we) {
                     \Illuminate\Support\Facades\Log::warning('Web push from messages failed', [
                         'conversation' => $convo->id, 'error' => $we->getMessage(),

@@ -77,7 +77,9 @@ final class ChatController extends Controller
         $user = $request->user();
         $data = $request->validate([
             'body' => ['required_without:attachment', 'nullable', 'string', 'max:5000'],
+            'emergency' => ['sometimes', 'boolean'],   // App\Support\EmergencyMessage
         ]);
+        $emergency = \App\Support\EmergencyMessage::requested($request);
 
         if (! $this->parentCanAccess($user->id, $conversationId)) {
             return response()->json(['message' => 'Forbidden'], 403);
@@ -92,7 +94,7 @@ final class ChatController extends Controller
         $moved = $this->movedAway($conversationId);
         if ($moved) {
             $newId = $this->currentProviderThread($moved['conv'], $moved['family']);
-            $msg = $this->insertMessage($newId, $user->id, $data['body'] ?? '', $attachments);
+            $msg = $this->insertMessage($newId, $user->id, $data['body'] ?? '', $attachments, null, $emergency);
             return response()->json($msg + [
                 'conversation_id' => $newId,
                 'moved_to_conversation' => $newId,
@@ -100,7 +102,7 @@ final class ChatController extends Controller
             ]);
         }
 
-        return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments));
+        return response()->json($this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments, null, $emergency));
     }
 
     /**
@@ -308,6 +310,7 @@ final class ChatController extends Controller
             // SMS, text and email as well or allow to choose all if required").
             'also' => ['sometimes', 'array'],
             'also.*' => ['in:sms,email'],
+            'emergency' => ['sometimes', 'boolean'],   // App\Support\EmergencyMessage
         ]);
 
         if (! $this->providerCanAccess($user->id, $conversationId)) {
@@ -318,7 +321,8 @@ final class ChatController extends Controller
         $attachments = $this->extractAttachment($request);
         // A family that has moved provider: this thread is the old provider's history now.
         if ($moved = $this->movedAway($conversationId)) { return $this->movedAwayRefusal($moved); }
-        $msg = $this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments);
+        $msg = $this->insertMessage($conversationId, $user->id, $data['body'] ?? '', $attachments, null,
+            \App\Support\EmergencyMessage::requested($request));
 
         /* The message is in the thread either way; text and/or email carry the same words
            to the family's parents through the agency's number and mailer (consent, logging,
@@ -735,6 +739,7 @@ final class ChatController extends Controller
                 // to be able to tell - a reply typed here reaches a phone only when the
                 // parent is opted in, and that is worth knowing before you rely on it.
                 'via' => $m->via ?? null,
+                'is_emergency' => (bool) ($m->is_emergency ?? false),
                 'deleted' => $deleted,
                 'can_delete' => $isMe && ! $deleted,
                 'reactions' => $this->groupReactions($reactsByMsg[$m->id] ?? collect(), (int) $userId),
@@ -932,7 +937,7 @@ final class ChatController extends Controller
      * @param  string|null  $via  'sms' when the message arrived from, or is going to, a
      *                            handset; null for an ordinary in-app message.
      */
-    public function insertMessage(int $conversationId, int $senderId, string $body, array $attachments = [], ?string $via = null): array
+    public function insertMessage(int $conversationId, int $senderId, string $body, array $attachments = [], ?string $via = null, bool $emergency = false): array
     {
         $now = now();
         $msgId = DB::table('messages')->insertGetId([
@@ -941,6 +946,7 @@ final class ChatController extends Controller
             'body' => $body,
             'via' => $via,
             'attachments' => $attachments ? json_encode($attachments) : null,
+            'is_emergency' => $emergency,
             'created_at' => $now,
         ]);
 
@@ -1007,8 +1013,14 @@ final class ChatController extends Controller
                         ? mb_substr($body, 0, 120)
                         : (! empty($attachments) ? '📎 sent an image' : 'New message');
 
-                    app(\App\Services\WebPushService::class)->sendToUsers($recipients, [
-                        'title' => '💬 ' . $senderName,
+                    // EMERGENCY or not (App\Support\EmergencyMessage): the one thing that
+                    // decides whether this rings insistently or arrives as a normal notification.
+                    $pushTitle = $emergency ? \App\Support\EmergencyMessage::title($senderName) : '💬 ' . $senderName;
+                    if ($emergency) {
+                        \App\Support\EmergencyMessage::audit((int) $senderId, $agencyId ?: null, 'conversation', $conversationId, (int) $msgId, $recipients);
+                    }
+                    $webPayload = [
+                        'title' => $pushTitle,
                         'body'  => $preview,
                         'icon'  => '/icon-192.png',
                         /* THE CONVERSATION ID, so the tap lands in the THREAD.
@@ -1020,7 +1032,9 @@ final class ChatController extends Controller
                            right here in the tag. (Anthony, 2026-09-09) */
                         'url'   => '/dashboard.html#chat?c=' . $conversationId,
                         'tag'   => 'chat-' . $conversationId,
-                    ]);
+                    ];
+                    app(\App\Services\WebPushService::class)->sendToUsers($recipients,
+                        $emergency ? \App\Support\EmergencyMessage::web($webPayload) : $webPayload);
 
                     // v23: ALSO push to native FCM device tokens (the Capacitor
                     // Android/iOS app). The WebPushService call above only reaches
@@ -1033,7 +1047,16 @@ final class ChatController extends Controller
                         $fcm = app(\App\Services\FcmService::class);
                         foreach ($recipients as $rid) {
                             // Same deep link as web push — the APK opens this directly.
-                            $fcm->sendToUser((int) $rid, '💬 ' . $senderName, $preview, '#chat?c=' . $conversationId, true, true, false);   // false: web push already sent above; urgent+forceUrgent = takeover for staff AND parents
+                            /* NORMAL unless flagged. Every chat message used to go out urgent +
+                               forceUrgent, so every "thanks!" rang insistently and took over the
+                               screen. Now only an EMERGENCY does — for staff AND parents — with
+                               the ring limit for the app; anything else is an ordinary push.
+                               false: web push was already sent above. */
+                            if ($emergency) {
+                                $fcm->sendToUser((int) $rid, $pushTitle, $preview, '#chat?c=' . $conversationId, true, true, false, \App\Support\EmergencyMessage::pushExtra());
+                            } else {
+                                $fcm->sendToUser((int) $rid, $pushTitle, $preview, '#chat?c=' . $conversationId, false, false, false);
+                            }
                         }
                     } catch (\Throwable $fe) {
                         \Illuminate\Support\Facades\Log::warning('FCM push from chat failed', ['error' => $fe->getMessage()]);
@@ -1069,13 +1092,16 @@ final class ChatController extends Controller
                         $rows[] = [
                             'user_id' => $rid,
                             'type' => 'chat',
-                            'title' => '💬 ' . $senderName . $ctxSuffix,
+                            'title' => ($emergency ? '🚨 EMERGENCY · ' : '💬 ') . $senderName . $ctxSuffix,
                             'body' => $preview,
                             'data' => json_encode([
                                 // The inbox renderer navigates to data.url; it carried the
                                 // conversation_id beside it but never used it.
                                 'url' => '/dashboard.html#chat?c=' . $conversationId,
                                 'conversation_id' => $conversationId,
+                                // kt-urgent-alert.js raises the ringing takeover for these.
+                                'emergency' => $emergency ? 1 : 0,
+                                'message_id' => (int) $msgId,
                             ]),
                             'created_at' => $nowTs,
                         ];
@@ -1097,6 +1123,7 @@ final class ChatController extends Controller
             'sender_id' => $senderId,
             'body' => $body,
             'attachments' => $attachments,
+            'is_emergency' => $emergency,
             'created_at' => $now->toDateTimeString(),
         ];
     }
