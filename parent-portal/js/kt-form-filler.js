@@ -455,9 +455,19 @@
             if (form.draftValues && fieldCount) {
               var restored = 0;
               Object.keys(form.draftValues).forEach(function (name) {
-                var el = zoomWrap.querySelector('.annotationLayer [name="' + (w.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
-                if (!el) return;
                 var v = form.draftValues[name];
+                var el = null;
+                var bi = btnInfo(fieldMap);
+                Object.keys(bi).forEach(function (id) {
+                  if (el || !bi[id].radio || fieldMap[id] !== name || String(bi[id].on) !== String(v)) return;
+                  el = zoomWrap.querySelector('.annotationLayer [data-element-id="' + id + '"]')
+                    || zoomWrap.querySelector('.annotationLayer [data-annotation-id="' + id + '"] input');
+                  if (el && el.type === 'radio') { if (!el.checked) { el.click(); restored++; } el = 'done'; }
+                });
+                if (el === 'done') return;
+                el = zoomWrap.querySelector('.annotationLayer [name="' + (w.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+                if (!el) return;
+                if (el.type === 'radio') return;   // an old bare true: no way to know which
                 if (el.type === 'checkbox' || el.type === 'radio') {
                   var on = (v === true || v === 'true' || v === 'On');
                   if (el.checked !== on) { el.click(); restored++; }
@@ -641,6 +651,20 @@
           return { widgetCount: widgets.length, attachFields: function (fieldMap) {
           widgets.forEach(function (a) {
             if (fieldMap && a && a.id != null && a.fieldName) fieldMap[String(a.id)] = a.fieldName;
+            /* YES/NO BOXES THAT PRINTED EMPTY (2026-10-13, Anthony: Samantha Kicks "filled
+               in the form but the form returned empty"). A radio group is ONE field name
+               shared by several widgets — Yes and No — and pdf.js stores only true/false per
+               widget. Mapped to the field name that became a bare `true`, which says nothing
+               about WHICH box was picked, and pdf-lib's select("true") then threw (no such
+               option) and was skipped: every Yes/No answer on every form printed blank. So
+               remember each button's own value (its PDF "on" state, e.g. "Yes", "No",
+               "Female") and record THAT. */
+            if (fieldMap && a && a.id != null && (a.radioButton || a.checkBox)) {
+              btnInfo(fieldMap)[String(a.id)] = {
+                radio: !!a.radioButton,
+                on: a.radioButton ? a.buttonValue : (a.exportValue || 'Yes'),
+              };
+            }
           });
           var layer = document.createElement('div');
           layer.className = 'annotationLayer';
@@ -696,6 +720,7 @@
    */
   function collectValues(storage, fieldMap) {
     var out = {};
+    var info = fieldMap ? btnInfo(fieldMap) : {};
     try {
       var all = storage && storage.getAll ? storage.getAll() : null;
       if (!all) return out;
@@ -703,10 +728,26 @@
         var v = all[k];
         var val = (v && typeof v === 'object' && 'value' in v) ? v.value : v;
         if (val === null || val === undefined || val === '') return;
-        out[(fieldMap && fieldMap[k]) || k] = val;
+        var name = (fieldMap && fieldMap[k]) || k;
+        var b = info[k];
+        if (b && b.radio) {
+          // Only the PICKED button speaks for the group, and it says which one it is.
+          // pdf.js writes `false` for the others, in no particular order — letting those
+          // through is what turned every answer into a bare true/false.
+          if (val === true || val === 'true') out[name] = String(b.on);
+          return;
+        }
+        out[name] = val;
       });
     } catch (e) {}
     return out;
+  }
+
+  /* Per-widget facts for buttons, kept beside the id→name map without becoming one of its
+     keys (callers iterate the map). */
+  function btnInfo(fieldMap) {
+    if (!fieldMap.__btn) Object.defineProperty(fieldMap, '__btn', { value: {}, enumerable: false });
+    return fieldMap.__btn;
   }
 
   /**
@@ -727,11 +768,24 @@
             var v = values[name];
             try {
               var f = formObj.getField(name);
-              var t = f.constructor && f.constructor.name;
+              /* instanceof, NOT constructor.name. pdf-lib is loaded MINIFIED, where the class
+                 names are single letters ("r"), so comparing against 'PDFCheckBox' never
+                 matched: every checkbox, radio group and dropdown fell through to setText(),
+                 threw, and was skipped — they all printed blank (2026-10-13). */
+              var t = f instanceof PDFLib.PDFCheckBox ? 'PDFCheckBox'
+                : f instanceof PDFLib.PDFRadioGroup ? 'PDFRadioGroup'
+                : f instanceof PDFLib.PDFDropdown ? 'PDFDropdown'
+                : f instanceof PDFLib.PDFOptionList ? 'PDFOptionList'
+                : f instanceof PDFLib.PDFTextField ? 'PDFTextField' : '';
               if (t === 'PDFCheckBox') { if (v === true || v === 'true' || v === 'On') f.check(); else f.uncheck(); }
               else if (t === 'PDFDropdown' || t === 'PDFOptionList') { f.select(String(v)); }
-              else if (t === 'PDFRadioGroup') { f.select(String(v)); }
-              else { f.setText(String(v)); }
+              else if (t === 'PDFRadioGroup') {
+                // A real option ("Yes", "No", "Female"…). Answers saved before 2026-10-13 hold a
+                // bare true, which names no option; leave those unticked rather than guess.
+                var opts = f.getOptions ? f.getOptions() : [];
+                if (opts.indexOf(String(v)) > -1) f.select(String(v));
+              }
+              else if (t === 'PDFTextField') { f.setText(String(v)); }
             } catch (e) { /* a field we can't set must not abort the rest */ }
           });
         }
