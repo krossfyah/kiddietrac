@@ -230,7 +230,7 @@
       '.kt-calc-k{height:38px;border:1px solid #E2E8F0;border-radius:9px;background:#fff;font:700 15px inherit;font-family:inherit;color:#0F172A;cursor:pointer;',
       '  transition:background .1s,transform .06s;}',
       '.kt-calc-k:hover{background:#F1F5F9;}',
-      '.kt-calc-k:active,.kt-calc-k.kt-calc-hit{transform:scale(.96);background:#E2E8F0;}',
+      '.kt-calc-k:active{transform:scale(.96);background:#E2E8F0;}',
       '.kt-calc-k.op{color:#0E7C90;background:#F0FAFB;border-color:#CDEBEF;}',
       '.kt-calc-k.fn{color:#475569;background:#F8FAFC;}',
       '.kt-calc-k.eq{background:linear-gradient(135deg,#0E7C90,#14A1A8);border-color:transparent;color:#fff;}',
@@ -323,7 +323,9 @@
       e.preventDefault(); e.stopPropagation();
       press(k);
       var b = box.querySelector('[data-k="' + (k === '(' || k === ')' ? '__' : k) + '"]');
-      if (b) { b.classList.add('kt-calc-hit'); setTimeout(function () { b.classList.remove('kt-calc-hit'); }, 110); }
+      // A Web Animation, not a class + timer: timers are throttled in background tabs and
+      // the class stayed on, leaving typed keys grey.
+      if (b && b.animate) b.animate([{ transform: 'scale(.94)', background: '#E2E8F0' }, { transform: 'none' }], { duration: 140, easing: 'ease-out' });
     }
   }
 
