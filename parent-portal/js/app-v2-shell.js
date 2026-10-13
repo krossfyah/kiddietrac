@@ -276,6 +276,10 @@
           { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
+          { hash: 'headcounts',    label: 'Headcounts',       icon: '👀' },
+          // Ontario sleep supervision (2026-10-13): hidden unless sleep checks are on (screen-sleep-room.js).
+          { hash: 'sleep-room',    label: 'Sleep room',       icon: '😴' },
+          { hash: 'hazards',       label: 'Hazards',         icon: '🚧' },
           // Ohio (2026-10-10): shown only for US-OH agencies or where switched on (screen-ohio.js).
           { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🏛️' },
           { hash: 'sutq',          label: 'Step Up To Quality', icon: '⭐' },
@@ -308,6 +312,7 @@
           ...(hccEnabled_v ? [{ hash: 'hcc-forms', label: 'Inspection forms', icon: '🏡' }] : []),
         ]},
         { label: 'Compliance', items: [
+          { hash: 'policies',           label: 'Policies',             icon: '📘' },
           { hash: 'inspection',         label: 'Inspection checklist', icon: '✅' },
           { hash: 'renewals',           label: 'Renewals calendar',    icon: '📅' },
           { hash: 'cwelcc',             label: 'Subsidies',           icon: '💵' },
@@ -471,6 +476,10 @@
           { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
+          { hash: 'headcounts',    label: 'Headcounts',       icon: '👀' },
+          // Ontario sleep supervision (2026-10-13): hidden unless sleep checks are on (screen-sleep-room.js).
+          { hash: 'sleep-room',    label: 'Sleep room',       icon: '😴' },
+          { hash: 'hazards',       label: 'Hazards',         icon: '🚧' },
           // Ohio (2026-10-10): shown only for US-OH agencies or where switched on (screen-ohio.js).
           { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🏛️' },
           { hash: 'sutq',          label: 'Step Up To Quality', icon: '⭐' },
@@ -502,6 +511,8 @@
         ]},
         { label: 'Compliance', items: [
           { hash: 'compliance',        label: 'Compliance',           icon: '✅' },
+          { hash: 'policies',          label: 'Policies',             icon: '📘' },
+          { hash: 'my-policies',       label: 'Policies to review',   icon: '✍️' },
           { hash: 'my-training',       label: 'My training',          icon: '🎓' },
           { hash: 'household',         label: 'Household residents',  icon: '🏠' },
           { hash: 'inspection',        label: 'Inspection checklist', icon: '✅' },
@@ -560,6 +571,10 @@
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
           { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
+          { hash: 'headcounts',    label: 'Headcounts',       icon: '👀' },
+          // Ontario sleep supervision (2026-10-13): hidden unless sleep checks are on (screen-sleep-room.js).
+          { hash: 'sleep-room',    label: 'Sleep room',       icon: '😴' },
+          { hash: 'hazards',       label: 'Report a hazard', icon: '🚧' },
           { hash: 'late-pickups',  label: 'Late pickups',  icon: '⏰' },
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
           { hash: 'announcements', label: 'News',          icon: '📢' },
@@ -577,6 +592,7 @@
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
           { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'my-policies',   label: 'Policies to review', icon: '📘' },
           { hash: 'household',     label: 'Household residents', icon: '🏠' },
         ]},
         { label: 'Account', items: [
@@ -604,6 +620,7 @@
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
           { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'my-policies',   label: 'Policies to review', icon: '📘' },
           { hash: 'household',     label: 'Household residents', icon: '🏠' },
           { hash: 'files',          label: 'Files',          icon: '📎' },
         ]},
@@ -994,7 +1011,9 @@
     'waitlist': 'Families waiting for a space.',
     'tours': 'Prospective families who booked a centre tour.',
     'incidents': 'Injuries, behaviour and safeguarding reports.',
-    'drills': 'Fire, weather and lockdown drills — what is owed under your province or state.',
+    'drills': 'Fire, weather, lockdown and missing-child drills — what is owed under your province or state.',
+    'sleep-room': 'Sleeping children under 24 months: when each is due a check, record checks, and the inspector report.',
+    'hazards': 'Non-routine hazards at your centres, the steps taken, and the notice to parents.',
     'pfcc': 'Ohio publicly funded child care: authorizations, copays, absent days and the weekly TAP reconciliation.',
     'sutq': 'Step Up To Quality: screening and assessment timers, referrals, the improvement plan and the evidence binder.',
     'medications': 'Medication authorised, given and outstanding.',

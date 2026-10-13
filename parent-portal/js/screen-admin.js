@@ -386,6 +386,13 @@
        the archive endpoint refuses while children are still enrolled. Permanent
        delete lives on Agency overview -> Archived centres, on records that have
        already been archived. */
+    /* Ontario O. Reg. 137/15 s.6.1(2) (from 2027): who acts for the supervisor when the
+       supervisor is off-site. Edited in screen-headcounts.js (KT.Headcount). 2026-10-13. */
+    if (window.KT && window.KT.Headcount && window.KT.Headcount.editActing) {
+      var actingBtn = mk('Acting supervisor');
+      actingBtn.addEventListener('click', function (e) { e.stopPropagation(); window.KT.Headcount.editActing(c.id); });
+      return [viewBtn, editBtn, actingBtn, offboardBtn];
+    }
     return [viewBtn, editBtn, offboardBtn];
   }
 

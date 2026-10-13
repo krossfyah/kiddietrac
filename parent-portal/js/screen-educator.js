@@ -126,6 +126,13 @@
       shell.appendChild(formsBox);
       renderFormsToday(formsBox);
 
+      /* HEADCOUNT (2026-10-13; Ontario O. Reg. 137/15 s.11 as amended by O. Reg. 197/26):
+         a name-to-face count of the children signed in to this room, one tap away above
+         the roster. The checklist lives in screen-headcounts.js (KT.Headcount). */
+      if (window.KT && KT.Headcount && KT.Headcount.todayBar) {
+        try { shell.appendChild(KT.Headcount.todayBar(() => currentRoomId)); } catch (_) {}
+      }
+
       // Roster
       const rosterContainer = Dom.el('div', { id: 'educatorRoster' });
       shell.appendChild(rosterContainer);

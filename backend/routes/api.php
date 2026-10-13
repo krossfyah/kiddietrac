@@ -2217,12 +2217,62 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get('/admin/country',  [\App\Http\Controllers\Api\CurrencyController::class, 'showCountry']);
     // Province / state profile (2026-10-09, App\Support\Jurisdictions) — read by screens for wording and rules.
     Route::get('/admin/jurisdiction', [\App\Http\Controllers\Api\CurrencyController::class, 'showJurisdiction']);
+    /* HEADCOUNTS + ACTING SUPERVISOR (2026-10-13; Ontario O. Reg. 137/15 s.11 and s.6.1(2) as amended by
+       O. Reg. 197/26). Admins, directors (their centres) and educators (their centres and rooms); scoped
+       in the controller. Acting supervisor edits: agency admins and the centre's directors. */
+    Route::middleware('role:agency_admin,platform_admin,centre_director,educator')->group(function () {
+        Route::get ('/headcounts',                 [\App\Http\Controllers\Api\HeadcountController::class, 'index']);
+        Route::post('/headcounts',                 [\App\Http\Controllers\Api\HeadcountController::class, 'store']);
+        Route::get ('/headcounts/start',           [\App\Http\Controllers\Api\HeadcountController::class, 'start']);
+        Route::get ('/headcounts/overview',        [\App\Http\Controllers\Api\HeadcountController::class, 'overview']);
+        Route::post('/headcounts/settings',        [\App\Http\Controllers\Api\HeadcountController::class, 'settings']);
+        Route::post('/headcounts/{id}/alert',      [\App\Http\Controllers\Api\HeadcountController::class, 'alert'])->whereNumber('id');
+        Route::post('/headcounts/{id}/resolve',    [\App\Http\Controllers\Api\HeadcountController::class, 'resolve'])->whereNumber('id');
+        Route::get ('/headcounts/acting/{centre}', [\App\Http\Controllers\Api\HeadcountController::class, 'actingShow'])->whereNumber('centre');
+        Route::post('/headcounts/acting/{centre}', [\App\Http\Controllers\Api\HeadcountController::class, 'actingSave'])->whereNumber('centre');
+    });
     // Drill log (2026-10-09): admins, directors and educators; scoped to their centres in the controller.
     Route::middleware('role:agency_admin,platform_admin,centre_director,educator')->group(function () {
         Route::get   ('/drills',           [\App\Http\Controllers\Api\DrillController::class, 'index']);
         Route::post  ('/drills',           [\App\Http\Controllers\Api\DrillController::class, 'store']);
         Route::delete('/drills/{id}',      [\App\Http\Controllers\Api\DrillController::class, 'destroy'])->whereNumber('id');
         Route::post  ('/drills/reminders', [\App\Http\Controllers\Api\DrillController::class, 'reminders']);
+        // Ontario s.68 / s.68.2 (2026-10-13): fire cadence per centre, cadence reminders switch.
+        Route::post  ('/drills/cadence',           [\App\Http\Controllers\Api\DrillController::class, 'cadence']);
+        Route::post  ('/drills/cadence-reminders', [\App\Http\Controllers\Api\DrillController::class, 'cadenceReminders']);
+        /* HAZARD REGISTER (2026-10-13, Ontario s.24.3): anyone on staff reports; directors/admins
+           manage and notify parents — checked per centre in HazardController. */
+        Route::get   ('/hazards',                 [\App\Http\Controllers\Api\HazardController::class, 'index']);
+        Route::post  ('/hazards',                 [\App\Http\Controllers\Api\HazardController::class, 'store']);
+        Route::patch ('/hazards/{id}',            [\App\Http\Controllers\Api\HazardController::class, 'update'])->whereNumber('id');
+        Route::post  ('/hazards/{id}/resolve',    [\App\Http\Controllers\Api\HazardController::class, 'resolve'])->whereNumber('id');
+        Route::post  ('/hazards/{id}/reopen',     [\App\Http\Controllers\Api\HazardController::class, 'reopen'])->whereNumber('id');
+        Route::get   ('/hazards/{id}/audience',   [\App\Http\Controllers\Api\HazardController::class, 'audienceCount'])->whereNumber('id');
+        Route::post  ('/hazards/{id}/notify',     [\App\Http\Controllers\Api\HazardController::class, 'notify'])->whereNumber('id');
+    });
+    /* POLICY LIBRARY + STAFF SIGN-OFFS + TRAINING MATRIX (2026-10-13; O. Reg. 137/15 s.6.1, s.46, s.58(1.1)).
+       Managing: admins (agency) and directors (their centres) — scoped again in the controller.
+       Reading and signing: every staff member the policy applies to. */
+    Route::middleware('role:agency_admin,platform_admin,centre_director')->group(function () {
+        Route::get   ('/policies',                       [\App\Http\Controllers\Api\PolicyController::class, 'index']);
+        Route::post  ('/policies',                       [\App\Http\Controllers\Api\PolicyController::class, 'store']);
+        Route::post  ('/policies/seed-ontario',          [\App\Http\Controllers\Api\PolicyController::class, 'seedOntario']);
+        Route::post  ('/policies/reminders',             [\App\Http\Controllers\Api\PolicyController::class, 'reminders']);
+        Route::get   ('/policies/matrix',                [\App\Http\Controllers\Api\PolicyController::class, 'matrix']);
+        Route::get   ('/policy-contraventions',          [\App\Http\Controllers\Api\PolicyController::class, 'contraventions']);
+        Route::get   ('/policies/{id}',                  [\App\Http\Controllers\Api\PolicyController::class, 'show'])->whereNumber('id');
+        Route::patch ('/policies/{id}',                  [\App\Http\Controllers\Api\PolicyController::class, 'update'])->whereNumber('id');
+        Route::post  ('/policies/{id}/archive',          [\App\Http\Controllers\Api\PolicyController::class, 'archive'])->whereNumber('id');
+        Route::post  ('/policies/{id}/versions',         [\App\Http\Controllers\Api\PolicyController::class, 'publish'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post  ('/policies/{id}/reviewed',         [\App\Http\Controllers\Api\PolicyController::class, 'reviewed'])->whereNumber('id');
+        Route::post  ('/policies/{id}/contraventions',   [\App\Http\Controllers\Api\PolicyController::class, 'recordContravention'])->whereNumber('id');
+        Route::post  ('/policies/{id}/training',         [\App\Http\Controllers\Api\PolicyController::class, 'recordTraining'])->whereNumber('id');
+    });
+    Route::middleware('role:agency_admin,platform_admin,centre_director,educator,home_visitor')->group(function () {
+        Route::get   ('/my-policies',                    [\App\Http\Controllers\Api\PolicyController::class, 'mine']);
+        Route::post  ('/my-policies/{id}/acknowledge',   [\App\Http\Controllers\Api\PolicyController::class, 'acknowledge'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::get   ('/policy-versions/{id}',           [\App\Http\Controllers\Api\PolicyController::class, 'version'])->whereNumber('id');
+        Route::get   ('/policy-versions/{id}/file',      [\App\Http\Controllers\Api\PolicyController::class, 'file'])->whereNumber('id');
     });
     /* OHIO PFCC + STEP UP TO QUALITY (2026-10-10): directors (their centres) and admins. Both
        controllers 404 unless the agency is US-OH or has switched the feature on. */
@@ -3142,4 +3192,17 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
    disagree. */
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('admin/users/{user}/data-map', [App\Http\Controllers\Api\UserDataMapController::class, 'show'])->whereNumber('user');
+});
+
+/* SLEEP SUPERVISION CHECKS (2026-10-13; Ontario O. Reg. 137/15 s.33.1). Educators (their
+   rooms), directors (their centres), admins (the agency) — scoped in the controller.
+   Report, settings and the physician-direction write check the role again inside. */
+Route::prefix('v1')->middleware(['auth:sanctum', 'role:educator,centre_director,agency_admin,platform_admin'])->group(function () {
+    Route::get ('sleep-checks/status',   [App\Http\Controllers\Api\SleepCheckController::class, 'status']);
+    Route::get ('sleep-checks/room',     [App\Http\Controllers\Api\SleepCheckController::class, 'room']);
+    Route::post('sleep-checks',          [App\Http\Controllers\Api\SleepCheckController::class, 'store']);
+    Route::get ('sleep-checks/report',   [App\Http\Controllers\Api\SleepCheckController::class, 'report']);
+    Route::get ('sleep-checks/settings', [App\Http\Controllers\Api\SleepCheckController::class, 'settings']);
+    Route::post('sleep-checks/settings', [App\Http\Controllers\Api\SleepCheckController::class, 'saveSettings']);
+    Route::post('sleep-checks/children/{child}/direction', [App\Http\Controllers\Api\SleepCheckController::class, 'direction'])->whereNumber('child');
 });

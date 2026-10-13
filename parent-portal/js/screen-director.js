@@ -151,6 +151,8 @@
         data.rooms.forEach(room => roomGrid.appendChild(roomTile(room)));
       }
       content.appendChild(roomGrid);
+      // Supervision: acting supervisor + last headcount per room (2026-10-13, screen-headcounts.js).
+      if (window.KT && KT.Headcount && KT.Headcount.dashboardCard) { try { KT.Headcount.dashboardCard(content); } catch (_) {} }
 
     } catch (e) {
       Dom.clear(content);

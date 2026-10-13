@@ -91,8 +91,12 @@
     pill.innerHTML =
       '<span class="ktw-live"><b></b><span>Live<span class="ktw-sub"> · ' + esc(sub) + '</span></span></span>' +
       '<button class="ktw-map" id="ktw-pill-map">Map</button>' +
+      (KT.Headcount ? '<button class="ktw-map" id="ktw-pill-hc" title="Headcount of the children on this walk">\ud83d\udc40 Count</button>' : '') +
       '<button class="ktw-stop" id="ktw-pill-stop">Stop</button>';
     pill.querySelector('#ktw-pill-map').onclick = function () { openMap(state.tripId, 'Your walk'); };
+    // Headcount of the children on the walk (2026-10-13, screen-headcounts.js).
+    var _hc = pill.querySelector('#ktw-pill-hc');
+    if (_hc) _hc.onclick = function () { KT.Headcount.open({ trip_id: state.tripId, context: 'field_trip' }); };
     pill.querySelector('#ktw-pill-stop').onclick = confirmStop;
   }
 

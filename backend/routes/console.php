@@ -48,6 +48,14 @@ Schedule::command('forms:remind-countersign')->everyFifteenMinutes()->withoutOve
 Schedule::command('providers:remind-bio')->everyFifteenMinutes()->withoutOverlapping(14);
 /* Drill reminders: only agencies that switched them on (Drill log screen); weekdays 9:00 agency time. */
 Schedule::command('drills:remind')->everyFifteenMinutes()->withoutOverlapping(14);
+/* Headcount reminders: only agencies that switched them on (Headcounts screen); rooms with children
+   signed in and no count within the agency's interval. Bell + push to clocked-in educators, never SMS. */
+Schedule::command('headcounts:remind')->everyFiveMinutes()->withoutOverlapping(10);
+// Overdue sleep checks (2026-10-13, Ontario O. Reg. 137/15 s.33.1): one cheap query a minute instead of phones polling.
+Schedule::command('sleep-checks:alert')->everyMinute()->withoutOverlapping(5);
+/* Ontario drill schedule (O. Reg. 137/15 s.68 / s.68.2, 2026-10-13): missing-child drill due within 14 days or
+   overdue, monthly fire drill overdue — directors (admins on overdue), once per change. CA-ON agencies only. */
+Schedule::command('drills:cadence-remind')->dailyAt('08:00')->timezone('America/Toronto')->withoutOverlapping();
 
 /* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
    had accumulated, 281 of them already expired: full-access credentials (`["*"]`) sitting
@@ -452,3 +460,7 @@ Schedule::command('sage:sync')->everyThirtyMinutes()->withoutOverlapping(25)->ru
 /* Ohio PFCC (2026-10-10): unpaid copays and the absent-day cap — bell only, to directors and
    admins, only for agencies where PFCC is on. See PfccAlertsCommand. */
 Schedule::command('pfcc:alerts')->dailyAt('07:15')->timezone('America/New_York')->withoutOverlapping(30)->onOneServer();
+
+// Policy library (2026-10-13): weekly — Mondays 8:00 agency time, once per ISO week — staff with policies to sign,
+// and director/admin summaries with reviews due within 30 days (O. Reg. 137/15 s.6.1, s.46). On unless switched off.
+Schedule::command('policies:remind')->hourlyAt(5)->withoutOverlapping(30)->onOneServer();

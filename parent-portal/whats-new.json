@@ -1,6 +1,69 @@
 {
- "updated": "2026-10-10",
+ "updated": "2026-10-13",
  "entries": [
+  {
+   "type": "new",
+   "date": "2026-10-13",
+   "icon": "👀",
+   "title": "Headcounts and the acting supervisor",
+   "body": "Educators tap Headcount on Today (or Count on a walk) and tick each child signed in as they see them, with the moment: transition, washroom, outdoor in/out, arrival, dismissal, field trip. If anyone is not seen, one tap alerts the director, agency admins and acting supervisors, and links to the serious occurrence form. Directors see every count on the new Headcounts screen and name the acting supervisor for each centre (Ontario O. Reg. 137/15 s.11 and s.6.1(2), from 1 January 2027).",
+   "roles": [
+    "educator",
+    "centre_director",
+    "agency_admin",
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-13",
+   "icon": "📘",
+   "title": "Policies and staff sign-offs",
+   "body": "Compliance → Policies keeps your policies and procedures: upload or write each one, publish a new version with a summary of what changed, and every staff member it applies to is asked to read and sign it. A training matrix shows who has signed (and been trained) on each required policy, with CSV export, and you can record contraventions and yearly reviews. Ontario agencies can add the O. Reg. 137/15 checklist in one click (titles only; you add your own text).",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-13",
+   "icon": "📘",
+   "title": "Policies to review",
+   "body": "Your centre's policies are now in KiddieTrac. Open Policies to review, read each one and sign that you have read and understand it. You are asked again whenever a policy changes.",
+   "roles": [
+    "educator",
+    "home_visitor",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-13",
+   "icon": "😴",
+   "title": "Sleep room and sleep checks",
+   "body": "For Ontario centres: the Sleep room lists every sleeping child under 24 months with a countdown to their next direct visual check. Tap Checked (or Check all) to record position, breathing and colour. An overdue check alerts the room, then the director. Directors get a per-nap report with every gap, as CSV or PDF, and admins set the check interval in Settings → Notifications → Sleep checks.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "agency_admin",
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-13",
+   "icon": "🚧",
+   "title": "Hazards, and missing-child drills",
+   "body": "New Hazards screen: record a non-routine hazard, the steps taken, and send parents a notice (in the app and by email) — then a second notice once it is resolved, as Ontario requires from January 2027. Educators can report a hazard from their menu. The Drill log now records missing-child drills (at least every 3 months in Ontario) and shows when each centre's next missing-child and fire drill is due, with a reminder to directors when one is coming up or overdue.",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director",
+    "educator"
+   ]
+  },
   {
    "type": "improved",
    "date": "2026-10-10",

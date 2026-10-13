@@ -1358,6 +1358,16 @@
     });
 
     const form = wrap.querySelector('#kt-new-incident-form');
+    /* PREFILL from the link (2026-10-13): a headcount that finds a child unaccounted for links
+       here with child_id, type=serious_occurrence, when, where and what the count showed. */
+    try {
+      const pf = (ctx && ctx.params) || {};
+      const setIf = function (name, v) { const el = form.querySelector('[name="' + name + '"]'); if (!el || v == null || v === '') return;
+        if (el.tagName === 'SELECT' && !Array.prototype.some.call(el.options, function (o) { return o.value === String(v); })) return; el.value = String(v); };
+      setIf('child_id', pf.child_id); setIf('incident_type', pf.type); setIf('severity', pf.severity);
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(pf.occurred_at || '')) setIf('occurred_at', pf.occurred_at);
+      setIf('location', pf.location); setIf('description', pf.description);
+    } catch (_) {}
     let pendingSubmit = false;
 
     wrap.querySelectorAll('[data-submit]').forEach(function (btn) {
