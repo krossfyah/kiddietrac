@@ -312,6 +312,12 @@ final class ManualPayrollController extends Controller
                 $hours = isset($row['hours']) ? round((float) $row['hours'], 2) : null;
 
                 $id = DB::table('payroll_documents')->insertGetId([
+                    /* external_key is NOT NULL + UNIQUE (it keys the iLearn backfill). The
+                       manual run never set it, so no manual payslip could ever be saved
+                       (found 2026-10-13: 0 manual payslips existed). One per agency, period
+                       and payee, matching the duplicate check above. */
+                    'external_key' => substr('manual:' . $agencyId . ':' . $from . ':' . $to . ':'
+                        . ($isContractor ? 'c:' . md5(mb_strtolower($payeeName)) : 'u:' . $uid), 0, 120),
                     'agency_id' => $agencyId,
                     'centre_id' => $row['centre_id'] ?? null,
                     'user_id' => $isContractor ? null : $uid,
