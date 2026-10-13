@@ -104,6 +104,11 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const r = await Api.get('/operations/closures').catch(() => ({ data: [] }));
+    /* MOST RECENTLY ADDED FIRST (2026-10-13, Anthony: "closures section should default to the
+       latest in the table"). The API returns date order, so a closure added today sat among a
+       year of pre-loaded holidays. Newest entry at the top; same-moment rows by newest id. */
+    r.data = (r.data || []).slice().sort((x, y) =>
+      String(y.created_at || '').localeCompare(String(x.created_at || '')) || (Number(y.id) - Number(x.id)));
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🗓 Closures & holidays</h2>
