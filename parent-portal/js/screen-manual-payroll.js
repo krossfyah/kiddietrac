@@ -115,8 +115,12 @@
         hours_detail: s.hours_detail, centre_id: s.centre_id,
         /* Only ever an HOURLY rate — the server refuses to carry forward a flat
            payout, because hours x flat-amount proposes six-figure pay. */
-        rate: s.last_rate || null, last_paid: s.last_paid || null,
+        rate: s.last_rate || (s.funding && s.funding.base) || null, last_paid: s.last_paid || null,
         gross: null, net: null,
+        /* Ontario workforce funding (2026-10-13): the WEG / WCF rates and the hours x rate
+           lines the server worked out. Added as SEPARATE lines when the person is ticked,
+           because the pay stub must show them separately on every pay cheque. */
+        funding: s.funding || null,
         lines: [], notes: '', picked: false
       };
     });
@@ -147,6 +151,31 @@
     function lineTotal(r) {
       return (r.lines || []).reduce(function (a, l) { return a + (Number(l.amount) || 0); }, 0);
     }
+    var anyFunding = Object.keys(rows).some(function (k) { return rows[k].funding; });
+    /* Seed the funding lines once, from the server's rates and the clock's hours. They are
+       ordinary lines after that (editable, removable) but keep their component. */
+    function seedFunding(r) {
+      if (!r.funding || r.fundingSeeded) return;
+      r.fundingSeeded = true;
+      (r.funding.lines || []).forEach(function (l) {
+        r.lines.push({ label: l.label + ' (' + Number(l.hours).toFixed(2) + ' h × $' + Number(l.rate).toFixed(2) + ')',
+          amount: l.amount, component: l.component, hours: l.hours, rate: l.rate });
+      });
+    }
+    function fundingChip(r) {
+      var f = r.funding;
+      if (!f) return '';
+      var parts = [];
+      if (f.rates.weg > 0) parts.push('WEG $' + f.rates.weg.toFixed(2));
+      if (f.rates.wcf_increase > 0) parts.push('WCF $' + f.rates.wcf_increase.toFixed(2));
+      if (f.rates.wcf_floor > 0) parts.push('floor $' + f.rates.wcf_floor.toFixed(2));
+      if (f.rates.stability > 0) parts.push('stability $' + f.rates.stability.toFixed(2));
+      return '<div style="font-size:11px;color:#1F6080;margin-top:2px;">' + esc(f.category_label)
+        + (parts.length ? ' · ' + parts.join(' · ') + ' /h' : ' · no funding')
+        + (f.base == null ? ' · <span style="color:' + C.warn + ';">no base wage recorded</span>' : '')
+        + '</div>'
+        + (f.warnings || []).map(function (w) { return '<div style="font-size:11px;color:' + C.warn + ';">⚠ ' + esc(w.text) + '</div>'; }).join('');
+    }
 
     function paint() {
       if (detailFor) { paintDetail(rows[detailFor]); return; }
@@ -171,7 +200,7 @@
           + '<input type="checkbox" data-pick="' + esc(r.key) + '"' + (r.picked ? ' checked' : '') + ' style="width:16px;height:16px;"></td>'
           + '<td style="padding:8px 10px;border-top:1px solid ' + C.line + ';">'
           + '<strong>' + esc(r.name) + '</strong>'
-          + '<div style="font-size:11.5px;color:' + C.muted + ';">' + esc(r.sub || '') + '</div></td>';
+          + '<div style="font-size:11.5px;color:' + C.muted + ';">' + esc(r.sub || '') + '</div>' + fundingChip(r) + '</td>';
 
         if (r.kind === 'staff') {
           cells += '<td style="padding:8px 10px;border-top:1px solid ' + C.line + ';white-space:nowrap;">'
@@ -215,6 +244,9 @@
       wrap.innerHTML =
         '<div style="font-size:13px;color:#334155;margin-bottom:10px;">Period '
         + esc(from) + ' to ' + esc(to) + '. Tick who is being paid, then enter what they are paid.</div>'
+        + (anyFunding ? '<div style="font-size:12px;color:#1F6080;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:6px 10px;margin-bottom:10px;">'
+          + 'Ontario workforce funding is on: ticking someone adds WEG and workforce compensation as separate lines '
+          + '(hours × rate) and includes them in the pay. Rates come from <a href="#workforce-funding">Workforce funding</a>.</div>' : '')
         + '<div style="display:flex;gap:4px;border-bottom:1px solid ' + C.rule + ';margin-bottom:10px;flex-wrap:wrap;">' + tabs + '</div>'
         + '<div style="max-height:44vh;overflow:auto;border:1px solid ' + C.rule + ';border-radius:10px;">'
         + '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>'
@@ -237,8 +269,9 @@
           r.picked = el.checked;
           /* Seed the pay from hours × rate the first time somebody is ticked. It is a
              starting point they can overwrite, never a figure that files itself. */
+          if (r.picked) { seedFunding(r); }
           if (r.picked && r.gross == null && r.hours && r.rate) {
-            r.gross = Math.round(r.hours * r.rate * 100) / 100;
+            r.gross = Math.round((r.hours * r.rate + lineTotal(r)) * 100) / 100;
           }
           paint();
         });
@@ -247,7 +280,7 @@
         el.addEventListener('change', function () {
           var r = rows[el.getAttribute('data-rate')];
           r.rate = el.value === '' ? null : parseFloat(el.value);
-          if (r.hours && r.rate) { r.gross = Math.round(r.hours * r.rate * 100) / 100; }
+          if (r.hours && r.rate) { r.gross = Math.round((r.hours * r.rate + lineTotal(r)) * 100) / 100; }
           paint();
         });
       });

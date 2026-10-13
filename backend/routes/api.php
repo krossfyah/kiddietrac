@@ -2743,6 +2743,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         });
         Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/operations/ratio-status',      [\App\Http\Controllers\Api\OperationsV2Controller::class, 'ratioStatus']);
+        Route::put   ('/operations/ratio-settings/{centre}', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'saveRatioSettings'])->where('centre', '[0-9]+');   // Ontario ratio settings (2026-10-13)
         Route::get   ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'busRoutes']);
         Route::post  ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'createBusRoute']);
         Route::get   ('/operations/bus-routes/{id}/children', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'routeChildren']);
@@ -2757,7 +2758,6 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/billing/prorate-preview',      [\App\Http\Controllers\Api\BillingV2Controller::class, 'proratePreview']);
         Route::get   ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'listCampaigns']);
         Route::post  ('/engagement/reenrollment',      [\App\Http\Controllers\Api\EngagementController::class, 'createCampaign']);
-        Route::put   ('/operations/ratio-settings/{centre}', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'saveRatioSettings'])->where('centre', '[0-9]+');   // Ontario ratio settings (2026-10-13)
         Route::get   ('/engagement/scores',            [\App\Http\Controllers\Api\EngagementController::class, 'engagementScores']);
         Route::get   ('/engagement/nps',               [\App\Http\Controllers\Api\EngagementController::class, 'npsSummary']);
     });
@@ -3220,4 +3220,24 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'role:educator,centre_director,
     Route::get ('sleep-checks/settings', [App\Http\Controllers\Api\SleepCheckController::class, 'settings']);
     Route::post('sleep-checks/settings', [App\Http\Controllers\Api\SleepCheckController::class, 'saveSettings']);
     Route::post('sleep-checks/children/{child}/direction', [App\Http\Controllers\Api\SleepCheckController::class, 'direction'])->whereNumber('child');
+});
+
+/* ONTARIO ECE WORKFORCE FUNDING (2026-10-13) - WEG + CWELCC workforce compensation: wage
+   components, pay-period lines, funding receipts (32-day check), year-end reconciliation.
+   Admins only; the controller re-checks agency_admin of the ACTIVE agency and CA-ON. */
+Route::prefix('v1')->middleware(['auth:sanctum', 'role:agency_admin,platform_admin'])->group(function () {
+    Route::get ('workforce-funding/status',   [App\Http\Controllers\Api\WorkforceFundingController::class, 'status']);
+    Route::get ('workforce-funding/settings', [App\Http\Controllers\Api\WorkforceFundingController::class, 'settings']);
+    Route::post('workforce-funding/settings', [App\Http\Controllers\Api\WorkforceFundingController::class, 'saveSettings']);
+    Route::post('workforce-funding/policy',   [App\Http\Controllers\Api\WorkforceFundingController::class, 'policy']);
+    Route::get ('workforce-funding/staff',    [App\Http\Controllers\Api\WorkforceFundingController::class, 'staff']);
+    Route::get ('workforce-funding/staff/{user}', [App\Http\Controllers\Api\WorkforceFundingController::class, 'person'])->whereNumber('user');
+    Route::post('workforce-funding/staff/{user}/components', [App\Http\Controllers\Api\WorkforceFundingController::class, 'addComponent'])->whereNumber('user');
+    Route::post ('workforce-funding/components/{id}', [App\Http\Controllers\Api\WorkforceFundingController::class, 'updateComponent'])->whereNumber('id');
+    Route::patch('workforce-funding/components/{id}', [App\Http\Controllers\Api\WorkforceFundingController::class, 'updateComponent'])->whereNumber('id');
+    Route::get ('workforce-funding/period',   [App\Http\Controllers\Api\WorkforceFundingController::class, 'period']);
+    Route::get ('workforce-funding/receipts', [App\Http\Controllers\Api\WorkforceFundingController::class, 'receipts']);
+    Route::post('workforce-funding/receipts', [App\Http\Controllers\Api\WorkforceFundingController::class, 'addReceipt']);
+    Route::post('workforce-funding/receipts/{id}/void', [App\Http\Controllers\Api\WorkforceFundingController::class, 'voidReceipt'])->whereNumber('id');
+    Route::get ('workforce-funding/year-end', [App\Http\Controllers\Api\WorkforceFundingController::class, 'yearEnd']);
 });

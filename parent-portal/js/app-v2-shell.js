@@ -356,6 +356,8 @@
           { hash: 'donations',        label: 'Donations',        icon: '💝' },
           { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
+          // Ontario WEG + workforce compensation (2026-10-13): hidden unless Ontario + on (screen-workforce-funding.js).
+          { hash: 'workforce-funding',  label: 'Workforce funding',  icon: '🍁' },
         ]},
         { label: 'Administration', items: [
           { hash: 'admin-users',      label: 'User management',  icon: '👥' },
@@ -1010,6 +1012,7 @@
     'time-off': 'Leave requests awaiting a decision.',
     'substitutes': 'Cover for absent staff.',
     'payroll': 'Pay runs and hours.',
+    'workforce-funding': 'Ontario WEG and workforce compensation: wage components, the 32-day check and the year-end report.',
     'background-checks': 'Police checks and vulnerable-sector screening.',
 
     'waitlist': 'Families waiting for a space.',

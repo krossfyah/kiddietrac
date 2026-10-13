@@ -4,6 +4,17 @@
   {
    "type": "new",
    "date": "2026-10-13",
+   "icon": "🍁",
+   "title": "Ontario workforce funding in payroll",
+   "body": "Ontario agencies can now run the Wage Enhancement Grant and CWELCC workforce compensation through payroll. Set each person’s base wage under Finance → Workforce funding and KiddieTrac works out WEG, the annual increase and the wage-floor top-up (2026: $25.86 program staff, $26.86 supervisors and home visitors; $28 / $31 ceilings). Payroll runs add them as separate pay-stub lines, funding receipts are checked against the 32-day rule, and the year-end reconciliation (hours, FTE, base, WEG, WCF by person and position) downloads as CSV or PDF. Switch it on in Settings → Payroll.",
+   "roles": [
+    "agency_admin",
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-13",
    "icon": "🧾",
    "title": "OCCMS reporting: Record of Attendance",
    "body": "Ontario centres with fee-subsidized children: Compliance → OCCMS reporting prepares each month's Record of Attendance for OCCMS. Every subsidized child's days are filled in from sign-ins, reported absences and closures (P, S, A, V, H, N, W, O); correct any day, see absence allowance used and left, and who was absent 5 days in a row without notice. One person reviews, a second signs off, then record the date you entered it in OCCMS. CSV and a printable PDF with capacity and vacancies by age group, a CWELCC monthly summary tab, and reminders on the 1st and before the due day (York: the 8th).",

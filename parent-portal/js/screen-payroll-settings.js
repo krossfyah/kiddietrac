@@ -166,6 +166,12 @@
         st.style.color = '#BE4038'; st.textContent = (e && e.message) || 'Save failed';
       });
     };
+
+    /* Ontario workforce funding (WEG + CWELCC), 2026-10-13 — its own card under the pay
+       schedule. Only Ontario agencies get one back from the API; elsewhere nothing shows. */
+    if (KT.WorkforceFunding && KT.WorkforceFunding.paintSettings) {
+      try { KT.WorkforceFunding.paintSettings(main); } catch (e) {}
+    }
   }
 
   KT.PayrollSettings = { render: render };

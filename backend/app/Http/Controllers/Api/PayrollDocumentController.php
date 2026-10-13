@@ -342,9 +342,50 @@ class PayrollDocumentController extends Controller
             'income_tax' => $doc->income_tax !== null ? $money($doc->income_tax) : '',
             'other_deductions' => $doc->other_deductions !== null ? $money($doc->other_deductions) : '',
             'net' => $doc->net !== null ? $money($doc->net) : $money($gross),
+            // Line items (incl. Ontario WEG / workforce compensation), for {{#each pay_lines}}.
+            'pay_lines' => array_map(fn ($l) => [
+                'label' => $l['label'], 'hours' => $l['hours'] !== null ? $money($l['hours']) : '',
+                'rate' => $l['rate'] !== null ? $money($l['rate']) : '', 'amount' => $money($l['amount']),
+            ], self::payLines($doc)),
             'notes' => $doc->notes ?? ($settings['payslip_note'] ?? ''),
             'generated_at' => now()->format('M j, Y g:i A'),
         ];
+    }
+
+    /**
+     * The payslip's stored line items, normalised: label, hours, rate, amount, component.
+     * Ontario workforce-funding lines carry a component (weg, wcf_increase, wcf_floor, …).
+     */
+    private static function payLines(object $doc): array
+    {
+        $raw = isset($doc->lines) && $doc->lines ? (json_decode((string) $doc->lines, true) ?: []) : [];
+        $out = [];
+        foreach ((array) $raw as $l) {
+            if (! is_array($l) || trim((string) ($l['label'] ?? '')) === '') continue;
+            $out[] = [
+                'label' => (string) $l['label'],
+                'hours' => isset($l['hours']) && $l['hours'] !== null && $l['hours'] !== '' ? round((float) $l['hours'], 2) : null,
+                'rate' => isset($l['rate']) && $l['rate'] !== null && $l['rate'] !== '' ? round((float) $l['rate'], 2) : null,
+                'amount' => round((float) ($l['amount'] ?? 0), 2),
+                'component' => isset($l['component']) ? (string) $l['component'] : null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /** The funding lines as a small table, for a custom template that does not print pay_lines itself. */
+    private static function fundingBlock(array $lines): string
+    {
+        $f = array_values(array_filter($lines, fn ($l) => ! empty($l['component'])));
+        if (! $f) return '';
+        $h = '<table style="margin-top:14px;"><thead><tr><th>Wage enhancement and workforce compensation</th><th class="r">Hours</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>';
+        foreach ($f as $l) {
+            $h .= '<tr><td>' . e($l['label']) . '</td><td class="r">' . ($l['hours'] !== null ? e((string) $l['hours']) : '') . '</td><td class="r">'
+                . ($l['rate'] !== null ? '$' . number_format($l['rate'], 2) : '') . '</td><td class="r">$' . number_format($l['amount'], 2) . '</td></tr>';
+        }
+
+        return $h . '</tbody></table>';
     }
 
     /**
@@ -445,7 +486,11 @@ class PayrollDocumentController extends Controller
                     . ((string) ($tpl->styles ?? ''))
                     . '</style></head><body>'
                     . '<h1>' . e($agency->name ?? 'Payroll') . '</h1>'
-                    . $rendered . '</body></html>';
+                    . $rendered
+                    // A template written before workforce funding existed would drop the
+                    // WEG / WCF lines the pay stub must show — so they are added under it.
+                    . (str_contains((string) $tpl->body, 'pay_lines') ? '' : self::fundingBlock(self::payLines($doc)))
+                    . '</body></html>';
 
                 $pdf = new Dompdf();
                 $pdf->loadHtml($html);
@@ -470,6 +515,27 @@ class PayrollDocumentController extends Controller
             ? Carbon::parse($doc->period_start)->format('j M Y') . ' – ' . Carbon::parse($doc->period_end ?: $doc->period_start)->format('j M Y')
             : '—';
 
+        /* THE LINES THE PAY IS MADE OF (2026-10-13). They were stored on manual payslips but
+           never printed. Gross INCLUDES them (the run says "incl. $x in lines"), so the first
+           row is the remainder — for an Ontario workforce-funding payslip that is exactly
+           hours x base wage, followed by WEG and workforce compensation as their own lines,
+           which the funding guidelines require on every pay stub. */
+        $payLines = self::payLines($doc);
+        $hasFunding = (bool) array_filter($payLines, fn ($l) => ! empty($l['component']));
+        // Only a payslip that carries Ontario workforce-funding lines changes layout; every
+        // other payslip prints exactly as before (Anthony, 2026-10-13).
+        if (! $hasFunding) {
+            $payLines = [];
+        }
+        $linesSum = round(array_sum(array_column($payLines, 'amount')), 2);
+        $firstAmount = $payLines ? round((float) $doc->gross - $linesSum, 2) : (float) $doc->gross;
+        $firstLabel = $hasFunding ? 'Base wage' : ($doc->unit_label === 'visits' ? 'Home visits completed' : ($doc->unit_label === 'hours' ? 'Hours worked' : 'Agreed amount'));
+        $lineRows = '';
+        foreach ($payLines as $l) {
+            $lineRows .= '<tr><td>' . e($l['label']) . '</td><td class="r">' . ($l['hours'] !== null ? e((string) $l['hours']) : '') . '</td><td class="r">'
+                . ($l['rate'] !== null ? $fmt($l['rate']) : '') . '</td><td class="r">' . $fmt($l['amount']) . '</td></tr>';
+        }
+
         $html = '<html><head><meta charset="utf-8"><style>'
             . 'body{font-family:DejaVu Sans,sans-serif;color:#0F172A;font-size:12px;}'
             . 'h1{font-size:20px;margin:0 0 2px;color:#1F6080;}'
@@ -487,9 +553,10 @@ class PayrollDocumentController extends Controller
             . '<td style="border:0;padding-top:14px;" class="r"><div class="muted">Pay period</div>' . e($period) . '</td></tr></table>'
             . '<table><thead><tr><th>Description</th><th class="r">' . e(ucfirst((string) $doc->unit_label)) . '</th>'
             . '<th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>'
-            . '<tr><td>' . ($doc->unit_label === 'visits' ? 'Home visits completed' : ($doc->unit_label === 'hours' ? 'Hours worked' : 'Agreed amount'))
+            . '<tr><td>' . e($firstLabel)
             . '</td><td class="r">' . e((string) (float) $doc->units) . '</td><td class="r">' . $fmt($doc->rate)
-            . '</td><td class="r">' . $fmt($doc->gross) . '</td></tr>'
+            . '</td><td class="r">' . $fmt($firstAmount) . '</td></tr>'
+            . $lineRows
             . '<tr><td colspan="3" class="r"><strong>Gross pay</strong></td><td class="r"><strong>' . $fmt($doc->gross) . '</strong></td></tr>'
             . (function () use ($doc, $fmt) {
                 // Only where a payroll was actually run. Reconstructed payslips carry no
@@ -523,6 +590,8 @@ class PayrollDocumentController extends Controller
                 : 'Gross pay only — deductions are not calculated here.')
             . ($doc->status === 'paid' && $doc->paid_at ? ' Marked paid ' . Carbon::parse($doc->paid_at)->format('j M Y') . '.' : '')
             . '</p>'
+            . ($hasFunding ? '<p class="muted">Wage Enhancement Grant (WEG) and workforce compensation (CWELCC) are provincial funding paid to you on '
+                . 'every pay cheque for each hour worked, shown here as separate lines.</p>' : '')
             . ($note !== '' ? '<p class="muted">' . e($note) . '</p>' : '')
             . '</body></html>';
 

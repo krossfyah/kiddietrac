@@ -159,6 +159,22 @@ final class ManualPayrollController extends Controller
                 ];
             })->values();
 
+        /* ONTARIO WORKFORCE FUNDING (2026-10-13). Where it is switched on, each person
+           carries their WEG / WCF / wage-floor rates and the hours x rate lines to put on
+           the payslip — every pay cheque, never a lump sum. Never allowed to break a run. */
+        try {
+            $funding = \App\Support\WorkforceFunding::forRun($agencyId, $staff->pluck('hours', 'user_id')->all(), $from, $to);
+            if ($funding) {
+                $staff = $staff->map(function ($s) use ($funding) {
+                    $s['funding'] = $funding[$s['user_id']] ?? null;
+
+                    return $s;
+                })->values();
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+
         /* PEOPLE PAID BY NAME. The bookkeeper, the accountant, the trades — nobody
            with a login, and nobody with a clock to read, so they carry an amount and no
            hours. Drawn from what this agency has actually paid before, which is also
@@ -216,6 +232,10 @@ final class ManualPayrollController extends Controller
             'rows.*.lines' => 'nullable|array|max:30',
             'rows.*.lines.*.label' => 'required_with:rows.*.lines|string|max:120',
             'rows.*.lines.*.amount' => 'required_with:rows.*.lines|numeric',
+            // Ontario workforce funding lines carry what they are and how they were made.
+            'rows.*.lines.*.component' => 'nullable|string|in:gof,weg,wcf_increase,wcf_floor,stability',
+            'rows.*.lines.*.hours' => 'nullable|numeric|min:0|max:1000',
+            'rows.*.lines.*.rate' => 'nullable|numeric|min:0|max:100',
             'rows.*.hours_detail' => 'nullable|array|max:200',
             'rows.*.staff_group' => 'nullable|string|max:16',
             'rows.*.centre_id' => 'nullable|integer',
@@ -321,6 +341,15 @@ final class ManualPayrollController extends Controller
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
+
+                /* The WEG / WCF lines this payslip carries, kept per component for the
+                   32-day check and the year-end reconciliation. Inside the transaction: a
+                   payslip whose funding was not recorded must not exist. */
+                if (! $isContractor && ! empty($row['lines'])) {
+                    \App\Support\WorkforceFunding::recordLines($agencyId, (int) $id, $uid,
+                        isset($row['centre_id']) ? (int) $row['centre_id'] : null, $from, $to,
+                        $hours, isset($row['rate']) ? (float) $row['rate'] : null, array_values($row['lines']));
+                }
 
                 $created[] = [
                     'id' => $id,
