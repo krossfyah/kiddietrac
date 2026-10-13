@@ -169,8 +169,22 @@ class SuppressAgencyMail
            run for every message; only the agency / centre / room switches and the .env
            kill-switch are skipped. Somebody who has left is not staff any more. */
         $bypassSwitches = false;
+        /* SCHEDULED REPORTS ARE NEVER SUPPRESSED (2026-10-10, Anthony: "add logic to never
+           supress emails with scheduled reports at all"). A report schedule is an address
+           somebody typed in on purpose: a shared mailbox, an accountant, a team inbox. That
+           address can also be the login of an account that has since been closed. iLearn's
+           attendance@ilearnhcc.com is one (user 9, deactivated), so the attendance log was
+           withheld every hour as "suspended or deactivated". X-KT-Scheduled-Report skips
+           EVERY gate: switches, kill-switches, invite state and account state. The only thing
+           still dropped is an address that cannot exist (demo.*, example.*, .invalid), which
+           would only bounce. Only SendScheduledReports::sendOne sets this header. */
+        $isScheduledReport = false;
         try {
             $hdrs = $event->message->getHeaders();
+            if ($hdrs && $hdrs->has('X-KT-Scheduled-Report')) {
+                $hdrs->remove('X-KT-Scheduled-Report');
+                $isScheduledReport = true;
+            }
             if ($hdrs && $hdrs->has('X-KT-Bypass-Suppression')) {
                 $hdrs->remove('X-KT-Bypass-Suppression');
                 $bypassSwitches = true;
@@ -211,6 +225,10 @@ class SuppressAgencyMail
             }
             $recipients = array_values(array_diff($recipients, $deadEnd));
             Log::info('Demo addresses dropped from a message', ['dropped' => $deadEnd]);
+        }
+
+        if ($isScheduledReport) {
+            return true;   // never suppressed: see the note at the top of decide()
         }
 
         // 0) NOT-ONBOARDED gate. A parent/user who hasn't accepted their invite yet
