@@ -316,6 +316,8 @@
           { hash: 'inspection',         label: 'Inspection checklist', icon: '✅' },
           { hash: 'renewals',           label: 'Renewals calendar',    icon: '📅' },
           { hash: 'cwelcc',             label: 'Subsidies',           icon: '💵' },
+          // Ontario OCCMS reporting (2026-10-13): hidden unless an Ontario agency (screen-subsidy-roa.js).
+          { hash: 'subsidy-roa',        label: 'OCCMS reporting',     icon: '🧾' },
           { hash: 'retention',          label: 'Retention',          icon: '📊' },
           { hash: 'anomalies',          label: 'Anomalies',          icon: '🔍' },
         ]},
@@ -518,6 +520,8 @@
           { hash: 'inspection',        label: 'Inspection checklist', icon: '✅' },
           { hash: 'renewals',          label: 'Renewals calendar',    icon: '📅' },
           { hash: 'cwelcc',            label: 'Subsidies',         icon: '💵' },
+          // Ontario OCCMS reporting (2026-10-13): hidden unless an Ontario agency (screen-subsidy-roa.js).
+          { hash: 'subsidy-roa',        label: 'OCCMS reporting',     icon: '🧾' },
           { hash: 'retention',         label: 'Retention',        icon: '📊' },
           { hash: 'forecast',          label: 'Enrolment forecast',icon: '📈' },
           { hash: 'anomalies',         label: 'Anomalies',        icon: '🔍' },
@@ -1064,6 +1068,7 @@
     'inspection': 'Walk the licensing checklist before an inspector does.',
     'renewals': 'Licences and certificates coming up for renewal.',
     'cwelcc': 'CWELCC and provincial fee subsidies.',
+    'subsidy-roa': 'Monthly fee subsidy Record of Attendance and CWELCC summary to enter in OCCMS.',
     'safe-arrival': 'Every scheduled child, accounted for.',
     'audit-logs': 'Every change made in the portal, and by whom.',
     'security-alerts': 'Sign-in anomalies and security events.',

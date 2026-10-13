@@ -2231,6 +2231,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/headcounts/acting/{centre}', [\App\Http\Controllers\Api\HeadcountController::class, 'actingShow'])->whereNumber('centre');
         Route::post('/headcounts/acting/{centre}', [\App\Http\Controllers\Api\HeadcountController::class, 'actingSave'])->whereNumber('centre');
     });
+    /* OCCMS MONTHLY REPORTING (2026-10-13): fee subsidy Record of Attendance + CWELCC monthly summary.
+       Ontario agencies only; admins (agency) and directors (their centres) — scoped in OccmsController. */
+    Route::middleware('role:agency_admin,platform_admin,centre_director')->group(function () {
+        Route::get  ('/occms/status',       [\App\Http\Controllers\Api\OccmsController::class, 'status']);
+        Route::get  ('/occms/roa',          [\App\Http\Controllers\Api\OccmsController::class, 'show']);
+        Route::patch('/occms/roa/cell',     [\App\Http\Controllers\Api\OccmsController::class, 'cell']);
+        Route::post ('/occms/roa/capacity', [\App\Http\Controllers\Api\OccmsController::class, 'capacity']);
+        Route::post ('/occms/roa/status',   [\App\Http\Controllers\Api\OccmsController::class, 'transition']);
+        Route::get  ('/occms/roa/csv',      [\App\Http\Controllers\Api\OccmsController::class, 'csv']);
+        Route::get  ('/occms/roa/pdf',      [\App\Http\Controllers\Api\OccmsController::class, 'pdf']);
+        Route::get  ('/occms/cwelcc',       [\App\Http\Controllers\Api\OccmsController::class, 'cwelcc']);
+        Route::get  ('/occms/cwelcc/csv',   [\App\Http\Controllers\Api\OccmsController::class, 'cwelccCsv']);
+        Route::post ('/occms/settings',     [\App\Http\Controllers\Api\OccmsController::class, 'settings']);
+    });
     // Drill log (2026-10-09): admins, directors and educators; scoped to their centres in the controller.
     Route::middleware('role:agency_admin,platform_admin,centre_director,educator')->group(function () {
         Route::get   ('/drills',           [\App\Http\Controllers\Api\DrillController::class, 'index']);

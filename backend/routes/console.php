@@ -464,3 +464,6 @@ Schedule::command('pfcc:alerts')->dailyAt('07:15')->timezone('America/New_York')
 // Policy library (2026-10-13): weekly — Mondays 8:00 agency time, once per ISO week — staff with policies to sign,
 // and director/admin summaries with reviews due within 30 days (O. Reg. 137/15 s.6.1, s.46). On unless switched off.
 Schedule::command('policies:remind')->hourlyAt(5)->withoutOverlapping(30)->onOneServer();
+// OCCMS Record of Attendance (2026-10-13): hourly; sends at 8:00 agency time on the 1st (ready to review) and two days
+// before the due day (not signed off). Ontario agencies with fee-subsidized children only; once per month and kind.
+Schedule::command('occms:roa-remind')->hourlyAt(7)->withoutOverlapping(30)->onOneServer();

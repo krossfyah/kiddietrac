@@ -4,6 +4,18 @@
   {
    "type": "new",
    "date": "2026-10-13",
+   "icon": "🧾",
+   "title": "OCCMS reporting: Record of Attendance",
+   "body": "Ontario centres with fee-subsidized children: Compliance → OCCMS reporting prepares each month's Record of Attendance for OCCMS. Every subsidized child's days are filled in from sign-ins, reported absences and closures (P, S, A, V, H, N, W, O); correct any day, see absence allowance used and left, and who was absent 5 days in a row without notice. One person reviews, a second signs off, then record the date you entered it in OCCMS. CSV and a printable PDF with capacity and vacancies by age group, a CWELCC monthly summary tab, and reminders on the 1st and before the due day (York: the 8th).",
+   "roles": [
+    "agency_admin",
+    "platform_admin",
+    "centre_director"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-13",
    "icon": "👥",
    "title": "Ontario ratio rules for licensed centres",
    "body": "Room ratios, the director dashboard and the educator ratio bar now apply O. Reg. 137/15 at Ontario licensed centres: Schedule 1 ratios and maximum group sizes, reduced ratios only inside your arrival, departure and rest windows, the supervisor counted fully, at half or not at all, the two-adult rule, mixed-age limits, family age groups and an RECE in every group. Turn it on per location under Room ratios → Ratio settings.",
