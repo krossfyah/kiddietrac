@@ -39,7 +39,8 @@
     for (var i = 0; i < first; i++) cells += '<div></div>';
     for (var dn = 1; dn <= days; dn++) {
       var t = dn === today;
-      cells += '<div data-cal-day="' + dn + '" style="position:relative;text-align:center;font-size:12px;padding:4px 0;border-radius:8px;' + (t ? 'background:var(--brand-blue,#1F6080);color:#fff;font-weight:800;' : 'color:#334155;') + '">' + dn + '</div>';
+      // Today stands out: filled, ringed, a touch larger (2026-10-13, "make the calendar card for today highlighted").
+      cells += '<div data-cal-day="' + dn + '"' + (t ? ' title="Today"' : '') + ' style="position:relative;text-align:center;font-size:12px;padding:4px 0;border-radius:8px;' + (t ? 'background:var(--brand-blue,#1F6080);color:#fff;font-weight:900;box-shadow:0 0 0 3px rgba(20,161,168,.25),0 4px 10px -4px rgba(14,124,144,.6);transform:scale(1.06);' : 'color:#334155;') + '">' + dn + '</div>';
     }
     return '<div style="' + CARD + '"><div style="' + TITLE + '">📅 <span>' + esc(label) + '</span></div>'
       + '<div class="kt-cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">' + cells + '</div>'
@@ -128,13 +129,16 @@
       var staff = (d && d.staff) || [];
       if (!staff.length) { bd.innerHTML = '<div style="color:#64748B;font-size:13px;">No staff active right now.</div>'; return; }
       bd.innerHTML = '<div style="font-size:26px;font-weight:800;color:var(--brand-blue,#1F6080);line-height:1;margin-bottom:11px;">' + staff.length + '<span style="font-size:13px;font-weight:600;color:#64748B;"> on the floor</span></div>';
-      staff.slice(0, 10).forEach(function (s) {
+      staff.slice(0, 10).forEach(function (s, i) {
         var row = document.createElement('button');
         row.type = 'button';
         row.title = 'Send ' + s.name + ' a quick message';
-        row.style.cssText = 'width:100%;text-align:left;display:flex;align-items:center;gap:9px;padding:6px 4px;border:none;background:none;cursor:pointer;border-radius:8px;';
-        row.onmouseenter = function () { row.style.background = '#F1F5F9'; };
-        row.onmouseleave = function () { row.style.background = 'none'; };
+        /* Zebra rows, the same tint as the centre cards' check-in lists (2026-10-13,
+           Anthony: "team on floor card is not zebra striped like the other cards"). */
+        var zebra = i % 2 ? '#F4F8FC' : '#FFFFFF';
+        row.style.cssText = 'width:100%;text-align:left;display:flex;align-items:center;gap:9px;padding:6px 8px;border:none;background:' + zebra + ';cursor:pointer;border-radius:8px;';
+        row.onmouseenter = function () { row.style.background = '#E8F1F7'; };
+        row.onmouseleave = function () { row.style.background = zebra; };
         var pDot = (s.presence === 'available' || s.presence === 'idle')
           ? '<span title="' + (s.presence === 'available' ? 'Available' : 'Idle') + '" style="display:inline-block;width:9px;height:9px;border-radius:50%;flex-shrink:0;background:' + (s.presence === 'available' ? '#16A34A' : '#F59E0B') + ';box-shadow:0 0 0 2px #fff;"></span>'
           : '';
@@ -277,10 +281,13 @@
 
       // Today is always drawn, even when empty: "nothing today" is an answer, and a
       // heading that vanishes on a quiet day teaches people to stop reading the card.
-      var html = head('Today')
+      // Today's block is highlighted — tinted, with an accent edge — so it reads first.
+      var html = '<div style="background:#ECF8FA;border:1px solid #CDEBEF;border-left:4px solid var(--brand-blue,#0E7C90);border-radius:10px;padding:4px 10px 6px;margin:0 0 4px;">'
+        + head('Today · ' + now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))
         + ((byDay[todayStr] || []).length
             ? byDay[todayStr].map(row).join('')
-            : '<div style="color:#94A3B8;padding:3px 0;">Nothing scheduled.</div>');
+            : '<div style="color:#64748B;padding:3px 0;">Nothing scheduled.</div>')
+        + '</div>';
 
       /* Local midnight from numeric parts. kt-tz-global.js parses a zone-less string as
          UTC, so new Date('2026-08-30T00:00:00') is 8pm on the 29th here — which labelled
