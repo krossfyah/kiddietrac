@@ -63,45 +63,69 @@
     if (told) { return; }
     told = true;
 
+    /* A CENTRED CARD, not a pill at the foot of the screen (2026-10-13, Anthony: "its
+       truncated and should show up in the middle of the screen as a popup"). The pill sat
+       behind the phone's own navigation bar and wrapped its sentence into four lines on a
+       narrow screen, so "is ready." disappeared under the system bar on the APK. */
+    if (!d.getElementById('kt-upd-css')) {
+      var st = d.createElement('style');
+      st.id = 'kt-upd-css';
+      st.textContent = [
+        '#kt-upd{position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;',
+        '  padding:20px max(16px,env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left));',
+        '  background:rgba(8,20,45,.45);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);animation:kt-upd-fade .18s ease-out both;}',
+        '#kt-upd .kt-upd-card{width:100%;max-width:340px;background:#fff;border-radius:20px;padding:24px 22px 18px;text-align:center;',
+        '  box-shadow:0 24px 60px -16px rgba(8,20,45,.5);font:500 15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#0F172A;',
+        '  animation:kt-upd-pop .22s cubic-bezier(.16,.84,.44,1) both;}',
+        '#kt-upd .kt-upd-ic{width:56px;height:56px;margin:0 auto 12px;border-radius:16px;display:flex;align-items:center;justify-content:center;',
+        '  background:linear-gradient(135deg,#0E7C90,#14A1A8);color:#fff;font-size:26px;box-shadow:0 8px 18px -8px rgba(14,124,144,.7);}',
+        '#kt-upd h2{margin:0 0 6px;font-size:18px;font-weight:800;letter-spacing:-.01em;}',
+        '#kt-upd p{margin:0 0 18px;color:#475569;font-size:14.5px;}',
+        '#kt-upd button{appearance:none;display:block;width:100%;border:0;border-radius:12px;font:inherit;font-weight:800;cursor:pointer;-webkit-tap-highlight-color:transparent;}',
+        '#kt-upd .kt-upd-go{background:linear-gradient(135deg,#0E7C90,#14A1A8);color:#fff;padding:13px 16px;font-size:15.5px;}',
+        '#kt-upd .kt-upd-go:active{transform:scale(.98);}',
+        '#kt-upd button:focus{outline:none;}#kt-upd button:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(20,161,168,.35);}',
+        '#kt-upd .kt-upd-later{background:none;color:#64748B;padding:11px 16px 4px;font-size:14px;font-weight:700;}',
+        '@keyframes kt-upd-fade{from{opacity:0}to{opacity:1}}',
+        '@keyframes kt-upd-pop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}',
+        '@media (prefers-reduced-motion:reduce){#kt-upd,#kt-upd .kt-upd-card{animation:none}}'
+      ].join('\n');
+      (d.head || d.documentElement).appendChild(st);
+    }
+
     var bar = d.createElement('div');
-    bar.setAttribute('role', 'status');
-    bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:22px;'
-      + 'z-index:2147483600;display:flex;align-items:center;gap:12px;'
-      + 'background:#0F172A;color:#fff;border-radius:999px;padding:11px 14px 11px 18px;'
-      + 'box-shadow:0 10px 30px rgba(15,23,42,.35);font:600 13.5px/1.2 -apple-system,'
-      + 'BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;max-width:92vw;';
+    bar.id = 'kt-upd';
+    // alertdialog, not dialog: kt-live and the shell treat [role="dialog"] as "a modal is
+    // open" and hold refreshes, which this notice has no reason to do.
+    bar.setAttribute('role', 'alertdialog');
+    bar.setAttribute('aria-modal', 'true');
+    bar.setAttribute('aria-labelledby', 'kt-upd-h');
+    bar.innerHTML = '<div class="kt-upd-card">'
+      + '<div class="kt-upd-ic" aria-hidden="true">⟳</div>'
+      + '<h2 id="kt-upd-h">Update available</h2>'
+      + '<p>A newer version of KiddieTrac is ready. Reload to get the latest changes.</p>'
+      + '<button type="button" class="kt-upd-go">Reload now</button>'
+      // aria-label="Close" tells kt-modal-guard.js this card already has a close control.
+      + '<button type="button" class="kt-upd-later" aria-label="Close">Later</button>'
+      + '</div>';
 
-    var msg = d.createElement('span');
-    msg.textContent = 'A newer version of KiddieTrac is ready.';
-    bar.appendChild(msg);
-
-    var go = d.createElement('button');
-    go.type = 'button';
-    go.textContent = 'Reload';
-    go.style.cssText = 'appearance:none;border:0;border-radius:999px;background:#159FB4;'
-      + 'color:#fff;font:inherit;font-weight:800;padding:7px 15px;cursor:pointer;';
+    var go = bar.querySelector('.kt-upd-go');
     go.addEventListener('click', function () {
       /* Cache-busted on purpose. A plain reload can be answered from the very
          caches that caused this, which would dismiss the notice and change
          nothing — the exact failure this file exists to end. */
+      go.textContent = 'Reloading…'; go.disabled = true;
       try {
         var u = new URL(w.location.href);
         u.searchParams.set('_b', String(Date.now()));
         w.location.replace(u.toString());
       } catch (e) { w.location.reload(); }
     });
-    bar.appendChild(go);
-
-    var later = d.createElement('button');
-    later.type = 'button';
-    later.textContent = 'Later';
-    later.setAttribute('aria-label', 'Dismiss');
-    later.style.cssText = 'appearance:none;border:0;background:none;color:#94A3B8;'
-      + 'font:inherit;font-weight:700;padding:7px 6px;cursor:pointer;';
-    later.addEventListener('click', function () { bar.remove(); });
-    bar.appendChild(later);
+    bar.querySelector('.kt-upd-later').addEventListener('click', function () { bar.remove(); });
+    // Not closed by a tap on the backdrop: a scroll or a drag that ends there is not "Later".
 
     (d.body || d.documentElement).appendChild(bar);
+    try { go.focus({ preventScroll: true }); } catch (e) {}
 
     /* Name only what CHANGED. The fingerprint is a few kilobytes of filenames and
        would bury the breadcrumb it is meant to explain. */
