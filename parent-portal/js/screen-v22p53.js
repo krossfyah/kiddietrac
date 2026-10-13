@@ -968,11 +968,11 @@
       </div>
       <div id="sm-monthly-wrap">
         <label style="${lbl}">Monthly amount ($)</label>
-        <input id="sm-amt" type="number" min="0.01" step="0.01" style="${fld}" value="${editing && basis0 === 'monthly' ? x.monthly_amount : ''}">
+        <input id="sm-amt" type="number" min="0" step="0.01" style="${fld}" value="${editing && basis0 === 'monthly' ? x.monthly_amount : ''}">
       </div>
       <div id="sm-daily-wrap">
         <label style="${lbl}">Daily amount ($)</label>
-        <input id="sm-daily" type="number" min="0.01" step="0.01" style="${fld}" value="${editing && basis0 === 'daily' ? x.daily_amount : ''}">
+        <input id="sm-daily" type="number" min="0" step="0.01" style="${fld}" value="${editing && basis0 === 'daily' ? x.daily_amount : ''}">
         <div style="font-size:12px;color:#64748B;margin-top:4px;line-height:1.45;">Each month this comes off as the daily amount × the days the child is scheduled to attend, not counting days the centre is closed.</div>
       </div>
       <div style="display:flex;gap:10px;">
@@ -1035,7 +1035,8 @@
       else body.monthly_amount = parseFloat(m.querySelector('#sm-amt').value);
       if (!editing) body.child_id = parseInt(m.querySelector('#sm-child').value, 10) || null;
       if (!editing && !body.child_id) { err.textContent = 'Choose the child.'; return; }
-      if (!((basis === 'daily' ? body.daily_amount : body.monthly_amount) > 0)) { err.textContent = basis === 'daily' ? 'Enter the daily amount.' : 'Enter the monthly amount.'; return; }
+      // $0 is allowed (a subsidy on file at no value); blank is not.
+      if (!((basis === 'daily' ? body.daily_amount : body.monthly_amount) >= 0)) { err.textContent = basis === 'daily' ? 'Enter the daily amount.' : 'Enter the monthly amount.'; return; }
       if (!body.valid_from) { err.textContent = 'Enter the first day.'; return; }
       if (body.valid_to && body.valid_to < body.valid_from) { err.textContent = 'The last day cannot be before the first day.'; return; }
       const files = m.querySelector('#sm-files').files;

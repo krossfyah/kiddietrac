@@ -433,8 +433,11 @@ class SubsidyController extends Controller
             // Daily or monthly (2026-09-29). A daily amount comes off as that amount x
             // the child's scheduled care days in the month (App\Support\SubsidyAmount).
             'amount_basis' => ['sometimes', 'in:monthly,daily'],
-            'monthly_amount' => ['nullable', 'numeric', 'min:0.01', 'max:99999'],
-            'daily_amount' => ['nullable', 'numeric', 'min:0.01', 'max:9999'],
+            /* $0 is allowed (2026-10-13, Anthony: "subsidy section allow to add zero dollars
+               for a family") — a subsidy on file at no value, e.g. approved but not funded
+               yet. Blank is still refused below: zero has to be entered on purpose. */
+            'monthly_amount' => ['nullable', 'numeric', 'min:0', 'max:99999'],
+            'daily_amount' => ['nullable', 'numeric', 'min:0', 'max:9999'],
             'valid_from' => [$req, 'date'],
             'valid_to' => ['nullable', 'date'],
             'approved_at' => ['nullable', 'date'],
@@ -457,13 +460,13 @@ class SubsidyController extends Controller
         if ($creating || array_key_exists('amount_basis', $data) || array_key_exists('monthly_amount', $data) || array_key_exists('daily_amount', $data)) {
             $basis = $data['amount_basis'] ?? ($creating ? 'monthly' : null);
             if ($basis === 'daily' || ($basis === null && isset($data['daily_amount']))) {
-                if (empty($data['daily_amount'])) {
+                if (! isset($data['daily_amount']) || $data['daily_amount'] === '') {
                     abort(response()->json(['message' => 'Enter the daily amount.', 'errors' => ['daily_amount' => ['Required for a daily subsidy.']]], 422));
                 }
                 $data['amount_basis'] = 'daily';
                 $data['monthly_amount'] = 0;
             } elseif ($basis === 'monthly' || isset($data['monthly_amount'])) {
-                if (empty($data['monthly_amount'])) {
+                if (! isset($data['monthly_amount']) || $data['monthly_amount'] === '') {
                     abort(response()->json(['message' => 'Enter the monthly amount.', 'errors' => ['monthly_amount' => ['Required for a monthly subsidy.']]], 422));
                 }
                 $data['amount_basis'] = 'monthly';
