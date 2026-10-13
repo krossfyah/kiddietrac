@@ -165,6 +165,19 @@ final class DrillController extends Controller
         $manager = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
             ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])->exists();
         abort_unless($manager || (int) $row->recorded_by === (int) $request->user()->id, 403, 'Only the person who recorded it, or a director, can remove a drill.');
+        /* KEPT 12 MONTHS (2026-10-13, Anthony: block removal of drill records under 12 months
+           old; Ontario O. Reg. 137/15 s.68.2 keeps missing-child drill records 12 months, and
+           fire drill records are inspection evidence). A record can still be removed within
+           24 hours of being entered, to undo a mistake; after that it stays until it is a year
+           old. Drills cannot be edited, so the 24-hour window is the only correction path. */
+        $enteredAt = $row->created_at ? \Illuminate\Support\Carbon::parse($row->created_at) : null;
+        $drilledAt = $row->drilled_at ? \Illuminate\Support\Carbon::parse($row->drilled_at) : null;
+        $justEntered = $enteredAt && $enteredAt->gt(now()->subDay());
+        $underAYear = $drilledAt && $drilledAt->gt(now()->subYear());
+        if (! $justEntered && $underAYear) {
+            return response()->json(['message' => 'Drill records are kept for 12 months, so this one can be removed after '
+                . $drilledAt->copy()->addYear()->format('M j, Y') . '. A record can only be removed within 24 hours of being entered.'], 422);
+        }
         DB::table('drills')->where('id', $id)->update(['deleted_at' => now(), 'updated_at' => now()]);
         try {
             \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $agencyId, 'action' => 'drill.removed', 'entity_type' => 'drill', 'entity_id' => $id,
