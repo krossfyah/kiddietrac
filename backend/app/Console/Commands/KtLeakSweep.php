@@ -52,8 +52,11 @@ class KtLeakSweep extends Command
         '#^api/v1/integration/pull/new#',            // the feed TELLS the source system about departures
     ];
 
-    /** Mail that is about leaving, so it names what has closed. Regex on the subject. */
-    public const LEGIT_MAIL = '/leaving|de-?enrol|depart|off-?board|statement|receipt|invoice|refund|credit note|final|closed account|access (has been )?(paused|closed)|your records|withdraw/i';
+    /** Mail that is about leaving, so it names what has closed. Regex on the subject.
+        Also the platform's own alerts (this sweep and kt:integrity-check), which name the
+        closed records BY DESIGN — counting them made every sweep re-find the previous
+        day's alert and raise a CRITICAL forever (2026-10-13). */
+    public const LEGIT_MAIL = '/^\[KiddieTrac\] (Leak sweep|Data check)|leaving|de-?enrol|depart|off-?board|statement|receipt|invoice|refund|credit note|final|closed account|access (has been )?(paused|closed)|your records|withdraw/i';
 
     private const PATHS = '#(roster|attendance|children|child|centres|centre|provider|staff|educator|famil|dashboard|today|ratio|check|report|summary|digest|people|users|directory|enrol|room|immuni|allerg|medic|birthday|safe|absence|closure|calendar|home|overview|stats|count|zone|late|pickup|option)#i';
     private const SKIP = '#(export|download|pdf|csv|xlsx|file|photo|avatar|image|logo|qr|ical|\.ics|stream|poll|callback|webhook|unsubscribe|oauth|google|track|pixel|preview|print|zip|backup|signed|token|logout|impersonat)#i';
