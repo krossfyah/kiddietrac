@@ -29,6 +29,13 @@
       '  border:1px solid #FECACA;border-radius:10px;background:#FFF5F5;color:#B91C1C;font:800 12.5px/1 inherit;font-family:inherit;cursor:pointer;',
       '  transition:background .15s,color .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent;}',
       '.kt-em-btn:hover{background:#FEE2E2;}',
+      /* Keep the composer on ONE line with the toggle in it: a global phone rule lets
+         .kt-thread-compose wrap, which dropped the mic to a second row and squeezed this
+         button to 21px. The text box takes whatever room is left instead. */
+      '.kt-em-btn{min-width:34px !important;width:auto;}',
+      '.kt-thread-compose:has(> .kt-em-btn),form:has(> .kt-em-btn){flex-wrap:nowrap !important;}',
+      '.kt-thread-compose:has(> .kt-em-btn) > input[type="text"],.kt-thread-compose:has(> .kt-em-btn) > textarea,form:has(> .kt-em-btn) > input[type="text"]{flex:1 1 0 !important;min-width:0 !important;}',
+      '@media (max-width:420px){.kt-thread-compose:has(> .kt-em-btn){gap:4px !important;}.kt-thread-compose:has(> .kt-em-btn) > button:not(.kt-em-btn){width:36px;}}',
       '.kt-em-btn[aria-pressed="true"]{background:#DC2626;border-color:#DC2626;color:#fff;box-shadow:0 0 0 3px rgba(220,38,38,.25);animation:kt-em-pulse 1.2s ease-in-out infinite;}',
       '.kt-em-btn .kt-em-ic{font-size:15px;line-height:1;filter:saturate(1.2);}',
       '@keyframes kt-em-pulse{0%,100%{box-shadow:0 0 0 3px rgba(220,38,38,.25);}50%{box-shadow:0 0 0 6px rgba(220,38,38,.12);}}',
