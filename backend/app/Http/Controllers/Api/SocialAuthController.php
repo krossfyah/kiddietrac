@@ -71,6 +71,9 @@ class SocialAuthController extends Controller
             return $this->fail("That sign-in method isn't enabled yet.");
         }
         try {
+            // A fresh driver: Socialite caches them, and with() would stay on the cached one,
+            // so a later plain sign-in in the same process would be marked as the app's.
+            Socialite::forgetDrivers();
             $driver = Socialite::driver($provider)->stateless();
             $cc = (string) request()->query('cc', '');
             if (request()->query('app') === '1' && preg_match('/^[A-Za-z0-9_-]{43}$/', $cc)) {
