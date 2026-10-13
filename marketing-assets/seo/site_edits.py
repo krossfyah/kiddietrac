@@ -527,3 +527,20 @@ _apply_gaev_chain = apply
 def apply(out):
     base = _apply_gaev_chain(out)
     return _growth.growth(base) if _os.environ.get('K6_GROWTH', '1') != '0' else base
+
+
+# -- Safe Arrival page + home showcase, its own sub-brand (safearrival_edits.py); K6_SAFEARRIVAL=0 builds without --
+# NOTE 2026-10-13: the live site was deployed by applying safearrival_edits.py to the
+# then-current index.built.html (rebase_vendor_scrub.py first), because live.html and this
+# chain are behind live (Xero/Sage/vendor scrub were edited in place on 2026-10-09).
+import safearrival_edits as _sa
+
+_apply_growth_chain = apply
+
+
+def apply(out):
+    base = _apply_growth_chain(out)
+    if _os.environ.get('K6_SAFEARRIVAL', '1') == '0':
+        return base
+    meta = _sa.merge_seo_meta(_json.load(open(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'seo_meta.json'), encoding='utf-8')))
+    return _sa.safearrival(base, meta)

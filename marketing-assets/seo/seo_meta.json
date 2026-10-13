@@ -129,6 +129,10 @@
     "cwelcc-calculator": {
       "t": "Calculateur des frais CWELCC pour l’Ontario (gratuit) | KiddieTrac",
       "d": "Calculateur gratuit : ce que paient les familles sous le plafond CWELCC de 22 $ par jour, leur économie par rapport à vos frais complets et vos revenus mensuels de frais parentaux."
+    },
+    "safe-arrival": {
+      "t": "Safe Arrival : alertes quand un enfant n’est pas arrivé | KiddieTrac",
+      "d": "Quand un enfant attendu aujourd’hui n’a pas été inscrit à l’arrivée, KiddieTrac demande aux parents, puis alerte les éducatrices et la direction. Un tableau en direct et un registre de chaque vérification."
     }
   },
   "es": {
@@ -255,6 +259,10 @@
     "cwelcc-calculator": {
       "t": "Calculadora de tarifas CWELCC para Ontario (gratis) | KiddieTrac",
       "d": "Calculadora gratuita: lo que pagan las familias con el tope de CWELCC de $22 al día, su ahorro frente a su tarifa completa y sus ingresos mensuales por tarifas de los padres."
+    },
+    "safe-arrival": {
+      "t": "Safe Arrival: alertas cuando un niño no ha llegado | KiddieTrac",
+      "d": "Cuando un niño esperado hoy no ha sido registrado, KiddieTrac pregunta a los padres y luego alerta a los educadores del aula y a la dirección. Un tablero en vivo y un registro de cada verificación."
     }
   },
   "hi": {
@@ -381,6 +389,10 @@
     "cwelcc-calculator": {
       "t": "ओंटारियो के लिए CWELCC फ़ीस कैलकुलेटर (मुफ़्त) | KiddieTrac",
       "d": "मुफ़्त कैलकुलेटर: CWELCC की $22 प्रतिदिन की सीमा में परिवार कितना देते हैं, आपकी पूरी फ़ीस की तुलना में उनकी बचत, और आपकी मासिक पैरेंट-फ़ीस आय।"
+    },
+    "safe-arrival": {
+      "t": "Safe Arrival: जब बच्चा नहीं पहुँचा हो तो अलर्ट | KiddieTrac",
+      "d": "जब आज अपेक्षित किसी बच्चे का साइन-इन नहीं हुआ हो, तो KiddieTrac माता-पिता से पूछता है, फिर कक्षा के शिक्षकों और डायरेक्टर को अलर्ट करता है। लाइव बोर्ड और हर जाँच का रिकॉर्ड।"
     }
   }
 }
