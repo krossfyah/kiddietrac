@@ -457,7 +457,10 @@
           await Api.post('/auth/active-agency', { agency_id: a.id });
           sessionStorage.setItem('kt_active_agency_id', String(a.id));
           sessionStorage.setItem('kt_active_agency_name', a.name);
-          window.location.hash = '#dashboard';
+          // The role's own landing: Home on a phone, the dashboard on a desktop (2026-10-13).
+          var _land = 'dashboard';
+          try { if (KT.Shell && KT.Shell.homeHashForRole) _land = KT.Shell.homeHashForRole('agency_admin') || 'dashboard'; } catch (e) {}
+          window.location.hash = '#' + _land;
           (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload());
         });
         actionsTd.appendChild(switchBtn);
