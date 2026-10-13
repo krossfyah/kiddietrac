@@ -139,6 +139,7 @@
         { hash: 'chat',          icon: '💬', label: 'Message Centre' },
         { hash: 'forms',         icon: '📄', label: 'Documents' },   // their filed documents (+ any staff forms) — 2026-10-09
         { hash: 'incidents',     icon: '⚠️', label: 'Incidents' },
+        { hash: 'hazards',       icon: '🚧', label: 'Report a hazard' },
         { hash: 'late-pickups',  icon: '⏰', label: 'Late pickup' },
         { hash: 'medications',   icon: '💊', label: 'Medications' },
         { hash: 'time-clock',    icon: '⏱', label: 'Clock in/out' },
@@ -204,7 +205,7 @@
     help: 'Guides and answers', children: 'Child records & details',
     'my-tasks': 'Tasks assigned to you', tasks: 'Assign and track educator tasks',
     'care-log': 'Log daily care moments', walk: 'Start a walk & share your live location', observations: 'Learning observations',
-    'lesson-plans': 'Weekly lesson plans', menu: "This week's meals", incidents: 'Report & view incidents',
+    'lesson-plans': 'Weekly lesson plans', menu: "This week's meals", incidents: 'Report & view incidents', hazards: 'Something unsafe? Tell your director',
     'time-clock': 'Clock in and out', 'my-schedule': 'Your work schedule',
     reports: 'Attendance and hours for your room(s)',
     'my-hours': 'Your pay, payslips and payout details', 'time-off': 'Request time off',

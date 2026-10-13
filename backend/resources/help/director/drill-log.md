@@ -35,3 +35,14 @@ Drills can't be dated in the future. The person who recorded a drill, a director
 ## Reminders
 
 Admins can switch on an email to directors on weekday mornings when a drill is still owed or was missed. It is off unless you turn it on.
+
+## Ontario: missing-child drills and the drill schedule
+
+From **January 1, 2027** Ontario centres must run a **missing-child drill at least every 3 months** (O. Reg. 137/15 s.68.2) and keep the records for at least 12 months. Fire drills stay monthly (s.68).
+
+- **Missing child** is a drill type for Ontario agencies. Choosing it adds: the room(s) or area, the scenario, who led it, how long until the child was located (seconds), whether a 911 call and a parent call were simulated, and what to improve.
+- The **Drill schedule** card replaces *Due and missed* for Ontario. For each centre it shows the last missing-child drill and when the next is due (3 months later), and the same for fire drills — **On track**, **Due**, **Due soon** or **Overdue**.
+- A school-based program can switch a centre's fire drills from **Monthly** to **3 per school term** (directors for their own centre, or an admin).
+- Drill records are never deleted by a clean-up job. Removing one from the log hides it but keeps it on file.
+
+**Schedule reminders** (Ontario, on by default): each morning, a centre's directors get an in-app notice and an email when its missing-child drill is due within 14 days or overdue, or its fire drill is overdue. Agency admins also hear about anything overdue. Each change is sent once, not every day. An admin can switch them off at the bottom of the Drill log.
