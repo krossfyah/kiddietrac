@@ -87,11 +87,16 @@
         + '<div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:2px;">' + title + '</div>'
         + row('Families they can message', 'Rooms = only families of the children in rooms they are assigned to.',
             sel('mr-' + role + '-fam', [['rooms', 'Families in their rooms'], ['centre', 'All families at their centre']], r.families))
-        + row('Staff they can message', '',
-            STAFF.map(function (p) {
-              return '<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;color:#334155;margin:2px 6px 2px 0;">'
+        // Five switches do not fit beside a label: they get the row's full width and wrap
+        // (they were running off the right edge of the card, 2026-10-13).
+        + '<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;">'
+        +   '<div style="font-size:14px;color:#334155;font-weight:600;margin-bottom:8px;">Staff they can message</div>'
+        +   '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;">'
+        +   STAFF.map(function (p) {
+              return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;white-space:nowrap;">'
                 + '<input type="checkbox" data-mr="' + role + '" data-staff="' + p[0] + '"' + (r.staff && r.staff[p[0]] ? ' checked' : '') + '> ' + p[1] + '</label>';
-            }).join(''))
+            }).join('')
+        +   '</div></div>'
         + '</div>';
     }
     body.innerHTML = '<div class="kt-card" style="max-width:680px;">'

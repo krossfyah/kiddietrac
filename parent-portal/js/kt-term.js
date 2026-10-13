@@ -24,6 +24,11 @@
 
   function transform(t) {
     var out = t;
+    /* "Message Centre" is the product's name, not a facility: an agency that says
+       "Provider" was shown "Message Provider" everywhere (2026-10-13). Held aside while
+       the facility word is swapped, then put back. */
+    var MC = /Message Centre/gi.test(out);
+    if (MC) out = out.replace(/Message Centre/g, '\uE000MC\uE000').replace(/message centre/g, '\uE000mc\uE000');
     if (/centre/i.test(out)) {
       // Combined "Centres / Rooms" + "Centre / Room" → the single chosen term.
       out = out.replace(/Centres\s*\/\s*Rooms/g, chosen(true)).replace(/centres\s*\/\s*rooms/g, chosen(true).toLowerCase());
@@ -34,6 +39,7 @@
           .replace(/\bcentres\b/g, _p.toLowerCase()).replace(/\bcentre\b/g, _s.toLowerCase());
       }
     }
+    if (MC) out = out.replace(/\uE000MC\uE000/g, 'Message Centre').replace(/\uE000mc\uE000/g, 'message centre');
     // Country address labels (base is CA: Province / Postal code).
     if (STATE !== 'Province' && /province/i.test(out)) {
       out = out.replace(/\bProvince\b/g, STATE).replace(/\bprovince\b/g, STATE.toLowerCase());
