@@ -475,6 +475,8 @@ Route::post('/auth/passkey/verify',  [\App\Http\Controllers\Api\PasskeyControlle
     Route::get('/auth/social/providers', [\App\Http\Controllers\Api\SocialAuthController::class, 'providers']);
     Route::get('/auth/social/{provider}/redirect', [\App\Http\Controllers\Api\SocialAuthController::class, 'redirect'])->where('provider', '[a-z]+')->middleware('throttle:20,1');
     Route::get('/auth/social/{provider}/callback', [\App\Http\Controllers\Api\SocialAuthController::class, 'callback'])->where('provider', '[a-z]+')->middleware('throttle:20,1');
+    // The phone app trades its one-time code for a token (SocialAuthController::appExchange).
+    Route::post('/auth/social/app-exchange', [\App\Http\Controllers\Api\SocialAuthController::class, 'appExchange'])->middleware('throttle:20,1');
     // v22p93: email open-tracking pixel (public, no auth)
     Route::get('/e/o/{token}', [\App\Http\Controllers\Api\PlatformController::class, 'trackOpen']);
 

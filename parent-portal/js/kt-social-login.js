@@ -44,6 +44,84 @@
     return false;
   }
 
+  /* IN THE PHONE APP (2026-10-13): "using google or microsoft to sign in using mobile apk
+     goes to the mobile site vs staying in the mobile apk". The plain link left the app's
+     WebView, so Android opened it in Chrome and the person ended up signed in to the
+     website there. In the app the sign-in now opens in a secure browser tab
+     (@capacitor/browser); the server sends a one-time code back through the app's own
+     link (com.kiddietrac.app://auth, needs APK versionCode 53+ for the intent filter) and
+     we swap it for a token here. The code is useless without the verifier, which never
+     leaves this WebView (see SocialAuthController::appExchange). */
+  var APP_MIN_BUILD = 53;
+  var appFlow = null; // a Promise<boolean> once we know whether this is a new-enough app
+  function capPlugins() { var C = window.Capacitor; return (C && C.Plugins) || {}; }
+  function isNativeApp() {
+    var C = window.Capacitor;
+    return !!(C && typeof C.isNativePlatform === 'function' && C.isNativePlatform() && (C.getPlatform ? C.getPlatform() === 'android' : true));
+  }
+  function appReady() {
+    if (appFlow) return appFlow;
+    var P = capPlugins();
+    if (!isNativeApp() || !P.Browser || !P.App || !window.crypto || !crypto.subtle) return (appFlow = Promise.resolve(false));
+    appFlow = P.App.getInfo().then(function (i) { return parseInt(i && i.build, 10) >= APP_MIN_BUILD; }).catch(function () { return false; });
+    return appFlow;
+  }
+  function b64url(bytes) {
+    var s = ''; for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function startAppSignIn(provider) {
+    var v = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    try { sessionStorage.setItem('kt_social_v', v); } catch (e) {}
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(v)).then(function (h) {
+      var url = API + '/auth/social/' + provider + '/redirect?app=1&cc=' + b64url(new Uint8Array(h));
+      return capPlugins().Browser.open({ url: url });
+    });
+  }
+  var _appBusy = false;
+  function finishAppSignIn(link) {
+    var q = {};
+    String(link).replace(/^[^?]*\?/, '').split('&').forEach(function (kv) {
+      var i = kv.indexOf('='); if (i > 0) q[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '));
+    });
+    try { capPlugins().Browser.close(); } catch (e) {}
+    if (q.error) { showError(q.error); return; }
+    var v = null; try { v = sessionStorage.getItem('kt_social_v'); } catch (e) {}
+    if (!q.code || !v || _appBusy) { if (!_appBusy) showError('Sign-in did not finish. Please try again.'); return; }
+    _appBusy = true;
+    fetch(API + '/auth/social/app-exchange', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ code: q.code, verifier: v })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        try { sessionStorage.removeItem('kt_social_v'); } catch (e) {}
+        if (!res.ok || !res.d || !res.d.token) { _appBusy = false; showError((res.d && res.d.message) || 'Sign-in failed. Please try again.'); return; }
+        var token = res.d.token;
+        return fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (u) {
+            var user = u ? (u.user || u) : null;
+            // The same finish as the password and passkey sign-ins on this page.
+            if (typeof window.ktFinishSignIn === 'function' && user) return window.ktFinishSignIn({ token: token, user: user }, 'social');
+            sessionStorage.setItem('kt_token', token);
+            if (user) sessionStorage.setItem('kt_user', JSON.stringify(user));
+            var now = String(Date.now());
+            sessionStorage.setItem('kt_login_at', now); sessionStorage.setItem('kt_last_activity', now);
+            location.replace('/dashboard.html');
+          });
+      })
+      .catch(function () { _appBusy = false; showError('Could not reach KiddieTrac. Check your connection and try again.'); });
+  }
+  function listenForAppReturn() {
+    appReady().then(function (ok) {
+      if (!ok) return;
+      var A = capPlugins().App;
+      A.addListener('appUrlOpen', function (ev) { if (ev && /^com\.kiddietrac\.app:\/\/auth/.test(ev.url || '')) finishAppSignIn(ev.url); });
+      // If Android closed the app while the browser tab was open, the link arrives as the launch URL.
+      if (A.getLaunchUrl) A.getLaunchUrl().then(function (r) { if (r && /^com\.kiddietrac\.app:\/\/auth/.test(r.url || '')) finishAppSignIn(r.url); }).catch(function () {});
+    });
+  }
+
   function injectButtons() {
     var form = document.getElementById('loginForm') || document.querySelector('.auth-form');
     if (!form || document.getElementById('kt-social')) return;
@@ -72,6 +150,16 @@
           a.addEventListener('mouseenter', function () { a.style.transform = 'translateY(-2px)'; a.style.boxShadow = '0 8px 18px -8px rgba(15,23,42,.28)'; });
           a.addEventListener('mouseleave', function () { a.style.transform = ''; a.style.boxShadow = '0 1px 3px rgba(15,23,42,.06)'; });
           a.innerHTML = ICONS[p] || ('<span style="font-weight:800;font-size:20px;color:#334155;">' + (name.charAt(0) || '?') + '</span>');
+          // In the app: sign in inside a secure tab and come back here (older app builds
+          // keep the plain link).
+          a.addEventListener('click', function (ev) {
+            if (!isNativeApp()) return;
+            ev.preventDefault();
+            appReady().then(function (ok) {
+              if (!ok) { location.href = a.href; return; }
+              startAppSignIn(p).catch(function () { location.href = a.href; });
+            });
+          });
           row.appendChild(a);
         });
         wrap.appendChild(row);
@@ -85,6 +173,7 @@
   }
 
   if (handleCallback()) return;                     // redirecting away — skip button injection
+  listenForAppReturn();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectButtons);
   else injectButtons();
 })();

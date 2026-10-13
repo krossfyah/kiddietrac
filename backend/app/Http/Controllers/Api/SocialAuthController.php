@@ -26,6 +26,30 @@ class SocialAuthController extends Controller
     private const PROVIDERS = ['google', 'microsoft', 'facebook'];
     private const FRONTEND = 'https://app.kiddietrac.com';
 
+    /* SIGN-IN FROM THE PHONE APP (2026-10-13, Anthony: "using google or microsoft to sign
+       in using mobile apk goes to the mobile site vs staying in the mobile apk").
+
+       The app's WebView may not show Google's sign-in (Google refuses embedded WebViews),
+       so Android handed the whole flow to Chrome, and the callback below then signed the
+       person in to the website IN CHROME. Now the app opens the flow in a secure browser
+       tab with ?app=1&cc=<challenge>, and the callback, instead of a token in a website
+       URL, sends a one-time code back to the app through its own link (APP_RETURN). The
+       app trades the code for a token at appExchange().
+
+       PKCE-style: the app made a secret (verifier) and sent only its SHA-256 (cc). Any
+       other app on the phone that claimed the same link would get the code but not the
+       verifier, so the code is useless to it. One use, two minutes. */
+    private const APP_RETURN = 'com.kiddietrac.app://auth';
+    private const APP_CODE_TTL = 120;
+
+    /** The PKCE challenge when this sign-in came from the app, else null. */
+    private function appChallenge(?string $state): ?string
+    {
+        if (! is_string($state) || strncmp($state, 'app.', 4) !== 0) return null;
+        $cc = substr($state, 4);
+        return preg_match('/^[A-Za-z0-9_-]{43}$/', $cc) ? $cc : null;
+    }
+
     private function enabled(string $provider): bool
     {
         return in_array($provider, self::PROVIDERS, true)
@@ -47,7 +71,13 @@ class SocialAuthController extends Controller
             return $this->fail("That sign-in method isn't enabled yet.");
         }
         try {
-            return Socialite::driver($provider)->stateless()->redirect();
+            $driver = Socialite::driver($provider)->stateless();
+            $cc = (string) request()->query('cc', '');
+            if (request()->query('app') === '1' && preg_match('/^[A-Za-z0-9_-]{43}$/', $cc)) {
+                // Comes back to callback() untouched as ?state=, which is how it knows.
+                $driver->with(['state' => 'app.' . $cc]);
+            }
+            return $driver->redirect();
         } catch (\Throwable $e) {
             return $this->fail('Could not start ' . ucfirst($provider) . ' sign-in.');
         }
@@ -55,6 +85,7 @@ class SocialAuthController extends Controller
 
     public function callback(string $provider)
     {
+        $this->appCc = $this->appChallenge(request()->query('state'));
         if (! $this->enabled($provider)) {
             return $this->fail("That sign-in method isn't enabled yet.");
         }
@@ -99,6 +130,14 @@ class SocialAuthController extends Controller
         \App\Support\AccountStatus::markClaimed((int) $user->id);
         DB::table('users')->where('id', $user->id)->update(['last_login_at' => now()]);
 
+        if ($this->appCc) {
+            // The app gets a code, not a token: the token is made in appExchange().
+            $code = bin2hex(random_bytes(24));
+            \Illuminate\Support\Facades\Cache::put('kt_social_app:' . hash('sha256', $code),
+                ['user_id' => (int) $user->id, 'provider' => $provider, 'cc' => $this->appCc], self::APP_CODE_TTL);
+            return redirect()->away(self::APP_RETURN . '?code=' . $code);
+        }
+
         $token = User::find($user->id)->createToken($provider . '-sso', ['*'], now()->addHours(12))->plainTextToken;
         \App\Support\SignInAlert::check((int) $user->id, request(), 'social');
 
@@ -106,9 +145,36 @@ class SocialAuthController extends Controller
         return redirect(self::FRONTEND . '/index.html#kt_social=' . urlencode($token));
     }
 
+    private ?string $appCc = null;
+
     private function fail(string $msg)
     {
+        // From the app, the message goes back to the app, not to a website in Chrome.
+        if ($this->appCc) {
+            return redirect()->away(self::APP_RETURN . '?error=' . rawurlencode($msg));
+        }
         return redirect(self::FRONTEND . '/index.html?social_error=' . urlencode($msg));
+    }
+
+    /** POST /auth/social/app-exchange {code, verifier} → {token}. One use, two minutes. */
+    public function appExchange(Request $request)
+    {
+        $data = $request->validate([
+            'code'     => 'required|string|regex:/^[a-f0-9]{48}$/',
+            'verifier' => 'required|string|regex:/^[A-Za-z0-9_-]{43,128}$/',
+        ]);
+        $row = \Illuminate\Support\Facades\Cache::pull('kt_social_app:' . hash('sha256', $data['code']));
+        $cc = rtrim(strtr(base64_encode(hash('sha256', $data['verifier'], true)), '+/', '-_'), '=');
+        if (! is_array($row) || ! hash_equals((string) $row['cc'], $cc)) {
+            return response()->json(['message' => 'That sign-in link has expired. Please try again.'], 422);
+        }
+        $user = User::find((int) $row['user_id']);
+        if (! $user || in_array($user->status ?? '', ['suspended', 'deactivated'], true)) {
+            return response()->json(['message' => 'This account is not active. Please contact your administrator.'], 403);
+        }
+        $token = $user->createToken($row['provider'] . '-sso', ['*'], now()->addHours(12))->plainTextToken;
+        \App\Support\SignInAlert::check((int) $user->id, $request, 'social');
+        return response()->json(['token' => $token]);
     }
 
     /* ── Portal config (platform-admin only; routes are role:platform_admin) ──
