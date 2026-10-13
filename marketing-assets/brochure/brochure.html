@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+<meta charset="UTF-8">
+<title>KiddieTrac Brochure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=block" rel="stylesheet">
+<style>
+  /* Tri-fold, US Letter landscape. Page 1 = outside (inside flap | back | cover),
+     page 2 = inside (three panels). */
+  @page { size: 11in 8.5in; margin: 0; }
+  :root { --navy: #021e49; --teal: #1F6080; --aqua: #2EBCBE; --green: #6DBE45; --mint: #E6F6F4; --sky: #EEF6FA; --ink: #1E293B; --muted: #475569; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sheet { width: 11in; height: 8.5in; display: grid; grid-template-columns: repeat(3, 1fr); page-break-after: always; overflow: hidden; }
+  .sheet:last-child { page-break-after: auto; }
+  .panel { position: relative; height: 8.5in; overflow: hidden; padding: 0.42in 0.36in; }
+  h1, h2, h3 { color: var(--navy); margin: 0; letter-spacing: -0.01em; }
+  h2 { font-size: 22pt; line-height: 1.12; font-weight: 800; }
+  h3 { font-size: 11.5pt; font-weight: 800; margin: 0 0 3pt; }
+  p { margin: 0 0 7pt; font-size: 9.3pt; line-height: 1.5; color: var(--muted); }
+  .eyebrow { font-size: 7.5pt; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--teal); margin-bottom: 6pt; }
+  .wave { position: absolute; left: -0.1in; right: -0.1in; height: 0.6in; }
+  .ticks { list-style: none; padding: 0; margin: 8pt 0 0; }
+  .ticks li { position: relative; padding-left: 17pt; font-size: 9.2pt; line-height: 1.45; color: var(--ink); margin-bottom: 6pt; }
+  .ticks li::before { content: ''; position: absolute; left: 0; top: 2.5pt; width: 11pt; height: 11pt; border-radius: 50%;
+    background: var(--green) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6.2l2 2 4-4.4' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/9pt no-repeat; }
+
+  /* ── cover ── */
+  .cover { padding: 0; background: var(--navy); color: #fff; display: flex; flex-direction: column; }
+  .cover .photo { height: 4.35in; background: url('img/educator-child-1600.jpg') 62% center / cover; position: relative; }
+  .cover .photo::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 0.55in;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'%3E%3Cpath d='M0 38 C110 5 250 70 400 22 L400 60 L0 60Z' fill='%23021e49'/%3E%3Cpath d='M0 38 C110 5 250 70 400 22' fill='none' stroke='%232EBCBE' stroke-width='3'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat; }
+  .cover .body { padding: 0.18in 0.4in 0.38in; flex: 1; display: flex; flex-direction: column; }
+  .cover h1 { color: #fff; font-size: 27pt; line-height: 1.06; font-weight: 800; }
+  .cover h1 em { font-style: normal; color: var(--aqua); }
+  .cover .lede { color: rgba(255,255,255,.82); font-size: 10pt; line-height: 1.5; margin: 10pt 0 0; }
+  .cover .foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; }
+  .cover .foot img { height: 0.62in; }
+  .cover .made { font-size: 8pt; font-weight: 700; color: rgba(255,255,255,.75); text-align: right; line-height: 1.4; }
+
+  /* ── inside flap: why ── */
+  .why { background: var(--mint); }
+  .why .item { display: grid; grid-template-columns: 0.42in 1fr; gap: 8pt; margin-top: 12pt; }
+  .why .ic { width: 0.42in; height: 0.42in; border-radius: 12pt; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 15pt; box-shadow: 0 2pt 6pt rgba(2,30,73,.08); }
+  .why .item p { margin: 0; font-size: 8.9pt; }
+  .why .photo { position: absolute; left: 0; right: 0; bottom: 0; height: 1.75in; background: url('img/parent-baby-1600.jpg') center 30% / cover; }
+  .why .photo::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 0.4in;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 0 L400 0 L400 14 C280 44 140 -6 0 26Z' fill='%23E6F6F4'/%3E%3Cpath d='M400 14 C280 44 140 -6 0 26' fill='none' stroke='%236DBE45' stroke-width='3'/%3E%3C/svg%3E") top / 100% 100% no-repeat; }
+
+  /* ── back: plans + contact ── */
+  .back { background: #fff; display: flex; flex-direction: column; }
+  .plans { display: grid; grid-template-columns: 1fr 1fr; gap: 7pt; margin: 10pt 0 6pt; }
+  .plan { border: 1.2pt solid #D9E6EE; border-radius: 10pt; padding: 8pt 9pt; }
+  .plan.pro { border-color: var(--teal); background: var(--sky); }
+  .plan b { display: block; font-size: 9pt; color: var(--navy); }
+  .plan .amt { font-size: 18pt; font-weight: 800; color: var(--navy); line-height: 1.1; }
+  .plan .amt small { font-size: 8pt; font-weight: 600; color: var(--muted); }
+  .plan span { display: block; font-size: 7.6pt; color: var(--muted); line-height: 1.35; margin-top: 2pt; }
+  .fine { font-size: 7.4pt; color: var(--muted); line-height: 1.45; }
+  .cta { margin-top: 12pt; background: var(--navy); border-radius: 14pt; padding: 12pt 13pt; color: #fff; display: grid; grid-template-columns: 1fr 0.95in; gap: 10pt; align-items: center; }
+  .cta h3 { color: #fff; font-size: 12.5pt; }
+  .cta p { color: rgba(255,255,255,.8); font-size: 8.4pt; margin: 3pt 0 0; }
+  .cta .qr { background: #fff; border-radius: 8pt; padding: 4pt; }
+  .cta .qr img { width: 100%; display: block; }
+  .contact { margin-top: auto; font-size: 8.8pt; line-height: 1.6; color: var(--ink); }
+  .contact b { color: var(--navy); }
+  .contact .logo { height: 0.42in; margin-bottom: 6pt; }
+
+  /* ── inside ── */
+  .meet { background: #fff; padding-top: 0; }
+  .meet .photo { margin: 0 -0.36in 12pt; height: 2.75in; background: url('img/director-laptop-1600.jpg') center 35% / cover; position: relative; }
+  .meet .photo::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 0.42in;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 30 C120 0 260 50 400 12 L400 40 L0 40Z' fill='white'/%3E%3Cpath d='M0 30 C120 0 260 50 400 12' fill='none' stroke='%232EBCBE' stroke-width='3'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat; }
+  .feat { background: var(--sky); }
+  .feat.two { background: #fff; }
+  .fb { margin-top: 11pt; }
+  .fb h3 { display: flex; align-items: center; gap: 6pt; }
+  .fb h3 i { font-style: normal; width: 18pt; height: 18pt; border-radius: 6pt; background: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 10pt; box-shadow: 0 1pt 4pt rgba(2,30,73,.1); }
+  .feat.two .fb h3 i { background: var(--sky); box-shadow: none; }
+  .fb .ticks { margin-top: 3pt; }
+  .fb .ticks li { font-size: 8.5pt; margin-bottom: 3pt; padding-left: 15pt; }
+  .fb .ticks li::before { width: 10pt; height: 10pt; top: 2pt; background-size: 8pt; }
+  .shot { margin-top: 12pt; border-radius: 9pt; overflow: hidden; box-shadow: 0 6pt 18pt rgba(2,30,73,.18); border: 1pt solid #DDE7EE; }
+  .shot img { width: 100%; display: block; }
+  .steps { position: absolute; left: 0.36in; right: 0.36in; bottom: 0.38in; background: var(--mint); border-radius: 12pt; padding: 10pt 11pt; }
+  .st { display: grid; grid-template-columns: 16pt 1fr; gap: 7pt; align-items: start; margin-top: 5pt; font-size: 8.4pt; line-height: 1.4; color: var(--muted); }
+  .st b { width: 16pt; height: 16pt; border-radius: 50%; background: var(--teal); color: #fff; font-size: 8pt; display: flex; align-items: center; justify-content: center; }
+  .st strong { color: var(--navy); }
+  .strip { position: absolute; left: 0; right: 0; bottom: 0; height: 1.55in; background: url('img/painting-hands-1600.jpg') center 45% / cover; }
+  .strip::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 0.38in;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 40' preserveAspectRatio='none'%3E%3Cpath d='M0 0 L400 0 L400 18 C260 44 120 0 0 24Z' fill='%23EEF6FA'/%3E%3Cpath d='M400 18 C260 44 120 0 0 24' fill='none' stroke='%232EBCBE' stroke-width='3'/%3E%3C/svg%3E") top / 100% 100% no-repeat; }
+  .badge { position: absolute; right: 0.28in; top: 0.34in; width: 1.05in; height: 1.05in; border-radius: 50%; background: var(--green); color: #fff; text-align: center;
+    display: flex; flex-direction: column; justify-content: center; font-weight: 800; font-size: 9pt; line-height: 1.15; transform: rotate(8deg); box-shadow: 0 5pt 12pt rgba(109,190,69,.35); }
+  .badge b { font-size: 15pt; }
+  /* Safe Arrival sub-brand callout (matches /safe-arrival on the website) */
+  .sa { margin-top: 10pt; border-radius: 11pt; padding: 8pt 10pt; background: linear-gradient(150deg,#022c22,#053d31); color: #d1fae5; display: grid; grid-template-columns: 0.46in 1fr; gap: 8pt; align-items: center; }
+  .sa .lk small { display: block; font-size: 6.4pt; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; color: #6ee7b7; }
+  .sa .lk b { display: block; font-size: 11.5pt; font-weight: 800; color: #fff; line-height: 1.1; }
+  .sa p { margin: 3pt 0 0; font-size: 7.9pt; line-height: 1.4; color: #c7ead9; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ OUTSIDE ═══════════ -->
+<section class="sheet">
+  <!-- inside flap -->
+  <div class="panel why">
+    <div class="eyebrow">Why KiddieTrac</div>
+    <h2>Made for the way childcare really works</h2>
+    <div class="item"><div class="ic">🍁</div><div><h3>Built for Canadian childcare</h3><p>CWELCC and provincial subsidies, Canadian stat holidays, and learning frameworks like How Does Learning Happen?, ELECT, BC ELF and Flight.</p></div></div>
+    <div class="item"><div class="ic">💬</div><div><h3>Families feel included</h3><p>A parent app with photos, daily updates and messages, in English, French, Spanish and Hindi.</p></div></div>
+    <div class="item"><div class="ic"><svg width="0.32in" height="0.32in" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="saWhy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#047857"/></linearGradient></defs><path d="M50 4 88 18v30c0 25-16 41-38 49C28 89 12 73 12 48V18z" fill="url(#saWhy)"/><path d="M50 4 88 18v30c0 25-16 41-38 49" fill="none" stroke="#065f46" stroke-opacity=".25" stroke-width="3"/><circle cx="58" cy="31" r="8.5" fill="#fff"/><path d="M30 54l15 15 27-27" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="22" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2.5"/></svg></div><div><h3>Safety comes first</h3><p><b style="color:#047857">Safe Arrival</b> checks on any scheduled child who hasn’t arrived, plus live ratios, incident reports and secure sign-in.</p></div></div>
+    <div class="item"><div class="ic">🤝</div><div><h3>Real people, real help</h3><p>A Canadian team that sets you up and replies within one business day.</p></div></div>
+    <div class="photo"></div>
+  </div>
+
+  <!-- back -->
+  <div class="panel back">
+    <div class="eyebrow">Simple pricing</div>
+    <h2>Plans that grow with you</h2>
+    <div class="plans">
+      <div class="plan"><b>Starter</b><div class="amt">$49<small>/month</small></div><span>For home daycare providers and small centres.</span></div>
+      <div class="plan pro"><b>Professional</b><div class="amt">$129<small>/month</small></div><span>For growing centres and multi-room programs.</span></div>
+    </div>
+    <div class="fine">Prices in CAD, billed monthly. Save 20% with annual billing. Enterprise and home child care agency plans are quoted for you. Optional SMS &amp; voice alerts: +$25/month. No setup fees; 14-day free trial.</div>
+    <div class="cta">
+      <div><h3>See it in 30 minutes</h3><p>Book a live demo with our team — we’ll show you KiddieTrac with your own programs in mind.</p></div>
+      <div class="qr"><img src="img/qr-contact.svg" alt="QR code: kiddietrac.com/contact"></div>
+    </div>
+    <div class="contact">
+      <img class="logo" src="img/logo-navy-701.png" alt="KiddieTrac"><br>
+      <b>Call</b> 1-855-400-9996 (toll-free)<br>
+      <b>Hours</b> Mon–Fri, 9 a.m.–5 p.m. ET<br>
+      <b>Email</b> sales@kiddietrac.com<br>
+      <b>Web</b> kiddietrac.com<br>
+      <span style="color:var(--muted)">246372 Hockley Road, Mono, Ontario L9W 6K4</span>
+    </div>
+  </div>
+
+  <!-- front cover -->
+  <div class="panel cover">
+    <div class="photo"></div>
+    <div class="body">
+      <div class="eyebrow" style="color:var(--aqua)">Smart childcare platform</div>
+      <h1>Childcare admin, <em>handled.</em></h1>
+      <p class="lede">Billing, attendance, CWELCC and family communication in one friendly platform — so your team spends the day with children, not spreadsheets.</p>
+      <div class="foot">
+        <img src="img/login-wordmark.png" alt="KiddieTrac">
+        <div class="made">🍁 Made in Canada<br>kiddietrac.com</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ INSIDE ═══════════ -->
+<section class="sheet">
+  <div class="panel meet">
+    <div class="photo"></div>
+    <div class="eyebrow">Meet KiddieTrac</div>
+    <h2>One place for your whole program</h2>
+    <p style="margin-top:7pt">KiddieTrac is an all-in-one platform for childcare centres, home child care agencies and multi-site organizations. It brings the office, the classroom and families together.</p>
+    <ul class="ticks">
+      <li>Invoices, subsidies and payments that reconcile themselves.</li>
+      <li>Check-in, attendance and ratios in real time.</li>
+      <li>Observations, lesson plans and report cards your educators enjoy writing.</li>
+      <li>Parents who always know how their child’s day went.</li>
+    </ul>
+    <div class="steps">
+      <div class="eyebrow" style="margin:0 0 6pt">Getting started is easy</div>
+      <div class="st"><b>1</b><span><strong>Book a demo.</strong> We learn how your program runs.</span></div>
+      <div class="st"><b>2</b><span><strong>We bring your data in.</strong> Families, children and rooms, set up with you.</span></div>
+      <div class="st"><b>3</b><span><strong>Go live.</strong> Train your team and invite families in days, not weeks.</span></div>
+    </div>
+  </div>
+
+  <div class="panel feat">
+    <div class="eyebrow">Features</div>
+    <h2>Everything you need</h2>
+    <div class="fb"><h3><i>💵</i>Billing &amp; payments</h3><ul class="ticks">
+      <li>Invoices, payment plans and autopay</li><li>Sibling discounts, late fees and receipts</li><li>Online payments through your own provider</li><li>QuickBooks, Xero and Sage sync</li></ul></div>
+    <div class="fb"><h3><i>🍁</i>CWELCC &amp; subsidies</h3><ul class="ticks">
+      <li>CWELCC enrolment periods and monthly reports</li><li>Provincial subsidies per day or per month</li><li>Subsidy documents kept on the family record</li></ul></div>
+    <div class="fb"><h3><i>✅</i>Attendance &amp; safety</h3><ul class="ticks">
+      <li>QR, PIN and kiosk check-in with signatures</li><li>Live ratios, incidents and immunizations</li></ul></div>
+    <div class="sa"><svg width="0.46in" height="0.46in" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="saFeat" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#047857"/></linearGradient></defs><path d="M50 4 88 18v30c0 25-16 41-38 49C28 89 12 73 12 48V18z" fill="url(#saFeat)"/><path d="M50 4 88 18v30c0 25-16 41-38 49" fill="none" stroke="#065f46" stroke-opacity=".25" stroke-width="3"/><circle cx="58" cy="31" r="8.5" fill="#fff"/><path d="M30 54l15 15 27-27" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/><circle cx="78" cy="22" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2.5"/></svg><div><div class="lk"><small>KiddieTrac</small><b>Safe Arrival</b></div>
+      <p>A scheduled child not signed in? Parents are asked first; if nobody answers, your team is alerted. Every check is recorded.</p></div></div>
+    <div class="fb"><h3><i>💬</i>Family communication</h3><ul class="ticks">
+      <li>Parent app with photos and daily summaries</li><li>Message Centre, announcements and forms to sign</li><li>Share printables and homework with families</li></ul></div>
+    <div class="strip"></div>
+  </div>
+
+  <div class="panel feat two">
+    <div class="badge"><b>14 days</b>free trial</div>
+    <div class="eyebrow">…and more</div>
+    <h2 style="padding-right:0.9in">Grow with confidence</h2>
+    <div class="fb"><h3><i>🌱</i>Learning &amp; development</h3><ul class="ticks">
+      <li>Speak observations instead of typing</li><li>Lesson plan templates and AI drafts</li><li>Report cards for your framework</li></ul></div>
+    <div class="fb"><h3><i>👥</i>Staff &amp; operations</h3><ul class="ticks">
+      <li>Scheduling, time off and payroll</li><li>Closure notices to families in one tap</li><li>Waitlist, enrolment and e-forms</li></ul></div>
+    <div class="fb"><h3><i>💝</i>Fundraising</h3><ul class="ticks">
+      <li>Campaign pages, gifts and CRA donation receipts</li></ul></div>
+    <div class="fb"><h3><i>🔒</i>Security &amp; privacy</h3><ul class="ticks">
+      <li>Two-factor sign-in, passkeys and audit logs</li><li>Text and voice alerts for urgent news</li><li>Each agency’s data kept separate</li></ul></div>
+    <div class="shot"><img src="img/product-tiles.png" alt="The KiddieTrac agency dashboard"></div>
+  </div>
+</section>
+</body>
+</html>
