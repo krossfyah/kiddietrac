@@ -411,8 +411,12 @@
     if (docCount === null) { return; }
     try { if (window.KT && KT.Shell && KT.Shell.setBadge) { KT.Shell.setBadge('my_documents', docCount); } } catch (e) {}
     var staff = /\brole-(educator|home_visitor)\b/.test(document.body.className || '');
-    var links = document.querySelectorAll('a[href="#my-documents"],[data-hash="my-documents"],a[href="#signed-docs"]'
+    /* NOT on "Signed documents" (2026-10-13, Anthony: "signed documents on the left side
+       panel shows 3 as an indicator - why? remove this"). That link is the agency's signed
+       agreements; a count of YOUR OWN documents beside it read as "3 to sign". */
+    var links = document.querySelectorAll('a[href="#my-documents"],[data-hash="my-documents"]'
       + (staff ? ',a[href="#forms"].kt-tile' : ''));
+    Array.prototype.forEach.call(document.querySelectorAll('a[href="#signed-docs"] .kt-doc-count'), function (p) { p.remove(); });
     Array.prototype.forEach.call(links, function (a) {
       if (a.querySelector('[data-badge-key="my_documents"]')) { return; }   // the sidebar's own badge
       var pill = a.querySelector('.kt-doc-count');
