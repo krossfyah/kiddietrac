@@ -76,12 +76,27 @@
     b.setAttribute('aria-label', 'Emergency');
     b.innerHTML = '<span class="kt-em-ic" aria-hidden="true">🚨</span>' + (o.wide ? '<span>Emergency</span>' : '');
     set(b, false);
+    adopt(b);
     b.addEventListener('click', function (e) {
       e.preventDefault(); e.stopPropagation();
       if (isOn(b)) { set(b, false); return; }
       ask().then(function (ok) { if (ok) set(b, true); });
     });
     return b;
+  }
+  /* The composer this sits in fits by its own CSS (above), so tell kt-phone-gutter.js to
+     leave it alone: its overflow fix forces flex-wrap:wrap and min-width:0 INLINE with
+     !important, which beat these rules, wrapped the mic onto a second line and squeezed
+     this button to 21px. Undo that if it already ran. */
+  function adopt(b) {
+    var tries = 0;
+    (function tick() {
+      var p = b.parentElement;
+      if (!p) { if (tries++ < 20) setTimeout(tick, 50); return; }
+      p.setAttribute('data-kt-allow-overflow', '1');
+      ['flex-wrap', 'min-width', 'max-width'].forEach(function (k) { if (p.style.getPropertyValue(k)) p.style.removeProperty(k); });
+      ['min-width', 'max-width'].forEach(function (k) { if (b.style.getPropertyValue(k)) b.style.removeProperty(k); });
+    })();
   }
   function isOn(b) { return !!(b && b.getAttribute('aria-pressed') === 'true'); }
   function reset(b) { if (b) set(b, false); }
