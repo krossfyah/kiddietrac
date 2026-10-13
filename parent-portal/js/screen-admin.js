@@ -5842,10 +5842,10 @@
       family: {
         centre_id: centres[0] ? centres[0].id : null,
         family_name: '', primary_phone: '', primary_email: '',
-        address_line1: '', city: '', province: '', postal_code: '',
+        address_line1: '', city: '', province: '', postal_code: '', country: 'CA',
         billing_split: 'single', notes: '',
       },
-      guardians: [{ email: '', first_name: '', last_name: '', phone: '', relationship: 'mother', is_primary: true, can_pickup: true }],
+      guardians: [{ email: '', first_name: '', last_name: '', phone: '', phone2: '', phone2_type: 'work', phone2_ext: '', relationship: 'mother', is_primary: true, can_pickup: true }],
       /* schedule = the days this child actually attends, written straight onto the
          enrolment. It used to be hardcoded Mon–Fri server-side, so a child attending
          three days was on every roster, in every ratio and every headcount for five —
@@ -6000,11 +6000,13 @@
       // Email and address are required for a new family (2026-10-13).
       r1.appendChild(wrap('Primary email *', bindInput(state.family, 'primary_email', { type: 'email' })));
       bodyEl.appendChild(r1);
+      // Country (2026-10-13): Canada or the United States.
+      bodyEl.appendChild(wrap('Country *', bindSelect(state.family, 'country', [{ value: 'CA', label: 'Canada' }, { value: 'US', label: 'United States' }])));
       bodyEl.appendChild(wrap('Street address *', bindInput(state.family, 'address_line1')));
       var r2 = fieldRow('2fr 1fr 1fr');
       r2.appendChild(wrap('City *', bindInput(state.family, 'city')));
-      r2.appendChild(wrap('Province *', bindInput(state.family, 'province')));
-      r2.appendChild(wrap('Postal code *', bindInput(state.family, 'postal_code')));
+      r2.appendChild(wrap('Province / State *', bindInput(state.family, 'province')));
+      r2.appendChild(wrap('Postal / ZIP code *', bindInput(state.family, 'postal_code')));
       bodyEl.appendChild(r2);
       bodyEl.appendChild(wrap('Billing split', bindSelect(state.family, 'billing_split', [
         { value: 'single', label: 'Single payer' },
@@ -6041,6 +6043,20 @@
         r2.appendChild(wrap(idx === 0 ? 'Email *' : 'Email (optional)', emailIn));
         r2.appendChild(wrap('Phone', bindPhone(g, 'phone')));
         card.appendChild(r2);
+        /* A SECOND NUMBER and what it is (2026-10-13, Anthony: "add ability to add secondary
+           phone number for primary and secondary guardian such as work or home (let user
+           choose type)" — and "if its a work phone number add ext as optional"). */
+        var r2b = fieldRow('130px 1fr 110px');
+        var p2type = bindSelect(g, 'phone2_type', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
+        var p2ext = bindInput(g, 'phone2_ext', { placeholder: 'Ext.' });
+        p2ext.setAttribute('inputmode', 'numeric');
+        var extWrap = wrap('Ext. (optional)', p2ext);
+        r2b.appendChild(wrap('Second phone type', p2type));
+        r2b.appendChild(wrap('Second phone (optional)', bindPhone(g, 'phone2')));
+        r2b.appendChild(extWrap);
+        var syncExt = function () { extWrap.style.visibility = g.phone2_type === 'work' ? 'visible' : 'hidden'; };
+        p2type.addEventListener('change', syncExt); syncExt();
+        card.appendChild(r2b);
         /* A FORMS-ONLY PARENT ALREADY? (2026-10-13, Anthony: "when adding a new family and
            entering the name or email it should find if the temporary user exists and link
            the two"). As the name or email is typed, look for a temporary account
@@ -6102,7 +6118,7 @@
         bodyEl.appendChild(card);
       });
       var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add another guardian');
-      add.addEventListener('click', function () { state.guardians.push({ email: '', first_name: '', last_name: '', phone: '', relationship: 'guardian', is_primary: false, can_pickup: true }); renderGuardiansStep(); });
+      add.addEventListener('click', function () { state.guardians.push({ email: '', first_name: '', last_name: '', phone: '', phone2: '', phone2_type: 'work', phone2_ext: '', relationship: 'guardian', is_primary: false, can_pickup: true }); renderGuardiansStep(); });
       bodyEl.appendChild(add);
     }
 
@@ -6643,10 +6659,15 @@
         city: state.family.city.trim() || null,
         province: state.family.province.trim() || null,
         postal_code: state.family.postal_code.trim() || null,
+        country: state.family.country || 'CA',
         billing_split: state.family.billing_split,
         notes: state.family.notes.trim() || null,
         guardians: state.guardians.map(function (g) {
-          return { email: String(g.email || '').trim() || null, first_name: g.first_name.trim(), last_name: g.last_name.trim(), phone: g.phone.trim() || null, relationship: g.relationship, is_primary: !!g.is_primary, can_pickup: g.can_pickup !== false };
+          return { email: String(g.email || '').trim() || null, first_name: g.first_name.trim(), last_name: g.last_name.trim(), phone: g.phone.trim() || null,
+            phone2: String(g.phone2 || '').trim() || null,
+            phone2_type: String(g.phone2 || '').trim() ? (g.phone2_type || 'mobile') : null,
+            phone2_ext: (String(g.phone2 || '').trim() && g.phone2_type === 'work') ? (String(g.phone2_ext || '').trim() || null) : null,
+            relationship: g.relationship, is_primary: !!g.is_primary, can_pickup: g.can_pickup !== false };
         }),
         children: state.children.map(function (c) {
           return { first_name: c.first_name.trim(), last_name: c.last_name.trim(), preferred_name: c.preferred_name.trim() || null, date_of_birth: c.date_of_birth, gender: c.gender, enrollment_status: c.enrollment_status,
@@ -6849,7 +6870,8 @@
       var ph = phoneField('Primary phone', f.primary_phone);
       var iEmail = inp(f.primary_email, 'name@example.com', 'email');
       var iAddr = inp(f.address_line1, 'Street address');
-      var iCity = inp(f.city, 'City'), iProv = inp(f.province, 'Province'), iPost = inp(f.postal_code, 'Postal code');
+      var iCity = inp(f.city, 'City'), iProv = inp(f.province, 'Province / State'), iPost = inp(f.postal_code, 'Postal / ZIP code');
+      var iCountry = selEl(f.country || 'CA', [{ value: 'CA', label: 'Canada' }, { value: 'US', label: 'United States' }]);
       var iBill = selEl(f.billing_split, [{ value: 'single', label: 'Single payer' }, { value: 'split_50_50', label: 'Split 50 / 50' }, { value: 'custom', label: 'Custom split' }]);
       var iNotes = Dom.el('textarea', { style: IN + 'min-height:60px;font-family:inherit;' }); iNotes.value = f.notes || '';
       pane.appendChild(fwrap('Family name *', iName));
@@ -6871,8 +6893,9 @@
         pane.appendChild(fwrap('Provider', iCentre));
       }
       var g1 = grid('1fr 1fr'); g1.appendChild(ph.wrap); g1.appendChild(fwrap('Primary email', iEmail)); pane.appendChild(g1);
+      pane.appendChild(fwrap('Country', iCountry));
       pane.appendChild(fwrap('Street address', iAddr));
-      var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province', iProv)); g2.appendChild(fwrap('Postal code', iPost)); pane.appendChild(g2);
+      var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province / State', iProv)); g2.appendChild(fwrap('Postal / ZIP code', iPost)); pane.appendChild(g2);
       pane.appendChild(fwrap('Billing split', iBill));
       /* WHO PAYS WHAT (split billing, 2026-09-29). The select only said "split"; nothing
          said between whom or in what proportion, and nothing billed that way. The panel
@@ -6921,7 +6944,7 @@
         if (!iName.value.trim()) { setMsg('Family name is required.'); return; }
         save.disabled = true; setMsg('Saving…', true);
         try {
-          await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: DATA.provider_locked ? undefined : parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, billing_split: iBill.value, notes: iNotes.value.trim() || null });
+          await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: DATA.provider_locked ? undefined : parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, country: iCountry.value || null, billing_split: iBill.value, notes: iNotes.value.trim() || null });
           // Going back to one payer also resets the shares (the primary carries 100%).
           if (iBill.value === 'single') { try { await Api.put('/admin/families/' + f.id + '/billing-split', { mode: 'single' }); } catch (e2) {} }
           setMsg('✓ Family saved', true); refreshList();
@@ -6948,12 +6971,22 @@
         var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:26px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
         var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('First name', iF)); g1.appendChild(fwrap('Last name', iL)); card.appendChild(g1);
         var g2 = grid('1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Relationship', iR)); card.appendChild(g2);
+        // Second number + its type, with an extension for a work number (2026-10-13).
+        var ph2 = phoneField('Second phone', g.phone2);
+        var iT2 = selEl(g.phone2_type || 'work', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
+        var iX2 = inp(g.phone2_ext, 'Ext.'); iX2.setAttribute('inputmode', 'numeric');
+        var x2wrap = fwrap('Ext. (optional)', iX2);
+        var g3 = grid('130px 1fr 110px'); g3.appendChild(fwrap('Type', iT2)); g3.appendChild(ph2.wrap); g3.appendChild(x2wrap); card.appendChild(g3);
+        var syncX2 = function () { x2wrap.style.visibility = iT2.value === 'work' ? 'visible' : 'hidden'; };
+        iT2.addEventListener('change', syncX2); syncX2();
         card.appendChild(pickWrap);
         card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:8px;' }, 'Login email: ' + (g.email || '—')));
         var save = Dom.el('button', { style: 'margin-top:10px;padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save guardian');
         save.addEventListener('click', async function () {
           save.disabled = true; setMsg('Saving…', true);
-          try { await Api.patch('/admin/guardians/' + g.id, { first_name: iF.value.trim(), last_name: iL.value.trim(), phone: ph.get() || null, relationship: iR.value, can_pickup: pick.checked }); setMsg('✓ Guardian saved', true); refreshList(); }
+          try { await Api.patch('/admin/guardians/' + g.id, { first_name: iF.value.trim(), last_name: iL.value.trim(), phone: ph.get() || null,
+            phone2: ph2.get() || null, phone2_type: ph2.get() ? iT2.value : null, phone2_ext: (ph2.get() && iT2.value === 'work') ? (iX2.value.trim() || null) : null,
+            relationship: iR.value, can_pickup: pick.checked }); setMsg('✓ Guardian saved', true); refreshList(); }
           catch (e) { setMsg(e.message || 'Save failed'); }
           save.disabled = false;
         });

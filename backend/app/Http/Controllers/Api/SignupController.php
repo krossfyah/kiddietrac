@@ -38,6 +38,7 @@ final class SignupController extends Controller
             'city' => ['required', 'string', 'max:80'],
             'province' => ['required', 'string', 'max:40'],
             'postal_code' => ['nullable', 'string', 'max:12'],
+            'country' => ['nullable', 'in:CA,US'],
             'phone' => ['nullable', 'string', 'max:40'],
             // Director info
             'director_email' => ['required', 'email', 'max:180', 'unique:users,email'],
@@ -96,7 +97,7 @@ final class SignupController extends Controller
                 'city' => $data['city'],
                 'province' => $data['province'],
                 'postal_code' => $data['postal_code'] ?? null,
-                'country' => 'CA',
+                'country' => $data['country'] ?? 'CA',
                 'phone' => $data['phone'] ?? null,
                 'email' => $data['director_email'],
                 'open_time' => '07:00:00',
@@ -207,6 +208,7 @@ final class SignupController extends Controller
             'city'                  => ['nullable', 'string', 'max:80'],
             'province'              => ['nullable', 'string', 'max:40'],
             'postal_code'           => ['nullable', 'string', 'max:12'],
+            'country'               => ['nullable', 'in:CA,US'],
             // Child
             'child_first_name'      => ['required', 'string', 'max:80'],
             'child_last_name'       => ['required', 'string', 'max:80'],
@@ -263,6 +265,7 @@ final class SignupController extends Controller
                 'city'           => $data['city'] ?? null,
                 'province'       => $data['province'] ?? null,
                 'postal_code'    => $data['postal_code'] ?? null,
+                'country'        => $data['country'] ?? 'CA',
                 'preferred_lang' => 'en',
                 'created_at'     => now(),
                 'updated_at'     => now(),

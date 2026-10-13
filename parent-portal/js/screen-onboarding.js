@@ -723,12 +723,30 @@
     // City full-width, then Province + Postal side by side — the old 3-across
     // row squished the postal field on phones (it truncated "L9V1C4").
     box.appendChild(input('City', 'city', state.address.city, 'text', null, null, reqA));
+    /* Country (2026-10-13): Canada or the United States; the province list follows it. */
+    var isUS = String(state.address.country || '').toUpperCase() === 'US';
+    var cWrap = input('Country', 'country', isUS ? 'US' : 'CA', 'select', null, ['CA', 'US'], reqA);
+    var cSel = cWrap.querySelector('select');
+    if (cSel) { [].forEach.call(cSel.options, function (o) { if (o.value === 'CA') o.textContent = 'Canada'; if (o.value === 'US') o.textContent = 'United States'; if (!o.value) o.remove(); }); cSel.value = isUS ? 'US' : 'CA'; }
+    box.insertBefore(cWrap, box.firstChild);
     var row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
-    row.appendChild(input('Province', 'province', state.address.province, 'select', null,
-      ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT'], reqA));
-    row.appendChild(input('Postal code', 'postal_code', state.address.postal_code, 'text', 'M5G 1Z4', null, reqA));
+    row.appendChild(input(isUS ? 'State' : 'Province', 'province', state.address.province, 'select', null,
+      isUS ? ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'] : ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT'], reqA));
+    row.appendChild(input(isUS ? 'ZIP code' : 'Postal code', 'postal_code', state.address.postal_code, 'text', isUS ? '43215' : 'M5G 1Z4', null, reqA));
     box.appendChild(row);
+    if (cSel) cSel.addEventListener('change', function () {
+      var us = cSel.value === 'US';
+      var pSel = row.querySelector('select[data-k="province"]');
+      if (pSel) {
+        var keep = pSel.value;
+        pSel.innerHTML = '<option value="">Select…</option>' + (us ? ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'] : ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT']).map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+        pSel.value = keep;
+      }
+      var labs = row.querySelectorAll('label');
+      if (labs[0]) labs[0].firstChild.textContent = us ? 'State' : 'Province';
+      if (labs[1]) labs[1].firstChild.textContent = us ? 'ZIP code' : 'Postal code';
+    });
 
     // Emergency contact — a titled card. Must be someone OTHER than the user
     // (validated on Next and again server-side).

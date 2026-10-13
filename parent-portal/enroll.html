@@ -108,7 +108,8 @@
                 <option>NL</option><option>PE</option><option>NT</option><option>NU</option><option>YT</option>
               </select>
             </div>
-            <div class="form-row"><label for="postal">Postal code</label><input id="postal" placeholder="M5G 1Z4"></div>
+            <div class="form-row"><label for="postal">Postal / ZIP code</label><input id="postal" placeholder="M5G 1Z4"></div>
+            <div class="form-row"><label for="country">Country</label><select id="country"><option value="CA">Canada</option><option value="US">United States</option></select></div>
           </div>
         </div>
 
@@ -264,6 +265,7 @@
           city:              document.getElementById('city').value.trim() || null,
           province:          document.getElementById('province').value || null,
           postal_code:       document.getElementById('postal').value.trim() || null,
+          country:           document.getElementById('country').value || 'CA',
           child_first_name:  document.getElementById('c_first').value.trim(),
           child_last_name:   document.getElementById('c_last').value.trim(),
           child_date_of_birth: document.getElementById('c_dob').value,
@@ -316,5 +318,18 @@
   <script src="/js/kt-modal-guard.js?v=20260921ms" defer></script>
   <script src="/js/kt-modal-safety.js?v=20260921ms" defer></script>
 <script src="/js/kt-phone.js?v=20261013ph1"></script>
+<script>
+/* Country (2026-10-13): Canada or the United States; the province list follows it. */
+(function () {
+  var US = ['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'], CA = ['ON','QC','BC','AB','MB','SK','NS','NB','NL','PE','NT','NU','YT'];
+  var c = document.getElementById('country'), p = document.getElementById('province');
+  if (!c || !p) return;
+  c.addEventListener('change', function () {
+    var keep = p.value, list = c.value === 'US' ? US : CA;
+    p.innerHTML = '<option value="">Select…</option>' + list.map(function (x) { return '<option>' + x + '</option>'; }).join('');
+    p.value = keep;
+  });
+})();
+</script>
 </body>
 </html>

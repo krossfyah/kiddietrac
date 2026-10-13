@@ -1286,6 +1286,7 @@ final class AuthController extends Controller
             'city'            => ['nullable', 'string', 'max:80'],
             'province'        => ['nullable', 'string', 'max:40'],
             'postal_code'     => ['nullable', 'string', 'max:12'],
+            'country'         => ['nullable', 'in:CA,US'],
 
             // Demographics + device (analytics; stored in profile_extras). Race /
             // ethnicity is OPTIONAL and self-reported. Device is auto-detected by the
@@ -1377,6 +1378,7 @@ final class AuthController extends Controller
             'city'                    => $data['city']            ?? null,
             'province'                => $data['province']        ?? null,
             'postal_code'             => $data['postal_code']     ?? null,
+            'country'                 => $data['country']         ?? null,
             'ethnicity'               => $data['ethnicity']       ?? null,
             'device_type'             => $data['device_type']     ?? null,
             'device_detail'           => $data['device_detail']   ?? null,

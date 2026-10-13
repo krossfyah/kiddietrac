@@ -3330,7 +3330,7 @@ final class AdminController extends Controller
         $guardians = DB::table('guardians')
             ->join('users', 'users.id', '=', 'guardians.user_id')
             ->where('guardians.family_id', $familyId)
-            ->select('guardians.*', 'users.email', 'users.first_name', 'users.last_name', 'users.phone', 'users.status', 'users.photo_url')
+            ->select('guardians.*', 'users.email', 'users.first_name', 'users.last_name', 'users.phone', 'users.phone2', 'users.phone2_type', 'users.phone2_ext', 'users.status', 'users.photo_url')
             ->get();
 
         $emergency = DB::table('emergency_contacts')
@@ -3408,12 +3408,16 @@ final class AdminController extends Controller
             'first_name'   => ['sometimes', 'string', 'max:80'],
             'last_name'    => ['sometimes', 'nullable', 'string', 'max:80'],
             'phone'        => ['sometimes', 'nullable', 'string', 'max:40'],
+            // A second number and what it is — work numbers may carry an extension (2026-10-13).
+            'phone2'       => ['sometimes', 'nullable', 'string', 'max:40'],
+            'phone2_type'  => ['sometimes', 'nullable', 'in:mobile,home,work,other'],
+            'phone2_ext'   => ['sometimes', 'nullable', 'string', 'max:10'],
             'relationship' => ['sometimes', 'string', 'max:40'],
             'can_pickup'   => ['sometimes', 'boolean'],
             'is_primary'   => ['sometimes', 'boolean'],
         ]);
         $userUpd = [];
-        foreach (['first_name', 'last_name', 'phone'] as $k) { if (array_key_exists($k, $data)) $userUpd[$k] = $data[$k]; }
+        foreach (['first_name', 'last_name', 'phone', 'phone2', 'phone2_type', 'phone2_ext'] as $k) { if (array_key_exists($k, $data)) $userUpd[$k] = $data[$k]; }
         if ($userUpd) { $userUpd['updated_at'] = now(); DB::table('users')->where('id', $g->user_id)->update($userUpd); }
         $gUpd = [];
         foreach (['relationship', 'can_pickup', 'is_primary'] as $k) { if (array_key_exists($k, $data)) $gUpd[$k] = $data[$k]; }
@@ -3588,6 +3592,7 @@ final class AdminController extends Controller
             'city' => [$need, 'string', 'max:80'],
             'province' => [$need, 'string', 'max:40'],
             'postal_code' => [$need, 'string', 'max:12'],
+            'country' => [$need, 'in:CA,US'],   // Canada / United States (2026-10-13)
             'preferred_lang' => ['nullable', 'string', 'max:10'],
             'billing_split' => ['nullable', 'in:single,split_50_50,custom'],
             'notes' => ['nullable', 'string'],
@@ -3607,6 +3612,9 @@ final class AdminController extends Controller
             'guardians.*.first_name' => ['required_with:guardians', 'string', 'max:80'],
             'guardians.*.last_name' => ['nullable', 'string', 'max:80'],
             'guardians.*.phone' => ['nullable', 'string', 'max:40'],
+            'guardians.*.phone2' => ['nullable', 'string', 'max:40'],
+            'guardians.*.phone2_type' => ['nullable', 'in:mobile,home,work,other'],
+            'guardians.*.phone2_ext' => ['nullable', 'string', 'max:10'],
             'guardians.*.relationship' => ['nullable', 'in:mother,father,guardian,grandparent,foster,other'],
             'guardians.*.is_primary' => ['nullable', 'boolean'],
             'guardians.*.can_pickup' => ['nullable', 'boolean'],
@@ -3823,7 +3831,7 @@ final class AdminController extends Controller
                         }
                         // Blanks only. A value that is already set is never overwritten.
                         $fill = [];
-                        foreach (['first_name', 'last_name', 'phone'] as $col) {
+                        foreach (['first_name', 'last_name', 'phone', 'phone2', 'phone2_type', 'phone2_ext'] as $col) {
                             if (trim((string) ($existing->$col ?? '')) === '' && trim((string) ($g[$col] ?? '')) !== '') {
                                 $fill[$col] = $g[$col];
                             }
@@ -3840,6 +3848,9 @@ final class AdminController extends Controller
                             'first_name' => $g['first_name'],
                             'last_name' => $g['last_name'] ?? '',
                             'phone' => $g['phone'] ?? null,
+                            'phone2' => $g['phone2'] ?? null,
+                            'phone2_type' => ! empty($g['phone2']) ? ($g['phone2_type'] ?? 'mobile') : null,
+                            'phone2_ext' => (! empty($g['phone2']) && ($g['phone2_type'] ?? '') === 'work') ? ($g['phone2_ext'] ?? null) : null,
                             'locale' => 'en-CA',
                             'timezone' => 'America/Toronto',
                             // No email = no login to invite them to.
@@ -4098,6 +4109,7 @@ final class AdminController extends Controller
             'city' => ['sometimes', 'nullable', 'string', 'max:80'],
             'province' => ['sometimes', 'nullable', 'string', 'max:40'],
             'postal_code' => ['sometimes', 'nullable', 'string', 'max:12'],
+            'country' => ['sometimes', 'nullable', 'in:CA,US'],
             'preferred_lang' => ['sometimes', 'nullable', 'string', 'max:10'],
             'billing_split' => ['sometimes', 'in:single,split_50_50,custom'],
             'notes' => ['sometimes', 'nullable', 'string'],

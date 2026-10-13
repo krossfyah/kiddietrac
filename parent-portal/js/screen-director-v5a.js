@@ -135,12 +135,13 @@
     contactRow.appendChild(field('Primary phone', 'primary_phone', { type: 'tel', maxlength: 40 }));
     form.appendChild(contactRow);
 
+    form.appendChild(selectField('Country *', 'country', [['CA', 'Canada'], ['US', 'United States']], true));
     form.appendChild(field('Street address *', 'address_line1', { type: 'text', maxlength: 200, required: true }));
 
     const addrRow = Dom.el('div', { style: 'display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;' });
     addrRow.appendChild(field('City *', 'city', { type: 'text', maxlength: 80, required: true }));
-    addrRow.appendChild(field('Province *', 'province', { type: 'text', maxlength: 40, required: true, placeholder: 'ON' }));
-    addrRow.appendChild(field('Postal code *', 'postal_code', { type: 'text', maxlength: 12, placeholder: 'L7C 1A1', required: true }));
+    addrRow.appendChild(field('Province / State *', 'province', { type: 'text', maxlength: 40, required: true, placeholder: 'ON' }));
+    addrRow.appendChild(field('Postal / ZIP *', 'postal_code', { type: 'text', maxlength: 12, placeholder: 'L7C 1A1', required: true }));
     form.appendChild(addrRow);
 
     form.appendChild(selectField('Preferred language', 'preferred_lang', [

@@ -141,6 +141,7 @@ final class FamilyController extends Controller
             'city' => ['required', 'string', 'max:80'],
             'province' => ['required', 'string', 'max:40'],
             'postal_code' => ['required', 'string', 'max:12'],
+            'country' => ['nullable', 'in:CA,US'],
             'preferred_lang' => ['nullable', 'string', 'max:10'],
             'billing_split' => ['nullable', 'in:single,split,custom'],
         ], [
@@ -153,6 +154,7 @@ final class FamilyController extends Controller
         $id = DB::table('families')->insertGetId([
             ...$data,
             'centre_id' => $centreId,
+            'country' => $data['country'] ?? 'CA',
             'preferred_lang' => $data['preferred_lang'] ?? 'en-CA',
             'billing_split' => $data['billing_split'] ?? 'single',
             'created_at' => now(),
