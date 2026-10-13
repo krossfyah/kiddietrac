@@ -39,6 +39,28 @@
     if (!tok) return;
     var ag = sessionStorage.getItem('kt_active_agency_id') || '';
     if (probedFor === ag) return;
+    /* ONLY WHO CAN USE IT (2026-10-13, Anthony: "why am i seeing this today with most of
+       the users - Get:api/v1/pfcc/settings (failed)"). This ran for every signed-in person,
+       but the endpoint admits directors and admins only, so every parent, educator and home
+       visitor made two refused requests per page load, and anyone with no agency chosen got
+       "Select an agency first". The Ohio menu is for those roles alone; nobody else asks.
+       No role class yet (still booting): wait for the next timer rather than decide now. */
+    var bc = document.body ? document.body.classList : null;
+    var anyRole = bc && /\brole-/.test(document.body.className || '');
+    if (!anyRole) return;
+    if (!(bc.contains('role-agency-admin') || bc.contains('role-centre-director') || bc.contains('role-platform-admin'))) {
+      probedFor = ag;
+      document.body.classList.remove('kt-jur-oh', 'kt-jur-sutq');
+      return;
+    }
+    // A platform admin's agency is whichever one they have chosen; with none chosen there
+    // is nothing to ask about. (Agency admins and directors are resolved by the server.)
+    if (!ag) {
+      try {
+        var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+        if (Array.isArray(u.roles) && u.roles.indexOf('platform_admin') !== -1) return;
+      } catch (e) {}
+    }
     probedFor = ag;
     Api.get('/pfcc/settings').then(function (d) {
       document.body.classList.toggle('kt-jur-oh', !!(d && d.pfcc_on));
