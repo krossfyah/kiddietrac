@@ -27,8 +27,12 @@ use Illuminate\Support\Facades\DB;
  *    present sets the ratio and the group-size limit; home licences (Ohio Type A/B) use the
  *    home rules instead (7 per staff, no more than 3 under 2 each, a total cap). Nap relief
  *    and the second-adult rule are reported, not used to excuse a breach.
- *    Every other jurisdiction — Ontario included — keeps the room's own ratio, exactly as
- *    before, because its table is not age-mapped. Unknown is never enforced.
+ *    Every other jurisdiction keeps the room's own ratio, exactly as before, because its
+ *    table is not age-mapped. Unknown is never enforced.
+ *  - ONTARIO LICENSED CENTRES (2026-10-13): an Ontario agency's location whose licence type is
+ *    'on_centre' is evaluated by App\Support\OntarioRatios (O. Reg. 137/15 ss.8, 8.1, 54,
+ *    Schedules 1 and 4). Ontario home child care and locations with no licence type set keep
+ *    the room's own ratio, exactly as before.
  */
 final class RatioRules
 {
@@ -123,6 +127,8 @@ final class RatioRules
     /** The jurisdiction's centre bands, only when every band is age-mapped (verified tables). */
     private static function bands(array $profile): ?array
     {
+        // A profile with its own engine (Ontario) is never read as generic youngest-child bands.
+        if (! empty($profile['ratios']['engine'])) return null;
         $centre = $profile['ratios']['centre'] ?? null;
         if (! is_array($centre) || ! $centre) return null;
         foreach ($centre as $b) {
@@ -160,6 +166,20 @@ final class RatioRules
         $profile = Jurisdictions::forAgency($agencyId);
         $ids = $childIds ?? self::childIdsPresent($room, $at);
         $n = count($ids);
+
+        // Ontario licensed centres: the regulation's own rules (App\Support\OntarioRatios).
+        if (OntarioRatios::applies($profile, $centre)) {
+            $base = [
+                'children_present' => $n, 'educators_present' => 0, 'educator_source' => null,
+                'jurisdiction' => $profile['code'], 'rule' => 'ontario', 'reason' => null,
+                'group_limit' => null, 'over_group' => false, 'group_note' => null,
+                'home' => null, 'nap' => null, 'second_adult' => null, 'warnings' => [],
+                'required_educators' => 0, 'ratio_target' => "{$room->ratio_educators}:{$room->ratio_children}",
+            ];
+
+            return OntarioRatios::evaluate($room, $at, $ids, $educators, $base, $centre, $childIds !== null);
+        }
+
         [$have, $source] = $educators ?? self::educatorsPresent($room, $at);
         $when = $at ?: now();
 

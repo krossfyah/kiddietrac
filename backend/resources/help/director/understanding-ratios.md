@@ -43,7 +43,9 @@ KiddieTrac now checks ratios against the rules of the province or state your age
 
 The ratio card says which rule it used — for example *"Youngest child: Under 12 months → 1:5 (Ohio)"* — and lists anything else it found.
 
-Ontario and the other provinces keep each room's own ratio for now, because their age-by-age tables have not been verified in KiddieTrac yet. Nothing about how those rooms are measured changed.
+**Ontario licensed centres** (October 2026): set the location's licence type to *Licensed child care centre* under **Room ratios → Ratio settings** and KiddieTrac applies O. Reg. 137/15 — Schedule 1 ratios and group sizes, reduced-ratio windows, supervisor counting, the two-adult rule, mixed ages, family age groups and an RECE in every group. See *Ontario ratio rules (licensed centres)*.
+
+Ontario home child care, locations with no licence type set, and the other provinces keep each room's own ratio. Nothing about how those rooms are measured changed.
 
 ## What to do when a room is in BREACH
 

@@ -331,15 +331,18 @@ final class CentreController extends Controller
            evening. A ratio is a live question: it is evaluated now. */
         $v = \App\Support\RatioRules::evaluate($room);
         $childrenPresent = (int) $v['children_present'];
-        $educatorsPresent = (int) $v['educators_present'];
+        // Ontario centres can count a supervisor at half (s.8(5)), so this may be 1.5.
+        $educatorsPresent = $v['rule'] === 'ontario' ? (float) $v['educators_present'] : (int) $v['educators_present'];
         $required = (int) $v['required_educators'];
+        $issues = (array) ($v['compliance_issues'] ?? []);
 
         $overGroup = ! empty($v['over_group']) || ! empty($v['home']['over_cap']);
-        $compliant = $educatorsPresent >= $required && ! $overGroup;
+        $compliant = $educatorsPresent >= $required && ! $overGroup && ! $issues;
         $status = match (true) {
             $educatorsPresent < $required => 'breach',
             $overGroup => 'over_group',
-            $educatorsPresent - $required <= 0 && $childrenPresent > 0 => 'tight',
+            (bool) $issues => 'attention',
+            $educatorsPresent - $required < 1 && $childrenPresent > 0 => 'tight',
             default => 'ok',
         };
 
@@ -358,6 +361,9 @@ final class CentreController extends Controller
             'rule' => $v['rule'],
             'reason' => $v['reason'],
             'warnings' => $v['warnings'],
+            'group_limit' => $v['group_limit'] ?? null,
+            'compliance_issues' => $issues,
+            'ontario' => $v['ontario'] ?? null,
             'utilization_pct' => $room->capacity > 0
                 ? (int) round($childrenPresent / $room->capacity * 100)
                 : 0,
@@ -376,6 +382,7 @@ final class CentreController extends Controller
             $statusBadge = match ($r['status']) {
                 'breach' => '<span style="color: #c0392b; font-weight: bold;">⚠ BREACH</span>',
                 'tight' => '<span style="color: #d35400; font-weight: bold;">⚠ TIGHT</span>',
+                'attention' => '<span style="color: #d35400; font-weight: bold;">⚠ CHECK STAFFING</span>',
                 default => '<span style="color: #27ae60; font-weight: bold;">✓ COMPLIANT</span>',
             };
             $roomRows .= "<tr>

@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\DB;
  * (sources in the gap-analysis doc). Anything not confirmed is null with a note, so code that
  * reads it must treat null as "unknown — do not enforce", never as zero.
  *
- * The ratio tables are stored for ratio engine v2; RatioEngine does not read them yet.
+ * The ratio tables are read by ratio engine v2 (App\Support\RatioRules; Ontario centres by
+ * App\Support\OntarioRatios).
  */
 final class Jurisdictions
 {
@@ -42,13 +43,33 @@ final class Jurisdictions
                     'on_hcc_agency' => 'Home child care agency',
                     'on_hcc_home' => 'Home child care (agency-affiliated home)',
                 ],
-                // Report verified infant and preschool only; other bands not checked.
+                /* O. Reg. 137/15 Schedule 1, read from the e-Laws consolidation (amended to O. Reg.
+                   197/26) on 2026-10-13. staff:children is the ratio ("3 to 10" for infants); group
+                   is Column 4; qualified is Column 5 (proportion of employees that must be
+                   qualified, s.54); reduced is the s.8(4) minimum from Licensing Manual Part 3.4
+                   (never below two-thirds of the ratio; none for infants or junior school age).
+                   Months; ranges overlap in the regulation (kindergarten is "in kindergarten").
+                   Read by App\Support\OntarioRatios for locations licensed 'on_centre' only. */
                 'ratios' => [
+                    'engine' => 'ontario',
                     'centre' => [
-                        ['band' => 'infant', 'label' => 'Infant', 'ratio' => 3, 'group' => null],
-                        ['band' => 'preschool', 'label' => 'Preschool', 'ratio' => 8, 'group' => null],
+                        ['band' => 'infant', 'label' => 'Infant', 'min_months' => 0, 'max_months' => 18, 'staff' => 3, 'children' => 10, 'ratio' => 3, 'group' => 10, 'qualified' => [1, 3], 'reduced' => null],
+                        ['band' => 'toddler', 'label' => 'Toddler', 'min_months' => 18, 'max_months' => 30, 'staff' => 1, 'children' => 5, 'ratio' => 5, 'group' => 15, 'qualified' => [1, 3], 'reduced' => 8],
+                        ['band' => 'preschool', 'label' => 'Preschool', 'min_months' => 30, 'max_months' => 72, 'staff' => 1, 'children' => 8, 'ratio' => 8, 'group' => 24, 'qualified' => [2, 3], 'reduced' => 12],
+                        ['band' => 'kindergarten', 'label' => 'Kindergarten', 'min_months' => 44, 'max_months' => 84, 'staff' => 1, 'children' => 13, 'ratio' => 13, 'group' => 26, 'qualified' => [1, 2], 'reduced' => 20],
+                        ['band' => 'primary_junior', 'label' => 'Primary/junior school age', 'min_months' => 68, 'max_months' => 156, 'staff' => 1, 'children' => 15, 'ratio' => 15, 'group' => 30, 'qualified' => [1, 2], 'reduced' => 23],
+                        ['band' => 'junior', 'label' => 'Junior school age', 'min_months' => 108, 'max_months' => 156, 'staff' => 1, 'children' => 20, 'ratio' => 20, 'group' => 20, 'qualified' => [1, 1], 'reduced' => null],
                     ],
-                    'mixed_age' => null, 'nap_relief' => null, 'home' => null,
+                    // s.8(3): younger children allowed in a group, percent of licensed capacity (Manual 3.3).
+                    'mixed_age' => ['toddler' => 20, 'preschool' => 20, 'kindergarten' => 25, 'primary_junior' => 25, 'junior' => 25],
+                    // s.8(4) + Manual 3.4; rest period up to 2 h for toddler/preschool (s.47).
+                    'reduced_ratio' => ['long_program_minutes' => 360, 'arrival_max' => [90, 30], 'departure_max' => [60, 30],
+                        'rest_max_minutes' => 120, 'rest_groups' => ['toddler', 'preschool'], 'never' => ['infant', 'junior', 'family']],
+                    'supervisor' => ['full_below' => 5, 'half_upto' => 6],   // s.8(5)
+                    'min_adults' => ['infant_group_at' => 4, 'others_at' => 6],   // s.8(6)
+                    // s.8.1 + Schedule 4: [from months, to months, children per employee].
+                    'family_group' => ['max' => 15, 'max_under_24m' => 6, 'bands' => [[0, 12, 3], [12, 24, 4], [24, 156, 8]]],
+                    'nap_relief' => null, 'home' => null,
                 ],
                 'drills' => [
                     ['type' => 'fire', 'every' => 'month', 'label' => 'Fire drill — monthly'],

@@ -4,6 +4,19 @@
   {
    "type": "new",
    "date": "2026-10-13",
+   "icon": "👥",
+   "title": "Ontario ratio rules for licensed centres",
+   "body": "Room ratios, the director dashboard and the educator ratio bar now apply O. Reg. 137/15 at Ontario licensed centres: Schedule 1 ratios and maximum group sizes, reduced ratios only inside your arrival, departure and rest windows, the supervisor counted fully, at half or not at all, the two-adult rule, mixed-age limits, family age groups and an RECE in every group. Turn it on per location under Room ratios → Ratio settings.",
+   "roles": [
+    "educator",
+    "centre_director",
+    "agency_admin",
+    "platform_admin"
+   ]
+  },
+  {
+   "type": "new",
+   "date": "2026-10-13",
    "icon": "👀",
    "title": "Headcounts and the acting supervisor",
    "body": "Educators tap Headcount on Today (or Count on a walk) and tick each child signed in as they see them, with the moment: transition, washroom, outdoor in/out, arrival, dismissal, field trip. If anyone is not seen, one tap alerts the director, agency admins and acting supervisors, and links to the serious occurrence form. Directors see every count on the new Headcounts screen and name the acting supervisor for each centre (Ontario O. Reg. 137/15 s.11 and s.6.1(2), from 1 January 2027).",

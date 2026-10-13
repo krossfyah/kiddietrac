@@ -314,36 +314,154 @@
   }
 
   // ============================ Room ratios =================================
+  /* LIVE (2026-10-13). Children signed in and staff on the floor right now, from the ratio
+     engine (App\Support\RatioRules; Ontario licensed centres: O. Reg. 137/15 ss.8, 8.1, 54).
+     It used to count ENROLLED children against every staff role at the centre. Per room:
+     required vs present and why (age group, reduced-ratio window, supervisor counting), group
+     size, mixed-age, two-adult and RECE findings. Ontario agencies set each location's licence
+     type, hours and windows, and each room's licensed age group, under "Ratio settings". */
   async function renderRoomRatios(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Computing…</div>';
     const r = await Api.get('/operations/ratio-status').catch(() => ({ data: [] }));
     const rooms = r.data || [];
-    const breached = rooms.filter(x => !x.compliant).length;
+    const centres = r.centres || [];
+    const on = r.jurisdiction === 'CA-ON';
+    const groups = r.groups || {};
+    const red = rooms.filter(x => x.status === 'breach' || x.status === 'over_group').length;
+    const amber = rooms.filter(x => x.status === 'attention').length;
+    const okN = rooms.length - red - amber;
+    const fmtN = (v) => { const n = Number(v) || 0; return Number.isInteger(n) ? String(n) : n.toFixed(1); };
+    const pill = (st) => st === 'breach' ? '<span class="kt-pill kt-pill-danger">⚠ Out of ratio</span>'
+      : st === 'over_group' ? '<span class="kt-pill kt-pill-danger">⚠ Over group size</span>'
+      : st === 'attention' ? '<span class="kt-pill kt-pill-warning">Check staffing</span>'
+      : st === 'tight' ? '<span class="kt-pill kt-pill-warning">At the limit</span>'
+      : '<span class="kt-pill kt-pill-success">✓ In ratio</span>';
+    const roomRow = (x) => {
+      const max = x.standard && x.standard.max_group;
+      const over = x.over_max_group;
+      const why = esc(x.reason || ('Room ratio ' + ((x.standard && x.standard.ratio) || '')));
+      const warn = (x.warnings || []).map(w => `<div style="color:#92400E;">⚠️ ${esc(w)}</div>`).join('');
+      return `<tr>
+        <td><strong>${esc(x.room_name)}</strong><div style="margin-top:3px;"><span class="kt-pill kt-pill-purple">${esc((x.standard && x.standard.label) || '')}</span></div></td>
+        <td><strong${over ? ' style="color:#B91C1C;"' : ''}>${x.children_present}</strong>${max ? ` <span style="color:#64748B;">/ ${max} max</span>` : ''}</td>
+        <td><strong${x.staff_present < x.required_staff ? ' style="color:#B91C1C;"' : ''}>${fmtN(x.staff_present)}</strong> <span style="color:#64748B;">/ ${x.required_staff} needed</span></td>
+        <td style="font-size:12px;line-height:1.4;max-width:420px;"><div style="color:#475569;">${why}</div>${warn}</td>
+        <td>${pill(x.status)}</td>
+      </tr>`;
+    };
+    const centreBlock = (c) => {
+      const list = rooms.filter(x => x.centre_id === c.id);
+      const badge = !on ? ''
+        : c.ontario_rules ? '<span class="kt-pill kt-pill-info">Ontario centre rules</span>'
+        : '<span class="kt-pill" title="Set the licence type to Licensed child care centre in Ratio settings to use O. Reg. 137/15 rules">Room’s own ratio</span>';
+      return `<div class="kt-card" style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <h3 style="margin:0;font-size:16px;">${esc(c.name)}</h3>${badge}
+          ${on ? `<button type="button" class="kt-btn kt-btn-ghost" data-rr-settings="${c.id}" style="margin-left:auto;">⚙ Ratio settings</button>` : ''}
+        </div>
+        ${c.ontario_rules && c.settings ? `<div style="font-size:12px;color:#64748B;margin-bottom:6px;">${esc(windowsLine(c.settings))}</div>` : ''}
+        <table data-kt-no-bulk>
+          <thead><tr><th>Room</th><th>Children</th><th>Staff</th><th>Why / checks</th><th>Status</th></tr></thead>
+          <tbody>${list.map(roomRow).join('') || '<tr><td colspan="5" style="text-align:center;padding:24px;color:#64748B;">No active rooms.</td></tr>'}</tbody>
+        </table>
+      </div>`;
+    };
+    function windowsLine(s) {
+      if (!s) return '';
+      const parts = ['Program ' + s.program_start + '–' + s.program_end];
+      if (s.reduced_enabled) {
+        parts.push('reduced ratio: arrival ' + s.arrival_minutes + ' min, departure ' + s.departure_minutes + ' min' + (s.rest_start && s.rest_minutes ? ', rest ' + s.rest_start + ' for ' + s.rest_minutes + ' min' : ''));
+      } else parts.push('reduced ratios off');
+      if ((s.outdoor || []).length) parts.push('outdoor ' + s.outdoor.map(w => w.from + '–' + w.to).join(', '));
+      return parts.join(' · ');
+    }
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>👥 Real-time room ratios</h2>
-        <p>Ontario CCEYA standards. ${breached} of ${rooms.length} rooms out of ratio right now.</p>
+        <p>${on ? 'Ontario O. Reg. 137/15. ' : ''}Children signed in and staff on the floor right now. ${red} of ${rooms.length} room${rooms.length === 1 ? '' : 's'} out of ratio${amber ? ', ' + amber + ' to check' : ''}.</p>
       </div>
       <div class="kt-kpi-grid">
-        <div class="kt-kpi kt-kpi-${breached > 0 ? 'danger' : 'success'}"><div class="kt-kpi-label">Out of ratio</div><div class="kt-kpi-value">${breached}</div></div>
+        <div class="kt-kpi kt-kpi-${red > 0 ? 'danger' : 'success'}"><div class="kt-kpi-label">Out of ratio</div><div class="kt-kpi-value">${red}</div></div>
+        <div class="kt-kpi kt-kpi-${amber > 0 ? 'warning' : 'success'}"><div class="kt-kpi-label">Check staffing</div><div class="kt-kpi-value">${amber}</div></div>
         <div class="kt-kpi kt-kpi-info"><div class="kt-kpi-label">Rooms tracked</div><div class="kt-kpi-value">${rooms.length}</div></div>
-        <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Compliant</div><div class="kt-kpi-value">${rooms.length - breached}</div></div>
+        <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">In ratio</div><div class="kt-kpi-value">${okN}</div></div>
       </div>
-      <div class="kt-card">
-        <table>
-          <thead><tr><th>Room</th><th>Age band</th><th>Children</th><th>Staff</th><th>Required</th><th>Status</th></tr></thead>
-          <tbody>${rooms.map(r => `<tr>
-            <td><strong>${esc(r.room_name)}</strong><div style="color:#64748B;font-size:12px;">${esc(r.centre_name)}</div></td>
-            <td><span class="kt-pill kt-pill-purple">${esc(r.standard.label)}</span></td>
-            <td>${r.children_present} / ${r.standard.max_group}</td>
-            <td>${r.staff_present}</td>
-            <td>${r.required_staff}</td>
-            <td><span class="kt-pill ${r.compliant ? 'kt-pill-success' : 'kt-pill-danger'}">${r.compliant ? '✓ Compliant' : '⚠ Out of ratio'}</span></td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:40px;color:#64748B;">No rooms tracked.</td></tr>'}</tbody>
-        </table>
-      </div>
+      ${centres.map(centreBlock).join('') || '<div class="kt-card" style="text-align:center;padding:40px;color:#64748B;">No rooms tracked.</div>'}
     </div>`;
+    main.querySelectorAll('button[data-rr-settings]').forEach(b => b.addEventListener('click', () => {
+      const c = centres.find(x => String(x.id) === b.getAttribute('data-rr-settings'));
+      if (c) openRatioSettings(main, c, rooms.filter(x => x.centre_id === c.id), groups);
+    }));
+  }
+
+  // Ontario: licence type, program hours, reduced-ratio windows (s.8(4)), outdoor play, room age groups.
+  function openRatioSettings(main, c, rooms, groups) {
+    const s = c.settings || {};
+    const Shell = window.KT && KT.Shell;
+    const lbl = 'display:block;font-size:12.5px;font-weight:700;margin:10px 0 4px;';
+    const inp = 'height:30px;padding:0 8px;border:1px solid #CBD5E1;border-radius:7px;box-sizing:border-box;';
+    const gOpts = (cur) => Object.keys(groups).map(k => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(groups[k])}</option>`).join('');
+    const derive = (x) => x.licensed_age_group || (x.age_group === 'school_age' ? 'primary_junior' : x.age_group);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <label style="${lbl}">This location is a</label>
+      <select data-f="license_type" style="${inp}width:100%;">
+        <option value="">Not set — use each room’s own ratio</option>
+        <option value="on_centre"${c.license_type === 'on_centre' ? ' selected' : ''}>Licensed child care centre — O. Reg. 137/15 rules</option>
+        <option value="on_hcc_home"${c.license_type === 'on_hcc_home' ? ' selected' : ''}>Home child care (agency-affiliated home)</option>
+        <option value="on_hcc_agency"${c.license_type === 'on_hcc_agency' ? ' selected' : ''}>Home child care agency</option>
+      </select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div><label style="${lbl}">Program starts</label><input data-f="program_start" type="time" value="${esc(s.program_start || '07:00')}" style="${inp}width:100%;"></div>
+        <div><label style="${lbl}">Program ends</label><input data-f="program_end" type="time" value="${esc(s.program_end || '18:00')}" style="${inp}width:100%;"></div>
+      </div>
+      <label style="${lbl}display:flex;align-items:center;gap:8px;"><input data-f="reduced_enabled" type="checkbox"${s.reduced_enabled !== false ? ' checked' : ''}> Use reduced ratios at arrival, departure and rest (s.8(4))</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div><label style="${lbl}">Arrival window (min)</label><input data-f="arrival_minutes" type="number" min="0" max="90" value="${s.arrival_minutes != null ? s.arrival_minutes : 90}" style="${inp}width:100%;"></div>
+        <div><label style="${lbl}">Departure window (min)</label><input data-f="departure_minutes" type="number" min="0" max="60" value="${s.departure_minutes != null ? s.departure_minutes : 60}" style="${inp}width:100%;"></div>
+        <div><label style="${lbl}">Rest period starts</label><input data-f="rest_start" type="time" value="${esc(s.rest_start || '')}" style="${inp}width:100%;"></div>
+        <div><label style="${lbl}">Rest period (min, max 120)</label><input data-f="rest_minutes" type="number" min="0" max="120" value="${s.rest_minutes || 0}" style="${inp}width:100%;"></div>
+      </div>
+      <div style="font-size:11.5px;color:#64748B;margin-top:6px;line-height:1.4;">Programs of 6 hours or more: arrival up to 90 min after opening, departure up to 60 min before closing; shorter programs 30 and 30. Rest period applies to toddler and preschool groups only. Never for infants, junior school age or family age groups.</div>
+      <label style="${lbl}">Outdoor play times (always full ratio)</label>
+      <input data-f="outdoor" placeholder="e.g. 10:00-11:00, 15:30-16:30" value="${esc((s.outdoor || []).map(w => w.from + '-' + w.to).join(', '))}" style="${inp}width:100%;">
+      <label style="${lbl}">Licensed age group of each room</label>
+      ${rooms.map(x => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span style="flex:1;min-width:0;font-size:13px;">${esc(x.room_name)}</span>
+        <select data-room="${x.room_id}" style="${inp}">${gOpts(derive(x))}</select></div>`).join('') || '<div style="font-size:12px;color:#64748B;">No active rooms.</div>'}
+      <div data-err style="color:#B91C1C;font-size:12.5px;min-height:16px;margin-top:6px;"></div>`;
+    const f = (k) => wrap.querySelector(`[data-f="${k}"]`);
+    const save = async () => {
+      const err = wrap.querySelector('[data-err]');
+      const outdoor = [];
+      const raw = f('outdoor').value.trim();
+      if (raw) {
+        for (const part of raw.split(',')) {
+          const m = part.trim().match(/^(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})$/);
+          if (!m) { err.textContent = 'Outdoor play times look like 10:00-11:00, separated by commas.'; return false; }
+          const p2 = (h) => String(h).padStart(2, '0');
+          outdoor.push({ from: p2(m[1]) + ':' + m[2], to: p2(m[3]) + ':' + m[4] });
+        }
+      }
+      const body = {
+        license_type: f('license_type').value || null,
+        reduced_enabled: f('reduced_enabled').checked,
+        program_start: f('program_start').value, program_end: f('program_end').value,
+        arrival_minutes: parseInt(f('arrival_minutes').value || '0', 10),
+        departure_minutes: parseInt(f('departure_minutes').value || '0', 10),
+        rest_start: f('rest_start').value || null,
+        rest_minutes: parseInt(f('rest_minutes').value || '0', 10),
+        outdoor,
+        rooms: Array.from(wrap.querySelectorAll('select[data-room]')).map(sel => ({ id: parseInt(sel.getAttribute('data-room'), 10), licensed_age_group: sel.value || null })),
+      };
+      try {
+        await Api.put('/operations/ratio-settings/' + c.id, body);
+      } catch (e) { err.textContent = (e && e.message) || 'Could not save.'; return false; }
+      if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Ratio settings saved', 'success');
+      renderRoomRatios(main && main.isConnected ? main : (document.getElementById('appMain') || main));
+      return true;
+    };
+    Shell.Modal.open({ title: 'Ratio settings — ' + c.name, body: wrap, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, handler: save }] });
   }
 
   // ============================ Vacation holds =================================

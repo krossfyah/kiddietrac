@@ -464,16 +464,21 @@
       const overCap = !!ratio.over_capacity;
       const overBy = ratio.over_capacity_by || 0;
       const atCap = !!ratio.at_capacity;
-      const short = Math.max(0, need - have);
+      // Ontario centres may count a supervisor at half (O. Reg. 137/15 s.8(5)) — 0.5 short is one person.
+      const short = Math.ceil(Math.max(0, need - have));
+      // Ontario: one adult where two are required (s.8(6)), no RECE in the group (s.54).
+      const issues = Array.isArray(ratio.compliance_issues) ? ratio.compliance_issues : [];
       // Two independent limits: the educator:child RATIO and the room's licensed
       // CAPACITY (headcount). Either one being exceeded is a red alert.
       const ratioBreached = short > 0 || ['over', 'breach', 'danger'].indexOf(ratio.status) !== -1;
       // v2 (2026-10-09): over the group-size or home limit is a breach too.
       const overGroup = !!ratio.over_group || ratio.status === 'over_group';
       const breached = ratioBreached || overCap || overGroup;
-      const tight = !breached && (ratio.status === 'warning' || ratio.status === 'tight' || atCap);
+      const attention = !breached && issues.length > 0;
+      const tight = !breached && (attention || ratio.status === 'warning' || ratio.status === 'tight' || atCap);
+      const issueText = attention ? ((ratio.warnings || []).find((w) => /adult|RECE/.test(w)) || 'Staffing needs attention') : '';
 
-      const label = ratioBreached ? 'RATIO BREACH' : overCap ? 'OVER CAPACITY' : overGroup ? (ratio.home ? 'OVER HOME LIMIT' : 'OVER GROUP SIZE') : tight ? 'AT THE LIMIT' : 'RATIO OK';
+      const label = ratioBreached ? 'RATIO BREACH' : overCap ? 'OVER CAPACITY' : overGroup ? (ratio.home ? 'OVER HOME LIMIT' : 'OVER GROUP SIZE') : attention ? 'CHECK STAFFING' : tight ? 'AT THE LIMIT' : 'RATIO OK';
       const theme = breached
         ? { bg: '#FEF2F2', border: '#DC2626', text: '#991B1B', chipBg: '#DC2626', icon: ratioBreached ? '🚨' : '⛔' }
         : tight
@@ -486,6 +491,8 @@
           ? `${overBy} child${overBy === 1 ? '' : 'ren'} over room capacity`
           : overGroup
             ? ((ratio.warnings && ratio.warnings[0]) || 'Over the group size limit')
+          : attention
+            ? issueText
           : `${kids} ${kids === 1 ? 'child' : 'children'} · ${have}/${need || 1} educator${(need || 1) === 1 ? '' : 's'}`;
 
       // Always surface BOTH limits so an educator sees at a glance which is at risk.
@@ -516,7 +523,7 @@
          (group size, home limits, a second adult on site, nap-time relief). One line each. */
       const notes = [];
       if (ratio.reason) notes.push(ratio.reason);
-      (ratio.warnings || []).forEach((w) => { if (!overGroup || w !== ratio.warnings[0]) notes.push('⚠️ ' + w); });
+      (ratio.warnings || []).forEach((w) => { if ((!overGroup || w !== ratio.warnings[0]) && w !== issueText) notes.push('⚠️ ' + w); });
       if (ratio.home && ratio.home.own_children_note) notes.push(ratio.home.own_children_note);
       if (ratio.nap && ratio.nap.note) notes.push('😴 ' + ratio.nap.note);
       notes.slice(0, 4).forEach((n) => txt.appendChild(Dom.el('div', {

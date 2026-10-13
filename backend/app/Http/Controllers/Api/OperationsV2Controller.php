@@ -370,74 +370,154 @@ final class OperationsV2Controller extends Controller
     // =========================================================
     public function ratioStatus(Request $request): JsonResponse
     {
+        /* LIVE (2026-10-13). This screen used to count ENROLLED children against every active
+           staff role at the centre, agency-wide for any director, with its own copy of the
+           Ontario table (preschool max 16 — the regulation says 24). It now asks the ratio
+           engine (App\Support\RatioRules — Ontario licensed centres via OntarioRatios) about
+           the children signed in and the staff on the floor right now, for the centres this
+           person can see. */
         $agencyId = $this->resolveAgencyId($request);
-        // Ontario CCEYA ratios used as defaults — overridable per room later.
-        // Format: maxAgeMonths => [educatorRatio, maxGroupSize]
-        $standards = [
-            18  => ['ratio' => 3, 'max_group' => 10, 'label' => 'Infant'],
-            30  => ['ratio' => 5, 'max_group' => 15, 'label' => 'Toddler'],
-            72  => ['ratio' => 8, 'max_group' => 16, 'label' => 'Preschool'],
-            156 => ['ratio' => 15, 'max_group' => 30, 'label' => 'School-age'],
-        ];
+        $centreIds = \App\Support\Visibility::centreIds((int) $agencyId, $request->user());
+        $code = \App\Support\Jurisdictions::codeFor((int) $agencyId);
 
-        $rooms = DB::table('rooms as r')
-            ->join('centres as c', 'c.id', '=', 'r.centre_id')
-            ->where('c.agency_id', $agencyId)
-            ->where(fn ($q) => \App\Support\Live::centres($q, 'c'))
-            ->select('r.id', 'r.name', 'r.centre_id', 'c.name as centre_name', 'r.capacity as licensed_capacity')
-            ->get();
+        $centres = DB::table('centres as c')->where('c.agency_id', $agencyId)->whereIn('c.id', $centreIds ?: [0])
+            ->where(fn ($q) => \App\Support\Live::centres($q, 'c'))->orderBy('c.name')
+            ->get(['c.id', 'c.name', 'c.license_type', 'c.settings', 'c.open_time', 'c.close_time']);
+        $rooms = DB::table('rooms')->whereIn('centre_id', $centres->pluck('id')->all() ?: [0])->where('active', true)
+            ->orderBy('centre_id')->orderBy('name')->get();
+        $byId = $centres->keyBy('id');
 
-        /* v2 (2026-10-09): an agency whose jurisdiction has an age-mapped table (Ohio) plans
-           against those bands and group sizes; everyone else keeps the defaults above. */
-        $prof = \App\Support\Jurisdictions::forAgency((int) $agencyId);
-        $jb = $prof['ratios']['centre'] ?? null;
-        $usable = is_array($jb) && $jb && ! array_filter($jb, fn ($b) => ! array_key_exists('min_months', $b));
-        if ($usable) {
-            $standards = [];
-            foreach ($jb as $b) {
-                if ($b['min_months'] === null) continue;
-                $max = $b['max_months'] ?? 72;
-                $standards[$max] = ['ratio' => (int) $b['ratio'], 'max_group' => (int) ($b['group'] ?? 999), 'label' => $b['label']];
-            }
-            ksort($standards);
-        }
-        $rows = $rooms->map(function ($room) use ($standards) {
-            $childCount = DB::table('children')
-                ->where('primary_room_id', $room->id)
-                ->where('enrollment_status', 'enrolled')
-                ->whereNull('deleted_at')
-                ->count();
-            $staffCount = DB::table('role_assignments')
-                ->where('centre_id', $room->centre_id)
-                ->whereIn('role', ['educator', 'centre_director'])
-                ->where('active', 1)
-                ->count();
-            // Pick the standard for the youngest child in this room
-            $oldestMonths = DB::table('children')->where('primary_room_id', $room->id)
-                ->whereNull('deleted_at')->where('enrollment_status', 'enrolled')
-                ->select(DB::raw('MIN(TIMESTAMPDIFF(MONTH, date_of_birth, NOW())) as min_age'))
-                ->value('min_age');
-            $oldestMonths = (int) $oldestMonths;
-            $standard = null;
-            foreach ($standards as $maxMonths => $s) {
-                if ($oldestMonths <= $maxMonths) { $standard = $s + ['age_band' => "0-{$maxMonths}mo"]; break; }
-            }
-            $standard = $standard ?? $standards[156];
-            $requiredStaff = (int) ceil($childCount / max(1, $standard['ratio']));
-            $compliant = $staffCount >= $requiredStaff && $childCount <= $standard['max_group'];
+        $rows = $rooms->map(function ($room) use ($byId) {
+            $v = \App\Support\RatioRules::evaluate($room);
+            $have = (float) $v['educators_present'];
+            $need = (int) $v['required_educators'];
+            $kids = (int) $v['children_present'];
+            $overGroup = ! empty($v['over_group']) || ! empty($v['home']['over_cap']);
+            $issues = (array) ($v['compliance_issues'] ?? []);
+            $status = match (true) {
+                $have < $need => 'breach',
+                $overGroup => 'over_group',
+                (bool) $issues => 'attention',
+                $kids > 0 && $have - $need < 1 => 'tight',
+                default => 'ok',
+            };
+            $on = $v['ontario'] ?? null;
+
             return [
                 'room_id' => $room->id,
                 'room_name' => $room->name,
-                'centre_name' => $room->centre_name,
-                'standard' => $standard,
-                'children_present' => $childCount,
-                'staff_present' => $staffCount,
-                'required_staff' => $requiredStaff,
-                'compliant' => $compliant,
-                'over_max_group' => $childCount > $standard['max_group'],
+                'centre_id' => (int) $room->centre_id,
+                'centre_name' => $byId[$room->centre_id]->name ?? '',
+                'licensed_age_group' => $room->licensed_age_group ?? null,
+                'age_group' => $room->age_group,
+                'standard' => [
+                    'label' => $on['group_label'] ?? ucfirst(str_replace('_', ' ', (string) $room->age_group)),
+                    'max_group' => $v['group_limit'] ?? ((int) $room->capacity ?: null),
+                    'ratio' => $v['ratio_target'],
+                ],
+                'children_present' => $kids,
+                'staff_present' => $have,
+                'required_staff' => $need,
+                'compliant' => $have >= $need && ! $overGroup && ! $issues,
+                'status' => $status,
+                'over_max_group' => $overGroup,
+                'rule' => $v['rule'],
+                'reason' => $v['reason'],
+                'warnings' => $v['warnings'],
+                'compliance_issues' => $issues,
+                'ontario' => $on,
+                'educator_source' => $v['educator_source'],
             ];
+        })->values();
+
+        $centreOut = $centres->map(fn ($c) => [
+            'id' => (int) $c->id, 'name' => $c->name, 'license_type' => $c->license_type,
+            'ontario_rules' => $code === 'CA-ON' && $c->license_type === 'on_centre',
+            'settings' => $code === 'CA-ON' ? \App\Support\OntarioRatios::settings($c) : null,
+        ])->values();
+
+        return response()->json([
+            'data' => $rows,
+            'centres' => $centreOut,
+            'jurisdiction' => $code,
+            'groups' => $code === 'CA-ON' ? \App\Support\OntarioRatios::GROUPS : null,
+            'as_of' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * PUT /operations/ratio-settings/{centre} — Ontario only (2026-10-13). The location's licence
+     * type (Ontario centre rules apply to 'on_centre' only), its program hours and the reduced-
+     * ratio windows it uses (s.8(4)), outdoor play times (never reduced), and each room's
+     * licensed age group (Schedule 1, or a family age group, s.8.1).
+     */
+    public function saveRatioSettings(Request $request, int $centre): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless(\App\Support\Jurisdictions::codeFor((int) $agencyId) === 'CA-ON', 422, 'Ontario ratio settings apply to Ontario agencies only.');
+        $row = DB::table('centres')->where('id', $centre)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        abort_unless($row, 404);
+        abort_unless(in_array($centre, \App\Support\Visibility::centreIds((int) $agencyId, $request->user()), true), 403);
+
+        $hm = 'regex:/^([01]\d|2[0-3]):[0-5]\d$/';
+        $d = $request->validate([
+            'license_type' => ['nullable', 'in:on_centre,on_hcc_agency,on_hcc_home'],
+            'reduced_enabled' => ['required', 'boolean'],
+            'program_start' => ['required', $hm],
+            'program_end' => ['required', $hm],
+            'arrival_minutes' => ['required', 'integer', 'min:0', 'max:90'],
+            'departure_minutes' => ['required', 'integer', 'min:0', 'max:60'],
+            'rest_start' => ['nullable', $hm],
+            'rest_minutes' => ['nullable', 'integer', 'min:0', 'max:120'],
+            'outdoor' => ['nullable', 'array', 'max:8'],
+            'outdoor.*.from' => ['required', $hm],
+            'outdoor.*.to' => ['required', $hm],
+            'rooms' => ['nullable', 'array', 'max:60'],
+            'rooms.*.id' => ['required', 'integer'],
+            'rooms.*.licensed_age_group' => ['nullable', 'in:' . implode(',', array_keys(\App\Support\OntarioRatios::GROUPS))],
+        ]);
+        $toMin = fn ($v) => (int) substr($v, 0, 2) * 60 + (int) substr($v, 3, 2);
+        if ($toMin($d['program_end']) <= $toMin($d['program_start'])) abort(422, 'The program must end after it starts.');
+        foreach ((array) ($d['outdoor'] ?? []) as $w) {
+            if ($toMin($w['to']) <= $toMin($w['from'])) abort(422, 'Each outdoor play time must end after it starts.');
+        }
+        // Programs under 6 hours: 30-minute arrival and departure periods at most (s.8(4)3).
+        $long = $toMin($d['program_end']) - $toMin($d['program_start']) >= 360;
+        $arr = min((int) $d['arrival_minutes'], $long ? 90 : 30);
+        $dep = min((int) $d['departure_minutes'], $long ? 60 : 30);
+
+        $settings = $row->settings ? (json_decode((string) $row->settings, true) ?: []) : [];
+        $settings['ratio_on'] = [
+            'reduced_enabled' => (bool) $d['reduced_enabled'],
+            'program_start' => $d['program_start'], 'program_end' => $d['program_end'],
+            'arrival_minutes' => $arr, 'departure_minutes' => $dep,
+            'rest_start' => $d['rest_start'] ?? null, 'rest_minutes' => (int) ($d['rest_minutes'] ?? 0),
+            'outdoor' => array_values(array_map(fn ($w) => ['from' => $w['from'], 'to' => $w['to']], (array) ($d['outdoor'] ?? []))),
+        ];
+
+        DB::transaction(function () use ($centre, $d, $settings) {
+            DB::table('centres')->where('id', $centre)->update([
+                'settings' => json_encode($settings), 'license_type' => $d['license_type'] ?? null, 'updated_at' => now(),
+            ]);
+            if (\Illuminate\Support\Facades\Schema::hasColumn('rooms', 'licensed_age_group')) {
+                foreach ((array) ($d['rooms'] ?? []) as $r) {
+                    DB::table('rooms')->where('id', (int) $r['id'])->where('centre_id', $centre)
+                        ->update(['licensed_age_group' => $r['licensed_age_group'] ?? null, 'updated_at' => now()]);
+                }
+            }
         });
-        return response()->json(['data' => $rows]);
+
+        try {
+            \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => (int) $agencyId, 'action' => 'ratio_settings.updated',
+                'entity_type' => 'centre', 'entity_id' => $centre,
+                'payload' => json_encode(['summary' => 'Ontario ratio settings for ' . $row->name, 'license_type' => $d['license_type'] ?? null,
+                    'ratio_on' => $settings['ratio_on'], 'rooms' => $d['rooms'] ?? []]),
+                'ip_address' => substr((string) $request->ip(), 0, 45), 'created_at' => now()]);
+        } catch (\Throwable $e) {}
+
+        $fresh = DB::table('centres')->where('id', $centre)->first();
+
+        return response()->json(['ok' => true, 'settings' => \App\Support\OntarioRatios::settings($fresh), 'license_type' => $fresh->license_type]);
     }
 
     // =========================================================

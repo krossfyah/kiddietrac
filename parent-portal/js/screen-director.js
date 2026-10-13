@@ -186,8 +186,28 @@
     return tile;
   }
 
+  /* Ontario centres (2026-10-13): two more states from the ratio engine — 'attention' (one adult
+     where two are required, no RECE in the group) and 'over_group'. The shell's statusTagFor
+     calls anything it does not know a BREACH. */
+  function ratioTag(st) {
+    if (st === 'attention') return { class: 'tag-warn', text: 'CHECK STAFFING', css: 'tight' };
+    if (st === 'over_group') return { class: 'tag-danger', text: 'OVER GROUP SIZE', css: 'breach' };
+    const t = statusTagFor(st);
+    return { class: t.class, text: t.text, css: st };
+  }
+
+  // One compact line per finding: why this many educators, then anything to fix.
+  function ratioNotes(room) {
+    const box = Dom.el('div', { style: 'margin-top:6px;display:flex;flex-direction:column;gap:2px;' });
+    if (room.reason) box.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:var(--kt-text-muted);line-height:1.35;' }, room.reason));
+    (room.warnings || []).slice(0, 3).forEach((w) => box.appendChild(Dom.el('div', {
+      style: 'font-size:11.5px;color:#92400E;line-height:1.35;',
+    }, '⚠️ ' + w)));
+    return box;
+  }
+
   function roomTile(room) {
-    const status = statusTagFor(room.status);
+    const status = ratioTag(room.status);
 
     const tile = Dom.el('div', {
       class: 'room-tile',
@@ -199,7 +219,7 @@
         Dom.el('span', { class: 'room-color-dot', style: { background: room.color_hex || '#1F6080' } }),
         room.room_name,
       ),
-      Dom.el('span', { class: 'ratio-status ' + room.status }, status.text),
+      Dom.el('span', { class: 'ratio-status ' + status.css }, status.text),
     ));
 
     tile.appendChild(Dom.el('div', { class: 'room-tile-stats' },
@@ -215,7 +235,8 @@
 
     tile.appendChild(Dom.el('div', {
       style: 'font-size: 12px; color: var(--kt-text-muted);'
-    }, `Capacity: ${room.utilization_pct}% · Ratio ${room.ratio_target}`));
+    }, `Capacity: ${room.utilization_pct}% · Ratio ${room.ratio_target}` + (room.group_limit ? ` · Max group ${room.group_limit}` : '')));
+    if (room.rule === 'ontario') tile.appendChild(ratioNotes(room));
 
     return tile;
   }
@@ -742,7 +763,7 @@
       Dom.el('div', { style: 'display: flex; align-items: center; gap: 10px;' },
         Dom.el('span', { class: 'room-color-dot', style: { background: room.color_hex || '#1F6080' } }),
         Dom.el('h2', { style: 'font-size: 18px;' }, room.room_name),
-        Dom.el('span', { class: 'ratio-status ' + room.status }, statusTagFor(room.status).text),
+        Dom.el('span', { class: 'ratio-status ' + ratioTag(room.status).css }, ratioTag(room.status).text),
       ),
       Dom.el('span', { style: 'font-size: 13px; color: var(--kt-text-muted);' },
         `${room.children_present} children · ${room.educators_present} educators`)
@@ -876,7 +897,7 @@
         row.appendChild(Dom.el('td', {}, String(r.educators_present)));
         row.appendChild(Dom.el('td', {}, String(r.required_educators)));
         row.appendChild(Dom.el('td', {},
-          Dom.el('span', { class: 'ratio-status ' + r.status }, statusTagFor(r.status).text)
+          Dom.el('span', { class: 'ratio-status ' + ratioTag(r.status).css }, ratioTag(r.status).text)
         ));
         rtbody.appendChild(row);
       });

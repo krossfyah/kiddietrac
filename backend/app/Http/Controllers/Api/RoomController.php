@@ -317,8 +317,10 @@ final class RoomController extends Controller
            jurisdiction's bands, group sizes and home rules. */
         $v = \App\Support\RatioRules::evaluate($room);
         $childrenPresent = (int) $v['children_present'];
-        $educatorsPresent = (int) $v['educators_present'];
+        // Ontario centres can count a supervisor at half (s.8(5)), so this may be 1.5.
+        $educatorsPresent = $v['rule'] === 'ontario' ? (float) $v['educators_present'] : (int) $v['educators_present'];
         $required = (int) $v['required_educators'];
+        $issues = (array) ($v['compliance_issues'] ?? []);
 
         // Two independent safety limits: the educator:child RATIO, and the room's
         // licensed CAPACITY (max children regardless of staffing). A room can be
@@ -333,13 +335,24 @@ final class RoomController extends Controller
         // NOT merely at the minimum educator count — 1 educator on a 1:3 ratio with
         // 1 child has headroom for 2 more and should read OK, not "at the limit".
         $perEducator = preg_match('/^1:(\d+)/', (string) $v['ratio_target'], $m) && $v['rule'] !== 'room' ? (int) $m[1] : max(1, (int) $room->ratio_children);
-        $coverage = $educatorsPresent * max(1, $perEducator);
+        if ($v['rule'] === 'ontario') {
+            // Ontario: the reduced ratio in a window, 3:10 for infants, Schedule 4 for family groups.
+            $coverage = $required > 0 ? (int) floor($educatorsPresent * $childrenPresent / $required) : PHP_INT_MAX;
+            if (! empty($v['ontario']['reduced']['ratio']) && empty($v['ontario']['reduced']['not_applied'])) {
+                $coverage = (int) floor($educatorsPresent * (int) substr($v['ontario']['reduced']['ratio'], 2));
+            } elseif (preg_match('/^(\d+):(\d+)$/', (string) $v['ratio_target'], $mm)) {
+                $coverage = (int) floor($educatorsPresent * (int) $mm[2] / max(1, (int) $mm[1]));
+            }
+        } else {
+            $coverage = $educatorsPresent * max(1, $perEducator);
+        }
         $overGroup = ! empty($v['over_group']) || ! empty($v['home']['over_cap']);
-        $compliant = $educatorsPresent >= $required && ! $overCapacity && ! $overGroup;
+        $compliant = $educatorsPresent >= $required && ! $overCapacity && ! $overGroup && ! $issues;
         $status = match (true) {
             $educatorsPresent < $required => 'breach',
             $overCapacity => 'over_capacity',
             $overGroup => 'over_group',
+            (bool) $issues => 'attention',
             ($childrenPresent > 0 && $childrenPresent >= $coverage) || $atCapacity => 'tight',
             default => 'ok',
         };
@@ -363,6 +376,8 @@ final class RoomController extends Controller
             'second_adult' => $v['second_adult'],
             'warnings' => $v['warnings'],
             'educator_source' => $v['educator_source'],
+            'compliance_issues' => $issues,
+            'ontario' => $v['ontario'] ?? null,
             'over_capacity' => $overCapacity,
             'at_capacity' => $atCapacity,
             'over_capacity_by' => $overBy,
