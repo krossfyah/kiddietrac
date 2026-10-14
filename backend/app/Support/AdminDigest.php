@@ -56,6 +56,7 @@ final class AdminDigest
             'openDays' => 'openDays', 'scorecard' => 'scorecard',
             'educators' => 'educators', 'newFamilies' => 'newFamilies',
             'onboarding' => 'onboarding', 'tempGuardians' => 'tempGuardians',
+            'parentIssues' => 'parentIssues',
         ] as $key => $method) {
             try {
                 $v = self::$method($ctx);
@@ -420,6 +421,25 @@ final class AdminDigest
                 ? 'unused · removed ' . \Carbon\Carbon::parse($r['removes_on'])->format('M j') . ' unless added to a family'
                 : 'since ' . \Carbon\Carbon::parse($r['created_at'])->format('M j') . ' · add their family',
         ], array_slice($all, 0, 8))];
+    }
+
+    /** Issues parents reported that are still open or in progress (ParentIssueController). */
+    private static function parentIssues(array $c): ?array
+    {
+        if (! Schema::hasTable('parent_issues')) return null;
+        $rows = DB::table('parent_issues as i')->join('families as f', 'f.id', '=', 'i.family_id')
+            ->whereIn('i.centre_id', $c['centres'])->whereIn('i.status', ['open', 'in_progress'])
+            ->orderBy('i.created_at')->limit(8)
+            ->get(['i.category', 'i.subcategory', 'i.status', 'i.created_at', 'f.family_name']);
+        if ($rows->isEmpty()) return null;
+        $total = DB::table('parent_issues')->whereIn('centre_id', $c['centres'])->whereIn('status', ['open', 'in_progress'])->count();
+        $labels = \App\Http\Controllers\Api\ParentIssueController::CATEGORIES;
+
+        return ['count' => $total, 'rows' => $rows->map(fn ($r) => [
+            'who' => (string) ($r->family_name ?: 'Family'),
+            'what' => ($labels[$r->category][0] ?? $r->category) . ($r->subcategory ? ' · ' . $r->subcategory : ''),
+            'detail' => ($r->status === 'open' ? 'open' : 'in progress') . ' · since ' . Carbon::parse($r->created_at)->format('M j'),
+        ])->all()];
     }
 
     private static function welcome(array $c): ?array

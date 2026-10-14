@@ -27,6 +27,7 @@ final class AdminDigestHtml
         'welcome' => '#16A34A', 'tempGuardians' => '#D97706', 'week' => '#1F6FB2', 'reportCards' => '#7C3AED',
         'emergency' => '#DC2626',
         'newFamilies' => '#16A34A',
+        'parentIssues' => '#D97706',
     ];
 
     public static function render(array $s, string $periodLabel): string
@@ -88,6 +89,8 @@ final class AdminDigestHtml
             'These families have no guardian account yet, so they cannot see anything you post.');
         $html .= self::section('📝 Report cards due', $s['reportCards'] ?? null, 'reportCards',
             'These children leave within the month and have no report card written.');
+        $html .= self::section('🗣️ Parent issues waiting', $s['parentIssues'] ?? null, 'parentIssues',
+            'Reported by parents in the app and not yet resolved. Open Parent issues to reply or close them.');
         $html .= self::section('🎫 Open support tickets', $s['tickets'] ?? null, 'tickets');
 
         // Billing

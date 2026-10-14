@@ -1186,9 +1186,18 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         Route::prefix('parent')->middleware('role:guardian')->group(function () {
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
+            // Report an issue to the centre (2026-10-13).
+            Route::get('/issues/options', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentOptions']);
+            Route::get('/issues', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentIndex']);
+            Route::post('/issues', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentStore'])->middleware('throttle:10,1');
+            Route::post('/issues/{id}/messages', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentMessage'])->whereNumber('id')->middleware('throttle:20,1');
             // Family & pick-ups: a parent asks the centre for a contact's pick-up login (2026-10-13).
             Route::get('/family-contacts', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentContacts']);
             Route::post('/family-contacts/{ec}/login-request', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentRequest'])->whereNumber('ec')->middleware('throttle:10,1');
+            // Parents keep their own pick-up list (2026-10-13): add / edit / remove, staff told, logged.
+            Route::post('/family-contacts', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentAdd'])->middleware('throttle:20,1');
+            Route::patch('/family-contacts/{ec}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentUpdate'])->whereNumber('ec')->middleware('throttle:30,1');
+            Route::delete('/family-contacts/{ec}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentRemove'])->whereNumber('ec')->middleware('throttle:20,1');
             Route::delete('/pickup-login-requests/{id}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentCancel'])->whereNumber('id');
             Route::get('/children', [FamilyController::class, 'myChildren']);
             Route::post('/withdrawals', [\App\Http\Controllers\Api\WithdrawalController::class, 'submit']);
@@ -3020,6 +3029,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     });
     // Safe Arrival (2026-09-29): the day's board, closing a case, and the agency's settings.
     Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
+        // Parent issues, staff side (2026-10-13): centre- and room-scoped in the controller.
+        Route::get  ('/parent-issues',               [\App\Http\Controllers\Api\ParentIssueController::class, 'staffIndex']);
+        Route::get  ('/parent-issues/{id}',          [\App\Http\Controllers\Api\ParentIssueController::class, 'staffShow'])->whereNumber('id');
+        Route::patch('/parent-issues/{id}',          [\App\Http\Controllers\Api\ParentIssueController::class, 'staffUpdate'])->whereNumber('id');
+        Route::post ('/parent-issues/{id}/messages', [\App\Http\Controllers\Api\ParentIssueController::class, 'staffMessage'])->whereNumber('id')->middleware('throttle:30,1');
         Route::get ('/safe-arrival/today',              [\App\Http\Controllers\Api\SafeArrivalController::class, 'today']);
         Route::post('/safe-arrival/{childId}/resolve',  [\App\Http\Controllers\Api\SafeArrivalController::class, 'resolve'])->where('childId', '[0-9]+');
         Route::get ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'settings']);

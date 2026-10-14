@@ -261,6 +261,7 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
+          { hash: 'parent-issues',  label: 'Parent issues',   icon: '🗣️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
@@ -463,6 +464,7 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
+          { hash: 'parent-issues',  label: 'Parent issues',   icon: '🗣️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'closures',       label: 'Closures',         icon: '🗓' },
           { hash: 'today',          label: 'Today',            icon: '✨' },
@@ -566,6 +568,7 @@
           { hash: 'today',         label: 'Today',         icon: '✨' },
           { hash: 'my-tasks',      label: 'My tasks',      icon: '📋' },
           { hash: 'parent-feedback', label: 'Parent Feedback', icon: '💬' },
+          { hash: 'parent-issues', label: 'Parent issues', icon: '🗣️' },
           // v22p98: educators clock in/out here — needed for ratio compliance,
           // payroll and reporting. The time-clock screen was already built and
           // registered for the educator role; it was just missing from this nav.
@@ -698,6 +701,8 @@
         /* Reports the centre has shared — incident reports today. Filed copies a
            family can come back to, rather than an email they have to keep. */
         { hash: 'my-documents',       label: 'Documents',  icon: '📄', badgeKey: 'my_documents' },
+        /* Tell the centre about something that needs looking into (2026-10-13). */
+        { hash: 'report-issue',       label: 'Report an issue', icon: '🗣️' },
         /* The family's guardians and emergency contacts, and asking the centre for a
            contact's pick-up login (2026-10-13). */
         { hash: 'family-contacts',    label: 'Family & pick-ups', icon: '👪' },
@@ -1065,6 +1070,8 @@
     'synced-waitlist': 'Waitlist leads and enquiries.',
     'edocuments': 'Documents on file, and what is still outstanding.',
     'my-documents': 'Forms you have signed and reports shared with you, kept for you to open any time.',
+    'report-issue': 'Tell the centre about something that needs looking into, and see their replies.',
+    'parent-issues': 'Issues parents have reported. Reply, add an internal note, change the status or assign it.',
     'family-contacts': 'The people on your family\'s file. Ask the centre to give an emergency contact their own pick-up login.',
     'my-forms': 'Forms waiting for your signature. Once you sign one it moves to Documents, where it is kept.',
     'signed-docs': 'Agreements that have been signed.',
