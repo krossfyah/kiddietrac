@@ -709,9 +709,14 @@ final class VoiceController extends Controller
                             if (($ov['language'] ?? '') !== '') { $cfg['language'] = $ov['language']; }
                         }
                         // A Safe Arrival call asks a question and waits for a key (2026-10-13).
-                        $r = $call->category === \App\Support\SafeArrivalCall::CATEGORY
-                            ? Telnyx::gather($cfg, $callControlId, (string) $call->body, $state)
-                            : Telnyx::speak($cfg, $callControlId, (string) $call->body, $state);
+                        if ($call->category === \App\Support\SafeArrivalCall::CATEGORY) {
+                            // The agency's call options (a test call uses the admin's unsaved draft).
+                            $sa = $this->safeArrivalConfig($call);
+                            $r = Telnyx::gather($cfg, $callControlId, (string) $call->body, $state,
+                                \App\Support\SafeArrivalCall::digits($sa), (int) $sa['tries'], (int) $sa['wait_secs'], (string) $sa['reply_invalid']);
+                        } else {
+                            $r = Telnyx::speak($cfg, $callControlId, (string) $call->body, $state);
+                        }
                         if (! $r['ok']) {
                             DB::table('voice_calls')->where('id', $call->id)->update([
                                 'status' => 'failed', 'error' => 'speak: ' . $r['error'], 'updated_at' => now(),
@@ -728,15 +733,20 @@ final class VoiceController extends Controller
                         break;
                     }
                     $digit = substr(preg_replace('/\D/', '', (string) ($p['digits'] ?? '')), 0, 1);
+                    $sa = $this->safeArrivalConfig($call);
+                    $isTest = $call->ref_type === 'safe_arrival_test';
+                    $saVars = $isTest ? \App\Support\SafeArrivalCall::testVars($agency)
+                        : (($chk = DB::table('safe_arrival_checks')->where('id', $call->ref_id)->where('agency_id', $agency)->first())
+                            ? \App\Support\SafeArrivalCall::vars($chk) : []);
                     if ($call->dtmf) {
                         $reply = 'Thank you. Goodbye.';
                     } elseif ($digit === '') {
-                        $reply = 'We did not get an answer. Please open KiddieTrac or call the centre. Goodbye.';
-                    } elseif ($call->ref_type === 'safe_arrival_test') {
-                        // The admin's own test call: nothing is recorded against any child.
+                        $reply = \App\Support\SafeArrivalCall::reply($sa, 'no_answer', $saVars);
+                    } elseif ($isTest) {
+                        // The admin's own test call, in their draft words: nothing is recorded against any child.
                         DB::table('voice_calls')->where('id', $call->id)->update(['dtmf' => $digit, 'updated_at' => now()]);
-                        $reply = 'Test call. You pressed ' . $digit . ', which means: '
-                            . \App\Support\SafeArrivalCall::label(\App\Support\SafeArrivalCall::RESPONSES[$digit] ?? '') . '. Nothing was recorded. Goodbye.';
+                        $resp = \App\Support\SafeArrivalCall::RESPONSES[$digit] ?? 'no_answer';
+                        $reply = \App\Support\SafeArrivalCall::reply($sa, $resp, $saVars) . ' This was a test call. Nothing was recorded.';
                     } else {
                         $reply = \App\Support\SafeArrivalCall::record($call, $digit);
                     }
@@ -803,6 +813,15 @@ final class VoiceController extends Controller
         }
 
         return response('', 200);
+    }
+
+    /** Safe Arrival call options for this call: the agency's, or the admin's draft on a test call. */
+    private function safeArrivalConfig(object $call): array
+    {
+        $draft = $call->ref_type === 'safe_arrival_test'
+            ? \Illuminate\Support\Facades\Cache::get('sa-test-cfg-' . $call->id) : null;
+
+        return \App\Support\SafeArrivalCall::config((int) $call->agency_id, is_array($draft) ? $draft : null);
     }
 
     // -- tenancy ------------------------------------------------------------

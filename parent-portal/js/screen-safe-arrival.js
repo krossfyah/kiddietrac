@@ -182,7 +182,53 @@
     };
   }
 
-  function settingsDialog(main, s) {
+  /* Settings, including the phone call's wording and options (2026-10-13, Anthony: "make this
+     more configurable"). The call section reads GET /safe-arrival/settings for the agency's
+     words and the shipped defaults; "Play test call" rings the admin's own phone with the
+     words as they are in the boxes now, before anything is saved. */
+  var CALL_TEXT = [
+    ['intro', 'Opening', 'Said first. Who is calling and why.'],
+    ['prompt_absent', 'Press 1 — absent today', 'Always offered.'],
+    ['prompt_late', 'Press 2 — on the way', ''],
+    ['prompt_dropped', 'Press 3 — already dropped off', ''],
+    ['reply_absent', 'After 1 is pressed', ''],
+    ['reply_late', 'After 2 is pressed', ''],
+    ['reply_dropped', 'After 3 is pressed', ''],
+    ['reply_no_answer', 'No key pressed', 'Then the next guardian is called.'],
+    ['reply_already', 'Child already accounted for', 'Another guardian or staff answered first.'],
+    ['reply_invalid', 'Wrong key', 'Followed by the keys to press.'],
+  ];
+  async function settingsDialog(main, s) {
+    var full = { settings: s, call_defaults: {} };
+    try { full = await call('GET', '/safe-arrival/settings'); } catch (e) {}
+    var cs = (full.settings && full.settings.call) || {};
+    var defs = full.call_defaults || {};
+    var TA = FLD + 'height:auto;min-height:52px;resize:vertical;font-family:inherit;line-height:1.4;padding:7px 9px;';
+    var callBox = '<details data-callbox style="margin-top:14px;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;"' + (s.call_parents ? ' open' : '') + '>'
+      + '<summary style="cursor:pointer;font-weight:800;font-size:14px;color:#0F172A;">📞 Phone call — wording and options</summary>'
+      + '<div style="font-size:12px;color:#64748B;margin:8px 0 4px;line-height:1.45;">Use <b>{child}</b>, <b>{child_full}</b>, <b>{centre}</b>, <b>{room}</b> and <b>{time}</b> — they are filled in on each call. Leave a box empty to use the standard wording. The keys always mean the same thing: 1 absent, 2 on the way, 3 dropped off.</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin-top:6px;">'
+      + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#0F172A;"><input type="checkbox" data-c="offer_late" ' + (cs.offer_late !== false ? 'checked' : '') + '> Offer 2 (on the way)</label>'
+      + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#0F172A;"><input type="checkbox" data-c="offer_dropped" ' + (cs.offer_dropped !== false ? 'checked' : '') + '> Offer 3 (dropped off)</label>'
+      + '<div><label style="' + LBL + '">Who is called</label><select data-c="who" style="' + FLD + 'background:#fff;">'
+      +   '<option value="all"' + (cs.who !== 'primary' ? ' selected' : '') + '>Each guardian in turn, primary first</option>'
+      +   '<option value="primary"' + (cs.who === 'primary' ? ' selected' : '') + '>Primary guardian only</option></select></div>'
+      + '<div><label style="' + LBL + '">Ask the question</label><select data-c="tries" style="' + FLD + 'background:#fff;">'
+      +   [1, 2, 3].map(function (n) { return '<option value="' + n + '"' + (Number(cs.tries || 2) === n ? ' selected' : '') + '>' + (n === 1 ? 'Once' : n + ' times') + ' if no key is pressed</option>'; }).join('') + '</select></div>'
+      + '<div><label style="' + LBL + '">Wait for a key (seconds)</label><input type="number" data-c="wait_secs" min="5" max="30" style="' + FLD + '" value="' + esc(cs.wait_secs || 10) + '"></div>'
+      + '</div>'
+      + CALL_TEXT.map(function (t) {
+          var v = cs[t[0]] && cs[t[0]] !== defs[t[0]] ? cs[t[0]] : '';
+          return '<label style="' + LBL + '">' + esc(t[1]) + (t[2] ? ' <span style="font-weight:500;color:#94A3B8;">· ' + esc(t[2]) + '</span>' : '') + '</label>'
+            + '<textarea data-t="' + t[0] + '" maxlength="400" rows="2" style="' + TA + '" placeholder="' + esc(defs[t[0]] || '') + '">' + esc(v) + '</textarea>';
+        }).join('')
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">'
+      + '<button type="button" data-testcall style="height:30px;padding:0 12px;border-radius:8px;border:1px solid #1F6080;background:#fff;color:#1F6080;font-weight:800;font-size:12.5px;cursor:pointer;">▶ Play test call to my phone</button>'
+      + '<button type="button" data-resetcall style="height:30px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#475569;font-weight:700;font-size:12.5px;cursor:pointer;">Reset wording to standard</button>'
+      + '<span data-testmsg style="font-size:12px;color:#475569;"></span></div>'
+      + '<div style="font-size:11.5px;color:#94A3B8;margin-top:6px;">The test rings the mobile number on your own profile, uses "Test Child", and records nothing. The voice is set in Carrier settings → Voice calls.</div>'
+      + '</details>';
+
     var m = modal('Safe Arrival settings',
       '<label style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#0F172A;cursor:pointer;">'
       + '<input type="checkbox" data-enabled ' + (s.enabled ? 'checked' : '') + ' style="width:18px;height:18px;"> Check that every scheduled child arrives</label>'
@@ -193,12 +239,47 @@
       + '<input type="number" data-esc min="5" max="240" style="' + FLD + '" value="' + esc(s.escalate_after_minutes) + '">'
       + '<label style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#0F172A;cursor:pointer;margin-top:14px;">'
       + '<input type="checkbox" data-call ' + (s.call_parents ? 'checked' : '') + ' style="width:18px;height:18px;"> Phone the parents if they don\'t answer</label>'
-      + '<div style="font-size:12px;color:#64748B;margin:4px 0 0 28px;line-height:1.45;">An automated call names the child and asks the parent to press 1 (absent today), 2 (on the way) or 3 (already dropped off). The answer is recorded on the child, absences go on the calendar, and the room\'s educators, the director and admins are told. Guardians are called one at a time, primary first. Uses your voice number; parents who opted out of calls are not rung.</div>'
+      + '<div style="font-size:12px;color:#64748B;margin:4px 0 0 28px;line-height:1.45;">An automated call names the child and asks the parent to press a key. The answer is recorded on the child, absences go on the calendar, and the room\'s educators, the director and admins are told. Parents who opted out of calls are not rung.</div>'
       + '<label style="' + LBL + '">Call this many minutes after the parents were asked</label>'
       + '<input type="number" data-callafter min="5" max="120" style="' + FLD + '" value="' + esc(s.call_after_minutes || 10) + '">'
+      + callBox
       + '<label style="' + LBL + '">Expected time for a child without one</label>'
       + '<input type="time" data-def style="' + FLD + '" value="' + esc(s.default_time) + '">'
       + '<div style="font-size:12px;color:#64748B;margin-top:6px;line-height:1.45;">Set each child\'s own drop-off time on their record (Usual times) for the most accurate checks. Only days the child is scheduled and the centre is open are checked.</div>');
+    var box = m.firstElementChild;
+    if (box) box.style.maxWidth = '640px';
+
+    function readCall() {
+      var c = {
+        offer_late: m.querySelector('[data-c="offer_late"]').checked,
+        offer_dropped: m.querySelector('[data-c="offer_dropped"]').checked,
+        who: m.querySelector('[data-c="who"]').value,
+        tries: parseInt(m.querySelector('[data-c="tries"]').value, 10) || 2,
+        wait_secs: Math.max(5, Math.min(30, parseInt(m.querySelector('[data-c="wait_secs"]').value, 10) || 10)),
+      };
+      m.querySelectorAll('[data-t]').forEach(function (ta) { c[ta.getAttribute('data-t')] = ta.value.trim(); });
+      return c;
+    }
+    // Hide the wording for a choice that is not offered.
+    function syncOffers() {
+      [['offer_late', ['prompt_late', 'reply_late']], ['offer_dropped', ['prompt_dropped', 'reply_dropped']]].forEach(function (p) {
+        var on = m.querySelector('[data-c="' + p[0] + '"]').checked;
+        p[1].forEach(function (k) {
+          var ta = m.querySelector('[data-t="' + k + '"]');
+          if (ta) { ta.style.display = on ? '' : 'none'; if (ta.previousElementSibling) ta.previousElementSibling.style.display = on ? '' : 'none'; }
+        });
+      });
+    }
+    m.querySelectorAll('[data-c^="offer_"]').forEach(function (cb) { cb.onchange = syncOffers; });
+    syncOffers();
+    m.querySelector('[data-resetcall]').onclick = function () { m.querySelectorAll('[data-t]').forEach(function (ta) { ta.value = ''; }); };
+    m.querySelector('[data-testcall]').onclick = async function () {
+      var b = this, msg = m.querySelector('[data-testmsg]');
+      b.disabled = true; msg.style.color = '#475569'; msg.textContent = 'Placing the call…';
+      try { var r = await call('POST', '/safe-arrival/test-call', { call: readCall() }); msg.style.color = '#166534'; msg.textContent = r.message || 'Calling now.'; }
+      catch (e) { msg.style.color = '#B91C1C'; msg.textContent = e.message; }
+      setTimeout(function () { b.disabled = false; }, 8000);
+    };
     m.querySelector('[data-ok]').onclick = async function () {
       var body = {
         enabled: m.querySelector('[data-enabled]').checked,
@@ -207,6 +288,7 @@
         default_time: m.querySelector('[data-def]').value || '09:00',
         call_parents: m.querySelector('[data-call]').checked,
         call_after_minutes: parseInt(m.querySelector('[data-callafter]').value, 10) || 10,
+        call: readCall(),
       };
       this.disabled = true;
       try { await call('PUT', '/safe-arrival/settings', body); m.remove(); render(main); }

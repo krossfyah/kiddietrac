@@ -3024,6 +3024,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/safe-arrival/{childId}/resolve',  [\App\Http\Controllers\Api\SafeArrivalController::class, 'resolve'])->where('childId', '[0-9]+');
         Route::get ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'settings']);
         Route::put ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'saveSettings']);
+        Route::post('/safe-arrival/test-call',          [\App\Http\Controllers\Api\SafeArrivalController::class, 'testCall'])->middleware('throttle:5,60');
         // The family record's subsidy history, and CWELCC enrolment changes as dated periods.
         Route::get   ('/compliance/families/{id}/subsidies', [\App\Http\Controllers\Api\SubsidyController::class, 'familyHistory'])->where('id', '[0-9]+');
         Route::post  ('/compliance/families/{id}/cwelcc',    [\App\Http\Controllers\Api\SubsidyController::class, 'familyCwelcc'])->where('id', '[0-9]+');

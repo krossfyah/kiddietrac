@@ -160,7 +160,8 @@ class SafeArrivalController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $this->scope($request, $agencyId);
 
-        return response()->json(['settings' => SafeArrival::settings($agencyId)]);
+        return response()->json(['settings' => SafeArrival::settings($agencyId) + ['call' => \App\Support\SafeArrivalCall::config($agencyId)],
+            'call_defaults' => \App\Support\SafeArrivalCall::DEFAULTS]);
     }
 
     /** PUT /safe-arrival/settings -- agency admins only. */
@@ -176,9 +177,14 @@ class SafeArrivalController extends Controller
             'escalate_after_minutes' => ['sometimes', 'integer', 'min:5', 'max:240'],
             'call_parents' => ['sometimes', 'boolean'],
             'call_after_minutes' => ['sometimes', 'integer', 'min:5', 'max:120'],
-        ]);
-        $before = SafeArrival::settings($agencyId);
-        $after = SafeArrival::saveSettings($agencyId, $data);
+            'call' => ['sometimes', 'array'],
+        ] + $this->callRules());
+        $before = SafeArrival::settings($agencyId) + ['call' => \App\Support\SafeArrivalCall::config($agencyId)];
+        $after = SafeArrival::saveSettings($agencyId, \Illuminate\Support\Arr::except($data, ['call']));
+        if (isset($data['call'])) {
+            \App\Support\SafeArrivalCall::save($agencyId, $data['call']);
+        }
+        $after['call'] = \App\Support\SafeArrivalCall::config($agencyId);
         try {
             \App\Support\Audit::write([
                 'user_id' => (int) $request->user()->id, 'agency_id' => $agencyId, 'action' => 'safe_arrival.settings',
@@ -192,6 +198,58 @@ class SafeArrivalController extends Controller
         }
 
         return response()->json(['settings' => $after]);
+    }
+
+    private function callRules(): array
+    {
+        $r = [];
+        foreach (\App\Support\SafeArrivalCall::TEXT_KEYS as $key) {
+            $r['call.' . $key] = ['sometimes', 'nullable', 'string', 'max:' . \App\Support\SafeArrivalCall::MAX_TEXT];
+        }
+
+        return $r + [
+            'call.offer_late' => ['sometimes', 'boolean'], 'call.offer_dropped' => ['sometimes', 'boolean'],
+            'call.tries' => ['sometimes', 'integer', 'min:1', 'max:3'], 'call.wait_secs' => ['sometimes', 'integer', 'min:5', 'max:30'],
+            'call.who' => ['sometimes', 'in:all,primary'],
+        ];
+    }
+
+    /**
+     * POST /safe-arrival/test-call {call?: draft options} -- agency admins only.
+     * Rings the admin's OWN profile phone with the draft wording, so it can be heard before
+     * it is saved. A test: the answer is spoken back and nothing is recorded on any child.
+     */
+    public function testCall(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        [, , $role] = $this->scope($request, $agencyId);
+        abort_unless($role === 'admin', 403, 'Only an agency admin can place a test call.');
+        $data = $request->validate(['call' => ['sometimes', 'array']] + $this->callRules());
+        $u = $request->user();
+        $phone = trim((string) ($u->phone ?? ''));
+        if ($phone === '' || \App\Support\Telnyx::e164($phone) === '') {
+            return response()->json(['message' => 'Add your mobile number to your profile first — the test rings your own phone.'], 422);
+        }
+        $who = \App\Http\Controllers\Api\VoiceController::testRecipient($agencyId, (int) $u->id, \App\Support\Telnyx::e164($phone));
+        if ($who['voice_opted_out']) {
+            return response()->json(['message' => 'Your number has opted out of phone calls, so it cannot be rung.'], 422);
+        }
+        if (! \App\Support\Telnyx::voiceConfig($agencyId)) {
+            return response()->json(['message' => 'Voice calls are not set up for this agency yet (Settings → Carrier settings → Voice calls).'], 422);
+        }
+        $draft = \App\Support\SafeArrivalCall::config($agencyId, $data['call'] ?? []);
+        $script = \App\Support\SafeArrivalCall::question($draft, \App\Support\SafeArrivalCall::testVars($agencyId));
+        $ok = app(\App\Http\Controllers\Api\VoiceController::class)->callOne($agencyId, (int) $u->id, $phone, $script,
+            \App\Support\SafeArrivalCall::CATEGORY, (int) $u->id, true, true, ['type' => 'safe_arrival_test', 'id' => (int) $u->id]);
+        $row = DB::table('voice_calls')->where('ref_type', 'safe_arrival_test')->where('to_user_id', $u->id)->orderByDesc('id')->first(['id', 'status', 'error']);
+        if ($row) {
+            \Illuminate\Support\Facades\Cache::put('sa-test-cfg-' . $row->id, $data['call'] ?? [], now()->addMinutes(15));
+        }
+        if (! $ok) {
+            return response()->json(['message' => 'The call could not be placed' . ($row && $row->error ? ': ' . $row->error : '.')], 422);
+        }
+
+        return response()->json(['ok' => true, 'message' => 'Calling ' . $phone . ' now. Answer and press a key to hear the reply.']);
     }
 
     /** [centreIds|null, roomIds|null, 'admin'|'director'|'educator'] */
