@@ -74,7 +74,8 @@
   function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
   function toast(i, t, m, c) { try { KT.toast && KT.toast(i, t, m || '', c || ACCENT); } catch (e) {} }
   function go(hash) { window.location.hash = '#' + hash; }
-  function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+  // A discount line is negative: "−$19.35", never "$-19.35" (2026-10-14).
+  function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return (n < 0 ? '−$' : '$') + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
   /* An instant from the server (UTC, "YYYY-MM-DD HH:MM:SS") shown with its time in the
      AGENCY's zone — "Oct 9, 2026, 8:57 AM". (Anthony, 2026-10-09: "when adding notes to
      leads add the timestamp to the notes as well".) */
@@ -1026,8 +1027,11 @@
 
   function openQuoteBuilder(leadId, quote, container, ctx) {
     var products = (META && META.products) || [];
+    var byId = {}; products.forEach(function (p) { byId[String(p.id)] = p; });
     var ov = el('div', { style: 'position:fixed;inset:0;z-index:10000;background:rgba(13,27,42,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto', onclick: function (ev) { if (ev.target === ov) ov.remove(); } });
-    var items = quote && quote.items ? quote.items.map(function (i) { return { description: i.description, qty: i.qty, unit_price: i.unit_price, product_id: i.product_id }; }) : [];
+    // A line from a discount plan remembers its rule, so a percentage follows the other lines.
+    function discRule(productId) { var p = byId[String(productId)]; return p && p.kind === 'discount' ? { type: p.discount_type, value: Number(p.price || 0), applies: p.applies_to || 'all' } : null; }
+    var items = quote && quote.items ? quote.items.map(function (i) { return { description: i.description, qty: i.qty, unit_price: i.unit_price, product_id: i.product_id, _disc: discRule(i.product_id) }; }) : [];
     var box = el('div', { style: 'background:#fff;border-radius:16px;max-width:640px;width:100%;padding:22px' });
     var titleIn = input({ value: quote ? (quote.title || '') : 'KiddieTrac Proposal', placeholder: 'Proposal title' });
     var discIn = input({ type: 'number', step: '0.01', value: quote ? (quote.discount || 0) : 0 });
@@ -1035,26 +1039,63 @@
     var notesIn = textarea({ value: quote ? (quote.notes || '') : '' });
     var itemsHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px;margin:6px 0' });
     var totalEl = el('div', { style: 'text-align:right;font-weight:800;font-size:18px;color:#047857;margin-top:8px' }, ['$0.00']);
-    function recalc() { var s = 0; items.forEach(function (i) { s += (Number(i.qty || 0) * Number(i.unit_price || 0)); }); var t = s - Number(discIn.value || 0); totalEl.textContent = money(t) + (Number(discIn.value || 0) ? '  (−' + money(discIn.value) + ')' : ''); }
+    function unitOf(it) { var p = byId[String(it.product_id)]; return p ? p.unit : null; }
+    // What a discount line takes off, from the lines it applies to (never more than they come to).
+    function discountAmount(it) {
+      var r = it._disc; if (!r) return 0;
+      var base = 0;
+      items.forEach(function (o) {
+        if (o === it || o._disc) return;
+        var u = unitOf(o);
+        var ok = r.applies === 'all' || (r.applies === 'recurring' && (u === 'month' || u === 'year')) || (r.applies === 'one-time' && u === 'one-time');
+        if (ok) base += Number(o.qty || 0) * Number(o.unit_price || 0);
+      });
+      var off = r.type === 'percent' ? base * r.value / 100 : r.value;
+      return Math.round(Math.min(Math.max(off, 0), Math.max(base, 0)) * 100) / 100;
+    }
+    function recalc() {
+      items.forEach(function (it) {
+        if (!it._disc) return;
+        it.qty = 1; it.unit_price = -discountAmount(it);
+        if (it._pIn) it._pIn.value = it.unit_price.toFixed(2);
+      });
+      var s = 0; items.forEach(function (i) { s += (Number(i.qty || 0) * Number(i.unit_price || 0)); });
+      var t = s - Number(discIn.value || 0);
+      totalEl.textContent = money(t) + (Number(discIn.value || 0) ? '  (−' + money(discIn.value) + ')' : '');
+    }
     function drawItems() {
       clear(itemsHost);
       items.forEach(function (it, idx) {
-        var d = input({ value: it.description || '', placeholder: 'Line item', style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+        var isDisc = !!it._disc;
+        var d = input({ value: it.description || '', placeholder: 'Line item', style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' + (isDisc ? ';color:#047857;font-weight:700' : '') });
         var q = input({ type: 'number', step: '0.01', value: it.qty == null ? 1 : it.qty, style: 'width:60px;flex:0 0 60px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
-        var p = input({ type: 'number', step: '0.01', value: it.unit_price == null ? 0 : it.unit_price, style: 'width:90px;flex:0 0 90px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+        var p = input({ type: 'number', step: '0.01', value: it.unit_price == null ? 0 : it.unit_price, style: 'width:90px;flex:0 0 90px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' + (isDisc ? ';color:#047857;background:#F0FDF4' : '') });
+        if (isDisc) { q.disabled = true; p.readOnly = true; p.title = 'Worked out from the discount plan'; it._pIn = p; }
         d.addEventListener('input', function () { it.description = d.value; }); q.addEventListener('input', function () { it.qty = q.value; recalc(); }); p.addEventListener('input', function () { it.unit_price = p.value; recalc(); });
         itemsHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' }, [d, q, p, el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer;flex:0 0 auto', onclick: function () { items.splice(idx, 1); drawItems(); recalc(); } }, ['×'])]));
       });
     }
     drawItems(); recalc(); discIn.addEventListener('input', recalc);
-    var planSel = selectEl([{ v: '', l: '+ Add preset plan…' }].concat(products.map(function (p) { return { v: p.id, l: p.name + ' — ' + money(p.price) + '/' + p.unit }; })), '');
-    planSel.addEventListener('change', function () { var p = products.filter(function (x) { return String(x.id) === planSel.value; })[0]; if (p) { items.push({ description: p.name + (p.description ? ' — ' + p.description : ''), qty: 1, unit_price: Number(p.price), product_id: p.id }); drawItems(); recalc(); planSel.value = ''; } });
+    var planOpts = products.filter(function (p) { return p.kind !== 'discount'; }).map(function (p) { return { v: p.id, l: p.name + ' — ' + money(p.price) + '/' + p.unit }; });
+    var discOpts = products.filter(function (p) { return p.kind === 'discount'; }).map(function (p) { return { v: p.id, l: '🏷️ ' + p.name + ' — ' + discountLabel(p) }; });
+    var planSel = selectEl([{ v: '', l: '+ Add preset plan or discount…' }].concat(planOpts, discOpts), '');
+    planSel.addEventListener('change', function () {
+      var p = byId[String(planSel.value)];
+      if (p) {
+        if (p.kind === 'discount') {
+          items.push({ description: p.name + ' (' + discountLabel(p) + ')' + (p.description ? ' — ' + p.description : ''), qty: 1, unit_price: 0, product_id: p.id, _disc: discRule(p.id) });
+        } else {
+          items.push({ description: p.name + (p.description ? ' — ' + p.description : ''), qty: 1, unit_price: Number(p.price), product_id: p.id });
+        }
+        drawItems(); recalc(); planSel.value = '';
+      }
+    });
     box.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [el('div', { style: 'font-size:18px;font-weight:800' }, [quote ? ('Proposal ' + (quote.number || '')) : 'New proposal']), el('button', { style: 'border:0;background:none;font-size:22px;cursor:pointer;color:#64748B', onclick: function () { ov.remove(); } }, ['×'])]));
     box.appendChild(field('Title', titleIn));
     box.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;margin:14px 0 6px' }, [el('div', { style: 'flex:1;font-size:12px;font-weight:700;color:#5a7080' }, ['Line items']), el('div', { style: 'width:60px;font-size:11px;color:#64748B;text-align:center' }, ['Qty']), el('div', { style: 'width:90px;font-size:11px;color:#64748B;text-align:center' }, ['Price']), el('div', { style: 'width:34px' })]));
     box.appendChild(itemsHost);
     box.appendChild(el('div', { style: 'display:flex;gap:8px;margin-bottom:14px' }, [el('div', { style: 'flex:1;min-width:0' }, [planSel]), btn('+ Blank line', 'light', function () { items.push({ description: '', qty: 1, unit_price: 0 }); drawItems(); })]));
-    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px' }, [field('Discount ($)', discIn), field('Valid until', validIn)]));
+    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px' }, [field('Extra discount ($)', discIn), field('Valid until', validIn)]));
     box.appendChild(el('div', { style: 'margin-top:14px' }, [field('Notes', notesIn)]));
     box.appendChild(totalEl);
     var statusSel = quote ? selectEl([{ v: 'draft', l: 'Draft' }, { v: 'sent', l: 'Sent' }, { v: 'accepted', l: 'Accepted' }, { v: 'declined', l: 'Declined' }], quote.status, { style: 'width:auto;padding:7px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:13px' }) : null;
@@ -1065,7 +1106,11 @@
       btn('Cancel', 'ghost', function () { ov.remove(); }),
       btn(quote ? 'Save proposal' : 'Create proposal', 'primary', async function (ev) {
         ev.target.disabled = true;
-        var body = { title: titleIn.value, discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: items.filter(function (i) { return (i.description || '').trim(); }) };
+        recalc();
+        var lines = items.filter(function (i) { return (i.description || '').trim(); }).map(function (i) {
+          return { description: i.description, qty: i.qty, unit_price: i.unit_price, product_id: i.product_id || null };
+        });
+        var body = { title: titleIn.value, discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: lines };
         if (quote) body.status = statusSel.value;
         try {
           if (quote) await Api.patch('/sales/quotes/' + quote.id, body); else await Api.post('/sales/leads/' + leadId + '/quotes', body);
@@ -1099,33 +1144,89 @@
   }
 
   // ─────────────────────────────── Plans / pricing ───────────────────────────────
+  /* DISCOUNT PLANS (2026-10-14, Anthony: "plans and pricing we need ability to add a plan that can
+     discount"). A preset is now a priced PLAN or a DISCOUNT — % off or a fixed $ off — that can
+     apply to the whole proposal, only its recurring (monthly/yearly) items, or only its one-time
+     items. In a proposal a discount is its own minus line, recalculated as the other lines change. */
+  var APPLIES = [{ v: 'all', l: 'the whole proposal' }, { v: 'recurring', l: 'recurring items (monthly / yearly)' }, { v: 'one-time', l: 'one-time items' }];
+  function discountLabel(p) {
+    var v = Number(p.price || 0);
+    var what = p.discount_type === 'percent' ? (v % 1 ? v.toFixed(2) : String(v)) + '% off' : money(v) + ' off';
+    var on = p.applies_to === 'recurring' ? ' recurring' : (p.applies_to === 'one-time' ? ' one-time' : '');
+    return what + on;
+  }
   async function renderPlans(container) {
     clear(container);
-    container.appendChild(hero('Plans & pricing', 'Preset products used in proposals. Edit prices to match your offer.', '💲'));
+    container.appendChild(hero('Plans & pricing', 'Preset plans and discounts used in proposals. Edit prices to match your offer.', '💲'));
     var host = el('div'); container.appendChild(host); // full width
+    var FLD = 'padding:9px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box';
     async function load() {
       clear(host);
       var products = await Api.get('/sales/products');
+      var plans = products.filter(function (p) { return p.kind !== 'discount'; });
+      var discounts = products.filter(function (p) { return p.kind === 'discount'; });
       var grid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start' });
-      products.forEach(function (p) { grid.appendChild(planCard(p, load)); });
+      plans.forEach(function (p) { grid.appendChild(planCard(p, load)); });
       host.appendChild(grid);
       host.appendChild(el('div', { style: 'margin-top:16px' }, [btn('➕ Add plan', 'primary', function () { grid.insertBefore(planCard({ name: '', description: '', price: 0, unit: 'month', active: true }, load, true), grid.firstChild); })]));
+
+      host.appendChild(el('div', { style: 'margin:26px 0 4px;font-size:16px;font-weight:800;color:#0D1B2A' }, ['🏷️ Discounts']));
+      host.appendChild(el('div', { style: 'margin:0 0 12px;font-size:13px;color:#64748B' }, ['Add one to a proposal from the same “Add preset” menu. It shows as its own line with a minus, and a percentage updates as you change the other lines.']));
+      var dgrid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;align-items:start' });
+      discounts.forEach(function (p) { dgrid.appendChild(discountCard(p, load)); });
+      if (!discounts.length) dgrid.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No discounts yet.']));
+      host.appendChild(dgrid);
+      host.appendChild(el('div', { style: 'margin-top:16px' }, [btn('➕ Add discount', 'primary', function () {
+        if (!discounts.length) clear(dgrid);
+        dgrid.insertBefore(discountCard({ name: '', description: '', price: 10, kind: 'discount', discount_type: 'percent', applies_to: 'all', active: true }, load, true), dgrid.firstChild);
+      })]));
+    }
+    function actions(p, reload, bodyFn) {
+      return el('div', { style: 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end;align-items:center' }, [
+        p.id ? el('button', { title: 'Delete', style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:8px 11px;cursor:pointer;font-size:14px', onclick: async function () { if (!(await window.KT.confirm({ title: 'Delete “' + (p.name || 'this') + '”?', description: 'It is removed for good. Proposals that already use it keep their lines.', okLabel: 'Delete' }))) return; try { await Api.delete('/sales/products/' + p.id); reload(); } catch (er) {} } }, ['🗑 Delete']) : el('div', { style: 'flex:1' }),
+        btn('Save', 'primary', async function (ev) {
+          var body = bodyFn(); if (!body) return;
+          ev.target.disabled = true;
+          try { if (p.id) await Api.patch('/sales/products/' + p.id, body); else await Api.post('/sales/products', body); toast('✅', 'Saved'); reload(); }
+          catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; }
+        }),
+      ]);
     }
     // Each plan is its own card: name + price + unit on top, then a FULL-WIDTH
     // multi-line description (so long descriptions are never cut off), then actions.
     function planCard(p, reload, isNew) {
-      var n = input({ value: p.name || '', placeholder: 'Plan name', style: 'flex:1 1 auto;min-width:0;padding:9px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;font-weight:700;box-sizing:border-box' });
-      var pr = input({ type: 'number', step: '0.01', value: p.price || 0, style: 'flex:0 0 110px;width:110px;padding:9px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
-      var u = selectEl([{ v: 'month', l: '/month' }, { v: 'year', l: '/year' }, { v: 'one-time', l: 'one-time' }], p.unit || 'month', { style: 'flex:0 0 118px;width:118px;padding:9px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+      var n = input({ value: p.name || '', placeholder: 'Plan name', style: 'flex:1 1 auto;min-width:0;font-weight:700;' + FLD });
+      var pr = input({ type: 'number', step: '0.01', value: p.price || 0, style: 'flex:0 0 110px;width:110px;' + FLD });
+      var u = selectEl([{ v: 'month', l: '/month' }, { v: 'year', l: '/year' }, { v: 'one-time', l: 'one-time' }], p.unit || 'month', { style: 'flex:0 0 118px;width:118px;' + FLD });
       var d = textarea({ value: p.description || '', placeholder: 'Description — shown on proposals. Full text is always visible here.', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:70px;resize:vertical' });
       return card([
         el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:11px' }, [n, pr, u]),
         field('Description', d),
-        el('div', { style: 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end;align-items:center' }, [
-          p.id ? el('button', { title: 'Delete plan', style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:8px 11px;cursor:pointer;font-size:14px', onclick: async function () { if (!(await window.KT.confirm({ title: 'Delete this plan?', description: 'It is removed for good.', okLabel: 'Delete' }))) return; try { await Api.delete('/sales/products/' + p.id); reload(); } catch (er) {} } }, ['🗑 Delete']) : el('div', { style: 'flex:1' }),
-          btn('Save', 'primary', async function (ev) { ev.target.disabled = true; try { var body = { name: n.value, description: d.value, price: pr.value || 0, unit: u.value, active: true }; if (p.id) await Api.patch('/sales/products/' + p.id, body); else await Api.post('/sales/products', body); toast('✅', 'Saved'); reload(); } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); ev.target.disabled = false; } }),
-        ]),
+        actions(p, reload, function () { return { name: n.value, description: d.value, price: pr.value || 0, unit: u.value, active: true, kind: 'plan' }; }),
       ], 'padding:15px 16px');
+    }
+    function discountCard(p, reload, isNew) {
+      var n = input({ value: p.name || '', placeholder: 'Discount name, e.g. Non-profit discount', style: 'flex:1 1 auto;min-width:0;font-weight:700;' + FLD });
+      var t = selectEl([{ v: 'percent', l: '% off' }, { v: 'amount', l: '$ off' }], p.discount_type || 'percent', { style: 'flex:0 0 96px;width:96px;' + FLD });
+      var v = input({ type: 'number', step: '0.01', min: '0', value: p.price == null ? 10 : p.price, style: 'flex:0 0 100px;width:100px;' + FLD });
+      var a = selectEl(APPLIES, p.applies_to || 'all', { style: 'width:100%;' + FLD });
+      var d = textarea({ value: p.description || '', placeholder: 'Optional note shown on the proposal line, e.g. “For registered non-profits”.', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:54px;resize:vertical' });
+      var preview = el('div', { style: 'font-size:12.5px;color:#047857;font-weight:700;margin-top:8px' });
+      function upd() { preview.textContent = 'Shows as: ' + (n.value || 'Discount') + ' (' + discountLabel({ price: v.value, discount_type: t.value, applies_to: a.value }) + ')'; }
+      [n, t, v, a].forEach(function (x) { x.addEventListener('input', upd); x.addEventListener('change', upd); }); upd();
+      return card([
+        el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:11px' }, [n, v, t]),
+        field('Applies to', a),
+        field('Description', d),
+        preview,
+        actions(p, reload, function () {
+          var val = Number(v.value || 0);
+          if (!(n.value || '').trim()) { toast('⚠️', 'Give the discount a name', '', '#DC2626'); return null; }
+          if (val <= 0) { toast('⚠️', 'Enter how much it takes off', '', '#DC2626'); return null; }
+          if (t.value === 'percent' && val > 100) { toast('⚠️', 'A percentage can be at most 100', '', '#DC2626'); return null; }
+          return { name: n.value, description: d.value, price: val, kind: 'discount', discount_type: t.value, applies_to: a.value, active: true };
+        }),
+      ], 'padding:15px 16px;border-left:4px solid #10B981');
     }
     load();
   }

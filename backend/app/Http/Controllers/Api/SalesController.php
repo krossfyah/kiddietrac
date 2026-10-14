@@ -472,7 +472,22 @@ class SalesController extends Controller
             'unit'        => 'nullable|string|max:20',
             'active'      => 'nullable|boolean',
             'sort'        => 'nullable|integer',
+            // A discount plan (2026-10-14): % off or $ off, on all / recurring / one-time items.
+            'kind'        => 'nullable|in:plan,discount',
+            'discount_type' => 'nullable|required_if:kind,discount|in:percent,amount',
+            'applies_to'  => 'nullable|in:all,recurring,one-time',
         ]);
+        if (($data['kind'] ?? 'plan') === 'discount') {
+            if (($data['discount_type'] ?? '') === 'percent' && (float) ($data['price'] ?? 0) > 100) {
+                return response()->json(['message' => 'A percentage discount can be at most 100%.', 'errors' => ['price' => ['At most 100%.']]], 422);
+            }
+            $data['applies_to'] = $data['applies_to'] ?? 'all';
+            $data['unit'] = 'discount';
+        } else {
+            $data['kind'] = 'plan';
+            $data['discount_type'] = null;
+            $data['applies_to'] = null;
+        }
         $p = $product ? SalesProduct::findOrFail($product) : new SalesProduct();
         $p->fill($data)->save();
 
@@ -645,13 +660,16 @@ class SalesController extends Controller
     {
         $lead = $q->lead;
         $num = fn ($v) => number_format((float) $v, 2);
+        $money = fn ($v) => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
         $rows = '';
         foreach ($q->items as $it) {
             $qty = rtrim(rtrim(number_format((float) $it->qty, 2), '0'), '.');
-            $rows .= '<tr><td style="padding:7px 10px;border-bottom:1px solid #e6ebf1">' . e($it->description) . '</td>'
+            // A discount plan's line is negative: shown in green with a minus (2026-10-14).
+            $neg = (float) $it->line_total < 0 ? 'color:#047857;' : '';
+            $rows .= '<tr><td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;' . $neg . '">' . e($it->description) . '</td>'
                 . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:center">' . $qty . '</td>'
-                . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right">$' . $num($it->unit_price) . '</td>'
-                . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right">$' . $num($it->line_total) . '</td></tr>';
+                . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right;' . $neg . '">' . $money($it->unit_price) . '</td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right;' . $neg . '">' . $money($it->line_total) . '</td></tr>';
         }
         $disc = (float) $q->discount > 0
             ? '<tr><td colspan="3" style="padding:6px 10px;text-align:right;color:#64748b">Discount</td><td style="padding:6px 10px;text-align:right">-$' . $num($q->discount) . '</td></tr>'
