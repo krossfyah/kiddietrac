@@ -948,7 +948,8 @@
           if (e.user_id) bits2.push('🚸 pick-up login');
           var phones = [e.phone, e.alt_phone ? (e.alt_phone + (e.alt_phone_type ? ' (' + e.alt_phone_type + (e.alt_phone_ext ? ' ext. ' + e.alt_phone_ext : '') + ')' : '')) : null].filter(Boolean).join('  ·  ');
           var er = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #EEF2F5;font-size:13px;' });
-          er.appendChild(_avatarEl(e.name || '?', { size: 34, photoUrl: '', role: 'contact' }));
+          // Initials, not a face guessed from the first name (it guessed "Debbie" as a man).
+          er.appendChild(_avatarEl(e.name || '?', { size: 34, photoUrl: '', role: 'contact', initials: true }));
           er.appendChild(Dom.el('div', { style: 'min-width:0;' }, [
             Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, (e.name || 'Contact') + ' · ' + bits2.join(', ')),
             phones ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, '📞 ' + phones) : Dom.el('span', {}),
