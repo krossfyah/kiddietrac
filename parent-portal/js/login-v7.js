@@ -117,11 +117,13 @@
       status.textContent = '';
 
       try {
-        const res = await fetch('https://api.kiddietrac.com/api/v1/auth/forgot', {
+        const fInit = {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(username ? { email, username } : { email }),
-        });
+        };
+        const fUrl = 'https://api.kiddietrac.com/api/v1/auth/forgot';
+        const res = (window.KT && KT.net) ? await KT.net.fetch(fUrl, fInit, { path: 'auth/forgot' }) : await fetch(fUrl, fInit);
         const body = await res.json().catch(() => ({}));
 
         // Always show success — we don't leak whether the email exists
@@ -132,7 +134,7 @@
         setTimeout(() => overlay.remove(), 6000);
       } catch (e) {
         status.style.color = '#DC2626';
-        status.textContent = 'Network error. Please try again.';
+        status.textContent = (window.KT && KT.net) ? KT.net.message(e) : 'Network error. Please try again.';
         submitBtn.disabled = false;
         submitBtn.textContent = 'Send reset link';
       }

@@ -35,6 +35,7 @@
   .trial-info strong { display: block; font-size: 18px; margin-bottom: 4px; }
   .trial-info span { opacity: 0.9; font-size: 14px; }
 </style>
+  <script src="/js/kt-net.js?v=20261014net"></script>
 </head>
 <body>
 <div class="wrap">
@@ -195,7 +196,7 @@
       submitBtn.textContent = 'Creating your centre...';
 
       try {
-        const res = await fetch('/api/v1/signup/centre', {
+        const res = await ((window.KT && KT.net) ? function (u, o) { return KT.net.fetch(u, o, { path: 'signup/centre', retries: 0 }); } : fetch)('/api/v1/signup/centre', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
           body: JSON.stringify(data),
@@ -222,7 +223,7 @@
         document.getElementById('success-stage').hidden = false;
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } catch (e) {
-        errorMsg.textContent = 'Network error. Please try again.';
+        errorMsg.textContent = (window.KT && KT.net) ? KT.net.message(e) : 'Network error. Please try again.';
         errorMsg.hidden = false;
         submitBtn.disabled = false;
         submitBtn.textContent = 'Create my centre';

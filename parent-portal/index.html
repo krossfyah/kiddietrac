@@ -15,9 +15,7 @@
   <link rel="preload" as="image" href="/login-wordmark.png">
   <link rel="preload" as="image" href="/login-tagline.png">
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
   <meta name="theme-color" content="#081C41">
   <!-- Light-only document: stops the Android WebView treating this page as
        dark-capable on a phone in dark mode, which painted native <select>
@@ -49,6 +47,7 @@
   <script>try{(function(){var L=localStorage,S=sessionStorage,d=document.documentElement;if(L.getItem('kt_biometric_enabled')!=='1'||!L.getItem('kt_bio_token'))return;if(S.getItem('kt_token')||S.getItem('kt_bio_session')==='1')return;if(L.getItem('kt_signed_out')==='1')return;if(Date.now()-(parseInt(L.getItem('kt_bio_unlocked_at')||'0',10)||0)<20000)return;if(!(window.__KT_NATIVE||window.__KT_PHONE))return;d.classList.add('kt-bio-pending');setTimeout(function(){d.classList.remove('kt-bio-pending');},20000);})();}catch(e){}</script>
   <!-- Bold navy mobile/APK login (layered over the redesign above). -->
   <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260921ios">
+  <script src="/js/kt-net.js?v=20261014net"></script>
 </head>
 <body class="auth-body">
 <!-- Launch splash REMOVED (2026-08-11): opening the app must land on the login
@@ -180,7 +179,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
           <div class="form-row">
             <div class="pw-label-row">
               <label for="password">Password</label>
-              <a href="/forgot-password.html" class="forgot-link" tabindex="-1">Forgot?</a>
+              <a href="#forgot" class="forgot-link" tabindex="-1">Forgot?</a>
             </div>
             <div class="kt-pw-wrap" style="position:relative;">
               <input type="password" id="password" name="password" autocomplete="current-password" placeholder="••••••••••" minlength="10" required style="padding-right:46px;">
@@ -375,11 +374,19 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
       }
 
       try {
-        const res = await fetch(API_BASE + '/auth/login', {
+        /* A dropped connection is retried, timed out and explained (KT.net, 2026-10-14) —
+           it used to print the browser's bare "Failed to fetch". */
+        const loginInit = {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
           body: JSON.stringify(data),
-        });
+        };
+        const res = (window.KT && KT.net)
+          ? await KT.net.fetch(API_BASE + '/auth/login', loginInit, {
+              path: 'auth/login',
+              onRetry: function () { submitBtn.textContent = 'Still connecting…'; },
+            })
+          : await fetch(API_BASE + '/auth/login', loginInit);
 
         if (res.status === 429) {
           throw new Error('Too many attempts. Please wait a few minutes.');
@@ -426,7 +433,8 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
 
         ktFinishSignIn(body, 'password');
       } catch (err) {
-        errorMsg.textContent = err.message;
+        errorMsg.textContent = (window.KT && KT.net) ? KT.net.message(err) : err.message;
+        errorMsg.style.color = '';
         errorMsg.hidden = false;
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign in';
