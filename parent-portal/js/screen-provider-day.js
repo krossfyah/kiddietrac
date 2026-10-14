@@ -498,6 +498,15 @@
                 + ' style="padding:5px 10px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;border-radius:7px;border:1px solid '
                 + (r.status === 'in' ? '#E2E8F0;background:#fff;color:#475569;' : '#BFDBFE;background:#EFF6FF;color:#1E40AF;')
                 + '">' + (r.status === 'in' ? 'Sign out' : 'Sign in') + '</button>'
+                /* AND a correction for TODAY too (2026-10-13, Anthony: "how to manually edit
+                   sign in and out for children"). Sign in/out above stamps NOW; a sign-out an
+                   educator missed at 4:15 needs the real time, not the time somebody noticed. */
+                + (pdMayCorrect() ? '<button type="button" class="pd-fix" data-child="' + r.id + '"'
+                    + ' data-name="' + esc(r.name || 'this child') + '"'
+                    + ' title="Correct a sign in or out time (entered late, with a reason)"'
+                    + ' style="margin-left:4px;padding:5px 10px;font-size:11.5px;font-weight:700;font-family:inherit;'
+                    + 'cursor:pointer;border-radius:7px;border:1px dashed #CBD5E1;background:#fff;color:#64748B;">'
+                    + '⏱ Fix</button>' : '')
               : (pdMayCorrect()
                   ? '<button type="button" class="pd-fix" data-child="' + r.id + '"'
                     + ' data-name="' + esc(r.name || 'this child') + '"'
