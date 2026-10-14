@@ -3330,7 +3330,7 @@ final class AdminController extends Controller
         $guardians = DB::table('guardians')
             ->join('users', 'users.id', '=', 'guardians.user_id')
             ->where('guardians.family_id', $familyId)
-            ->select('guardians.*', 'users.email', 'users.first_name', 'users.last_name', 'users.phone', 'users.phone2', 'users.phone2_type', 'users.phone2_ext', 'users.status', 'users.photo_url')
+            ->select('guardians.*', 'users.email', 'users.first_name', 'users.last_name', 'users.phone', 'users.phone2', 'users.phone2_type', 'users.phone2_ext', 'users.sex', 'users.status', 'users.photo_url')
             ->get();
 
         $emergency = DB::table('emergency_contacts')
@@ -3412,12 +3412,13 @@ final class AdminController extends Controller
             'phone2'       => ['sometimes', 'nullable', 'string', 'max:40'],
             'phone2_type'  => ['sometimes', 'nullable', 'in:mobile,home,work,other'],
             'phone2_ext'   => ['sometimes', 'nullable', 'string', 'max:10'],
+            'sex'          => ['sometimes', 'nullable', 'in:Female,Male,Non-binary,Prefer not to say'],   // gender (2026-10-13)
             'relationship' => ['sometimes', 'string', 'max:40'],
             'can_pickup'   => ['sometimes', 'boolean'],
             'is_primary'   => ['sometimes', 'boolean'],
         ]);
         $userUpd = [];
-        foreach (['first_name', 'last_name', 'phone', 'phone2', 'phone2_type', 'phone2_ext'] as $k) { if (array_key_exists($k, $data)) $userUpd[$k] = $data[$k]; }
+        foreach (['first_name', 'last_name', 'phone', 'phone2', 'phone2_type', 'phone2_ext', 'sex'] as $k) { if (array_key_exists($k, $data)) $userUpd[$k] = $data[$k]; }
         if ($userUpd) { $userUpd['updated_at'] = now(); DB::table('users')->where('id', $g->user_id)->update($userUpd); }
         $gUpd = [];
         foreach (['relationship', 'can_pickup', 'is_primary'] as $k) { if (array_key_exists($k, $data)) $gUpd[$k] = $data[$k]; }
@@ -3432,8 +3433,48 @@ final class AdminController extends Controller
             'relationship' => ['nullable', 'string', 'max:60'],
             'phone'        => ['nullable', 'string', 'max:40'],
             'alt_phone'    => ['nullable', 'string', 'max:40'],
+            // The second number's type, and an extension for a work number (2026-10-13).
+            'alt_phone_type' => ['nullable', 'in:mobile,home,work,other'],
+            'alt_phone_ext'  => ['nullable', 'string', 'max:10'],
+            'email'        => ['nullable', 'email', 'max:180'],
+            // A pick-up login: parent view minus billing (App\Support\PickupLogin).
+            'give_login'   => ['nullable', 'boolean'],
             'can_pickup'   => ['nullable', 'boolean'],
         ];
+    }
+
+    /** Typed second number: keep the type only with a number, the ext only for work. */
+    private function ecPhoneCols(array $d): array
+    {
+        $alt = trim((string) ($d['alt_phone'] ?? ''));
+        $type = $alt !== '' ? ($d['alt_phone_type'] ?? 'mobile') : null;
+        return ['alt_phone_type' => $type, 'alt_phone_ext' => ($type === 'work') ? (trim((string) ($d['alt_phone_ext'] ?? '')) ?: null) : null];
+    }
+
+    /** Grant / revoke the pick-up login for an emergency contact, and invite a new account. */
+    private function syncPickupLogin(Request $request, int $agencyId, int $familyId, int $ecId, array $d, bool $invite = true): ?string
+    {
+        $want = ! empty($d['give_login']);
+        $ec = DB::table('emergency_contacts')->where('id', $ecId)->first();
+        if (! $want) {
+            if ($ec && $ec->user_id) \App\Support\PickupLogin::revoke($agencyId, $familyId, $ecId, (int) $request->user()->id);
+            return null;
+        }
+        $email = trim((string) ($d['email'] ?? ($ec->email ?? '')));
+        if ($email === '') return 'An email address is needed to give a pick-up login.';
+        $r = \App\Support\PickupLogin::grant($agencyId, $familyId, $ecId, $email, (string) ($d['name'] ?? $ec->name ?? ''), $d['relationship'] ?? ($ec->relationship ?? null), (int) $request->user()->id);
+        if (! $r) return 'That email address does not look right.';
+        if ($invite && ! empty($r['temp'])) {
+            $this->sendAccountEmail($email, (string) ($d['name'] ?? 'there'),
+                'Your KiddieTrac pick-up login',
+                "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person.\n\n"
+                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and your check-in/out QR code:\n\n"
+                . "Email: {$email}\n"
+                . "Temporary password: {$r['temp']}\n\n"
+                . "We recommend changing your password after you sign in, via 'Forgot password'.",
+                $agencyId);
+        }
+        return null;
     }
 
     public function addEmergencyContact(Request $request, int $family): JsonResponse
@@ -3443,9 +3484,11 @@ final class AdminController extends Controller
         $id = DB::table('emergency_contacts')->insertGetId([
             'family_id' => $family, 'name' => $data['name'], 'relationship' => $data['relationship'] ?? null,
             'phone' => $data['phone'] ?? null, 'alt_phone' => $data['alt_phone'] ?? null,
-            'can_pickup' => ! empty($data['can_pickup']), 'created_at' => now(), 'updated_at' => now(),
-        ]);
-        return response()->json(['ok' => true, 'id' => $id], 201);
+            'email' => $data['email'] ?? null,
+            'can_pickup' => ! empty($data['can_pickup']) || ! empty($data['give_login']), 'created_at' => now(), 'updated_at' => now(),
+        ] + $this->ecPhoneCols($data));
+        $warn = $this->syncPickupLogin($request, (int) $this->getAgencyId($request), $family, (int) $id, $data);
+        return response()->json(['ok' => true, 'id' => $id, 'warning' => $warn], 201);
     }
 
     public function updateEmergencyContact(Request $request, int $id): JsonResponse
@@ -3456,9 +3499,14 @@ final class AdminController extends Controller
         DB::table('emergency_contacts')->where('id', $id)->update([
             'name' => $data['name'], 'relationship' => $data['relationship'] ?? null,
             'phone' => $data['phone'] ?? null, 'alt_phone' => $data['alt_phone'] ?? null,
-            'can_pickup' => ! empty($data['can_pickup']), 'updated_at' => now(),
-        ]);
-        return response()->json(['ok' => true]);
+            'email' => $data['email'] ?? $ec->email,
+            'can_pickup' => ! empty($data['can_pickup']) || ! empty($data['give_login']), 'updated_at' => now(),
+        ] + $this->ecPhoneCols($data));
+        // Only when the screen says so: an older client that never sends give_login leaves the login alone.
+        $warn = array_key_exists('give_login', $data)
+            ? $this->syncPickupLogin($request, (int) $this->getAgencyId($request), (int) $ec->family_id, $id, $data + ['email' => $ec->email])
+            : null;
+        return response()->json(['ok' => true, 'warning' => $warn]);
     }
 
     public function deleteEmergencyContact(Request $request, int $id): JsonResponse
@@ -3615,6 +3663,7 @@ final class AdminController extends Controller
             'guardians.*.phone2' => ['nullable', 'string', 'max:40'],
             'guardians.*.phone2_type' => ['nullable', 'in:mobile,home,work,other'],
             'guardians.*.phone2_ext' => ['nullable', 'string', 'max:10'],
+            'guardians.*.sex' => ['nullable', 'in:Female,Male,Non-binary,Prefer not to say'],   // gender (2026-10-13)
             'guardians.*.relationship' => ['nullable', 'in:mother,father,guardian,grandparent,foster,other'],
             'guardians.*.is_primary' => ['nullable', 'boolean'],
             'guardians.*.can_pickup' => ['nullable', 'boolean'],
@@ -3656,6 +3705,10 @@ final class AdminController extends Controller
             'emergency_contacts.*.phone' => ['nullable', 'string', 'max:40'],
             'emergency_contacts.*.alt_phone' => ['nullable', 'string', 'max:40'],
             'emergency_contacts.*.can_pickup' => ['nullable', 'boolean'],
+            'emergency_contacts.*.alt_phone_type' => ['nullable', 'in:mobile,home,work,other'],
+            'emergency_contacts.*.alt_phone_ext' => ['nullable', 'string', 'max:10'],
+            'emergency_contacts.*.email' => ['nullable', 'email', 'max:180'],
+            'emergency_contacts.*.give_login' => ['nullable', 'boolean'],
         ]);
 
         // Centre must belong to this agency.
@@ -3744,7 +3797,8 @@ final class AdminController extends Controller
         try {
             $unplaced = [];
             $linkedTemp = [];   // temporary (forms-only) accounts this family took in — App\Support\TempGuardians
-            $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId, $centreRooms, &$newGuardians, &$unplaced, &$linkedTemp) {
+            $pickupInvites = []; // emergency contacts given a pick-up login (App\Support\PickupLogin)
+            $result = DB::transaction(function () use ($data, $guardians, $children, $emergency, $agencyId, $centreRooms, &$newGuardians, &$unplaced, &$linkedTemp, &$pickupInvites) {
                 /* BUG (fixed 2026-09-09): this merged the WHOLE validated payload into the
                    insert, so every validated key had to also be a `families` column. It
                    stopped being true the moment `send_welcome` was added to the rules —
@@ -3831,7 +3885,7 @@ final class AdminController extends Controller
                         }
                         // Blanks only. A value that is already set is never overwritten.
                         $fill = [];
-                        foreach (['first_name', 'last_name', 'phone', 'phone2', 'phone2_type', 'phone2_ext'] as $col) {
+                        foreach (['first_name', 'last_name', 'phone', 'phone2', 'phone2_type', 'phone2_ext', 'sex'] as $col) {
                             if (trim((string) ($existing->$col ?? '')) === '' && trim((string) ($g[$col] ?? '')) !== '') {
                                 $fill[$col] = $g[$col];
                             }
@@ -3851,6 +3905,7 @@ final class AdminController extends Controller
                             'phone2' => $g['phone2'] ?? null,
                             'phone2_type' => ! empty($g['phone2']) ? ($g['phone2_type'] ?? 'mobile') : null,
                             'phone2_ext' => (! empty($g['phone2']) && ($g['phone2_type'] ?? '') === 'work') ? ($g['phone2_ext'] ?? null) : null,
+                            'sex' => $g['sex'] ?? null,
                             'locale' => 'en-CA',
                             'timezone' => 'America/Toronto',
                             // No email = no login to invite them to.
@@ -3966,16 +4021,25 @@ final class AdminController extends Controller
                 $emergencyIds = [];
                 if (\Illuminate\Support\Facades\Schema::hasTable('emergency_contacts')) {
                     foreach ($emergency as $ec) {
-                        $emergencyIds[] = (int) DB::table('emergency_contacts')->insertGetId([
+                        $ecId = (int) DB::table('emergency_contacts')->insertGetId([
                             'family_id' => $famId,
                             'name' => $ec['name'],
                             'relationship' => $ec['relationship'] ?? null,
                             'phone' => $ec['phone'] ?? null,
                             'alt_phone' => $ec['alt_phone'] ?? null,
-                            'can_pickup' => ! empty($ec['can_pickup']),
+                            'email' => $ec['email'] ?? null,
+                            'can_pickup' => ! empty($ec['can_pickup']) || ! empty($ec['give_login']),
                             'created_at' => now(),
                             'updated_at' => now(),
-                        ]);
+                        ] + $this->ecPhoneCols($ec));
+                        $emergencyIds[] = $ecId;
+                        // A pick-up login (parent view minus billing); the invite goes with the others below.
+                        if (! empty($ec['give_login']) && ! empty($ec['email'])) {
+                            $pl = \App\Support\PickupLogin::grant((int) $agencyId, (int) $famId, $ecId, (string) $ec['email'], (string) $ec['name'], $ec['relationship'] ?? null, null);
+                            if ($pl && ! empty($pl['temp'])) {
+                                $pickupInvites[] = ['email' => $ec['email'], 'name' => $ec['name'], 'temp' => $pl['temp']];
+                            }
+                        }
                     }
                 }
 
@@ -4022,6 +4086,17 @@ final class AdminController extends Controller
                 . "details, add anything missing, and upload a profile photo. We recommend changing your "
                 . "password afterwards via 'Forgot password'."
             );
+            if ($ok) $invited++;
+        }
+        foreach (($sendWelcome ? $pickupInvites : []) as $pi) {
+            $ok = $this->sendAccountEmail($pi['email'], $pi['name'] ?: 'there',
+                'Your KiddieTrac pick-up login',
+                "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person.\n\n"
+                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and your check-in/out QR code:\n\n"
+                . "Email: {$pi['email']}\n"
+                . "Temporary password: {$pi['temp']}\n\n"
+                . "We recommend changing your password after you sign in, via 'Forgot password'.",
+                $agencyId);
             if ($ok) $invited++;
         }
 

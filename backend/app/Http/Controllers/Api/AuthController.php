@@ -1151,6 +1151,9 @@ final class AuthController extends Controller
         }
 
         return [
+            /* Pick-up login (App\Support\PickupLogin): the parent view minus billing. The
+               server refuses billing for them regardless; this lets the app hide the menu. */
+            'billing_hidden' => \App\Support\PickupLogin::isPickupOnly((int) $user->id),
             'id' => $user->id,
             'email' => $user->email,
             'username' => $user->username ?? null,

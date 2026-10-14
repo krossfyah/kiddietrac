@@ -54,6 +54,8 @@ return Application::configure(basePath: dirname(__DIR__))
             // Kill switch: PASSWORD_CHANGE_GATE=false in .env + config:cache.
             \App\Http\Middleware\EnsurePasswordChanged::class,
             EnforceAuditorReadOnly::class,
+            // Pick-up logins see the parent view minus billing: refuse money paths (2026-10-13).
+            \App\Http\Middleware\PickupOnlyNoBilling::class,
             SecurityHeaders::class,
             // Portal-wide activity audit — records every write action to audit_logs.
             AuditActivity::class,

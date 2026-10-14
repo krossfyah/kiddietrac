@@ -6103,7 +6103,9 @@
           card.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(look, 350); });
           if (g.email || g.first_name) look();
         })(g, emailIn, tpBox, card);
-        var r3 = fieldRow('1fr 1fr');
+        // Gender (2026-10-13: "guardian should be asked what gender as well").
+        var r3 = fieldRow('1fr 1fr 1fr');
+        r3.appendChild(wrap('Gender', bindSelect(g, 'sex', [{ value: '', label: '—' }, { value: 'Female', label: 'Female' }, { value: 'Male', label: 'Male' }, { value: 'Non-binary', label: 'Non-binary' }, { value: 'Prefer not to say', label: 'Prefer not to say' }])));
         r3.appendChild(wrap('Relationship', bindSelect(g, 'relationship', [
           { value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' },
           { value: 'guardian', label: 'Guardian' }, { value: 'grandparent', label: 'Grandparent' },
@@ -6465,19 +6467,45 @@
         r1.appendChild(wrap('Last name *', bindInput(e, 'last_name')));
         card.appendChild(r1);
         card.appendChild(wrap('Relationship', bindSelect(e, 'relationship', RELATIONSHIP_OPTS)));
-        var r2 = fieldRow('1fr 1fr');
-        r2.appendChild(wrap('Phone', bindPhone(e, 'phone')));
-        r2.appendChild(wrap('Alternate phone', bindPhone(e, 'alt_phone')));
+        card.appendChild(wrap('Phone', bindPhone(e, 'phone')));
+        // Second number with its type, and an extension for a work number (2026-10-13).
+        var r2 = fieldRow('130px 1fr 110px');
+        var eType = bindSelect(e, 'alt_phone_type', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
+        var eExt = bindInput(e, 'alt_phone_ext', { placeholder: 'Ext.' }); eExt.setAttribute('inputmode', 'numeric');
+        var eExtWrap = wrap('Ext. (optional)', eExt);
+        r2.appendChild(wrap('Second phone type', eType));
+        r2.appendChild(wrap('Second phone (optional)', bindPhone(e, 'alt_phone')));
+        r2.appendChild(eExtWrap);
+        var eSync = function () { eExtWrap.style.visibility = e.alt_phone_type === 'work' ? 'visible' : 'hidden'; };
+        eType.addEventListener('change', eSync); eSync();
         card.appendChild(r2);
         var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
         var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup;
         pick.addEventListener('change', function () { e.can_pickup = pick.checked; });
         pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
         card.appendChild(pickWrap);
+        /* A PICK-UP LOGIN (2026-10-13): this person signs in like a parent — their own QR to
+           check the children in and out, daily reports, photos, messages — and sees no
+           billing (the server refuses it). Needs an email to sign in with. */
+        var loginWrap = Dom.el('div', { style: 'margin-top:10px;border:1px solid #E2E8F0;background:#F8FAFC;border-radius:10px;padding:10px 12px;' });
+        var lgRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+        var lg = Dom.el('input', { type: 'checkbox' }); lg.checked = !!e.give_login;
+        lgRow.appendChild(lg);
+        lgRow.appendChild(Dom.el('label', { style: 'font-size:13px;font-weight:700;color:#0F172A;' }, 'Give a pick-up login'));
+        loginWrap.appendChild(lgRow);
+        loginWrap.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:3px 0 0 24px;line-height:1.45;' },
+          'Signs in like a parent: their own QR to check the children in and out, daily reports, photos and messages. No billing or payment information.'));
+        var lgEmail = wrap('Email for the login *', bindInput(e, 'email', { type: 'email', placeholder: 'name@example.com' }));
+        lgEmail.style.margin = '8px 0 0 24px';
+        loginWrap.appendChild(lgEmail);
+        var lgSync = function () { lgEmail.style.display = e.give_login ? 'block' : 'none'; };
+        lg.addEventListener('change', function () { e.give_login = lg.checked; if (lg.checked) { e.can_pickup = true; pick.checked = true; } lgSync(); });
+        lgSync();
+        card.appendChild(loginWrap);
         bodyEl.appendChild(card);
       });
       var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add emergency contact');
-      add.addEventListener('click', function () { state.emergency.push({ first_name: '', last_name: '', relationship: 'Grandparent', phone: '', alt_phone: '', can_pickup: false }); renderEmergencyStep(); });
+      add.addEventListener('click', function () { state.emergency.push({ first_name: '', last_name: '', relationship: 'Grandparent', phone: '', alt_phone: '', alt_phone_type: 'work', alt_phone_ext: '', email: '', give_login: false, can_pickup: false }); renderEmergencyStep(); });
       bodyEl.appendChild(add);
     }
 
@@ -6570,6 +6598,12 @@
 
     function validateStep() {
       status.style.color = '#DC2626';
+      if (step === 3) {
+        for (var k = 0; k < (state.emergency || []).length; k++) {
+          var em = state.emergency[k], ee = String(em.email || '').trim();
+          if (em.give_login && (!ee || ee.indexOf('@') < 1)) { status.textContent = 'Emergency contact ' + (k + 1) + ': an email is needed for the pick-up login.'; return false; }
+        }
+      }
       if (step === 0) {
         if (!state.family.centre_id) { status.textContent = 'Please choose a centre.'; return false; }
         if (!state.family.family_name.trim()) { status.textContent = 'Family name is required.'; return false; }
@@ -6667,6 +6701,7 @@
             phone2: String(g.phone2 || '').trim() || null,
             phone2_type: String(g.phone2 || '').trim() ? (g.phone2_type || 'mobile') : null,
             phone2_ext: (String(g.phone2 || '').trim() && g.phone2_type === 'work') ? (String(g.phone2_ext || '').trim() || null) : null,
+            sex: g.sex || null,
             relationship: g.relationship, is_primary: !!g.is_primary, can_pickup: g.can_pickup !== false };
         }),
         children: state.children.map(function (c) {
@@ -6686,7 +6721,11 @@
               ? c.schedule.slice() : null };
         }),
         emergency_contacts: (state.emergency || []).filter(function (e) { return ((e.first_name || '') + (e.last_name || '')).trim(); }).map(function (e) {
-          return { name: ((e.first_name || '') + ' ' + (e.last_name || '')).trim(), relationship: (e.relationship || '').trim() || null, phone: (e.phone || '').trim() || null, alt_phone: (e.alt_phone || '').trim() || null, can_pickup: !!e.can_pickup };
+          return { name: ((e.first_name || '') + ' ' + (e.last_name || '')).trim(), relationship: (e.relationship || '').trim() || null, phone: (e.phone || '').trim() || null, alt_phone: (e.alt_phone || '').trim() || null,
+            alt_phone_type: (e.alt_phone || '').trim() ? (e.alt_phone_type || 'mobile') : null,
+            alt_phone_ext: ((e.alt_phone || '').trim() && e.alt_phone_type === 'work') ? ((e.alt_phone_ext || '').trim() || null) : null,
+            email: (e.email || '').trim() || null, give_login: !!e.give_login,
+            can_pickup: !!e.can_pickup || !!e.give_login };
         }),
       };
       // Circular progress + a short settle delay so the portal has time to update.
@@ -6964,13 +7003,14 @@
       }));
       (DATA.guardians || []).forEach(function (g) {
         var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
-        card.appendChild(Dom.el('div', { style: 'font-weight:700;color:#1F6080;font-size:13px;margin-bottom:10px;' }, ((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? ' ★ primary' : '')));
+        card.appendChild(Dom.el('div', { style: 'font-weight:700;color:#1F6080;font-size:13px;margin-bottom:10px;' }, ((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? ' ★ primary' : '') + (Number(g.billing_hidden) ? '  ·  🚸 Pick-up login (no billing)' : '')));
         var iF = inp(g.first_name, 'First name'), iL = inp(g.last_name, 'Last name');
         var ph = phoneField('Phone', g.phone);
         var iR = selEl(g.relationship, [{ value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' }, { value: 'guardian', label: 'Guardian' }, { value: 'grandparent', label: 'Grandparent' }, { value: 'foster', label: 'Foster' }, { value: 'other', label: 'Other' }]);
         var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:26px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
         var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('First name', iF)); g1.appendChild(fwrap('Last name', iL)); card.appendChild(g1);
-        var g2 = grid('1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Relationship', iR)); card.appendChild(g2);
+        var iSex = selEl(g.sex || '', [{ value: '', label: '—' }, { value: 'Female', label: 'Female' }, { value: 'Male', label: 'Male' }, { value: 'Non-binary', label: 'Non-binary' }, { value: 'Prefer not to say', label: 'Prefer not to say' }]);
+        var g2 = grid('1fr 1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Gender', iSex)); g2.appendChild(fwrap('Relationship', iR)); card.appendChild(g2);
         // Second number + its type, with an extension for a work number (2026-10-13).
         var ph2 = phoneField('Second phone', g.phone2);
         var iT2 = selEl(g.phone2_type || 'work', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
@@ -6986,6 +7026,7 @@
           save.disabled = true; setMsg('Saving…', true);
           try { await Api.patch('/admin/guardians/' + g.id, { first_name: iF.value.trim(), last_name: iL.value.trim(), phone: ph.get() || null,
             phone2: ph2.get() || null, phone2_type: ph2.get() ? iT2.value : null, phone2_ext: (ph2.get() && iT2.value === 'work') ? (iX2.value.trim() || null) : null,
+            sex: iSex.value || null,
             relationship: iR.value, can_pickup: pick.checked }); setMsg('✓ Guardian saved', true); refreshList(); }
           catch (e) { setMsg(e.message || 'Save failed'); }
           save.disabled = false;
@@ -7057,21 +7098,45 @@
     function ecCard(e) {
       var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
       var iN = inp(e.name, 'Full name'); var iR = selEl(e.relationship || '', [{ value: '', label: 'Relationship…' }].concat(EREL.map(function (r) { return { value: r, label: r }; })));
-      var ph = phoneField('Phone', e.phone); var pha = phoneField('Alternate phone', e.alt_phone);
+      var ph = phoneField('Phone', e.phone); var pha = phoneField('Second phone', e.alt_phone);
+      var iAT = selEl(e.alt_phone_type || 'work', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
+      var iAX = inp(e.alt_phone_ext, 'Ext.'); iAX.setAttribute('inputmode', 'numeric');
+      var axWrap = fwrap('Ext. (optional)', iAX);
+      var iEm = inp(e.email, 'name@example.com', 'email');
+      var lg = Dom.el('input', { type: 'checkbox' }); lg.checked = !!e.user_id;
       var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
       var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('Full name', iN)); g1.appendChild(fwrap('Relationship', iR)); card.appendChild(g1);
-      var g2 = grid('1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(pha.wrap); card.appendChild(g2);
+      card.appendChild(ph.wrap);
+      var g2 = grid('130px 1fr 110px'); g2.appendChild(fwrap('Type', iAT)); g2.appendChild(pha.wrap); g2.appendChild(axWrap); card.appendChild(g2);
+      var axSync = function () { axWrap.style.visibility = iAT.value === 'work' ? 'visible' : 'hidden'; };
+      iAT.addEventListener('change', axSync); axSync();
       card.appendChild(pickWrap);
+      // Pick-up login: parent view minus billing (2026-10-13).
+      var lgBox = Dom.el('div', { style: 'margin-top:10px;border:1px solid #E2E8F0;background:#F8FAFC;border-radius:10px;padding:10px 12px;' });
+      var lgRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+      lgRow.appendChild(lg); lgRow.appendChild(Dom.el('label', { style: 'font-size:13px;font-weight:700;color:#0F172A;' }, e.user_id ? 'Has a pick-up login' : 'Give a pick-up login'));
+      lgBox.appendChild(lgRow);
+      lgBox.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:3px 0 6px 24px;line-height:1.45;' }, 'Signs in like a parent: their own QR to check the children in and out, daily reports, photos and messages. No billing or payment information. Untick to remove the login.'));
+      var emWrap = fwrap('Email for the login', iEm); emWrap.style.marginLeft = '24px';
+      lgBox.appendChild(emWrap);
+      var lgSync = function () { emWrap.style.display = lg.checked ? 'block' : 'none'; };
+      lg.addEventListener('change', function () { if (lg.checked) pick.checked = true; lgSync(); }); lgSync();
+      card.appendChild(lgBox);
       var bar = Dom.el('div', { style: 'display:flex;gap:8px;margin-top:10px;' });
       var save = Dom.el('button', { style: 'padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save');
       save.addEventListener('click', async function () {
         if (!iN.value.trim()) { setMsg('Name is required.'); return; }
         save.disabled = true; setMsg('Saving…', true);
-        var payload = { name: iN.value.trim(), relationship: iR.value || null, phone: ph.get() || null, alt_phone: pha.get() || null, can_pickup: pick.checked };
+        if (lg.checked && !iEm.value.trim()) { setMsg('An email is needed for the pick-up login.'); return; }
+        var payload = { name: iN.value.trim(), relationship: iR.value || null, phone: ph.get() || null, alt_phone: pha.get() || null,
+          alt_phone_type: pha.get() ? iAT.value : null, alt_phone_ext: (pha.get() && iAT.value === 'work') ? (iAX.value.trim() || null) : null,
+          email: iEm.value.trim() || null, give_login: lg.checked, can_pickup: pick.checked || lg.checked };
         try {
-          if (e.__new) { var r = await Api.post('/admin/families/' + DATA.family.id + '/emergency-contacts', payload); e.__new = false; e.id = r.id; }
-          else { await Api.patch('/admin/emergency-contacts/' + e.id, payload); }
-          setMsg('✓ Emergency contact saved', true); refreshList();
+          var res;
+          if (e.__new) { res = await Api.post('/admin/families/' + DATA.family.id + '/emergency-contacts', payload); e.__new = false; e.id = res.id; }
+          else { res = await Api.patch('/admin/emergency-contacts/' + e.id, payload); }
+          if (res && res.warning) { setMsg(res.warning); } else { setMsg('✓ Emergency contact saved' + (lg.checked && !e.user_id ? ' — pick-up login sent' : ''), true); }
+          refreshList();
         } catch (err) { setMsg(err.message || 'Save failed'); }
         save.disabled = false;
       });
