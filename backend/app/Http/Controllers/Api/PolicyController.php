@@ -527,11 +527,12 @@ final class PolicyController extends Controller
         if ($request->input('format') === 'csv') {
             $label = ['signed' => 'Signed', 'outdated' => 'Out of date', 'outstanding' => 'Outstanding', 'na' => 'n/a'];
             $fh = fopen('php://temp', 'r+');
-            $hdr = ['Staff member', 'Centre(s)', 'Outstanding'];
+            $__pref = \App\Support\RefCode::users(array_column($rows, 'user_id'), (int) $agencyId, 'S');   // 2026-10-14
+            $hdr = ['Staff member', 'Staff ID', 'Centre(s)', 'Outstanding'];
             foreach ($cols as $c) $hdr[] = $c['title'] . ' (v' . $c['version'] . ')';
             fputcsv($fh, $hdr);
             foreach ($rows as $r) {
-                $line = [$r['name'], $r['centres'], $r['outstanding']];
+                $line = [$r['name'], $__pref[(int) $r['user_id']] ?? '', $r['centres'], $r['outstanding']];
                 foreach ($r['cells'] as $c) {
                     $t = $label[$c['state']] ?? $c['state'];
                     if (! empty($c['at'])) $t .= ' ' . $c['at'] . ($c['state'] === 'outdated' ? ' (v' . $c['version'] . ')' : '');

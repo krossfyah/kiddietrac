@@ -477,12 +477,13 @@ final class SleepCheckController extends Controller
     {
         $name = 'sleep-checks-' . preg_replace('/[^a-z0-9]+/i', '-', $meta['centre_name']) . '-' . $meta['date'] . ($meta['to'] !== $meta['date'] ? '-to-' . $meta['to'] : '') . '.csv';
 
-        return response()->streamDownload(function () use ($naps) {
+        $cref = \App\Support\RefCode::children(array_column($naps, 'child_id'));   // visible child IDs, 2026-10-14
+        return response()->streamDownload(function () use ($naps, $cref) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
-            fputcsv($h, ['Date', 'Child', 'Date of birth', 'Age (months)', 'Room', 'Asleep', 'Woke', 'Check interval (min)', 'Check time', 'Checked by', 'Position', 'Breathing normal', 'Colour normal', 'Note', 'Minutes since previous', 'Over interval']);
+            fputcsv($h, ['Date', 'Child', 'Child ID', 'Date of birth', 'Age (months)', 'Room', 'Asleep', 'Woke', 'Check interval (min)', 'Check time', 'Checked by', 'Position', 'Breathing normal', 'Colour normal', 'Note', 'Minutes since previous', 'Over interval']);
             foreach ($naps as $n) {
-                $lead = [$n['date'], $n['child'], $n['date_of_birth'], $n['age_months'], $n['room'], $n['start_local'], self::endText($n), $n['interval']];
+                $lead = [$n['date'], $n['child'], $cref[(int) ($n['child_id'] ?? 0)] ?? '', $n['date_of_birth'], $n['age_months'], $n['room'], $n['start_local'], self::endText($n), $n['interval']];
                 if (! $n['checks']) fputcsv($h, array_merge($lead, ['', '', '', '', '', 'NO CHECKS RECORDED', '', '']));
                 foreach ($n['checks'] as $c) {
                     fputcsv($h, array_merge($lead, [$c['at_local'], $c['by'], $c['position_label'], $c['breathing_ok'] ? 'Yes' : 'NO', $c['colour_ok'] ? 'Yes' : 'NO', (string) $c['note'], $c['minutes_since_previous'], $c['over'] ? 'YES' : '']));

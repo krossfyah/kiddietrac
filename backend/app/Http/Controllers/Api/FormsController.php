@@ -159,7 +159,7 @@ final class FormsController extends Controller
             ->orderByDesc('r.submitted_at')
             ->limit(2000)
             ->get([
-                'r.id', 'r.response_json', 'r.submitted_at',
+                'r.id', 'r.response_json', 'r.submitted_at', 'r.submitted_by_user_id',
                 DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, 'unknown') as submitter_name"),
                 'u.email as submitter_email',
             ]);
@@ -167,6 +167,9 @@ final class FormsController extends Controller
         // v22p44: CSV export — &format=csv streams an Excel-friendly file
         // with one column per schema field plus submitter / timestamp.
         if (strtolower((string) $request->query('format', '')) === 'csv') {
+            // The submitter's visible ID at this agency (2026-10-14).
+            $__sref = \App\Support\RefCode::users($rows->pluck('submitted_by_user_id')->filter()->all(), (int) $agencyId);
+            foreach ($rows as $__r) { $__r->submitter_ref = $__sref[(int) ($__r->submitted_by_user_id ?? 0)] ?? ''; }
             return $this->streamCsv($form, $rows);
         }
 
@@ -194,11 +197,11 @@ final class FormsController extends Controller
             $out = fopen('php://output', 'w');
             // UTF-8 BOM so Excel opens special characters cleanly
             fwrite($out, "\xEF\xBB\xBF");
-            $header = array_merge(['Submitted at', 'Submitter', 'Email'], $fieldLabels);
+            $header = array_merge(['Submitted at', 'Submitter', 'Submitter ID', 'Email'], $fieldLabels);
             fputcsv($out, $header);
             foreach ($rows as $r) {
                 $resp = json_decode((string) $r->response_json, true) ?: [];
-                $line = [$r->submitted_at, $r->submitter_name, $r->submitter_email];
+                $line = [$r->submitted_at, $r->submitter_name, $r->submitter_ref ?? '', $r->submitter_email];
                 foreach ($fieldIds as $fid) {
                     $v = $resp[$fid] ?? '';
                     if (is_array($v)) $v = implode(', ', $v);

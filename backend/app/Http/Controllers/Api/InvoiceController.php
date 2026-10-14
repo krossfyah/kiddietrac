@@ -153,17 +153,18 @@ final class InvoiceController extends Controller
         if (strtolower((string) $request->query('format', '')) === 'csv') {
             $rows = $q->limit(2000)->get();
             $filename = 'invoices-' . now()->format('Y-m-d') . '.csv';
-            return new \Symfony\Component\HttpFoundation\StreamedResponse(function () use ($rows) {
+            $fref = \App\Support\RefCode::families($rows->pluck('family_id')->all());   // visible family IDs, 2026-10-14
+            return new \Symfony\Component\HttpFoundation\StreamedResponse(function () use ($rows, $fref) {
                 $out = fopen('php://output', 'w');
                 fwrite($out, "\xEF\xBB\xBF");
                 fputcsv($out, [
-                    'Invoice #', 'Family', 'Status', 'Period start', 'Period end',
+                    'Invoice #', 'Family', 'Family ID', 'Status', 'Period start', 'Period end',
                     'Issued', 'Due', 'Subtotal', 'Subsidy', 'Discount', 'Tax',
                     'Total', 'Paid', 'Balance due',
                 ]);
                 foreach ($rows as $i) {
                     fputcsv($out, [
-                        $i->invoice_number, $i->family_name, $i->status,
+                        $i->invoice_number, $i->family_name, $fref[(int) $i->family_id] ?? '', $i->status,
                         $i->period_start, $i->period_end,
                         $i->issued_at, $i->due_at,
                         $i->subtotal, $i->subsidy_amount, $i->discount_amount ?? 0, $i->tax_amount ?? 0,

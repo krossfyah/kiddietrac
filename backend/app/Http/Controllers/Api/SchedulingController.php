@@ -1034,6 +1034,12 @@ final class SchedulingController extends Controller
             ]);
         }
         $rows = $rows->values();
+        // Visible staff IDs (2026-10-14, App\Support\RefCode), for the sheet and its CSV.
+        if ($agencyIds) {
+            $__ag = (int) reset($agencyIds);
+            $__ref = \App\Support\RefCode::users($rows->pluck('user_id')->filter()->all(), $__ag, 'S');
+            $rows = $rows->map(function ($r) use ($__ref) { $r = (array) $r; $r['staff_ref'] = $__ref[(int) ($r['user_id'] ?? 0)] ?? null; return $r; })->values();
+        }
 
         return response()->json([
             'centre_id' => $centreId,

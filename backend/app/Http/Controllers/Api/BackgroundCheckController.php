@@ -109,17 +109,18 @@ final class BackgroundCheckController extends Controller
         return response()->streamDownload(function () use ($agencyId) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
-            fputcsv($h, ['Staff name', 'Email', 'Check type', 'Reference', 'Issued', 'Expires', 'Status']);
+            fputcsv($h, ['Staff name', 'Staff ID', 'Email', 'Check type', 'Reference', 'Issued', 'Expires', 'Status']);
             DB::table('background_checks as bgc')
                 ->join('users as u', 'u.id', '=', 'bgc.user_id')
                 ->where('bgc.agency_id', $agencyId)
                 ->orderBy('bgc.expires_at')
                 ->select('bgc.*', DB::raw("CONCAT(u.first_name, ' ', u.last_name) as user_name"), 'u.email as user_email')
-                ->chunk(200, function ($rows) use ($h) {
+                ->chunk(200, function ($rows) use ($h, $agencyId) {
+                    $ref = \App\Support\RefCode::users($rows->pluck('user_id')->all(), $agencyId, 'S');   // 2026-10-14
                     foreach ($rows as $r) {
                         $status = Carbon::parse($r->expires_at)->isPast() ? 'expired' : 'valid';
                         fputcsv($h, [
-                            $r->user_name, $r->user_email, $r->check_type, $r->reference,
+                            $r->user_name, $ref[(int) $r->user_id] ?? '', $r->user_email, $r->check_type, $r->reference,
                             $r->issued_at, $r->expires_at, $status,
                         ]);
                     }

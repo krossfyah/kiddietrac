@@ -313,10 +313,11 @@ final class PfccController extends Controller
             : null;
 
         if ($request->query('format') === 'csv') {
-            $csv = "Child,Family,Centre,Case number,Care unit,Units/week,Days attended,Hours,Absent days,Issues\r\n";
+            $pref = \App\Support\RefCode::children(array_column($rows, 'child_id'));   // 2026-10-14
+            $csv = "Child,Child ID,Family,Centre,Case number,Care unit,Units/week,Days attended,Hours,Absent days,Issues\r\n";
             $q = fn ($v) => '"' . str_replace('"', '""', (string) $v) . '"';
             foreach ($rows as $r) {
-                $csv .= implode(',', array_map($q, [$r['child'], $r['family'], $r['centre'], $r['case_number'], $r['care_unit'], $r['units_per_week'], $r['days_attended'], $r['hours'], $r['absent_days'], implode('; ', $r['flags'])])) . "\r\n";
+                $csv .= implode(',', array_map($q, [$r['child'], $pref[(int) $r['child_id']] ?? '', $r['family'], $r['centre'], $r['case_number'], $r['care_unit'], $r['units_per_week'], $r['days_attended'], $r['hours'], $r['absent_days'], implode('; ', $r['flags'])])) . "\r\n";
             }
             $this->audit($request, $agencyId, 'pfcc.reconciliation_exported', 'agency', $agencyId, 'TAP reconciliation CSV for the week of ' . $week);
 

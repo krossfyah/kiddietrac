@@ -48,7 +48,7 @@ final class PayrollController extends Controller
             return $r;
         });
 
-        if ($request->query('format') === 'csv') return $this->csv($rows, $from, $to);
+        if ($request->query('format') === 'csv') return $this->csv($rows, $from, $to, (int) $agencyId);
 
         /* PAID, BUT NEVER CLOCKED IN.
 
@@ -213,16 +213,17 @@ final class PayrollController extends Controller
         ]);
     }
 
-    private function csv($rows, Carbon $from, Carbon $to): StreamedResponse
+    private function csv($rows, Carbon $from, Carbon $to, int $agencyId = 0): StreamedResponse
     {
         $name = 'payroll-' . $from->format('Y-m-d') . '-to-' . $to->format('Y-m-d') . '.csv';
-        return response()->streamDownload(function () use ($rows) {
+        $ref = $agencyId ? \App\Support\RefCode::users(collect($rows)->pluck('user_id')->all(), $agencyId, 'S') : [];   // 2026-10-14
+        return response()->streamDownload(function () use ($rows, $ref) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
-            fputcsv($h, ['Staff name', 'Email', 'Centre', 'Punch count', 'Total minutes', 'Total hours']);
+            fputcsv($h, ['Staff name', 'Staff ID', 'Email', 'Centre', 'Punch count', 'Total minutes', 'Total hours']);
             foreach ($rows as $r) {
                 fputcsv($h, [
-                    $r->user_name, $r->user_email, $r->centre_name ?? '',
+                    $r->user_name, $ref[(int) $r->user_id] ?? '', $r->user_email, $r->centre_name ?? '',
                     $r->punch_count, $r->total_minutes, $r->total_hours,
                 ]);
             }

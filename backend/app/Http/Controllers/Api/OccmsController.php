@@ -301,17 +301,18 @@ final class OccmsController extends Controller
         $info = $this->header($agencyId, $cid, $month, $b);
         $this->audit($request, $agencyId, 'occms.roa_export', $cid, 'Record of Attendance CSV exported: ' . $centres[$cid] . ', ' . $month);
 
-        return response()->streamDownload(function () use ($b, $info) {
+        $cref = \App\Support\RefCode::children(array_column($b['children'] ?? [], 'child_id'));   // KiddieTrac child IDs, 2026-10-14
+        return response()->streamDownload(function () use ($b, $info, $cref) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
             foreach ($info as $k => $v) fputcsv($h, [$k, $v]);
             fputcsv($h, []);
-            $head = ['Child', 'Case / subsidy number', 'Date of birth', 'Age group'];
+            $head = ['Child', 'Child ID', 'Case / subsidy number', 'Date of birth', 'Age group'];
             foreach ($b['days'] as $day) $head[] = (string) $day['d'];
             $head = array_merge($head, array_keys(OccmsRoa::CODES), ['Absences this month', 'Absences year to date', 'Allowance', 'Remaining']);
             fputcsv($h, $head);
             foreach ($b['children'] as $c) {
-                $row = [$c['name'], $c['case_number'], $c['dob'], OccmsRoa::AGE_GROUPS[$c['age_group']] ?? ''];
+                $row = [$c['name'], $cref[(int) ($c['child_id'] ?? 0)] ?? '', $c['case_number'], $c['dob'], OccmsRoa::AGE_GROUPS[$c['age_group']] ?? ''];
                 foreach ($c['codes'] as $code) $row[] = $code ?? '';
                 foreach (array_keys(OccmsRoa::CODES) as $k) $row[] = $c['totals'][$k] ?? 0;
                 $row = array_merge($row, [$c['absences_month'], $c['ytd_used'], $c['allowance'] ?? '', $c['remaining'] ?? '']);
@@ -357,8 +358,11 @@ final class OccmsController extends Controller
         foreach ($b['days'] as $day) $html .= '<th class="' . ($day['operating'] ? '' : 'we') . '">' . $day['d'] . '<br>' . $e(substr($day['dow'], 0, 1)) . '</th>';
         foreach (array_keys(OccmsRoa::CODES) as $k) $html .= '<th>' . $k . '</th>';
         $html .= '<th>YTD abs.</th><th>Left</th></tr></thead><tbody>';
+        $refs = \App\Support\RefCode::children(array_map(fn ($x) => (int) ($x['child_id'] ?? 0), $b['children']));
         foreach ($b['children'] as $c) {
-            $html .= '<tr><td class="l">' . $e($c['name']) . '</td><td>' . $e($c['case_number']) . '</td><td>' . $e($c['dob']) . '</td><td>' . $e(OccmsRoa::AGE_GROUPS[$c['age_group']] ?? '') . '</td>';
+            $html .= '<tr><td class="l">' . $e($c['name'])
+                . (! empty($refs[(int) ($c['child_id'] ?? 0)]) ? '<br><span style="font-size:7px;color:#64748B;">' . $e($refs[(int) $c['child_id']]) . '</span>' : '')
+                . '</td><td>' . $e($c['case_number']) . '</td><td>' . $e($c['dob']) . '</td><td>' . $e(OccmsRoa::AGE_GROUPS[$c['age_group']] ?? '') . '</td>';
             foreach ($c['codes'] as $j => $code) $html .= '<td class="' . ($b['days'][$j]['operating'] ? '' : 'we ') . $e($code ?? '') . '">' . $e($code ?? '') . '</td>';
             foreach (array_keys(OccmsRoa::CODES) as $k) $html .= '<td>' . (int) ($c['totals'][$k] ?? 0) . '</td>';
             $html .= '<td>' . (int) $c['ytd_used'] . ($c['allowance'] !== null ? '/' . (int) $c['allowance'] : '') . '</td><td>' . ($c['remaining'] ?? '') . '</td></tr>';

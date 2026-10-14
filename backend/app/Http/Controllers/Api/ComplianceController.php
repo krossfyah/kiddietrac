@@ -177,14 +177,15 @@ final class ComplianceController extends Controller
         $month = (string) $request->query('month', Carbon::now()->format('Y-m'));
         $reportJson = $this->cwelccMonthlyReport($request);
         $body = json_decode($reportJson->getContent(), true);
-        return response()->streamDownload(function () use ($body) {
+        $fref = \App\Support\RefCode::families(array_column($body['data'] ?? [], 'family_id'));   // 2026-10-14
+        return response()->streamDownload(function () use ($body, $fref) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
-            fputcsv($h, ['Children', 'Family', 'Centre', 'Gross fee', 'Subsidy rate %', 'Subsidy $', 'Parent portion $']);
+            fputcsv($h, ['Children', 'Family', 'Family ID', 'Centre', 'Gross fee', 'Subsidy rate %', 'Subsidy $', 'Parent portion $']);
             foreach ($body['data'] as $r) {
-                fputcsv($h, [$r['child_name'], $r['family_name'], $r['centre_name'], $r['gross_fee'], $r['subsidy_rate'], $r['subsidy_amount'], $r['parent_portion']]);
+                fputcsv($h, [$r['child_name'], $r['family_name'], $fref[(int) ($r['family_id'] ?? 0)] ?? '', $r['centre_name'], $r['gross_fee'], $r['subsidy_rate'], $r['subsidy_amount'], $r['parent_portion']]);
             }
-            fputcsv($h, ['TOTAL', '', '', $body['totals']['gross'], '', $body['totals']['subsidy'], $body['totals']['parent']]);
+            fputcsv($h, ['TOTAL', '', '', '', $body['totals']['gross'], '', $body['totals']['subsidy'], $body['totals']['parent']]);
             fclose($h);
         }, "CWELCC-{$month}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
     }

@@ -98,14 +98,16 @@ class SubsidyController extends Controller
 
         $monthStart = $start->toDateString();
 
-        return response()->streamDownload(function () use ($rows, $monthStart) {
+        $cref = \App\Support\RefCode::children($rows->pluck('child_id')->all());     // visible IDs, 2026-10-14
+        $fref = \App\Support\RefCode::families($rows->pluck('family_id')->all());
+        return response()->streamDownload(function () use ($rows, $monthStart, $cref, $fref) {
             $out = fopen('php://output', 'w');
-            fputcsv($out, ['Child', 'Family', 'Centre', 'Case number', 'Basis', 'Daily amount', 'Monthly amount',
+            fputcsv($out, ['Child', 'Child ID', 'Family', 'Family ID', 'Centre', 'Case number', 'Basis', 'Daily amount', 'Monthly amount',
                 'Scheduled days this month', 'Amount this month', 'From', 'To', 'Approved', 'Notes']);
             foreach ($rows as $r) {
                 $c = \App\Support\SubsidyAmount::forSubsidyMonth($r, $monthStart);
                 $daily = ($r->amount_basis ?? 'monthly') === 'daily';
-                fputcsv($out, [trim($r->first_name . ' ' . $r->last_name), $r->family_name, $r->centre_name,
+                fputcsv($out, [trim($r->first_name . ' ' . $r->last_name), $cref[(int) $r->child_id] ?? '', $r->family_name, $fref[(int) $r->family_id] ?? '', $r->centre_name,
                     $r->case_number, $daily ? 'Daily' : 'Monthly',
                     $daily ? number_format((float) $r->daily_amount, 2, '.', '') : '',
                     $daily ? '' : number_format((float) $r->monthly_amount, 2, '.', ''),

@@ -558,9 +558,9 @@
   }
 
   function downloadCsv(data) {
-    const headers = ['Date','Staff','Email','Clock In','Clock Out','Break (min)','Worked (hrs)','Notes'];
+    const headers = ['Date','Staff','Staff ID','Email','Clock In','Clock Out','Break (min)','Worked (hrs)','Notes'];
     const rows = [headers.join(',')].concat((data.rows || []).map(r =>
-      [r.date, r.staff_name, r.staff_email, r.clock_in, r.clock_out, r.break_min, r.worked_hours, (r.notes||'').replace(/,/g,';')].map(v => `"${v||''}"`).join(',')
+      [r.date, r.staff_name, r.staff_ref || '', r.staff_email, r.clock_in, r.clock_out, r.break_min, r.worked_hours, (r.notes||'').replace(/,/g,';')].map(v => `"${v||''}"`).join(',')
     ));
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

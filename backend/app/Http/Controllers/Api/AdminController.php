@@ -1810,15 +1810,18 @@ final class AdminController extends Controller
         }
 
         if (strtolower((string) $request->query('format', '')) === 'csv') {
+            // Child IDs (2026-10-14): the visible reference ID, not the database row number.
+            $__cref = \App\Support\RefCode::children(collect($rows)->pluck('id')->all());
+            $__fref = \App\Support\RefCode::families(collect($rows)->pluck('family_id')->all());
             return $this->streamCsv('children', [
                 'ID', 'First name', 'Last name', 'Preferred', 'Date of birth',
-                'Status', 'Enrolled', 'Last seen', 'Family', 'Centre',
+                'Status', 'Enrolled', 'Last seen', 'Family', 'Family ID', 'Centre',
                 'Allergies', 'Health alerts',
             ], array_map(fn ($r) => [
-                $r->id, $r->first_name, $r->last_name, $r->preferred_name,
+                $__cref[(int) $r->id] ?? '', $r->first_name, $r->last_name, $r->preferred_name,
                 $r->date_of_birth, $r->enrollment_status, $r->enrolled_at,
                 $r->last_seen_at ?? '',
-                $r->family_name, $r->centre_name,
+                $r->family_name, $__fref[(int) ($r->family_id ?? 0)] ?? '', $r->centre_name,
                 $r->allergies, $r->health_alerts,
             ], $rows));
         }
@@ -2309,6 +2312,17 @@ final class AdminController extends Controller
 
         $rows = $result->all();
 
+        // Visible reference IDs (App\Support\RefCode, 2026-10-14) — refA.
+        if (! $allMode && $agencyId && $rows) {
+            $refCodes = \App\Support\RefCode::userCodesMany(array_column($rows, 'id'), (int) $agencyId);
+            foreach ($rows as &$refRow) {
+                $rc = $refCodes[(int) $refRow['id']] ?? [];
+                $refRow['ref_codes'] = $rc;
+                $refRow['ref_code'] = $rc['S'] ?? ($rc['P'] ?? null);
+            }
+            unset($refRow);
+        }
+
         /* A centre director sees which of these people they may open in Manage (their
            own centre's, wholly) and why not for the rest — the same test the Manage
            endpoints apply, so the button and the server agree. */
@@ -2326,10 +2340,12 @@ final class AdminController extends Controller
 
         // v22p45: CSV export — ?format=csv streams an Excel-friendly file
         if (strtolower((string) $request->query('format', '')) === 'csv') {
+            // The person's reference ID at this agency (staff code preferred), 2026-10-14.
+            $__uref = $agencyId ? \App\Support\RefCode::users(array_column($rows, 'id'), (int) $agencyId) : [];
             return $this->streamCsv('users', [
                 'ID', 'Name', 'Email', 'Phone', 'Status', 'Roles', 'Last login', 'Created',
             ], array_map(fn ($u) => [
-                $u['id'], $u['name'], $u['email'], $u['phone'] ?? '',
+                $__uref[(int) $u['id']] ?? '', $u['name'], $u['email'], $u['phone'] ?? '',
                 $u['status'], implode(' / ', $u['roles']),
                 $u['last_login_at'] ?? '', $u['created_at'],
             ], $rows));
@@ -2903,6 +2919,16 @@ final class AdminController extends Controller
                 'emergency_contact_relation' => $p->emergency_contact_relation,
             ] : null,
             'record' => $record,
+            // Visible reference IDs at the active agency (App\Support\RefCode, 2026-10-14) — refA.
+            'ref_codes' => (function () use ($request, $userId) {
+                $a = (int) $this->getAgencyId($request);
+                $c = [];
+                if ($a) {
+                    if (\App\Support\RefCode::isStaff($userId, $a)) $c['S'] = \App\Support\RefCode::ensureUser($userId, $a, 'S');
+                    if (\App\Support\RefCode::isGuardian($userId, $a)) $c['P'] = \App\Support\RefCode::ensureUser($userId, $a, 'P');
+                }
+                return $c ?: (object) [];
+            })(),
             // Raw structured fields for the editable form (so edits write back to
             // the SAME place the Full record reads from — profile_extras + users).
             'editable' => [
@@ -3279,14 +3305,19 @@ final class AdminController extends Controller
         });
 
         $rows = $result->all();
+        // Visible reference IDs (App\Support\RefCode, 2026-10-14) — refA.
+        $refCodes = \App\Support\RefCode::families(array_column($rows, 'id'));
+        foreach ($rows as &$refRow) { $refRow['ref_code'] = $refCodes[(int) $refRow['id']] ?? null; }
+        unset($refRow);
 
         // v22p45: CSV export — ?format=csv
         if (strtolower((string) $request->query('format', '')) === 'csv') {
+            $__fref = \App\Support\RefCode::families(array_map(fn ($f) => (int) ($f['id'] ?? 0), $rows));   // 2026-10-14
             return $this->streamCsv('families', [
                 'ID', 'Family name', 'Centre', 'Primary email', 'Primary phone',
                 'Address', 'City', 'Children', 'Guardians', 'Outstanding balance',
             ], array_map(fn ($f) => [
-                $f['id'] ?? '',
+                $__fref[(int) ($f['id'] ?? 0)] ?? '',
                 $f['family_name'] ?? '',
                 $f['centre_name'] ?? '',
                 $f['primary_email'] ?? '',
@@ -3370,7 +3401,20 @@ final class AdminController extends Controller
             ];
         }
 
+        // Visible reference IDs (App\Support\RefCode, 2026-10-14) — refA.
+        $family->ref_code = \App\Support\RefCode::ensureFamily((int) $familyId);
+        $refAgency = (int) DB::table('families')->where('id', $familyId)->value('ref_agency_id');
+        $children = $children->map(function ($c) { $c->ref_code = \App\Support\RefCode::ensureChild((int) $c->id); return $c; });
+        if ($refAgency) {
+            $guardians = $guardians->map(function ($g) use ($refAgency) {
+                $g->ref_code = \App\Support\RefCode::ensureUser((int) $g->user_id, $refAgency, 'P');
+                $g->ref_codes = \App\Support\RefCode::userCodes((int) $g->user_id, $refAgency);
+                return $g;
+            });
+        }
+
         return response()->json([
+            'ref_code' => $family->ref_code,
             // The edit form locks its Provider field when this is true (see updateFamily).
             'provider_locked' => self::familyHasEnrolment((int) $familyId),
             'family' => $family,

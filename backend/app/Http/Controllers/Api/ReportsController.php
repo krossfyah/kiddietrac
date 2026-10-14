@@ -831,7 +831,37 @@ final class ReportsController extends Controller
      * @param  array{user_id:int,room_ids:array<int,int>}|null  $scope  Educator scope;
      *         null = the whole agency. See educatorScope().
      */
+    /**
+     * VISIBLE REFERENCE IDS IN EVERY CANNED REPORT (2026-10-14, App\Support\RefCode).
+     * The builders below tag rows with _child_id / _family_id / _user_id; this turns the tags
+     * into "Child ID" / "Family ID" / "Staff ID" columns beside the name and strips them, so
+     * the screen table, the PDF, the CSV and the scheduled email all carry the same IDs.
+     */
     private function cannedRows(string $type, int $agencyId, ?int $centreId, ?string $from, ?string $to, ?string $statusCsv = null, ?string $balance = null, ?array $scope = null): array
+    {
+        [$columns, $rows] = $this->cannedRowsRaw($type, $agencyId, $centreId, $from, $to, $statusCsv, $balance, $scope);
+        if ($rows) {
+            foreach ([['_child_id', 'Child', 'Child ID'], ['_family_id', 'Family', 'Family ID'], ['_user_id', 'Staff', 'Staff ID']] as [$tag, $after, $label]) {
+                $ids = [];
+                foreach ($rows as $r) { if (! empty($r[$tag])) $ids[] = (int) $r[$tag]; }
+                if (! $ids || in_array($label, $columns, true)) continue;
+                $map = $tag === '_child_id' ? \App\Support\RefCode::children($ids)
+                    : ($tag === '_family_id' ? \App\Support\RefCode::families($ids) : \App\Support\RefCode::users($ids, $agencyId, 'S'));
+                foreach ($rows as &$r) { $r[$label] = $map[(int) ($r[$tag] ?? 0)] ?? '—'; }
+                unset($r);
+                $pos = array_search($after, $columns, true);
+                if ($pos === false) array_unshift($columns, $label); else array_splice($columns, $pos + 1, 0, [$label]);
+            }
+            foreach ($rows as &$r) {
+                foreach (array_keys($r) as $k) { if (is_string($k) && $k !== '' && $k[0] === '_') unset($r[$k]); }
+            }
+            unset($r);
+        }
+
+        return [$columns, $rows];
+    }
+
+    private function cannedRowsRaw(string $type, int $agencyId, ?int $centreId, ?string $from, ?string $to, ?string $statusCsv = null, ?string $balance = null, ?array $scope = null): array
     {
         // Nothing below reaches this function without guardScopedType() having run, but
         // a report type added later would arrive here scoped and unhandled - and would
@@ -878,7 +908,7 @@ final class ReportsController extends Controller
                 foreach ($events as $e) {
                     $d = $this->localDate($e->occurred_at, $tz);
                     $key = $e->child_id . '|' . $d;
-                    if (! isset($byDay[$key])) $byDay[$key] = ['Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Status' => 'Present', 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—', 'Absence reason' => '—', 'Reported by' => '—', 'Note' => ''];
+                    if (! isset($byDay[$key])) $byDay[$key] = ['_child_id' => (int) $e->child_id, 'Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Status' => 'Present', 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—', 'Absence reason' => '—', 'Reported by' => '—', 'Note' => ''];
                     $t = $this->localTime($e->occurred_at, $tz);
                     /* An automatic overnight close is not a person. by_user_id holds
                        a borrowed id, so without this the report attributes the
@@ -935,7 +965,7 @@ final class ReportsController extends Controller
                         // discrepancy somebody should see, not something to tidy away.
                         $byDay[$key]['Status'] = 'Absence recorded (but signed in)';
                     } else {
-                        $byDay[$key] = ['Date' => $d, 'Child' => $a->child, 'Room' => '—', 'Centre' => $a->centre,
+                        $byDay[$key] = ['_child_id' => (int) $a->child_id, 'Date' => $d, 'Child' => $a->child, 'Room' => '—', 'Centre' => $a->centre,
                             'Status' => 'Absent', 'Check in' => '—', 'Checked in by' => '—',
                             'Check out' => '—', 'Checked out by' => '—'];
                     }
@@ -952,9 +982,10 @@ final class ReportsController extends Controller
                 $q = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')->where('c.agency_id', $agencyId)->whereNull('ch.deleted_at');
                 if ($centreId) $q->where('c.id', $centreId);
-                $data = $q->select('ch.first_name', 'ch.last_name', 'ch.date_of_birth', 'ch.enrollment_status', 'ch.enrolled_at', 'f.family_name', 'c.name as centre')
+                $data = $q->select('ch.id as child_id', 'f.id as family_id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth', 'ch.enrollment_status', 'ch.enrolled_at', 'f.family_name', 'c.name as centre')
                     ->orderBy('c.name')->orderBy('ch.first_name')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
+                    '_child_id' => (int) $r->child_id, '_family_id' => (int) $r->family_id,
                     'Child' => trim($r->first_name . ' ' . ($r->last_name ?? '')), 'DOB' => $r->date_of_birth ?: '—',
                     'Status' => ucfirst((string) $r->enrollment_status), 'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Enrolled' => $r->enrolled_at ?: '—',
@@ -967,10 +998,10 @@ final class ReportsController extends Controller
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->where('p.paid_at', '>=', $fromUtc);
                 if ($to) $q->where('p.paid_at', '<=', $toUtc);
-                $data = $q->select('p.paid_at', 'p.amount', 'p.method', 'p.reference_number', 'f.family_name', 'c.name as centre')
+                $data = $q->select('f.id as family_id', 'p.paid_at', 'p.amount', 'p.method', 'p.reference_number', 'f.family_name', 'c.name as centre')
                     ->orderByDesc('p.paid_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Date' => $this->localDate($r->paid_at, $tz), 'Family' => $r->family_name, 'Centre' => $r->centre,
+                    '_family_id' => (int) $r->family_id, 'Date' => $this->localDate($r->paid_at, $tz), 'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Amount' => '$' . number_format((float) $r->amount, 2), 'Method' => ucfirst((string) $r->method), 'Reference' => $r->reference_number ?: '—',
                     'Source' => 'KiddieTrac',
                 ], $data->all());
@@ -1001,7 +1032,7 @@ final class ReportsController extends Controller
                     if ($to) {
                         $xq->whereDate(DB::raw('COALESCE(x.external_updated_at, x.issued_at)'), '<=', $to);
                     }
-                    $ext = $xq->select('x.number', 'x.amount_paid', 'x.issued_at', 'x.external_updated_at',
+                    $ext = $xq->select('f.id as family_id', 'x.number', 'x.amount_paid', 'x.issued_at', 'x.external_updated_at',
                         'x.source_label', 'x.external_source', 'f.family_name', 'c.name as centre')
                         ->orderByDesc(DB::raw('COALESCE(x.external_updated_at, x.issued_at)'))
                         ->limit(5000)->get();
@@ -1013,6 +1044,7 @@ final class ReportsController extends Controller
                             'Family' => $r->family_name ?: '—',
                             'Centre' => $r->centre ?: '—',
                             'Amount' => '$' . number_format((float) $r->amount_paid, 2),
+                            '_family_id' => (int) ($r->family_id ?? 0),
                             'Method' => 'Invoice settled',
                             'Reference' => $r->number ?: '—',
                             'Source' => $r->source_label ?: ucfirst((string) ($r->external_source ?: 'External')),
@@ -1045,10 +1077,10 @@ final class ReportsController extends Controller
                 if ($statuses) $q->whereIn('i.status', $statuses);
                 if ($balance === 'owing') $q->where('i.balance_due', '>', 0);
                 if ($balance === 'settled') $q->where('i.balance_due', '<=', 0);
-                $data = $q->select('i.invoice_number', 'i.issued_at', 'i.due_at', 'i.total', 'i.amount_paid', 'i.balance_due', 'i.status', 'f.family_name', 'c.name as centre')
+                $data = $q->select('f.id as family_id', 'i.invoice_number', 'i.issued_at', 'i.due_at', 'i.total', 'i.amount_paid', 'i.balance_due', 'i.status', 'f.family_name', 'c.name as centre')
                     ->orderByDesc('i.issued_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Invoice' => $r->invoice_number, 'Family' => $r->family_name, 'Centre' => $r->centre,
+                    '_family_id' => (int) $r->family_id, 'Invoice' => $r->invoice_number, 'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Issued' => $r->issued_at ? substr((string) $r->issued_at, 0, 10) : '—', 'Due' => $r->due_at ? substr((string) $r->due_at, 0, 10) : '—',
                     'Total' => '$' . number_format((float) $r->total, 2), 'Paid' => '$' . number_format((float) $r->amount_paid, 2),
                     'Balance' => '$' . number_format((float) $r->balance_due, 2), 'Status' => ucfirst((string) $r->status),
@@ -1070,7 +1102,7 @@ final class ReportsController extends Controller
                     if ($statuses) $eq->whereIn('x.status', $statuses);
                     if ($balance === 'owing') $eq->where('x.balance_due', '>', 0);
                     if ($balance === 'settled') $eq->where('x.balance_due', '<=', 0);
-                    $ext = $eq->select('x.number', 'x.issued_at', 'x.due_at', 'x.total', 'x.amount_paid',
+                    $ext = $eq->select('f.id as family_id', 'x.number', 'x.issued_at', 'x.due_at', 'x.total', 'x.amount_paid',
                             'x.balance_due', 'x.status', 'x.source_label', 'x.external_source',
                             'f.family_name', 'c.name as centre')
                         ->orderByDesc('x.issued_at')->limit(5000)->get();
@@ -1086,6 +1118,7 @@ final class ReportsController extends Controller
                             $status = 'overdue';
                         }
                         $rows[] = [
+                            '_family_id' => (int) ($r->family_id ?? 0),
                             'Invoice' => $r->number,
                             // A mirrored invoice can outlive the family link, so say so
                             // rather than printing a blank cell somebody has to interpret.
@@ -1110,10 +1143,10 @@ final class ReportsController extends Controller
                 $q = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
                     ->where('c.agency_id', $agencyId)->whereNull('f.deleted_at');
                 if ($centreId) $q->where('c.id', $centreId);
-                $data = $q->select('f.family_name', 'f.primary_email', 'f.primary_phone', 'f.city', 'c.name as centre', 'f.autopay_enabled')
+                $data = $q->select('f.id as family_id', 'f.family_name', 'f.primary_email', 'f.primary_phone', 'f.city', 'c.name as centre', 'f.autopay_enabled')
                     ->orderBy('f.family_name')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Family' => $r->family_name, 'Email' => $r->primary_email ?: '—', 'Phone' => $r->primary_phone ?: '—',
+                    '_family_id' => (int) $r->family_id, 'Family' => $r->family_name, 'Email' => $r->primary_email ?: '—', 'Phone' => $r->primary_phone ?: '—',
                     'City' => $r->city ?: '—', 'Centre' => $r->centre, 'Autopay' => $r->autopay_enabled ? 'Yes' : 'No',
                 ], $data->all());
                 return [['Family', 'Email', 'Phone', 'City', 'Centre', 'Autopay'], $rows];
@@ -1133,7 +1166,7 @@ final class ReportsController extends Controller
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->where('t.punched_in_at', '>=', $fromUtc);
                 if ($to) $q->where('t.punched_in_at', '<=', $toUtc);
-                $data = $q->select('t.punched_in_at', 't.punched_out_at', 'c.name as centre',
+                $data = $q->select('t.user_id', 't.punched_in_at', 't.punched_out_at', 'c.name as centre',
                         DB::raw("TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) as staff"))
                     ->orderByDesc('t.punched_in_at')->limit(5000)->get();
                 $rows = array_map(function ($r) use ($tz) {
@@ -1144,7 +1177,7 @@ final class ReportsController extends Controller
                         $hrs = 'On floor';
                     }
                     return [
-                        'Staff' => $r->staff, 'Centre' => $r->centre, 'Date' => $this->localDate($r->punched_in_at, $tz),
+                        '_user_id' => (int) $r->user_id, 'Staff' => $r->staff, 'Centre' => $r->centre, 'Date' => $this->localDate($r->punched_in_at, $tz),
                         'Clock in' => $this->localTime($r->punched_in_at, $tz),
                         'Clock out' => $this->localTime($r->punched_out_at, $tz),
                         'Hours' => $hrs,
@@ -1233,6 +1266,7 @@ final class ReportsController extends Controller
                 }
 
                 $rows = array_map(function ($r) {
+                    $r['_child_id'] = (int) $r['_cid'];
                     unset($r['_cid']);
                     return $r;
                 }, array_values($days));
@@ -1244,9 +1278,10 @@ final class ReportsController extends Controller
                     ->join('centres as c', 'c.id', '=', 'f.centre_id')->where('c.agency_id', $agencyId)
                     ->where('ch.enrollment_status', 'waitlist')->whereNull('ch.deleted_at');
                 if ($centreId) $q->where('c.id', $centreId);
-                $data = $q->select('ch.first_name', 'ch.last_name', 'ch.date_of_birth', 'ch.applied_at', 'ch.expected_start_date', 'f.family_name', 'c.name as centre')
+                $data = $q->select('ch.id as child_id', 'f.id as family_id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth', 'ch.applied_at', 'ch.expected_start_date', 'f.family_name', 'c.name as centre')
                     ->orderBy('ch.applied_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
+                    '_child_id' => (int) $r->child_id, '_family_id' => (int) $r->family_id,
                     'Child' => trim($r->first_name . ' ' . ($r->last_name ?? '')), 'DOB' => $r->date_of_birth ?: '—',
                     'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Applied' => $r->applied_at ?: '—', 'Preferred start' => $r->expected_start_date ?: '—',
@@ -1358,6 +1393,7 @@ final class ReportsController extends Controller
                         : ($overdue ? 'Overdue' : ($upcoming ? 'Due soon' : 'Up to date')));
 
                     $rows[] = [
+                        '_child_id' => (int) $k->id,
                         'Child' => trim($k->first_name . ' ' . ($k->last_name ?? '')),
                         'Centre' => $k->centre,
                         'Age' => $ageMonths === null ? '—' : $ageMonths . ' mo',
@@ -1388,11 +1424,11 @@ final class ReportsController extends Controller
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->where('inc.occurred_at', '>=', $fromUtc);
                 if ($to) $q->where('inc.occurred_at', '<=', $toUtc);
-                $data = $q->select('inc.occurred_at', 'inc.incident_type', 'inc.severity', 'inc.location', 'inc.status',
+                $data = $q->select('ch.id as child_id', 'inc.occurred_at', 'inc.incident_type', 'inc.severity', 'inc.location', 'inc.status',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"), 'c.name as centre')
                     ->orderByDesc('inc.occurred_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Date' => $this->localDate($r->occurred_at, $tz), 'Child' => $r->child, 'Centre' => $r->centre,
+                    '_child_id' => (int) $r->child_id, 'Date' => $this->localDate($r->occurred_at, $tz), 'Child' => $r->child, 'Centre' => $r->centre,
                     'Type' => ucfirst(str_replace('_', ' ', (string) $r->incident_type)), 'Severity' => ucfirst((string) $r->severity),
                     'Location' => $r->location ?: '—', 'Status' => ucfirst((string) ($r->status ?: 'open')),
                 ], $data->all());
@@ -1406,12 +1442,12 @@ final class ReportsController extends Controller
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->where('o.observed_at', '>=', $fromUtc);
                 if ($to) $q->where('o.observed_at', '<=', $toUtc);
-                $data = $q->select('o.observed_at', 'o.domain', 'o.title', 'c.name as centre',
+                $data = $q->select('ch.id as child_id', 'o.observed_at', 'o.domain', 'o.title', 'c.name as centre',
                         DB::raw("TRIM(CONCAT(ch.first_name,' ',COALESCE(ch.last_name,''))) as child"),
                         DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as educator"))
                     ->orderByDesc('o.observed_at')->limit(5000)->get();
                 $rows = array_map(fn ($r) => [
-                    'Date' => $this->localDate($r->observed_at, $tz), 'Child' => $r->child,
+                    '_child_id' => (int) $r->child_id, 'Date' => $this->localDate($r->observed_at, $tz), 'Child' => $r->child,
                     'Domain' => ucfirst(str_replace('_', ' ', (string) $r->domain)), 'Title' => $r->title,
                     'Centre' => $r->centre, 'Educator' => trim((string) $r->educator) ?: '—',
                 ], $data->all());

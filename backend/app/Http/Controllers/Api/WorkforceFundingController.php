@@ -362,13 +362,14 @@ final class WorkforceFundingController extends Controller
             $this->audit($request, $a, 'workforce_funding.period_exported', 'payroll_period', null, ['summary' => 'Exported workforce funding pay-period lines ' . $d['from'] . ' to ' . $d['to'] . ' (CSV)']);
             $name = 'workforce-funding-lines-' . $d['from'] . '-to-' . $d['to'] . '.csv';
 
-            return response()->streamDownload(function () use ($rows, $d) {
+            $wref = \App\Support\RefCode::users(collect($rows)->pluck('user_id')->all(), (int) $a, 'S');   // 2026-10-14
+            return response()->streamDownload(function () use ($rows, $d, $wref) {
                 $h = fopen('php://output', 'w');
                 fwrite($h, "\xEF\xBB\xBF");
-                fputcsv($h, ['Period start', 'Period end', 'Employee', 'Position (funding category)', 'Line', 'Hours', 'Rate', 'Amount']);
+                fputcsv($h, ['Period start', 'Period end', 'Employee', 'Staff ID', 'Position (funding category)', 'Line', 'Hours', 'Rate', 'Amount']);
                 foreach ($rows as $r) {
-                    if (! $r['lines']) fputcsv($h, [$d['from'], $d['to'], $r['name'], $r['category_label'], 'No base wage recorded', $r['hours'], '', '']);
-                    foreach ($r['lines'] as $l) fputcsv($h, [$d['from'], $d['to'], $r['name'], $r['category_label'], $l['label'], $l['hours'], number_format($l['rate'], 2, '.', ''), number_format($l['amount'], 2, '.', '')]);
+                    if (! $r['lines']) fputcsv($h, [$d['from'], $d['to'], $r['name'], $wref[(int) ($r['user_id'] ?? 0)] ?? '', $r['category_label'], 'No base wage recorded', $r['hours'], '', '']);
+                    foreach ($r['lines'] as $l) fputcsv($h, [$d['from'], $d['to'], $r['name'], $wref[(int) ($r['user_id'] ?? 0)] ?? '', $r['category_label'], $l['label'], $l['hours'], number_format($l['rate'], 2, '.', ''), number_format($l['amount'], 2, '.', '')]);
                 }
                 fclose($h);
             }, $name, ['Content-Type' => 'text/csv; charset=UTF-8']);
@@ -470,24 +471,25 @@ final class WorkforceFundingController extends Controller
         $agency = (string) DB::table('agencies')->where('id', $a)->value('name');
         $name = 'workforce-funding-year-end-' . $r['year'] . '.csv';
 
-        return response()->streamDownload(function () use ($r, $agency) {
+        $yref = \App\Support\RefCode::users(collect(array_merge($r['rece'] ?? [], $r['non_rece'] ?? [], $r['other'] ?? []))->pluck('user_id')->all(), $a, 'S');
+        return response()->streamDownload(function () use ($r, $agency, $yref) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
             fputcsv($h, ['Ontario ECE workforce funding — year-end reconciliation', $agency, (string) $r['year']]);
             fputcsv($h, ['FTE basis: ' . $r['fte_hours'] . ' hours a year. Benefit allocation = 17.5% of WEG + WCF paid (the guideline allocation, not the employer\'s actual benefit cost).']);
             fputcsv($h, []);
-            $head = array_merge(['Section', 'Employee', 'Position (funding category)', 'Payslips'], array_values(self::COLS));
+            $head = array_merge(['Section', 'Employee', 'Staff ID', 'Position (funding category)', 'Payslips'], array_values(self::COLS));
             foreach (['rece' => 'RECE staff', 'non_rece' => 'Non-RECE director-approved staff (reported separately)', 'other' => 'Not eligible (paid, no funding)'] as $k => $label) {
                 fputcsv($h, [$label]);
                 fputcsv($h, $head);
                 foreach ($r[$k] as $p) {
-                    $line = [$label, $p['name'], $p['category_label'], $p['payslips']];
+                    $line = [$label, $p['name'], $yref[(int) ($p['user_id'] ?? 0)] ?? '', $p['category_label'], $p['payslips']];
                     foreach (array_keys(self::COLS) as $c) $line[] = $c === 'fte' ? number_format($p[$c], 3, '.', '') : number_format($p[$c], 2, '.', '');
                     fputcsv($h, $line);
                 }
                 $t = $r['totals'][$k] ?? null;
                 if ($t) {
-                    $line = [$label . ' — total', '', '', ''];
+                    $line = [$label . ' — total', '', '', '', ''];
                     foreach (array_keys(self::COLS) as $c) $line[] = isset($t[$c]) ? ($c === 'fte' ? number_format($t[$c], 3, '.', '') : number_format($t[$c], 2, '.', '')) : '';
                     fputcsv($h, $line);
                 }
