@@ -1,3 +1,15 @@
+# KT-NOEXPOSE (2026-10-14): backup copies, logs and dumps are never served
+# (app.js.bak-*, .htaccess.bak-*, error_log were all downloadable).
+<FilesMatch "\.(bak|orig|old)([-._].*)?$|\.(sql|log)$|^_htaccess$|^error_log$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
 # KiddieTrac parent-portal (app.kiddietrac.com) — v22p84
 # Performance (compression + caching) and security headers.
 # Every block is guarded by <IfModule> so a missing module is a no-op, never a 500.
