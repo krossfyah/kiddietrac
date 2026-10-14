@@ -1526,6 +1526,13 @@
        returning to the active conversations. (Anthony, 2026-09-09) */
     if (el.hasAttribute && el.hasAttribute('data-kt-inpage')) return false;
 
+    /* A "Back" INSIDE A POPUP is the popup's own previous step, never browser history
+       (2026-10-13, Anthony: "when going back in the adding family the pop-up window
+       closed on its own"). The New family wizard's "← Back" was claimed here, its own
+       step-back handler never ran, and the hash navigation that followed closed the
+       dialog. Explicit back controls (data-back / .kt-back, above) still count. */
+    if (el.closest && el.closest('#modalRoot, [role="dialog"], .kt-modal, .modal')) return false;
+
     /* A link with a real destination already says where it goes; honouring the href is
        always at least as correct as guessing history. */
     if (el.tagName === 'A') {
