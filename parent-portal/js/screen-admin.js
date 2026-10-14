@@ -6072,11 +6072,12 @@
             tpBox.style.display = 'block';
             tpBox.innerHTML = '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid ' + (linked ? '#86EFAC' : '#FCD34D') + ';background:' + (linked ? '#F0FDF4' : '#FFFBEB') + ';border-radius:10px;padding:9px 12px;font-size:13px;">'
               + '<span style="font-size:18px;">' + (linked ? '✅' : '🧾') + '</span>'
-              + '<div style="flex:1;min-width:180px;"><b></b><div style="color:#64748B;font-size:12px;"></div></div>'
+              + '<div style="flex:1;min-width:180px;"><b class="kt-tp-h"></b><div class="kt-tp-sub" style="color:#64748B;font-size:12px;"></div></div>'
               + (linked ? '' : '<button type="button" style="height:30px;padding:0 12px;border:0;border-radius:8px;background:#D97706;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;">Link to this family</button>')
               + '</div>';
-            tpBox.querySelector('b').textContent = linked ? ('Will link ' + match.name + '\u2019s forms account') : ('Forms-only account found: ' + match.name);
-            tpBox.querySelector('div > div').textContent = match.email + ' \u00b7 ' + match.forms_signed + '/' + match.forms_assigned + ' forms signed' + (linked ? ' \u00b7 their forms join this family' : '');
+            tpBox.querySelector('.kt-tp-h').textContent = linked ? ('Will link ' + match.name + '\u2019s forms account') : ('Forms-only account found: ' + match.name);
+            // A named element: 'div > div' also matched the box's own wrapper and wiped the button.
+            tpBox.querySelector('.kt-tp-sub').textContent = match.email + ' \u00b7 ' + match.forms_signed + '/' + match.forms_assigned + ' forms signed' + (linked ? ' \u00b7 their forms join this family' : '');
             var btn = tpBox.querySelector('button');
             /* CONFIRM WHO THIS IS, then pull everything the account already holds (2026-10-13,
                Anthony: "when adding a family and the temp user is already there suggest to
