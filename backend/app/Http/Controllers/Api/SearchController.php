@@ -37,6 +37,25 @@ final class SearchController extends Controller
             return response()->json(['message' => 'No agency context'], 403);
         }
 
+        /* A REFERENCE ID ("ILH-C-0042", "ilh c 42") opens its record (refA, 2026-10-14). The
+           same scoped lookup as GET /refs/lookup, so a code from another agency, or a child
+           outside an educator's rooms, finds nothing. */
+        if (\App\Support\RefCode::lookup($q, (int) $agencyId)) {
+            $sub = $request->duplicate(['code' => $q]);
+            $sub->headers->replace($request->headers->all());
+            $sub->setUserResolver($request->getUserResolver());
+            $res = app(\App\Http\Controllers\Api\RefController::class)->lookup($sub);
+            $hit = $res->getStatusCode() === 200 ? $res->getData(true) : null;
+            if ($hit && ! empty($hit['found'])) {
+                $groups = $this->emptyGroups();
+                $grp = ['C' => 'children', 'F' => 'families', 'S' => 'staff', 'P' => 'staff'][$hit['type']] ?? 'children';
+                $kind = ['C' => 'Child ID', 'F' => 'Family ID', 'S' => 'Staff ID', 'P' => 'Parent ID'][$hit['type']] ?? 'ID';
+                $groups[$grp] = [['id' => $hit['id'], 'label' => $hit['code'] . ' · ' . $hit['name'], 'sublabel' => $kind, 'hash' => $hit['link']]];
+
+                return response()->json(['q' => $q, 'results' => $groups, 'ref' => $hit]);
+            }
+        }
+
         $term = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\%', '\_'], $q).'%';
         $centreIds = DB::table('centres')
             ->where('agency_id', $agencyId)

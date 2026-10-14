@@ -293,6 +293,14 @@ class EducatorSelfController extends Controller
         $all = $checks->concat($careLogs)->concat($eventLogs)->sortByDesc('at')->values();
         $history = $all->filter(fn ($h) => $h->at >= $cutoff)->values();
 
+        // Visible reference IDs (App\Support\RefCode, 2026-10-14) — refA.
+        $row->ref_code = \App\Support\RefCode::ensureChild((int) $child);
+        $row->family_ref_code = $row->family_id ? \App\Support\RefCode::ensureFamily((int) $row->family_id) : null;
+        $refAgency = (int) DB::table('children')->where('id', $child)->value('ref_agency_id');
+        if ($refAgency) {
+            $guardians = $guardians->map(function ($g) use ($refAgency) { $g->ref_code = \App\Support\RefCode::ensureUser((int) $g->id, $refAgency, 'P'); return $g; });
+        }
+
         return response()->json([
             'child' => $row,
             'guardians' => $guardians,

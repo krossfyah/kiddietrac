@@ -560,6 +560,12 @@
       _idText.appendChild(Dom.el('div', {
         style: 'color:#6B7280;font-size:14px;',
       }, (child.age && child.age.human ? child.age.human : '—') + '  ·  born ' + fmtDate(child.date_of_birth)));
+      /* refA-2026-10-14: reference IDs (KT.refPill, kt-refid.js) */
+      if (child.ref_code && window.KT && KT.refPill) {
+        var _refRow = Dom.el('div', { style: 'margin-top:5px;' });
+        _refRow.appendChild(KT.refPill(child.ref_code, { label: 'Child ID' }));
+        _idText.appendChild(_refRow);
+      }
       /* Usual drop-off / pick-up belongs in the glance, not three tabs down: it is
          what the room plans the day around.
 
@@ -705,6 +711,7 @@
           + '<button class="noprint" onclick="window.print()" style="padding:9px 16px;background:#1F6080;color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px">Print / Save as PDF</button></div>'
           + '<h2>Child</h2><table>'
           + '<tr><td class="l">Full name</td><td>' + _e(child.full_name) + '</td></tr>'
+          + ((child.ref_code || child.reference_id) ? '<tr><td class="l">Reference ID</td><td>' + _e(child.ref_code || child.reference_id) + '</td></tr>' : '')
           + '<tr><td class="l">Preferred name</td><td>' + _e(child.preferred_name || '—') + '</td></tr>'
           + '<tr><td class="l">Date of birth</td><td>' + _e(fmtDate(child.date_of_birth)) + '</td></tr>'
           + '<tr><td class="l">Age</td><td>' + _e(child.age && child.age.human ? child.age.human : '—') + '</td></tr>'
@@ -927,6 +934,14 @@
           grid.appendChild(tr);
         };
         addRow('Family', f.family_name);
+        if (f.ref_code && window.KT && KT.refPill) {
+          var _ftr = Dom.el('tr', {});
+          _ftr.appendChild(Dom.el('td', { style: 'padding:5px 14px 5px 0;color:#64748B;white-space:nowrap;vertical-align:top;width:150px;' }, 'Family ID'));
+          var _ftd = Dom.el('td', { style: 'padding:5px 0;' });
+          _ftd.appendChild(KT.refPill(f.ref_code));
+          _ftr.appendChild(_ftd);
+          grid.appendChild(_ftr);
+        }
         addRow('Address', addr);
         addRow('Phone', f.primary_phone);
         addRow('Email', f.primary_email);
@@ -956,6 +971,7 @@
               Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, name + (bits.length ? ' · ' + bits.join(', ') : '') + (Number(g.billing_hidden) ? ' · 🚸 pick-up login' : '')),
               g.email ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, g.email) : Dom.el('span', {}),
               gPhones ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, '📞 ' + gPhones) : Dom.el('span', {}),
+              (g.ref_code && window.KT && KT.refPill) ? Dom.el('div', { style: 'margin-top:3px;' }, [KT.refPill(g.ref_code)]) : Dom.el('span', {}),
             ]));
             gr.appendChild(_loginCell(g.account_status === 'invited' || g.account_status === 'not_invited'
               ? [_loginBtn('✉ Send login invite', 'primary', function (b) {

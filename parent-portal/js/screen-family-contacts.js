@@ -173,6 +173,8 @@
     fams.forEach(function (fam) {
       var card = D.el('div', { style: 'background:var(--kt-surface,#fff);border:1px solid var(--kt-border,#E5E7EB);border-radius:14px;padding:14px 16px 6px;margin-bottom:14px;' });
       if (fams.length > 1) card.appendChild(D.el('div', { style: 'font-weight:800;font-size:15px;margin-bottom:2px;' }, (fam.family_name || 'Family') + ' family'));
+      /* refA-2026-10-14: the family's reference ID */
+      if (fam.ref_code && KT.refPill) card.appendChild(D.el('div', { style: 'margin:0 0 4px;' }, [KT.refPill(fam.ref_code, { label: 'Family ID' })]));
 
       card.appendChild(heading(D, 'Parents & guardians'));
       (fam.guardians || []).forEach(function (g) {

@@ -533,7 +533,10 @@
       + (photo ? '<img decoding="sync" src="' + esc(photo) + '" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,.5);">'
                : '<div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;">' + esc((d.first_name || '?')[0]) + '</div>')
       + '<div><div style="font-size:22px;font-weight:800;">' + esc(d.full_name || d.display_name) + '</div>'
-      + '<div style="opacity:.9;font-size:13px;">' + esc((d.age && d.age.human) || '') + (d.room && d.room.name ? ' · ' + esc(d.room.name) : '') + '</div></div>'
+      + '<div style="opacity:.9;font-size:13px;">' + esc((d.age && d.age.human) || '') + (d.room && d.room.name ? ' · ' + esc(d.room.name) : '') + '</div>'
+      /* refA-2026-10-14: the child's reference ID */
+      + ((d.ref_code && KT.refPillHtml) ? '<div style="margin-top:6px;">' + KT.refPillHtml(d.ref_code, { label: 'Child ID' }) + '</div>' : '')
+      + '</div>'
       + '<button type="button" id="kt-cr-close" aria-label="Close" style="position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);color:#fff;border:0;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">&times;</button>'
       + '<span style="position:absolute;bottom:12px;right:18px;background:rgba(255,255,255,.16);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 9px;border-radius:20px;">VIEW ONLY</span></div>'
       + section('Child', row('Full name', d.full_name) + row('Date of birth', d.date_of_birth) + row('Age', d.age && d.age.human) + row('Gender', gender) + row('Status', d.is_at_centre ? 'At the centre' : 'At home'))
@@ -543,7 +546,7 @@
       + section('Health & dietary', healthHtml)
       /* Filled in after the card paints — a slow fetch must not hold up the profile. */
       + section('Medications', '<div id="kt-pmeds"><div style="color:#64748B;font-size:13px;padding:6px 0;">Loading…</div></div>')
-      + section('Family', row('Household', fam.family_name) + row('Address', addr) + row('Phone', fam.primary_phone) + row('Email', fam.primary_email))
+      + section('Family', ((fam.ref_code && KT.refPillHtml) ? '<div style="display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #F1F5F9;align-items:center;"><span style="color:#64748B;font-size:13px;">Family ID</span>' + KT.refPillHtml(fam.ref_code) + '</div>' : '') + row('Household', fam.family_name) + row('Address', addr) + row('Phone', fam.primary_phone) + row('Email', fam.primary_email))
       + '<div style="padding:14px 24px 22px;color:#64748B;font-size:12px;">Need a change? Contact your childcare centre — these records are maintained by the agency.</div>';
 
     var cl = card.querySelector('#kt-cr-close');

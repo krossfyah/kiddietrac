@@ -227,6 +227,21 @@ final class RefCode
         return $out;
     }
 
+    /** @param int[] $userIds @return array<int, array{S?:string,P?:string}> every code each person has at the agency */
+    public static function userCodesMany(array $userIds, int $agencyId): array
+    {
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+        if (! $userIds || ! $agencyId) return [];
+        $out = [];
+        foreach (array_chunk($userIds, 1000) as $chunk) {
+            foreach (DB::table('user_refs')->where('agency_id', $agencyId)->whereIn('user_id', $chunk)->get(['user_id', 'type', 'ref_no']) as $r) {
+                $out[(int) $r->user_id][$r->type] = self::format($agencyId, $r->type, (int) $r->ref_no);
+            }
+        }
+
+        return $out;
+    }
+
     // ── Lookup ─────────────────────────────────────────────────────────────
 
     /**

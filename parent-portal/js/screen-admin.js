@@ -1599,7 +1599,10 @@
         }));
       }
       nameWrap.appendChild(avatarWrap);
-      nameWrap.appendChild(Dom.el('span', {}, u.name));
+      /* refA-2026-10-14: reference IDs (KT.refPill, kt-refid.js) */
+      var _unCol = Dom.el('span', { style: 'display:inline-flex;flex-direction:column;gap:3px;' }, [Dom.el('span', {}, u.name)]);
+      if (u.ref_code && KT.refPill) _unCol.appendChild(KT.refPill(u.ref_code));
+      nameWrap.appendChild(_unCol);
       nameCell.appendChild(nameWrap);
       row.appendChild(nameCell);
       // Username column (mono, muted em-dash when none)
@@ -2571,6 +2574,18 @@
       var paneMode = _isSelf ? 'self' : 'admin';
       KT.AccountPanes.payroll(payHost, subject, paneMode);
       KT.AccountPanes.security(secHost, subject, paneMode);
+    })();
+    // The person's reference ID(s) at this agency — staff and/or parent (refA-2026-10-14).
+    (function () {
+      var rc = user && user.ref_codes;
+      if (!rc || !KT.refPill) return;
+      var codes = [];
+      if (rc.S) codes.push(['Staff ID', rc.S]);
+      if (rc.P) codes.push(['Parent ID', rc.P]);
+      if (!codes.length) return;
+      var idRow = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:-4px 0 12px;' });
+      codes.forEach(function (c) { idRow.appendChild(KT.refPill(c[1], { label: c[0] })); });
+      root.appendChild(idRow);
     })();
     root.appendChild(tabBar);
     /* A STEADY WINDOW (2026-10-09: "make sure the popup window doesnt resize when
@@ -5005,6 +5020,7 @@
       var famText = Dom.el('div', { style: 'min-width:0;' });
       famText.appendChild(Dom.el('div', { style: 'font-size: 17px; font-weight: 700; margin-bottom: 2px;' }, f.family_name));
       famText.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, f.centre_name || '—'));
+      if (f.ref_code && KT.refPill) famText.appendChild(Dom.el('div', { style: 'margin-top:4px;' }, [KT.refPill(f.ref_code)]));
       famHead.appendChild(famText);
       card.appendChild(famHead);
 
@@ -5796,7 +5812,9 @@
       var famCell = Dom.el('td', { style: 'padding:11px 14px;font-weight:600;' });
       var famWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
       famWrap.appendChild(avatarCircle({ id: f.id, name: f.family_name }, 32));
-      famWrap.appendChild(Dom.el('span', { style: 'color:#1F6080;' }, f.family_name));
+      var _fnCol = Dom.el('span', { style: 'display:inline-flex;flex-direction:column;gap:3px;' }, [Dom.el('span', { style: 'color:#1F6080;' }, f.family_name)]);
+      if (f.ref_code && KT.refPill) _fnCol.appendChild(KT.refPill(f.ref_code));
+      famWrap.appendChild(_fnCol);
       if (f.suspended) famWrap.appendChild(Dom.el('span', { style: 'background:#FEF3C7;color:#92400E;font-weight:700;font-size:10px;padding:2px 7px;border-radius:20px;' }, '⏸ Suspended'));
       famCell.appendChild(famWrap);
       tr.appendChild(famCell);
@@ -8027,6 +8045,15 @@
       var _canEdit = !data.is_archived && famEditFor === familyId;
 
       var _f = data.family || {};
+      if (data.ref_code && KT.refPill) {
+        var _fidRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin:-2px 0 12px;' });
+        _fidRow.appendChild(KT.refPill(data.ref_code, { label: 'Family ID' }));
+        (data.children || []).forEach(function (c) {
+          if (c.ref_code) _fidRow.appendChild(KT.refPill(c.ref_code, { label: ((c.preferred_name || c.first_name || '') + '').trim() || 'Child' }));
+        });
+        _fidRow.style.flexWrap = 'wrap';
+        body.appendChild(_fidRow);
+      }
       if (data.is_archived) {
         body.appendChild(Dom.el('div', {
           style: 'background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:#9A3412;line-height:1.55;',
@@ -8348,6 +8375,38 @@
   // ════════════════════════════════════════════════════════════════
   //   BRANDING TAB
   // ════════════════════════════════════════════════════════════════
+  /* REFERENCE ID PREFIX (2026-10-14). Every child, family, staff member and parent has an
+     ID like ILH-C-0042 (App\\Support\\RefCode). The agency chooses the letters in front. */
+  function buildRefPrefixCard() {
+    var card = Dom.el('div', { style: 'background:#fff;padding:18px 20px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:18px;' });
+    card.appendChild(Dom.el('h3', { style: 'margin:0 0 4px;font-size:16px;' }, 'Reference ID prefix'));
+    card.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:10px;' },
+      'Every child, family, staff member and parent has an ID made of these letters, a type (C child, F family, S staff, P parent) and a number. It appears on records, documents and exports, and typing it into the search bar opens the record.'));
+    var row = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;' });
+    var inp = Dom.el('input', { type: 'text', maxlength: '6', style: 'width:110px;height:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font:700 14px ui-monospace,Menlo,Consolas,monospace;text-transform:uppercase;' });
+    var save = Dom.el('button', { type: 'button', style: 'height:32px;padding:0 14px;border-radius:8px;border:0;background:#1F6080;color:#fff;font-weight:700;font-size:13px;cursor:pointer;' }, 'Save prefix');
+    var ex = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;' });
+    var msg = Dom.el('div', { style: 'font-size:12.5px;margin-top:6px;min-height:16px;' });
+    row.appendChild(inp); row.appendChild(save);
+    card.appendChild(row); card.appendChild(ex); card.appendChild(msg);
+    card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:4px;' }, 'Changing it updates every ID at once. IDs already printed with the old letters still find their records.'));
+    function paint(d) {
+      inp.value = d.prefix || '';
+      Dom.clear(ex);
+      var e = d.examples || {};
+      [['Child', e.child], ['Family', e.family], ['Staff', e.staff], ['Parent', e.parent]].forEach(function (x) { if (x[1] && KT.refPill) ex.appendChild(KT.refPill(x[1], { label: x[0] })); });
+    }
+    Api.get('/admin/ref-prefix').then(paint).catch(function () { card.style.display = 'none'; });
+    save.addEventListener('click', function () {
+      var v = String(inp.value || '').trim().toUpperCase();
+      save.disabled = true; msg.style.color = '#475569'; msg.textContent = 'Saving…';
+      Api.put('/admin/ref-prefix', { prefix: v }).then(function (d) { paint(d); msg.style.color = '#166534'; msg.textContent = '✓ Saved'; })
+        .catch(function (err) { msg.style.color = '#B91C1C'; msg.textContent = (err && err.message) || 'Could not save'; })
+        .then(function () { save.disabled = false; });
+    });
+    return card;
+  }
+
   async function renderBrandingTab(content) {
     Dom.clear(content);
     content.appendChild(loading('Loading branding...'));
@@ -8363,6 +8422,7 @@
 
     Dom.clear(content);
     const b = data.branding;
+    try { content.appendChild(buildRefPrefixCard()); } catch (e) {}
 
     const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: 1fr 380px; gap: 24px;' });
 
@@ -8706,6 +8766,7 @@
   // Exposed so the Agency overview and Branding & settings can render the SAME
   // card instead of each keeping a copy that drifts.
   KT.renderCountryCard = function (container) { return renderCountryCard(container); };
+  KT.buildRefPrefixCard = function () { return buildRefPrefixCard(); };   // refA-2026-10-14
 
   async function renderCountryCard(content) {
     var card = Dom.el('div', { style: 'background:white;padding:24px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:24px;' });
@@ -9306,12 +9367,21 @@
   ['centres', 'users', 'families', 'branding', 'billing'].forEach(function (tab) {
     Shell.registerScreen('agency_admin:admin-' + tab, function (main, ctx) {
       state.activeTab = tab;
-      return renderAdmin(main, ctx);
+      return openUserFromHash(renderAdmin(main, ctx));
     });
   });
   // Centre directors: Users only — their own centre's people (2026-10-07).
   Shell.registerScreen('centre_director:admin-users', function (main, ctx) {
     state.activeTab = 'users';
-    return renderAdmin(main, ctx);
+    return openUserFromHash(renderAdmin(main, ctx));
   });
+  /* #admin-users?user=N opens that person's record — where a reference-ID search lands
+     (refA-2026-10-14). */
+  function openUserFromHash(p) {
+    Promise.resolve(p).then(function () {
+      var m = String(location.hash || '').match(/[?&]user=(\d+)/);
+      if (m && KT.openUserRecord) setTimeout(function () { KT.openUserRecord(Number(m[1])); }, 250);
+    }).catch(function () {});
+    return p;
+  }
 })(window);

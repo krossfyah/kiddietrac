@@ -193,9 +193,12 @@ final class ChildController extends Controller
             ->pluck('ci.child_id')
             ->all();
 
+        // Visible reference IDs (App\Support\RefCode, 2026-10-14) — refA.
+        $refCodes = \App\Support\RefCode::children($children->pluck('id')->all());
+
         return response()->json([
             'children' => $children
-                ->map(fn ($c) => $this->formatChildListItem($c, in_array($c->id, $presentChildIds, true)))
+                ->map(fn ($c) => $this->formatChildListItem($c, in_array($c->id, $presentChildIds, true)) + ['ref_code' => $refCodes[(int) $c->id] ?? null])
                 ->all(),
         ]);
     }
@@ -286,7 +289,23 @@ final class ChildController extends Controller
                      'enrollments.monthly_fee', 'enrollments.schedule', 'rooms.name as room_name')
             ->get();
 
+        // Visible reference IDs (App\Support\RefCode, 2026-10-14) — refA. Ensured here so a
+        // record created a moment ago already shows its ID.
+        $refCode = \App\Support\RefCode::ensureChild((int) $child->id);
+        $refAgency = (int) DB::table('children')->where('id', $child->id)->value('ref_agency_id');
+        if ($family) {
+            $family->ref_code = \App\Support\RefCode::ensureFamily((int) $family->id);
+        }
+        if ($refAgency) {
+            $guardians = $guardians->map(function ($g) use ($refAgency) {
+                $g->ref_code = \App\Support\RefCode::ensureUser((int) $g->id, $refAgency, 'P');
+                $g->ref_codes = \App\Support\RefCode::userCodes((int) $g->id, $refAgency);
+                return $g;
+            });
+        }
+
         return response()->json([
+            'ref_code' => $refCode,
             'centre' => $centre,
             'agency' => $agency,
             'enrollment_history' => $enrollmentHistory,

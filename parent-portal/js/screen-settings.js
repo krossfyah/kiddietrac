@@ -794,6 +794,32 @@
     pc.appendChild(pStatus); pc.appendChild(pSave);
     paneProfile.appendChild(pc);
 
+    // ── YOUR KIDDIETRAC ID(S) (refA-2026-10-14) ──
+    (function () {
+      if (!(window.KT && KT.refPill)) return;
+      var ic = el('div', { style: CARD });
+      ic.appendChild(el('div', { style: SECT }, ['Your KiddieTrac ID']));
+      var box = el('div', { style: 'display:flex;flex-direction:column;gap:7px;font-size:13px;color:#475569;' });
+      ic.appendChild(box);
+      ic.style.display = 'none';
+      paneProfile.appendChild(ic);
+      Api.get('/refs/mine').then(function (d) {
+        var rows = [];
+        if (d.me && d.me.S) rows.push(['You (staff)', d.me.S]);
+        if (d.me && d.me.P) rows.push(['You (parent)', d.me.P]);
+        (d.families || []).forEach(function (f) { if (f.code) rows.push([(f.name || 'Your') + ' family', f.code]); });
+        (d.children || []).forEach(function (c) { if (c.code) rows.push([c.name || 'Child', c.code]); });
+        if (!rows.length) return;
+        rows.forEach(function (r) {
+          var line = el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:10px;' }, [el('span', {}, [r[0]])]);
+          line.appendChild(KT.refPill(r[1]));
+          box.appendChild(line);
+        });
+        box.appendChild(el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:2px;' }, ['Quote these when you contact the centre.']));
+        ic.style.display = '';
+      }).catch(function () {});
+    })();
+
     // ── PROVIDER BIO (home-daycare providers only) ──
     // Onboarding makes this mandatory, but only fires once — already-onboarded
     // providers edit it here. Saves to their centre (centres.provider_bio),

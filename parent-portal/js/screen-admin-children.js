@@ -217,6 +217,8 @@
         nameSide.appendChild(Dom.el('span', { html: KT.avatar(childName, { size: 38, photoUrl: c.photo_url }) }));
         var nameWrap = Dom.el('div', { style: 'min-width:0;' });
         nameWrap.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:15px;' }, childName));
+        /* refA-2026-10-14: reference IDs (KT.refPill, kt-refid.js) */
+        if (c.ref_code && KT.refPill) nameWrap.appendChild(Dom.el('div', { style: 'margin-top:3px;' }, [KT.refPill(c.ref_code)]));
         nameWrap.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:1px;' },
           (c.age && c.age.human ? c.age.human : '') +
           (c.room_name ? ' · ' + roomCellText(c) : '')));
@@ -333,7 +335,10 @@
       // v22p83: child avatar (photo or initials)
       var rowChildName = c.full_name || (c.first_name + ' ' + c.last_name);
       nameWrap.appendChild(Dom.el('span', { html: KT.avatar(rowChildName, { size: 30, photoUrl: c.photo_url }) }));
-      nameWrap.appendChild(Dom.el('span', { style: 'font-weight:600;' }, rowChildName));
+      // Name, with the reference ID under it.
+      var _nmCol = Dom.el('span', { style: 'display:inline-flex;flex-direction:column;gap:3px;' }, [Dom.el('span', { style: 'font-weight:600;' }, rowChildName)]);
+      if (c.ref_code && KT.refPill) _nmCol.appendChild(KT.refPill(c.ref_code));
+      nameWrap.appendChild(_nmCol);
       nameCell.appendChild(nameWrap);
       tr.appendChild(nameCell);
 

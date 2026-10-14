@@ -189,6 +189,17 @@
       }
     } catch (e) {}
 
+    /* REFERENCE ID PREFIX (refA-2026-10-14): the letters in front of every child, family,
+       staff and parent ID (ILH-C-0042). The card lives in screen-admin.js. */
+    try {
+      if (window.KT && KT.buildRefPrefixCard) {
+        const grid2 = container.querySelector('#kt-brand-grid');
+        const refCard = KT.buildRefPrefixCard();
+        if (grid2 && grid2.parentNode) grid2.parentNode.insertBefore(refCard, grid2);
+        else container.appendChild(refCard);
+      }
+    } catch (e) {}
+
     refreshPreview(container, agencyId);
 
     /* The blurb follows the choice, so somebody can read what each style is before

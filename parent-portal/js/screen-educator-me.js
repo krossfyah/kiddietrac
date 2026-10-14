@@ -329,7 +329,10 @@
       + '<div><div style="font-weight:800;font-size:17px;color:#0F172A;">' + esc(name) + '</div>'
       + '<div style="font-size:12.5px;color:#64748B;">'
       + esc([c.age_human, genderLabel(c.gender), c.room_name, c.pronouns].filter(Boolean).join(' · ') || '—')
-      + '</div></div>'
+      + '</div>'
+      /* refA-2026-10-14: reference IDs (KT.refPill, kt-refid.js) */
+      + ((c.ref_code && KT.refPillHtml) ? '<div style="margin-top:5px;">' + KT.refPillHtml(c.ref_code, { label: 'Child ID' }) + '</div>' : '')
+      + '</div>'
       /* EMERGENCY CARD (2026-10-09, Anthony: "educators should be able to see the emergency
          card for their children"). The same printable card directors open, for a child
          in this educator's own rooms; every view is audited. */

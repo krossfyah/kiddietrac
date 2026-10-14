@@ -86,6 +86,7 @@ final class PickupLoginController extends Controller
                 })->values();
             $out[] = [
                 'family_id' => $fid, 'family_name' => $l->family_name,
+                'ref_code' => \App\Support\RefCode::ensureFamily($fid),   // refA, 2026-10-14
                 // Someone who is only a pick-up login cannot hand out logins in turn.
                 'can_request' => ! (int) $l->billing_hidden,
                 'guardians' => $guardians, 'contacts' => $contacts,
