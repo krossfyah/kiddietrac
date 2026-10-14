@@ -33,25 +33,27 @@ final class KioskTemperatureController extends Controller
         $fam = DB::table('families')->where('id', $child->family_id)->first();
         abort_unless($fam && $fam->centre_id === (int) $centre->id, 403, 'Child not at this centre');
 
-        // Update or insert a check_event row
-        if (!empty($data['check_event_id'])) {
-            DB::table('check_events')->where('id', $data['check_event_id'])->update([
-                'temperature_c' => $data['temperature_c'],
-                'temperature_method' => $data['method'],
-            ]);
-            $id = $data['check_event_id'];
-        } else {
-            // Create a temperature-only check_event with type 'screening'
-            $id = DB::table('check_events')->insertGetId([
-                'child_id' => $data['child_id'],
-                'event_type' => 'temperature_screening',
-                'occurred_at' => now(),
-                'temperature_c' => $data['temperature_c'],
-                'temperature_method' => $data['method'],
-                'kiosk_source' => 1,
-                'created_at' => now(),
-            ]);
+        /* A TEMPERATURE GOES ON THE CHILD'S OWN SIGN-IN TODAY (2026-10-14, support ticket #144).
+           This used to update ANY check_events row by the id it was given — any child, any
+           agency, for anyone holding a kiosk token — and, with no id, to insert a
+           'temperature_screening' event that could never save (room_id, by_user_id and
+           recorded_by_id are required) and that the roster would have read as the child's
+           latest event. Now: the given event must be this child's, or the reading goes on
+           the child's latest sign-in today; with no sign-in yet, the kiosk is told to sign the
+           child in first. */
+        [$today] = \App\Support\AgencyTime::dayRange((int) $centre->agency_id, \App\Support\AgencyTime::today((int) $centre->agency_id));
+        $ev = DB::table('check_events')->where('child_id', $child->id)->where('event_type', 'check_in')
+            ->when(! empty($data['check_event_id']), fn ($q) => $q->where('id', (int) $data['check_event_id']),
+                   fn ($q) => $q->where('occurred_at', '>=', $today)->orderByDesc('occurred_at'))
+            ->first(['id']);
+        if (! $ev) {
+            return response()->json(['message' => 'Sign the child in first, then record their temperature.'], 422);
         }
+        DB::table('check_events')->where('id', $ev->id)->update([
+            'temperature_c' => $data['temperature_c'],
+            'temperature_method' => $data['method'],
+        ]);
+        $id = $ev->id;
 
         // If temperature is elevated (≥38°C), notify staff
         if ((float) $data['temperature_c'] >= 38) {

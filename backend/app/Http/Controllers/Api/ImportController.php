@@ -247,12 +247,28 @@ final class ImportController extends Controller
             'last_name' => $row['last_name'] ?? '',
             'date_of_birth' => $this->normDate($row['date_of_birth']),
             'enrollment_status' => $row['enrollment_status'] ?? 'waitlist',
-            'allergies' => $row['allergies'] ?? null,
-            'dietary_restrictions' => $row['dietary_restrictions'] ?? null,
+            // JSON lists (the columns carry a json_valid CHECK): "Peanuts, Eggs" → ["Peanuts","Eggs"].
+            // A CSV's plain text failed the whole row (support ticket #143, 2026-10-14).
+            'allergies' => $this->jsonList($row['allergies'] ?? null),
+            'dietary_restrictions' => $this->jsonList($row['dietary_restrictions'] ?? null),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
         return 'inserted';
+    }
+
+    /** A cell as a JSON list: JSON kept as it is, text split on , ; or |, empty → null. */
+    private function jsonList($v): ?string
+    {
+        if ($v === null) return null;
+        if (is_array($v)) return $v ? json_encode(array_values($v)) : null;
+        $v = trim((string) $v);
+        if ($v === '' || strtolower($v) === 'none' || strtolower($v) === 'n/a') return null;
+        $d = json_decode($v, true);
+        if (is_array($d)) return json_encode(array_values($d));
+        $parts = array_values(array_filter(array_map('trim', preg_split('/[,;|]/', $v) ?: [])));
+
+        return $parts ? json_encode($parts) : null;
     }
 
     private function insertFamily(array $row, int $agencyId): string
