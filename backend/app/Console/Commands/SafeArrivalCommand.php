@@ -66,7 +66,7 @@ class SafeArrivalCommand extends Command
                     $this->line(($dry ? '[dry] ' : '') . "closed {$row['name']}: {$row['state']}");
                     continue;
                 }
-                if (! in_array($row['state'], ['overdue', 'escalated'], true)) {
+                if (! in_array($row['state'], ['overdue', 'escalated', 'on_the_way'], true)) {
                     continue;
                 }
 
@@ -86,9 +86,22 @@ class SafeArrivalCommand extends Command
                     continue;
                 }
 
-                // 2. No answer: alert the room and the centre, once.
-                if (! $c->escalated_at && $c->parents_notified_at
-                    && $now->greaterThanOrEqualTo(Carbon::parse($c->parents_notified_at)->addMinutes($cfg['escalate_after_minutes']))) {
+                // 1b. Still no answer: phone them (SafeArrivalCall), if the agency turned it on.
+                if ($cfg['call_parents'] && ! $quietParents && ! $c->call_started_at && ! ($c->parent_response ?? null)
+                    && $c->parents_notified_at
+                    && $now->greaterThanOrEqualTo(Carbon::parse($c->parents_notified_at)->addMinutes($cfg['call_after_minutes']))) {
+                    $rang = $dry ? false : \App\Support\SafeArrivalCall::callNext($c);
+                    $this->line(($dry ? '[dry] would call' : ($rang ? 'calling' : 'could not call')) . " parents of {$row['name']}");
+                }
+
+                // 2. No answer: alert the room and the centre, once. A parent who answered
+                //    "on the way" moves the clock to their answer; if the child still has
+                //    not arrived that long after, the staff are alerted after all.
+                $onWay = ($c->parent_response ?? null) === 'on_the_way';
+                $from = $onWay ? $c->parent_response_at : $c->parents_notified_at;
+                $alerted = $onWay ? ($c->escalated_at && Carbon::parse($c->escalated_at)->gte(Carbon::parse($c->parent_response_at))) : (bool) $c->escalated_at;
+                if (! $alerted && $from
+                    && $now->greaterThanOrEqualTo(Carbon::parse($from)->addMinutes($cfg['escalate_after_minutes']))) {
                     [$n, $unreached] = $this->alertStaff($agencyId, $row, $tz, $dry, (int) $c->parents_notified);
                     if (! $dry) {
                         $upd = ['status' => 'escalated', 'escalated_at' => now(), 'staff_alerted' => $n, 'updated_at' => now()];
@@ -170,10 +183,12 @@ class SafeArrivalCommand extends Command
 
         $at = Carbon::parse($row['expected'], $tz)->format('g:i A');
         $title = "⚠️ Safe Arrival: {$row['name']} not here";
+        $onWay = (($row['check']->parent_response ?? null) === 'on_the_way');
         $body = "{$row['name']} ({$row['room_name']}) was expected around {$at}, hasn't been signed in, "
             . "and no absence has been reported. "
-            . ($parentsAsked > 0 ? "The parents were asked and haven't answered. Please call them."
-                                  : "No message could be sent to the parents. Please call them.");
+            . ($onWay ? "A parent said on the Safe Arrival call that they were on the way, and the child still isn't here. Please call them."
+               : ($parentsAsked > 0 ? "The parents were asked and haven't answered. Please call them."
+                                    : "No message could be sent to the parents. Please call them."));
         if ($dry) {
             return [count($ids), []];
         }

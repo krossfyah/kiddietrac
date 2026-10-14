@@ -310,6 +310,32 @@ final class Telnyx
         return self::call($cfg['api_key'], 'POST', '/calls/' . rawurlencode($callControlId) . '/actions/speak', $payload);
     }
 
+    /**
+     * Speak a question and collect one key press (Safe Arrival, 2026-10-13). The answer
+     * arrives as a call.gather.ended webhook carrying `digits`.
+     */
+    public static function gather(array $cfg, string $callControlId, string $text, string $clientState, string $validDigits = '123'): array
+    {
+        $voice = ($cfg['voice'] ?? '') !== '' ? $cfg['voice'] : 'female';
+        $basic = in_array(strtolower($voice), ['female', 'male'], true);
+        $payload = [
+            'payload' => mb_substr($text, 0, 3000),
+            'payload_type' => 'text',
+            'voice' => $basic ? strtolower($voice) : $voice,
+            'service_level' => $basic ? 'basic' : 'premium',
+            'language' => $cfg['language'],
+            'valid_digits' => $validDigits,
+            'minimum_digits' => 1,
+            'maximum_digits' => 1,
+            'maximum_tries' => 2,
+            'timeout_millis' => 10000,
+            'invalid_payload' => 'Sorry, please press ' . implode(', ', str_split($validDigits)) . '.',
+            'client_state' => base64_encode($clientState),
+        ];
+
+        return self::call($cfg['api_key'], 'POST', '/calls/' . rawurlencode($callControlId) . '/actions/gather_using_speak', $payload);
+    }
+
     public static function hangup(array $cfg, string $callControlId): array
     {
         return self::call($cfg['api_key'], 'POST', '/calls/' . rawurlencode($callControlId) . '/actions/hangup', []);

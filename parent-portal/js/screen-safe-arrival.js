@@ -34,6 +34,8 @@
     resolved:  ['#E0F2FE', '#075985', 'Accounted for'],
     absent:    ['#EDE9FE', '#5B21B6', 'Absent'],
     arrived:   ['#DCFCE7', '#166534', 'Arrived'],
+    on_the_way:  ['#E0F2FE', '#075985', 'On the way (parent)'],
+    dropped_off: ['#FEE2E2', '#991B1B', 'Parent says dropped off — NOT signed in'],
   };
   var REASONS = [['sick', 'Sick'], ['appointment', 'Appointment'], ['holiday', 'Holiday'], ['family', 'Family'], ['other', 'Other']];
   var centreFilter = '';
@@ -57,8 +59,9 @@
 
     var c = d.counts || {};
     var s = d.settings || {};
-    var urgent = d.rows.filter(function (r) { return r.state === 'escalated' || r.state === 'overdue'; });
-    var rest = d.rows.filter(function (r) { return r.state !== 'escalated' && r.state !== 'overdue'; });
+    var URGENT = { escalated: 1, overdue: 1, on_the_way: 1, dropped_off: 1 };
+    var urgent = d.rows.filter(function (r) { return URGENT[r.state]; });
+    var rest = d.rows.filter(function (r) { return !URGENT[r.state]; });
     var kpi = function (label, n, bg, fg) {
       return '<div style="flex:1;min-width:130px;background:' + bg + ';padding:12px 14px;border-radius:10px;"><div style="font-size:11px;font-weight:800;color:' + fg + ';letter-spacing:.04em;">' + label + '</div><div style="font-size:22px;font-weight:900;color:' + fg + ';">' + (n || 0) + '</div></div>';
     };
@@ -67,7 +70,7 @@
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">'
       + '<div><div style="font-size:13px;color:#64748B;max-width:760px;line-height:1.5;">'
       + (s.enabled
-        ? '<b style="color:#166534;">On.</b> Parents are asked ' + s.grace_minutes + ' min after a child\'s expected drop-off time if the child isn\'t signed in and no absence is reported. If they don\'t answer within ' + s.escalate_after_minutes + ' min, the room\'s educators and the director are alerted. Children without an expected time use ' + esc(s.default_time) + '.'
+        ? '<b style="color:#166534;">On.</b> Parents are asked ' + s.grace_minutes + ' min after a child\'s expected drop-off time if the child isn\'t signed in and no absence is reported.' + (s.call_parents ? ' No answer after ' + s.call_after_minutes + ' min: they get a phone call (1 absent · 2 on the way · 3 dropped off).' : '') + ' If they don\'t answer within ' + s.escalate_after_minutes + ' min, the room\'s educators and the director are alerted. Children without an expected time use ' + esc(s.default_time) + '.'
         : '<b style="color:#B91C1C;">Off.</b> Nobody is being checked automatically. This board still shows who hasn\'t arrived.')
       + '</div></div>'
       + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
@@ -86,13 +89,16 @@
       + '</div>'
       + '<h3 style="margin:8px 0 10px;font-size:15px;color:#0F172A;">Needs attention</h3>'
       + (urgent.length ? urgent.map(function (r) {
-          return '<div style="border:1px solid ' + (r.state === 'escalated' ? '#FCA5A5' : '#FCD34D') + ';background:' + (r.state === 'escalated' ? '#FFF7F7' : '#FFFDF5') + ';border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
+          var red = r.state === 'escalated' || r.state === 'dropped_off';
+          return '<div style="border:' + (r.state === 'dropped_off' ? '2px' : '1px') + ' solid ' + (red ? '#FCA5A5' : (r.state === 'on_the_way' ? '#BAE6FD' : '#FCD34D')) + ';background:' + (red ? '#FFF7F7' : (r.state === 'on_the_way' ? '#F5FBFF' : '#FFFDF5')) + ';border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
             + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">'
             + '<div><div style="font-weight:800;font-size:15px;color:#0F172A;">' + esc(r.name) + ' ' + chip(r.state) + '</div>'
             + '<div style="font-size:12.5px;color:#475569;margin-top:3px;">' + esc(r.room_name) + (d.centres && d.centres.length > 1 ? ' · ' + esc(r.centre_name) : '')
             + ' · expected ' + esc(r.expected) + (r.expected_is_default ? ' (default)' : '')
             + (r.parents_notified ? ' · parents asked ' + esc(r.parents_notified) : '')
+            + (r.called ? ' · called ' + esc(r.called) : '')
             + (r.escalated ? ' · staff alerted ' + esc(r.escalated) : '') + '</div>'
+            + (r.parent_response && r.note ? '<div style="font-size:12.5px;font-weight:700;margin-top:4px;color:' + (r.state === 'dropped_off' ? '#991B1B' : '#075985') + ';">📞 ' + esc(r.note) + (r.parent_response_at ? ' (' + esc(r.parent_response_at) + ')' : '') + (r.state === 'dropped_off' ? ' Find the child and sign them in now.' : '') + '</div>' : '')
             + (r.staff_unreached ? '<div style="font-size:12.5px;color:#991B1B;font-weight:700;margin-top:4px;">⚠️ No phone alert reached: ' + esc(r.staff_unreached) + ' (emailed instead)</div>' : '')
             + '</div>'
             + '<div style="display:flex;gap:6px;flex-wrap:wrap;">'
@@ -185,6 +191,11 @@
       + '<input type="number" data-grace min="0" max="180" style="' + FLD + '" value="' + esc(s.grace_minutes) + '">'
       + '<label style="' + LBL + '">Alert the room\'s educators and the director if parents haven\'t answered after (minutes)</label>'
       + '<input type="number" data-esc min="5" max="240" style="' + FLD + '" value="' + esc(s.escalate_after_minutes) + '">'
+      + '<label style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#0F172A;cursor:pointer;margin-top:14px;">'
+      + '<input type="checkbox" data-call ' + (s.call_parents ? 'checked' : '') + ' style="width:18px;height:18px;"> Phone the parents if they don\'t answer</label>'
+      + '<div style="font-size:12px;color:#64748B;margin:4px 0 0 28px;line-height:1.45;">An automated call names the child and asks the parent to press 1 (absent today), 2 (on the way) or 3 (already dropped off). The answer is recorded on the child, absences go on the calendar, and the room\'s educators, the director and admins are told. Guardians are called one at a time, primary first. Uses your voice number; parents who opted out of calls are not rung.</div>'
+      + '<label style="' + LBL + '">Call this many minutes after the parents were asked</label>'
+      + '<input type="number" data-callafter min="5" max="120" style="' + FLD + '" value="' + esc(s.call_after_minutes || 10) + '">'
       + '<label style="' + LBL + '">Expected time for a child without one</label>'
       + '<input type="time" data-def style="' + FLD + '" value="' + esc(s.default_time) + '">'
       + '<div style="font-size:12px;color:#64748B;margin-top:6px;line-height:1.45;">Set each child\'s own drop-off time on their record (Usual times) for the most accurate checks. Only days the child is scheduled and the centre is open are checked.</div>');
@@ -194,6 +205,8 @@
         grace_minutes: parseInt(m.querySelector('[data-grace]').value, 10) || 0,
         escalate_after_minutes: parseInt(m.querySelector('[data-esc]').value, 10) || 20,
         default_time: m.querySelector('[data-def]').value || '09:00',
+        call_parents: m.querySelector('[data-call]').checked,
+        call_after_minutes: parseInt(m.querySelector('[data-callafter]').value, 10) || 10,
       };
       this.disabled = true;
       try { await call('PUT', '/safe-arrival/settings', body); m.remove(); render(main); }

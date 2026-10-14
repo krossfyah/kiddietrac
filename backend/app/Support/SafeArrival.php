@@ -32,6 +32,10 @@ class SafeArrival
         'grace_minutes' => 15,          // after the expected time before parents are asked
         'default_time' => '09:00',      // for a child with no expected drop-off time
         'escalate_after_minutes' => 20, // after asking the parents, before staff are alerted
+        // Phone call (2026-10-13): when the text has gone unanswered, ring the parents and
+        // let them press 1 absent / 2 on the way / 3 already dropped off. SafeArrivalCall.
+        'call_parents' => false,
+        'call_after_minutes' => 10,     // after asking the parents, before calling them
     ];
 
     public static function settings(int $agencyId): array
@@ -43,6 +47,8 @@ class SafeArrival
         $out['enabled'] = (bool) $out['enabled'];
         $out['grace_minutes'] = max(0, min(180, (int) $out['grace_minutes']));
         $out['escalate_after_minutes'] = max(5, min(240, (int) $out['escalate_after_minutes']));
+        $out['call_parents'] = (bool) $out['call_parents'];
+        $out['call_after_minutes'] = max(5, min(120, (int) $out['call_after_minutes']));
         $out['default_time'] = preg_match('/^\d{2}:\d{2}$/', (string) $out['default_time']) ? $out['default_time'] : '09:00';
 
         return $out;
@@ -156,7 +162,7 @@ class SafeArrival
     }
 
     /**
-     * arrived | absent | resolved | escalated | overdue | waiting
+     * arrived | absent | resolved | dropped_off | on_the_way | escalated | overdue | waiting
      * (waiting = not due yet; overdue = due, parents asked or about to be.)
      */
     public static function state(array $row, Carbon $now): string
@@ -170,6 +176,14 @@ class SafeArrival
         $c = $row['check'];
         if ($c && $c->resolved_at) {
             return 'resolved';
+        }
+        // The parent answered the Safe Arrival call (SafeArrivalCall).
+        $resp = $c->parent_response ?? null;
+        if ($resp === 'dropped_off') {
+            return 'dropped_off';
+        }
+        if ($resp === 'on_the_way' && (! $c->escalated_at || Carbon::parse($c->escalated_at)->lt(Carbon::parse($c->parent_response_at)))) {
+            return 'on_the_way';
         }
         if ($c && $c->escalated_at) {
             return 'escalated';

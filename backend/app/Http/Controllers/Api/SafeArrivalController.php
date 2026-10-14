@@ -31,7 +31,7 @@ class SafeArrivalController extends Controller
         $rows = SafeArrival::today($agencyId, $centres, $rooms);
 
         $needGuardians = array_values(array_unique(array_map(fn ($r) => $r['family_id'],
-            array_filter($rows, fn ($r) => in_array($r['state'], ['overdue', 'escalated'], true)))));
+            array_filter($rows, fn ($r) => in_array($r['state'], ['overdue', 'escalated', 'on_the_way', 'dropped_off'], true)))));
         $guardians = [];
         if ($needGuardians) {
             foreach (DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
@@ -58,6 +58,9 @@ class SafeArrivalController extends Controller
                 'escalated' => $c ? $fmt($c->escalated_at) : null,
                 'staff_unreached' => $c ? ($c->staff_unreached ?? null) : null,
                 'resolution' => $c ? $c->resolution : null,
+                'parent_response' => $c ? ($c->parent_response ?? null) : null,
+                'parent_response_at' => $c ? $fmt($c->parent_response_at ?? null) : null,
+                'called' => $c ? $fmt($c->call_started_at ?? null) : null,
                 'note' => $c ? $c->note : null,
                 'resolved' => $c ? $fmt($c->resolved_at) : null,
                 'guardians' => $guardians[$r['family_id']] ?? [],
@@ -65,7 +68,7 @@ class SafeArrivalController extends Controller
         }, $rows));
 
         // Most urgent first: escalated, overdue, then waiting, then settled.
-        $rank = ['escalated' => 0, 'overdue' => 1, 'waiting' => 2, 'resolved' => 3, 'absent' => 4, 'arrived' => 5];
+        $rank = ['dropped_off' => 0, 'escalated' => 1, 'overdue' => 2, 'on_the_way' => 3, 'waiting' => 4, 'resolved' => 5, 'absent' => 6, 'arrived' => 7];
         usort($out, fn ($a, $b) => [$rank[$a['state']], $a['name']] <=> [$rank[$b['state']], $b['name']]);
         $counts = array_count_values(array_column($out, 'state'));
 
@@ -171,6 +174,8 @@ class SafeArrivalController extends Controller
             'grace_minutes' => ['sometimes', 'integer', 'min:0', 'max:180'],
             'default_time' => ['sometimes', 'regex:/^\d{2}:\d{2}$/'],
             'escalate_after_minutes' => ['sometimes', 'integer', 'min:5', 'max:240'],
+            'call_parents' => ['sometimes', 'boolean'],
+            'call_after_minutes' => ['sometimes', 'integer', 'min:5', 'max:120'],
         ]);
         $before = SafeArrival::settings($agencyId);
         $after = SafeArrival::saveSettings($agencyId, $data);

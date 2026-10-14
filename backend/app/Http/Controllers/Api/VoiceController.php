@@ -459,8 +459,11 @@ final class VoiceController extends Controller
         string $category,
         ?int $startedBy = null,
         bool $bypassOptIn = false,
-        bool $selfTest = false
+        bool $selfTest = false,
+        ?array $ref = null
     ): bool {
+        // What the call is about (a Safe Arrival check), written on every row, placed or not.
+        $refCols = $ref ? ['ref_type' => (string) $ref['type'], 'ref_id' => (int) $ref['id']] : [];
         // 1. Do-not-contact: never ring a parent at a live agency while we are testing.
         if (\App\Support\Suppression::isUser($userId)) {
             \App\Support\Suppression::note('voice', $userId, $category);
@@ -468,8 +471,8 @@ final class VoiceController extends Controller
             return false;
         }
 
-        $write = function (string $status, ?string $error) use ($agencyId, $userId, $phone, $script, $category, $startedBy): bool {
-            DB::table('voice_calls')->insert([
+        $write = function (string $status, ?string $error) use ($agencyId, $userId, $phone, $script, $category, $startedBy, $refCols): bool {
+            DB::table('voice_calls')->insert($refCols + [
                 'agency_id' => $agencyId,
                 'to_user_id' => $userId,
                 'to_phone' => $phone,
@@ -495,8 +498,13 @@ final class VoiceController extends Controller
             return $write('skipped', 'voice calls disabled for this agency');
         }
 
-        // 2b. The reasons this agency allows calls for (tests exempt).
-        if ($category !== 'test' && ! in_array($category, self::allowedCategories($agencyId), true)) {
+        // 2b. The reasons this agency allows calls for (tests exempt). A Safe Arrival call
+        //     has its own switch, on the Safe Arrival settings (call_parents).
+        if ($category === \App\Support\SafeArrivalCall::CATEGORY) {
+            if (! $selfTest && ! \App\Support\SafeArrival::settings($agencyId)['call_parents']) {
+                return $write('skipped', 'Safe Arrival calls are switched off for this agency');
+            }
+        } elseif ($category !== 'test' && ! in_array($category, self::allowedCategories($agencyId), true)) {
             return $write('skipped', 'calls for this reason (' . $category . ') are switched off for this agency');
         }
         // 2c. The reasons this person wants calls for (My profile → Texts and phone calls).
@@ -570,7 +578,7 @@ final class VoiceController extends Controller
            HTTP response, so a row created afterwards would not exist when it is first
            needed. */
         $state = 'kt_' . bin2hex(random_bytes(14));
-        $rowId = DB::table('voice_calls')->insertGetId([
+        $rowId = DB::table('voice_calls')->insertGetId($refCols + [
             'agency_id' => $agencyId,
             'to_user_id' => $userId,
             'consent_user_id' => $consentVia,
@@ -700,13 +708,39 @@ final class VoiceController extends Controller
                             $cfg['voice'] = $ov['voice'];
                             if (($ov['language'] ?? '') !== '') { $cfg['language'] = $ov['language']; }
                         }
-                        $r = Telnyx::speak($cfg, $callControlId, (string) $call->body, $state);
+                        // A Safe Arrival call asks a question and waits for a key (2026-10-13).
+                        $r = $call->category === \App\Support\SafeArrivalCall::CATEGORY
+                            ? Telnyx::gather($cfg, $callControlId, (string) $call->body, $state)
+                            : Telnyx::speak($cfg, $callControlId, (string) $call->body, $state);
                         if (! $r['ok']) {
                             DB::table('voice_calls')->where('id', $call->id)->update([
                                 'status' => 'failed', 'error' => 'speak: ' . $r['error'], 'updated_at' => now(),
                             ]);
                         }
                     }
+                    break;
+
+                case 'call.gather.ended':
+                    /* The parent's answer to a Safe Arrival call. Recorded once (a retried
+                       webhook finds dtmf already set and only repeats the goodbye), then
+                       the confirmation is spoken, and call.speak.ended hangs up. */
+                    if ($call->category !== \App\Support\SafeArrivalCall::CATEGORY || ! $cfg || ! $callControlId) {
+                        break;
+                    }
+                    $digit = substr(preg_replace('/\D/', '', (string) ($p['digits'] ?? '')), 0, 1);
+                    if ($call->dtmf) {
+                        $reply = 'Thank you. Goodbye.';
+                    } elseif ($digit === '') {
+                        $reply = 'We did not get an answer. Please open KiddieTrac or call the centre. Goodbye.';
+                    } elseif ($call->ref_type === 'safe_arrival_test') {
+                        // The admin's own test call: nothing is recorded against any child.
+                        DB::table('voice_calls')->where('id', $call->id)->update(['dtmf' => $digit, 'updated_at' => now()]);
+                        $reply = 'Test call. You pressed ' . $digit . ', which means: '
+                            . \App\Support\SafeArrivalCall::label(\App\Support\SafeArrivalCall::RESPONSES[$digit] ?? '') . '. Nothing was recorded. Goodbye.';
+                    } else {
+                        $reply = \App\Support\SafeArrivalCall::record($call, $digit);
+                    }
+                    Telnyx::speak($cfg, $callControlId, $reply, $state);
                     break;
 
                 case 'call.speak.ended':
@@ -746,6 +780,14 @@ final class VoiceController extends Controller
                         'error' => $status === 'completed' ? $call->error : ($cause ?: null),
                         'updated_at' => now(),
                     ]);
+                    /* Nobody pressed a key: ring the next guardian (Safe Arrival). */
+                    if ($call->category === \App\Support\SafeArrivalCall::CATEGORY && $call->ref_type === 'safe_arrival_check'
+                        && ! DB::table('voice_calls')->where('id', $call->id)->value('dtmf')) {
+                        $check = DB::table('safe_arrival_checks')->where('id', $call->ref_id)->where('agency_id', $agency)->first();
+                        if ($check) {
+                            \App\Support\SafeArrivalCall::callNext($check);
+                        }
+                    }
                     break;
 
                 default:
