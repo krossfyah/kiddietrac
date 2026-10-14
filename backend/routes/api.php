@@ -1186,6 +1186,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         Route::prefix('parent')->middleware('role:guardian')->group(function () {
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
+            // Family & pick-ups: a parent asks the centre for a contact's pick-up login (2026-10-13).
+            Route::get('/family-contacts', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentContacts']);
+            Route::post('/family-contacts/{ec}/login-request', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentRequest'])->whereNumber('ec')->middleware('throttle:10,1');
+            Route::delete('/pickup-login-requests/{id}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentCancel'])->whereNumber('id');
             Route::get('/children', [FamilyController::class, 'myChildren']);
             Route::post('/withdrawals', [\App\Http\Controllers\Api\WithdrawalController::class, 'submit']);
             Route::get('/withdrawals', [\App\Http\Controllers\Api\WithdrawalController::class, 'mine']);
@@ -1386,6 +1390,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/waitlist', [ChildController::class, 'waitlist']);
 
             Route::get('/children/{child}', [ChildController::class, 'show']);
+            // Logins next to the family's people on the child record (2026-10-13), centre-scoped.
+            Route::post('/emergency-contacts/{ec}/pickup-login', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffGrant'])->whereNumber('ec')->middleware('throttle:20,1');
+            Route::delete('/emergency-contacts/{ec}/pickup-login', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffRevoke'])->whereNumber('ec');
+            Route::post('/pickup-login-requests/{id}/decline', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffDecline'])->whereNumber('id');
+            Route::post('/guardians/{user}/login-invite', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffInviteGuardian'])->whereNumber('user')->middleware('throttle:20,1');
             // v22p88: child-detail tabs
             Route::get('/children/{child}/daily-events', [ChildController::class, 'dailyEvents']);
             Route::get('/children/{child}/feed',         [ChildController::class, 'feed']);

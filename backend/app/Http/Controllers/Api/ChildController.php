@@ -236,7 +236,7 @@ final class ChildController extends Controller
             ->where('guardians.family_id', $child->family_id)
             ->select(
                 'users.id', 'users.first_name', 'users.last_name', 'users.email',
-                'users.phone', 'users.phone2', 'users.phone2_type', 'users.phone2_ext', 'users.sex', 'users.photo_url',
+                'users.phone', 'users.phone2', 'users.phone2_type', 'users.phone2_ext', 'users.sex', 'users.photo_url', 'users.status as account_status',
                 'guardians.relationship', 'guardians.is_primary', 'guardians.can_pickup', 'guardians.billing_hidden',
             )
             ->get();
@@ -249,6 +249,13 @@ final class ChildController extends Controller
         $emergencyContacts = $child->family_id
             ? DB::table('emergency_contacts')->where('family_id', $child->family_id)->orderByDesc('can_pickup')->orderBy('id')
                 ->get(['id', 'name', 'relationship', 'phone', 'alt_phone', 'alt_phone_type', 'alt_phone_ext', 'email', 'can_pickup', 'user_id', 'notes'])
+            : collect();
+        // A parent's waiting request for a contact's pick-up login (PickupLoginController).
+        $loginRequests = $child->family_id && \Illuminate\Support\Facades\Schema::hasTable('pickup_login_requests')
+            ? DB::table('pickup_login_requests as r')->leftJoin('users as u', 'u.id', '=', 'r.requested_by')
+                ->where('r.family_id', $child->family_id)->where('r.status', 'pending')
+                ->get(['r.id', 'r.emergency_contact_id', 'r.email', 'r.created_at', DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as requested_by_name")])
+                ->keyBy('emergency_contact_id')
             : collect();
 
         $subsidies = DB::table('subsidies')
@@ -316,7 +323,10 @@ final class ChildController extends Controller
             'pronouns' => $child->pronouns ?? null,
             'family' => $family,
             'guardians' => $guardians,
-            'emergency_contacts' => $emergencyContacts,
+            'emergency_contacts' => $emergencyContacts->map(function ($e) use ($loginRequests) {
+                $e->login_request = $loginRequests->get($e->id);
+                return $e;
+            })->values(),
             'room' => $room,
             'enrollment' => $enrollment,
             'health_flags' => $healthFlags,

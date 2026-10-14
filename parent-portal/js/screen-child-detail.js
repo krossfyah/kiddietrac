@@ -885,6 +885,32 @@
         var f = child.family;
         if (!f) return;
         var esc2 = function (s) { return String(s == null ? '' : s); };
+        var _loginToast = function (m, kind) { if (Dom.toast) Dom.toast(m, kind); };
+        var _loginCell = function (kids) {
+          return Dom.el('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0;margin-left:auto;' }, kids);
+        };
+        var _loginPill = function (t, fg, bg) {
+          return Dom.el('span', { style: 'font-size:11.5px;font-weight:700;color:' + fg + ';background:' + bg + ';border-radius:999px;padding:3px 10px;white-space:nowrap;' }, t);
+        };
+        var _loginBtn = function (t, kind, fn) {
+          var b = Dom.el('button', {
+            type: 'button', 'data-kt-login-btn': '1',
+            style: 'height:28px;padding:0 11px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;'
+              + (kind === 'primary' ? 'background:#1F6080;color:#fff;border:1px solid #1F6080;' : 'background:#fff;color:#1F6080;border:1px solid #CBD5E1;'),
+          }, t);
+          b.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); fn(b); });
+          return b;
+        };
+        var _loginConfirm = function (title, desc, ok, act, b) {
+          var run = function () {
+            b.disabled = true;
+            act().then(function () { renderChildDetail(container, opts); },
+              function (err) { b.disabled = false; _loginToast((err && err.message) || 'That did not work', 'error'); });
+          };
+          if (window.KT && KT.confirm) {
+            KT.confirm({ title: title, description: desc, okLabel: ok }).then(function (yes) { if (yes) run(); });
+          } else { run(); }
+        };
         var addr = [f.address_line1, f.address_line2, f.city, f.province, f.postal_code].filter(Boolean).join(', ');
         var sec = Dom.el('div', { style: 'background:white;border-radius:14px;padding:16px 20px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;' });
         var head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;' });
@@ -931,12 +957,22 @@
               g.email ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, g.email) : Dom.el('span', {}),
               gPhones ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, '📞 ' + gPhones) : Dom.el('span', {}),
             ]));
+            gr.appendChild(_loginCell(g.account_status === 'invited' || g.account_status === 'not_invited'
+              ? [_loginBtn('✉ Send login invite', 'primary', function (b) {
+                  if (!g.email) { _loginToast('Add an email for ' + name + ' in Families → Edit first.', 'error'); return; }
+                  _loginConfirm('Send ' + name + ' their login?', 'They have not signed in yet. A new temporary password goes to ' + g.email + '.', 'Send invite', function () {
+                    return Api.post('/director/guardians/' + (g.user_id || g.id) + '/login-invite', { family_id: f.id })
+                      .then(function () { _loginToast('Login sent to ' + g.email, 'success'); });
+                  }, b);
+                })]
+              : [_loginPill('✓ Signs in', '#047857', '#ECFDF5')]));
             sec.appendChild(gr);
           });
         }
         /* Pick-ups & emergency contacts (2026-10-13) — they belong to the family and were never
            on the child's record. Authorised pick-ups first. */
         var ecs = child.emergency_contacts || [];
+        var redraw = function () { renderChildDetail(container, opts); };
         sec.appendChild(Dom.el('div', { style: 'font-size:11.5px;font-weight:800;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;margin:14px 0 6px;' }, 'Pick-ups & emergency contacts'));
         if (!ecs.length) {
           sec.appendChild(Dom.el('div', { style: 'font-size:13px;color:#94A3B8;padding:4px 0;' }, 'None on file — add them in Families → Edit → Emergency.'));
@@ -950,11 +986,57 @@
           var er = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #EEF2F5;font-size:13px;' });
           // Initials, not a face guessed from the first name (it guessed "Debbie" as a man).
           er.appendChild(_avatarEl(e.name || '?', { size: 34, photoUrl: '', role: 'contact', initials: true }));
-          er.appendChild(Dom.el('div', { style: 'min-width:0;' }, [
+          er.appendChild(Dom.el('div', { style: 'min-width:0;flex:1;' }, [
             Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, (e.name || 'Contact') + ' · ' + bits2.join(', ')),
             phones ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, '📞 ' + phones) : Dom.el('span', {}),
             e.email ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, e.email) : Dom.el('span', {}),
+            e.login_request ? Dom.el('div', { style: 'color:#B45309;font-size:12px;font-weight:700;margin-top:2px;' },
+              '⏳ ' + (e.login_request.requested_by_name || 'The family') + ' asked for a pick-up login → ' + e.login_request.email) : Dom.el('span', {}),
           ]));
+          /* Logins next to each contact (2026-10-13, Anthony: "setup under admin/director next
+             to the emergency and guardian names"). Approving a parent's request and setting one
+             up by hand are the same action. */
+          var who = e.name || 'this contact';
+          var setUp = function (b, approving) {
+            var email = approving ? e.login_request.email : (e.email || '');
+            var go = function (addr) {
+              return Api.post('/director/emergency-contacts/' + e.id + '/pickup-login', { email: addr })
+                .then(function () { _loginToast(who + ' now has a pick-up login. Sign-in details went to ' + addr + '.', 'success'); });
+            };
+            if (email) {
+              _loginConfirm((approving ? 'Approve' : 'Set up') + ' a pick-up login for ' + who + '?',
+                'They sign in with ' + email + ' and can check the children in and out with their own QR code, and see the parent view. They never see billing.',
+                approving ? 'Approve' : 'Set up login', function () { return go(email); }, b);
+              return;
+            }
+            if (!(window.KT && KT.prompt)) return;
+            KT.prompt({ title: 'Pick-up login for ' + who, description: 'Where should their sign-in details go? They will see the parent view without billing.', fields: [{ key: 'email', label: 'Email', type: 'email', placeholder: 'name@example.com' }], okLabel: 'Set up login' })
+              .then(function (v) {
+                v = String(v || '').trim();
+                if (!v) return;
+                b.disabled = true;
+                go(v).then(redraw, function (err) { b.disabled = false; _loginToast((err && err.message) || 'Could not set up the login', 'error'); });
+              });
+          };
+          var btns = [];
+          if (e.user_id) {
+            btns.push(_loginPill('🚸 Has login', '#047857', '#ECFDF5'));
+            btns.push(_loginBtn('Remove', 'ghost', function (b) {
+              _loginConfirm('Remove ' + who + '\'s pick-up login?', 'They will no longer be able to sign in for this family or use their QR code to pick up. Their contact details stay on file.', 'Remove login', function () {
+                return Api.delete('/director/emergency-contacts/' + e.id + '/pickup-login').then(function () { _loginToast('Login removed', 'success'); });
+              }, b);
+            }));
+          } else if (e.login_request) {
+            btns.push(_loginBtn('✓ Approve', 'primary', function (b) { setUp(b, true); }));
+            btns.push(_loginBtn('Decline', 'ghost', function (b) {
+              _loginConfirm('Decline the request?', 'The family is told the centre did not set up a login for ' + who + '.', 'Decline', function () {
+                return Api.post('/director/pickup-login-requests/' + e.login_request.id + '/decline', {}).then(function () { _loginToast('Request declined', 'success'); });
+              }, b);
+            }));
+          } else {
+            btns.push(_loginBtn('🔑 Set up login', 'ghost', function (b) { setUp(b, false); }));
+          }
+          er.appendChild(_loginCell(btns));
           sec.appendChild(er);
         });
         wrap.appendChild(sec);

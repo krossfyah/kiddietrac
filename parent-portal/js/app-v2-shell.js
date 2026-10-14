@@ -698,6 +698,9 @@
         /* Reports the centre has shared — incident reports today. Filed copies a
            family can come back to, rather than an email they have to keep. */
         { hash: 'my-documents',       label: 'Documents',  icon: '📄', badgeKey: 'my_documents' },
+        /* The family's guardians and emergency contacts, and asking the centre for a
+           contact's pick-up login (2026-10-13). */
+        { hash: 'family-contacts',    label: 'Family & pick-ups', icon: '👪' },
       ]},
       { label: 'Account', items: [
         { hash: 'notifications', label: 'Notifications', icon: '🔔' },
@@ -1062,6 +1065,7 @@
     'synced-waitlist': 'Waitlist leads and enquiries.',
     'edocuments': 'Documents on file, and what is still outstanding.',
     'my-documents': 'Forms you have signed and reports shared with you, kept for you to open any time.',
+    'family-contacts': 'The people on your family\'s file. Ask the centre to give an emergency contact their own pick-up login.',
     'my-forms': 'Forms waiting for your signature. Once you sign one it moves to Documents, where it is kept.',
     'signed-docs': 'Agreements that have been signed.',
     'doc-workflows': 'Who has to sign what, and in which order.',
