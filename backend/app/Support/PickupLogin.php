@@ -70,7 +70,7 @@ final class PickupLogin
         if (! $g) {
             DB::table('guardians')->insert([
                 'family_id' => $familyId, 'user_id' => $uid,
-                'relationship' => mb_substr(mb_strtolower((string) ($relationship ?: 'other')), 0, 40),
+                'relationship' => self::relationship($relationship),
                 'is_primary' => 0, 'can_pickup' => 1, 'can_receive_billing' => 0,
                 'billing_share_pct' => 0, 'billing_hidden' => 1, 'created_at' => now(),
             ]);
@@ -89,6 +89,15 @@ final class PickupLogin
         }
 
         return ['user_id' => $uid, 'temp' => $temp, 'reused' => (bool) $existing];
+    }
+
+    /** guardians.relationship is an ENUM; an emergency contact's free text maps onto it. */
+    private static function relationship(?string $r): string
+    {
+        $r = mb_strtolower(trim((string) $r));
+        if (str_starts_with($r, 'grand')) return 'grandparent';
+        foreach (['mother', 'father', 'guardian', 'foster'] as $k) { if ($r === $k) return $k; }
+        return 'other';
     }
 
     /** Take the pick-up login away again (the account itself stays; it may be used elsewhere). */
