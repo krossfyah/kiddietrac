@@ -14,6 +14,7 @@
     families: { icon: '👨‍👩‍👧', label: 'Families' },
     children: { icon: '👶', label: 'Children' },
     staff:    { icon: '👤', label: 'Staff' },
+    parents:  { icon: '👨‍👩‍👧', label: 'Parents' },
     rooms:    { icon: '🚪', label: 'Rooms' },
   };
 

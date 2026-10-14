@@ -318,7 +318,8 @@
      other column. Ties keep their original order, so the list never shuffles for rows
      that are equally good. (Anthony, 2026-09-08) */
   function ktRankOf(primary, whole, q) {
-    if (whole.indexOf(q) === -1) { return -1; }
+    // A reference ID typed loosely ("ilh c 42") still finds the row showing ILH-C-0042 (2026-10-14).
+    if (whole.indexOf(q) === -1) { return (window.KT && window.KT.refMatch && window.KT.refMatch(whole, q)) ? 1 : -1; }
     if (primary === q) { return 0; }
     if (primary.indexOf(q) === 0) { return 1; }
     var esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

@@ -116,10 +116,20 @@ final class ChildController extends Controller
         $search = $request->input('search');
         if ($search) {
             $term = '%'.$search.'%';
-            $q->where(fn ($w) => $w
-                ->where('children.first_name', 'LIKE', $term)
-                ->orWhere('children.last_name', 'LIKE', $term)
-                ->orWhere('families.family_name', 'LIKE', $term));
+            // A reference ID finds its child — or, for a family ID, that family's children (2026-10-14).
+            $refIds = null;
+            try {
+                $agencyForRefs = (int) $this->resolveAgencyId($request);
+                $refIds = $agencyForRefs ? \App\Support\RefCode::searchIds((string) $search, $agencyForRefs) : null;
+            } catch (\Throwable $e) {}
+            $q->where(function ($w) use ($term, $refIds) {
+                $w->where('children.first_name', 'LIKE', $term)
+                  ->orWhere('children.last_name', 'LIKE', $term)
+                  ->orWhere('families.family_name', 'LIKE', $term);
+                if ($refIds && ($refIds['C'] || $refIds['F'])) {
+                    $w->orWhereIn('children.id', $refIds['C'] ?: [0])->orWhereIn('children.family_id', $refIds['F'] ?: [0]);
+                }
+            });
         }
 
         /* SEARCH RESULTS COME BACK BEST-FIRST.

@@ -189,6 +189,8 @@
       (r.families || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Family', icon: '👪', hash: x.hash, group: 'Families' }); });
       (r.children || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Child', icon: '🧒', hash: x.hash, group: 'Children' }); });
       (r.staff || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Staff', icon: '👤', hash: x.hash, group: 'Staff' }); });
+      // Parents and guardians, by name or by their ID (ILH-P-0031) — 2026-10-14.
+      (r.parents || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Parent', icon: '👨‍👩‍👧', hash: x.hash, group: 'Parents' }); });
 
       state.items = items;
       state.cursor = 0;

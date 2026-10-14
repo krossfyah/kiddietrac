@@ -1949,11 +1949,18 @@ final class AdminController extends Controller
                       ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES);
                 });
 
+        // A staff or parent reference ID finds that person (2026-10-14).
+        $refUserIds = [];
+        if ($searchQuery && $agencyId) {
+            $ri = \App\Support\RefCode::searchIds((string) $searchQuery, (int) $agencyId);
+            if ($ri) $refUserIds = array_values(array_unique(array_merge($ri['S'], $ri['P'])));
+        }
         if ($searchQuery) {
-            $usersQuery->where(function ($q) use ($searchQuery) {
+            $usersQuery->where(function ($q) use ($searchQuery, $refUserIds) {
                 $q->where('email', 'like', "%{$searchQuery}%")
                   ->orWhere('first_name', 'like', "%{$searchQuery}%")
                   ->orWhere('last_name', 'like', "%{$searchQuery}%");
+                if ($refUserIds) $q->orWhereIn('users.id', $refUserIds);
             });
         }
 

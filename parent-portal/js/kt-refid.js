@@ -73,6 +73,34 @@
     }).catch(function () {});
   }, true);
 
+  /* KT.refMatch(text, typed) — does a reference ID in this text match what was typed?
+     (2026-10-14, Anthony: "make sure the global search also picks up the record ID's as well
+     throughout"). Loose on purpose, like the server's RefCode::searchIds: "ILH-C-0042",
+     "ilh c 42", "ILHC42", "C-0042", "c42", "0042" and "42" all match ILH-C-0042, and a
+     partial "ILH-C-00" matches the IDs that begin that way. Plain words are left to the
+     normal name search: something only counts as an ID once it has a digit in it, or ends
+     in a separator ("ILH-"). */
+  var CODE_RE = /\b([A-Z][A-Z0-9]{1,5})-([CFSP])-(\d{2,})\b/g;
+  function refNorm(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  function refMatch(text, typed) {
+    var raw = String(typed || '');
+    var qn = refNorm(raw);
+    if (!qn || qn.length > 14) return false;
+    if (!/\d/.test(qn) && !/[\-_.#\s]$/.test(raw)) return false;
+    var qz = qn.replace(/(^|[A-Z])0+(?=\d)/g, '$1');      // leading zeros never matter
+    var s = String(text || '').toUpperCase(), m;
+    CODE_RE.lastIndex = 0;
+    while ((m = CODE_RE.exec(s))) {
+      var num = String(parseInt(m[3], 10));
+      var forms = [m[1] + m[2] + m[3], m[1] + m[2] + num, m[2] + m[3], m[2] + num, m[3], num];
+      for (var i = 0; i < forms.length; i++) {
+        if (forms[i].indexOf(qn) === 0 || forms[i].indexOf(qz) === 0) return true;
+      }
+    }
+    return false;
+  }
+
+  KT.refMatch = refMatch;
   KT.refPill = el;
   KT.refPillHtml = html;
 })(window);

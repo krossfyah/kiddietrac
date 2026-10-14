@@ -9381,6 +9381,10 @@
     Promise.resolve(p).then(function () {
       var m = String(location.hash || '').match(/[?&]user=(\d+)/);
       if (m && KT.openUserRecord) setTimeout(function () { KT.openUserRecord(Number(m[1])); }, 250);
+      // #admin-families?family=N (a family found by name or ID in the search) opens its details.
+      var fm = String(location.hash || '').match(/[?&]family=(\d+)/);
+      var arch = /[?&]archived=1/.test(String(location.hash || ''));
+      if (fm) setTimeout(function () { try { showFamilyDetail(Number(fm[1]), arch); } catch (e) {} }, 300);
     }).catch(function () {});
     return p;
   }

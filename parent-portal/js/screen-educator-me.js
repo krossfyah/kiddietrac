@@ -244,7 +244,8 @@
       var shown = 0;
       rosters.forEach(function (r) {
         var kids = r.children.filter(function (c) {
-          return !q || ((c.first_name || '') + ' ' + (c.last_name || '')).toLowerCase().indexOf(q) > -1;
+          return !q || ((c.first_name || '') + ' ' + (c.last_name || '')).toLowerCase().indexOf(q) > -1
+            || !!(window.KT && KT.refMatch && KT.refMatch(c.ref_code, q));   // or the child's ID (2026-10-14)
         });
         if (!kids.length) return;
         shown += kids.length;

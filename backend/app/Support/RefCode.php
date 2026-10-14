@@ -265,6 +265,71 @@ final class RefCode
             'code' => self::format($agencyId, $type, $no)] : null;
     }
 
+    // ── Search ─────────────────────────────────────────────────────────────
+
+    /**
+     * Records whose ID matches what was typed — in full, in part or loosely. Returns
+     * ['C' => [child ids], 'F' => [...], 'S' => [user ids], 'P' => [...]], or null when the
+     * text does not look like an ID at all (so callers search names as usual).
+     *
+     *   "ILH-C-0042" / "ilh c 42" / "ILHC42"  → that child
+     *   "ILH-C-00" / "ILH-C-4"                → children whose number starts 0…/4…
+     *   "C-0042" / "c42"                      → child 42 (any kind letter works)
+     *   "ILH-" / "ILH C"                      → that agency's records (a short list)
+     *   "42" / "0042"                         → every kind numbered 42 (and 420…)
+     *
+     * Only this agency's prefix (or one it used before) counts; another agency's code finds
+     * nothing. Numbers match from the left, so leading zeros never get in the way.
+     */
+    public static function searchIds(string $q, int $agencyId, int $limit = 25): ?array
+    {
+        $raw = trim($q);
+        $qn = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $raw));
+        if ($qn === '' || strlen($qn) > 14) return null;
+        $prefixes = [self::prefix($agencyId)];
+        $settings = DB::table('agencies')->where('id', $agencyId)->value('settings');
+        foreach ((array) ((json_decode((string) $settings, true) ?: [])['ref_prefix_history'] ?? []) as $h) $prefixes[] = strtoupper((string) $h);
+        usort($prefixes, fn ($a, $b) => strlen($b) - strlen($a));
+
+        $type = null; $digits = ''; $isId = false;
+        foreach ($prefixes as $p) {
+            if ($p !== '' && str_starts_with($qn, $p) && preg_match('/^([CFSP])?(\d*)$/', substr($qn, strlen($p)), $m)) {
+                // A bare prefix ("ILH") is also a word; only treat it as an ID once more is typed.
+                if ($m[1] === '' && $m[2] === '' && ! preg_match('/[\s\-_.#]$/', $raw)) break;
+                $type = $m[1] ?: null; $digits = $m[2]; $isId = true;
+                break;
+            }
+        }
+        if (! $isId && preg_match('/^([CFSP])(\d{1,7})$/', $qn, $m)) { $type = $m[1]; $digits = $m[2]; $isId = true; }
+        if (! $isId && preg_match('/^\d{1,7}$/', $qn)) { $digits = $qn; $isId = true; }
+        if (! $isId) return null;
+
+        /* "0042" / "00" are read against the zero-padded ID (0042 → 42 only; 00 → 1–99);
+           "42" / "4" against the plain number (42, 420…; 4, 40–49…). */
+        $num = ltrim($digits, '0');
+        $padded = $digits !== '' && $digits[0] === '0';
+        $numCond = function ($q) use ($digits, $num, $padded) {
+            if ($digits !== '') {
+                $padded ? $q->whereRaw("LPAD(ref_no, 4, '0') LIKE ?", [$digits . '%'])
+                        : $q->whereRaw('CAST(ref_no AS CHAR) LIKE ?', [$num . '%']);
+            }
+            return $q->orderByRaw('ref_no = ? DESC', [(int) ($num ?: 0)])->orderBy('ref_no');
+        };
+        $want = $type ? [$type] : ['C', 'F', 'S', 'P'];
+        $out = ['C' => [], 'F' => [], 'S' => [], 'P' => []];
+        foreach ($want as $t) {
+            if ($t === 'C' || $t === 'F') {
+                $out[$t] = $numCond(DB::table($t === 'C' ? 'children' : 'families')->where('ref_agency_id', $agencyId)->whereNotNull('ref_no'))
+                    ->limit($limit)->pluck('id')->map(fn ($x) => (int) $x)->all();
+            } else {
+                $out[$t] = $numCond(DB::table('user_refs')->where('agency_id', $agencyId)->where('type', $t))
+                    ->limit($limit)->pluck('user_id')->map(fn ($x) => (int) $x)->all();
+            }
+        }
+
+        return $out;
+    }
+
     // ── Sweep ──────────────────────────────────────────────────────────────
 
     /** Number everything that has no number yet, oldest first. Returns counts by kind. */

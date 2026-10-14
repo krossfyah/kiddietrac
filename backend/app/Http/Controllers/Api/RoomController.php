@@ -282,7 +282,16 @@ final class RoomController extends Controller
 
         return response()->json([
             'room' => $room,
-            'roster' => $roster,
+            'roster' => (function ($r) {
+                // Each child's reference ID (2026-10-14), so the roster can be searched by it.
+                $r = collect($r);
+                $codes = \App\Support\RefCode::children($r->map(fn ($x) => is_array($x) ? ($x['id'] ?? 0) : ($x->id ?? 0))->all());
+                return $r->map(function ($x) use ($codes) {
+                    if (is_array($x)) { $x['ref_code'] = $codes[$x['id'] ?? 0] ?? null; }
+                    elseif (is_object($x)) { $x->ref_code = $codes[$x->id ?? 0] ?? null; }
+                    return $x;
+                })->values();
+            })($roster),
             'day' => [
                 'key' => $dayKey,
                 'label' => \App\Support\CareSchedule::LABELS[$dayKey] ?? ucfirst($dayKey),
