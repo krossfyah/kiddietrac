@@ -434,6 +434,8 @@ Schedule::command('announcements:send-scheduled')->everyMinute()->withoutOverlap
 
 /* Safe Arrival (2026-09-29): ask parents about children who have not arrived, then alert
    staff. Only agencies that switched it on; see App\Support\SafeArrival. */
+// Visible reference IDs for anything created since the last minute (App\Support\RefCode).
+Schedule::command('kiddietrac:ref-codes')->everyMinute()->withoutOverlapping(5)->runInBackground();
 Schedule::command('kiddietrac:safe-arrival')->everyFiveMinutes()->withoutOverlapping(10)->runInBackground()->onOneServer();
 
 /* Weekly What's new email (2026-09-29): Mondays 9am, only when there is something new,

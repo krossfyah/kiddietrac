@@ -726,6 +726,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::delete('/marketing-site/translations/{id}', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'destroy'])->where('id','[0-9]+');
         });
         Route::get('/auth/me', [AuthController::class, 'me']);
+        // Visible reference IDs, ILH-C-0042 (2026-10-14, App\Support\RefCode).
+        Route::get('/refs/lookup', [\App\Http\Controllers\Api\RefController::class, 'lookup'])->middleware('throttle:60,1');
+        Route::get('/refs/mine', [\App\Http\Controllers\Api\RefController::class, 'mine']);
+        Route::get('/admin/ref-prefix', [\App\Http\Controllers\Api\RefController::class, 'prefix']);
+        Route::put('/admin/ref-prefix', [\App\Http\Controllers\Api\RefController::class, 'setPrefix'])->middleware('throttle:10,1');
         // Tasks — admins/directors assign to educators; educators mark progress/done.
         Route::middleware('role:educator,home_visitor,guardian,centre_director,agency_admin,platform_admin')->prefix('tasks')->group(function () {
             Route::get('/mine', [\App\Http\Controllers\Api\TaskController::class, 'mine']);
