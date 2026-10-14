@@ -6078,14 +6078,34 @@
             tpBox.querySelector('b').textContent = linked ? ('Will link ' + match.name + '\u2019s forms account') : ('Forms-only account found: ' + match.name);
             tpBox.querySelector('div > div').textContent = match.email + ' \u00b7 ' + match.forms_signed + '/' + match.forms_assigned + ' forms signed' + (linked ? ' \u00b7 their forms join this family' : '');
             var btn = tpBox.querySelector('button');
-            if (btn) btn.addEventListener('click', function () {
+            /* CONFIRM WHO THIS IS, then pull everything the account already holds (2026-10-13,
+               Anthony: "when adding a family and the temp user is already there suggest to
+               pull all of the existing users information in a popup confirming the users
+               info that already exists"). */
+            if (btn) btn.addEventListener('click', async function () {
+              var fmtD = function (d) { try { return new Date(String(d).replace(' ', 'T') + 'Z').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return d || ''; } };
+              var lines = [
+                'Name: ' + (match.name || '—'),
+                'Email: ' + (match.email || '—'),
+                'Phone: ' + (match.phone || '—'),
+                match.phone2 ? ('Second phone (' + (match.phone2_type || 'other') + '): ' + match.phone2) : null,
+                match.sex ? ('Gender: ' + match.sex) : null,
+                'Forms: ' + match.forms_signed + ' of ' + match.forms_assigned + ' signed',
+                'Account since: ' + fmtD(match.created_at) + (match.last_login_at ? ' · last signed in ' + fmtD(match.last_login_at) : ' · never signed in'),
+              ].filter(Boolean);
+              var ok = (window.KT && KT.confirm)
+                ? await KT.confirm({ title: 'Link ' + (match.name || 'this parent') + ' to this family?',
+                    description: 'This parent already has an account from forms you sent them:\n\n' + lines.join('\n')
+                      + '\n\nLinking fills this guardian in from that account and brings their signed forms with them. Nothing is changed on the account itself.',
+                    okLabel: 'Use this account' })
+                : window.confirm(lines.join('\n'));
+              if (!ok) return;
               g.email = match.email;
-              if (!String(g.first_name || '').trim() && match.first_name) g.first_name = match.first_name;
-              if (!String(g.last_name || '').trim() && match.last_name) g.last_name = match.last_name;
-              card.querySelectorAll('input').forEach(function (inp) {
-                // Reflect the filled values in the inputs bindInput made.
-                if (inp === emailIn || inp.type === 'email') inp.value = g.email;
-              });
+              if (match.first_name) g.first_name = match.first_name;
+              if (match.last_name) g.last_name = match.last_name;
+              if (match.phone) g.phone = match.phone;
+              if (match.phone2) { g.phone2 = match.phone2; g.phone2_type = match.phone2_type || g.phone2_type; }
+              if (match.sex) g.sex = match.sex;
               renderGuardiansStep();
             });
           }

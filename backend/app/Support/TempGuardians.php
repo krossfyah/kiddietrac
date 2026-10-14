@@ -90,7 +90,7 @@ final class TempGuardians
                 });
             })
             ->orderByDesc('u.created_at')->limit($limit)
-            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.status', 'u.created_at', 'u.last_login_at']);
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone', 'u.phone2', 'u.phone2_type', 'u.sex', 'u.status', 'u.created_at', 'u.last_login_at']);
         if ($rows->isEmpty()) return [];
 
         $ids = $rows->pluck('id')->all();
@@ -106,6 +106,8 @@ final class TempGuardians
                 'name' => trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: $r->email,
                 'first_name' => $r->first_name, 'last_name' => $r->last_name,
                 'email' => $r->email,
+                // Everything the account already holds, so Add family can offer it (2026-10-13).
+                'phone' => $r->phone, 'phone2' => $r->phone2, 'phone2_type' => $r->phone2_type, 'sex' => $r->sex,
                 'status' => $r->status,
                 'created_at' => $r->created_at,
                 'last_login_at' => $r->last_login_at,
