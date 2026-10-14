@@ -56,13 +56,15 @@ final class PickupLoginController extends Controller
             $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
                 ->where('g.family_id', $fid)->whereNull('u.deleted_at')
                 ->orderByDesc('g.is_primary')->orderBy('g.id')
-                ->get(['u.id', 'u.first_name', 'u.last_name', 'u.status', 'g.relationship', 'g.is_primary', 'g.billing_hidden'])
+                ->get(['u.id', 'u.first_name', 'u.last_name', 'u.status', 'u.phone', 'g.relationship', 'g.is_primary', 'g.billing_hidden', 'g.can_pickup'])
                 ->map(fn ($g) => [
                     'id' => (int) $g->id,
                     'name' => trim($g->first_name . ' ' . $g->last_name),
                     'relationship' => $g->relationship,
                     'is_primary' => (bool) $g->is_primary,
                     'pickup_only' => (bool) $g->billing_hidden,
+                    'can_pickup' => (bool) $g->can_pickup,
+                    'phone' => $g->phone,
                     'has_login' => ! in_array((string) $g->status, self::NEVER_CLAIMED, true),
                     'is_me' => (int) $g->id === $uid,
                 ])->values();
@@ -70,12 +72,14 @@ final class PickupLoginController extends Controller
                 ->get(['id', 'emergency_contact_id', 'email', 'created_at'])->keyBy('emergency_contact_id');
             $contacts = DB::table('emergency_contacts')->where('family_id', $fid)
                 ->orderByDesc('can_pickup')->orderBy('id')
-                ->get(['id', 'name', 'relationship', 'phone', 'email', 'can_pickup', 'user_id'])
+                ->get(['id', 'name', 'relationship', 'phone', 'alt_phone', 'alt_phone_type', 'alt_phone_ext', 'email', 'can_pickup', 'user_id', 'notes'])
                 ->map(function ($e) use ($pending) {
                     $p = $pending->get($e->id);
                     return [
                         'id' => (int) $e->id, 'name' => $e->name, 'relationship' => $e->relationship,
                         'phone' => $e->phone, 'email' => $e->email,
+                        'alt_phone' => $e->alt_phone, 'alt_phone_type' => $e->alt_phone_type, 'alt_phone_ext' => $e->alt_phone_ext,
+                        'notes' => $e->notes,
                         'can_pickup' => (bool) $e->can_pickup, 'has_login' => (bool) $e->user_id,
                         'request' => $p ? ['id' => (int) $p->id, 'email' => $p->email, 'created_at' => $p->created_at] : null,
                     ];
@@ -127,6 +131,198 @@ final class PickupLoginController extends Controller
         if (! $existing) $this->tellStaff($agencyId, (int) $contact->family_id, $who, $contact, $email);
 
         return response()->json(['ok' => true, 'id' => $reqId], $existing ? 200 : 201);
+    }
+
+    /*
+     * PARENTS KEEP THEIR OWN PICK-UP LIST (2026-10-13, Anthony: "pick up authorizations for
+     * parents view should show the guardians allowed to pick up child and can add or
+     * remove/edit and it sends a notification to admin/educator/director when changes are
+     * made and logs these appropriately").
+     *
+     * The list is the family's emergency_contacts — the SAME rows staff see on the child's
+     * record, the educator's record, the emergency card and the sign-out check. (The old
+     * pickup_authorizations table behind the parent "Pickup people" screen had no rows at
+     * all and nothing else read it as the list.) Every change tells the room's educators, the
+     * centre's directors and the agency's admins, tells the family's other parents, and is
+     * written to the audit log with the before and after.
+     *
+     * Parents may change their emergency contacts, not the guardians: who is a guardian of
+     * the child (and custody) is the centre's record.
+     */
+    private function contactRules(bool $create): array
+    {
+        return ($create ? ['family_id' => ['required', 'integer']] : []) + [
+            'name' => ['required', 'string', 'max:120'],
+            'relationship' => ['nullable', 'string', 'max:60'],
+            'phone' => ['required', 'string', 'max:40'],
+            'alt_phone' => ['nullable', 'string', 'max:40'],
+            'alt_phone_type' => ['nullable', 'in:mobile,home,work,other'],
+            'alt_phone_ext' => ['nullable', 'string', 'max:10'],
+            'email' => ['nullable', 'email:rfc', 'max:180'],
+            'can_pickup' => ['required', 'boolean'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ];
+    }
+
+    private function contactCols(array $d): array
+    {
+        $alt = trim((string) ($d['alt_phone'] ?? ''));
+        $type = $alt !== '' ? ($d['alt_phone_type'] ?? 'mobile') : null;
+
+        return [
+            'name' => trim($d['name']), 'relationship' => trim((string) ($d['relationship'] ?? '')) ?: null,
+            'phone' => trim($d['phone']), 'alt_phone' => $alt ?: null, 'alt_phone_type' => $type,
+            'alt_phone_ext' => $type === 'work' ? (trim((string) ($d['alt_phone_ext'] ?? '')) ?: null) : null,
+            'email' => trim((string) ($d['email'] ?? '')) ?: null,
+            'can_pickup' => (bool) $d['can_pickup'],
+            'notes' => trim((string) ($d['notes'] ?? '')) ?: null,
+        ];
+    }
+
+    /** The caller must be a parent/guardian of this family — not a pick-up-only login. */
+    private function parentFamily(Request $request, int $familyId): int
+    {
+        $link = DB::table('guardians')->where('family_id', $familyId)->where('user_id', $request->user()->id)->first();
+        abort_unless($link, 404);
+        abort_if((int) $link->billing_hidden, 403, 'Only a parent or guardian of the family can change its contacts.');
+        $agencyId = $this->familyAgency($familyId);
+        abort_unless($agencyId, 404);
+
+        return $agencyId;
+    }
+
+    /** POST /parent/family-contacts */
+    public function parentAdd(Request $request): JsonResponse
+    {
+        $d = $request->validate($this->contactRules(true));
+        $fid = (int) $d['family_id'];
+        $agencyId = $this->parentFamily($request, $fid);
+        if (DB::table('emergency_contacts')->where('family_id', $fid)->count() >= 20) {
+            return response()->json(['message' => 'A family can have up to 20 contacts. Remove one first.'], 422);
+        }
+        $cols = $this->contactCols($d);
+        $id = (int) DB::table('emergency_contacts')->insertGetId(['family_id' => $fid, 'created_at' => now(), 'updated_at' => now()] + $cols);
+        $this->contactChanged($request, $agencyId, $fid, 'added', null, (object) ($cols + ['id' => $id]));
+
+        return response()->json(['ok' => true, 'id' => $id], 201);
+    }
+
+    /** PATCH /parent/family-contacts/{ec} */
+    public function parentUpdate(Request $request, int $ec): JsonResponse
+    {
+        $before = DB::table('emergency_contacts')->where('id', $ec)->first();
+        abort_unless($before, 404);
+        $agencyId = $this->parentFamily($request, (int) $before->family_id);
+        $d = $request->validate($this->contactRules(false));
+        $cols = $this->contactCols($d);
+        DB::table('emergency_contacts')->where('id', $ec)->update($cols + ['updated_at' => now()]);
+        $after = DB::table('emergency_contacts')->where('id', $ec)->first();
+        // No longer allowed to pick up: a pick-up login stops working with it.
+        if ($before->user_id && ! $cols['can_pickup']) {
+            PickupLogin::revoke($agencyId, (int) $before->family_id, $ec, (int) $request->user()->id);
+        }
+        $this->contactChanged($request, $agencyId, (int) $before->family_id, 'updated', $before, $after);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** DELETE /parent/family-contacts/{ec} */
+    public function parentRemove(Request $request, int $ec): JsonResponse
+    {
+        $before = DB::table('emergency_contacts')->where('id', $ec)->first();
+        abort_unless($before, 404);
+        $agencyId = $this->parentFamily($request, (int) $before->family_id);
+        if ($before->user_id) {
+            PickupLogin::revoke($agencyId, (int) $before->family_id, $ec, (int) $request->user()->id);
+        }
+        DB::table('pickup_login_requests')->where('emergency_contact_id', $ec)->where('status', 'pending')
+            ->update(['status' => 'cancelled', 'decided_by' => $request->user()->id, 'decided_at' => now(), 'updated_at' => now()]);
+        DB::table('emergency_contacts')->where('id', $ec)->delete();
+        $this->contactChanged($request, $agencyId, (int) $before->family_id, 'removed', $before, null);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Audit (before/after) + tell the staff and the family's other parents. */
+    private function contactChanged(Request $request, int $agencyId, int $familyId, string $verb, ?object $before, ?object $after): void
+    {
+        $actor = $request->user();
+        $who = trim(($actor->first_name ?? '') . ' ' . ($actor->last_name ?? '')) ?: 'A parent';
+        $name = (string) (($after ?? $before)->name ?? 'a contact');
+        $family = (string) DB::table('families')->where('id', $familyId)->value('family_name');
+        $children = DB::table('children')->where('family_id', $familyId)->whereNull('deleted_at')
+            ->get(['id', 'first_name', 'preferred_name']);
+        $kids = $children->map(fn ($c) => $c->preferred_name ?: $c->first_name)->filter()->implode(' & ') ?: 'the children';
+
+        $changes = [];
+        if ($verb === 'updated' && $before && $after) {
+            $labels = ['name' => 'name', 'relationship' => 'relationship', 'phone' => 'phone', 'alt_phone' => 'second phone',
+                'email' => 'email', 'can_pickup' => 'allowed to pick up', 'notes' => 'notes'];
+            foreach ($labels as $col => $label) {
+                $a = (string) ($before->{$col} ?? ''); $b = (string) ($after->{$col} ?? '');
+                if ($col === 'can_pickup') { $a = $a ? 'yes' : 'no'; $b = $b ? 'yes' : 'no'; }
+                if ($a !== $b) $changes[] = $label . ': ' . ($a === '' ? '—' : $a) . ' → ' . ($b === '' ? '—' : $b);
+            }
+            if (! $changes) return;                    // nothing actually changed: nobody is told
+        }
+        $pick = (bool) (($after ?? $before)->can_pickup ?? false);
+        $line = match ($verb) {
+            'added' => $who . ' added ' . $name . ' as ' . ($pick ? 'an authorised pick-up' : 'an emergency contact') . ' for ' . $kids . '.',
+            'removed' => $who . ' removed ' . $name . ' from ' . $kids . '\'s pick-ups and emergency contacts.',
+            default => $who . ' changed ' . $name . ' (' . implode('; ', $changes) . ').',
+        };
+        $this->audit((int) $actor->id, $agencyId, 'family.emergency_contact_' . $verb, $familyId, [
+            'emergency_contact_id' => (int) (($after ?? $before)->id ?? 0), 'by' => 'parent',
+            'before' => $before, 'after' => $after, 'changes' => $changes, 'summary' => $line,
+        ]);
+
+        try {
+            $centreId = (int) DB::table('families')->where('id', $familyId)->value('centre_id');
+            $roomIds = DB::table('enrollments')->whereIn('child_id', $children->pluck('id'))
+                ->where(fn ($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString()))
+                ->pluck('room_id')->unique()->all();
+            $educators = $roomIds ? DB::table('educator_rooms as er')->join('users as u', 'u.id', '=', 'er.user_id')
+                ->whereIn('er.room_id', $roomIds)->whereNull('u.deleted_at')->where('u.status', 'active')->pluck('u.id')->all() : [];
+            $leads = DB::table('role_assignments')->where('active', 1)
+                ->where(function ($q) use ($agencyId, $centreId) {
+                    $q->where(fn ($x) => $x->where('role', 'agency_admin')->where('agency_id', $agencyId))
+                      ->orWhere(fn ($x) => $x->where('role', 'centre_director')->where('centre_id', $centreId));
+                })->pluck('user_id')->all();
+            $staff = array_values(array_diff(array_unique(array_map('intval', array_merge($educators, $leads))), [(int) $actor->id]));
+            $parents = DB::table('guardians')->where('family_id', $familyId)->where('billing_hidden', 0)
+                ->where('user_id', '!=', $actor->id)->pluck('user_id')->map(fn ($x) => (int) $x)->all();
+
+            $title = '🚗 Pick-up list ' . ($verb === 'added' ? 'addition' : ($verb === 'removed' ? 'removal' : 'change')) . ($family !== '' ? ' · ' . $family : '');
+            $childId = (int) ($children->first()->id ?? 0);
+            $rows = [];
+            foreach ($staff as $uid) {
+                $rows[] = ['user_id' => $uid, 'type' => 'pickup_auth', 'title' => $title, 'body' => mb_substr($line, 0, 500),
+                    'data' => json_encode(['link' => $childId ? '#child-detail?id=' . $childId : '#admin-families', 'family_id' => $familyId]), 'created_at' => now()];
+            }
+            foreach ($parents as $uid) {
+                $rows[] = ['user_id' => $uid, 'type' => 'pickup_auth', 'title' => $title, 'body' => mb_substr($line, 0, 500),
+                    'data' => json_encode(['link' => '#family-contacts', 'family_id' => $familyId]), 'created_at' => now()];
+            }
+            if ($rows) Notify::write($rows);
+            foreach (array_merge($staff, $parents) as $uid) {
+                try { app(\App\Services\FcmService::class)->sendToUser($uid, $title, $line, in_array($uid, $parents, true) ? '#family-contacts' : '#child-detail?id=' . $childId); } catch (\Throwable $e) {}
+            }
+            // Directors and admins also by email: a change to who may collect a child is worth a record in the inbox.
+            $to = DB::table('users')->whereIn('id', array_intersect($leads, $staff))->whereNull('deleted_at')->pluck('email')
+                ->filter(fn ($e) => filter_var($e, FILTER_VALIDATE_EMAIL))->unique()->values()->all();
+            if ($to) {
+                $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($line) . '</p>'
+                    . '<p style="margin:0;font-size:13px;color:#475569;">Changed by the parent in KiddieTrac. The child\'s record shows the current list; the audit log keeps the before and after.</p>';
+                $html = \App\Services\EmailTemplate::wrap($agencyId, $body, ['eyebrow' => 'PICK-UPS', 'title' => $title, 'preheader' => $line]);
+                \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $title, $agencyId) {
+                    $m->to($to[0])->subject($title);
+                    if (count($to) > 1) $m->bcc(array_slice($to, 1));
+                    try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); } catch (\Throwable $e) {}
+                });
+            }
+        } catch (\Throwable $e) {
+            Log::warning('pick-up list change notify failed', ['family_id' => $familyId, 'error' => $e->getMessage()]);
+        }
     }
 
     /** Withdraw a request the caller's family made that is still waiting. */

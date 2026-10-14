@@ -215,7 +215,9 @@
 
   // v22p57 — combined features
   ['guardian'].forEach(function (r) {
-    Shell.registerScreen(r + ':pickup-auth', bridge('KT.V22p57', 'renderPickupAuth'));
+    /* #pickup-auth is the family's real pick-up list now (screen-family-contacts.js,
+       2026-10-13); the old screen wrote to pickup_authorizations, which nothing used. */
+    if (!(window.KT && window.KT.FamilyContacts)) Shell.registerScreen(r + ':pickup-auth', bridge('KT.V22p57', 'renderPickupAuth'));
     Shell.registerScreen(r + ':checkin',     bridge('KT.V22p57', 'renderCheckin'));
     Shell.registerScreen(r + ':trends',      bridge('KT.V22p57', 'renderTrends'));
     Shell.registerScreen(r + ':referrals',   bridge('KT.V22p57', 'renderReferrals'));

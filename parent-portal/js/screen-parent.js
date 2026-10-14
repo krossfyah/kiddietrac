@@ -501,8 +501,23 @@
       return '<div style="padding:8px 0;border-bottom:1px solid #F1F5F9;">'
         + '<div style="font-weight:600;color:#0F172A;font-size:14px;">' + esc((g.first_name || '') + ' ' + (g.last_name || '')) + (g.is_primary ? ' <span style="color:#159FB4;font-weight:700;font-size:11px;">· PRIMARY</span>' : '') + '</div>'
         + '<div style="color:#64748B;font-size:12.5px;">' + esc(g.relationship || 'guardian') + (g.can_pickup ? ' · can pick up' : ' · not authorised for pickup') + '</div>'
-        + (g.email ? '<div style="color:#64748B;font-size:12px;">' + esc(g.email) + '</div>' : '') + '</div>';
+        + (g.email ? '<div style="color:#64748B;font-size:12px;">' + esc(g.email) + '</div>' : '')
+        + (g.phone ? '<div style="color:#64748B;font-size:12px;">📞 ' + esc(g.phone) + '</div>' : '') + '</div>';
     }).join('');
+
+    /* EVERYONE ON FILE (2026-10-13, Anthony: "in the childs record under the parent and
+       educator view needs to show all guardians and emergency contacts"). The record only
+       showed guardians; the people who may collect the child are the family's emergency
+       contacts. */
+    var ecs = (d.emergency_contacts || []).map(function (e) {
+      var alt = e.alt_phone ? e.alt_phone + ' (' + (e.alt_phone_type || 'mobile') + (e.alt_phone_ext ? ' ext. ' + e.alt_phone_ext : '') + ')' : '';
+      return '<div style="padding:8px 0;border-bottom:1px solid #F1F5F9;">'
+        + '<div style="font-weight:600;color:#0F172A;font-size:14px;">' + esc(e.name || 'Contact') + (e.user_id ? ' <span style="color:#047857;font-weight:700;font-size:11px;">· PICK-UP LOGIN</span>' : '') + '</div>'
+        + '<div style="color:#64748B;font-size:12.5px;">' + esc(e.relationship || 'contact') + (e.can_pickup ? ' · can pick up' : ' · emergency contact only') + '</div>'
+        + ((e.phone || alt) ? '<div style="color:#64748B;font-size:12px;">📞 ' + esc([e.phone, alt].filter(Boolean).join('  ·  ')) + '</div>' : '')
+        + (e.email ? '<div style="color:#64748B;font-size:12px;">' + esc(e.email) + '</div>' : '') + '</div>';
+    }).join('') || '<div style="color:#64748B;font-size:13px;padding:6px 0;">None on file.</div>';
+    ecs += '<a href="#family-contacts" class="kt-cr-manage" style="display:inline-block;margin-top:10px;font-size:13px;font-weight:700;color:#1F6080;text-decoration:none;">Add or change pick-ups →</a>';
 
     var health = [];
     if (d.medical_notes) health.push(row('Medical', d.medical_notes));
@@ -524,6 +539,7 @@
       + section('Child', row('Full name', d.full_name) + row('Date of birth', d.date_of_birth) + row('Age', d.age && d.age.human) + row('Gender', gender) + row('Status', d.is_at_centre ? 'At the centre' : 'At home'))
       + section('Enrolment', row('Room', d.room && d.room.name) + row((KT.centreWord ? KT.centreWord(false) : 'Centre'), d.centre && d.centre.name) + row('Schedule', sched) + row('Start date', d.enrollment && d.enrollment.start_date) + row('CWELCC', d.enrollment && d.enrollment.cwelcc_eligible ? 'Eligible' : ''))
       + section('Guardians', guardians)
+      + section('Pick-ups & emergency contacts', ecs)
       + section('Health & dietary', healthHtml)
       /* Filled in after the card paints — a slow fetch must not hold up the profile. */
       + section('Medications', '<div id="kt-pmeds"><div style="color:#64748B;font-size:13px;padding:6px 0;">Loading…</div></div>')
@@ -532,6 +548,9 @@
 
     var cl = card.querySelector('#kt-cr-close');
     if (cl) cl.addEventListener('click', function () { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); });
+    // Leaving for the pick-up list closes the record first.
+    var mg = card.querySelector('.kt-cr-manage');
+    if (mg) mg.addEventListener('click', function () { if (window.KT && KT.popOverlay) KT.popOverlay(ov); else dismiss(); });
 
     /* ── MEDICATIONS: what is on file, and a way to ask for a new one ──────────
        A parent ASKS; a director authorises. Nothing submitted here can be given to a
@@ -984,7 +1003,8 @@
       Dom.clear(gallery);
       if (!data.photos || data.photos.length === 0) {
         gallery.removeAttribute('data-kt-list');
-        gallery.appendChild(emptyState('📷', 'Nothing shared yet', `When educators share photos or video of ${child.display_name}, they'll appear here.`));
+        // Across the whole grid, so it centres like every other empty screen (2026-10-13).
+        gallery.appendChild(Dom.el('div', { style: 'grid-column:1/-1;' }, [emptyState('📷', 'Nothing shared yet', `When educators share photos or video of ${child.display_name}, they'll appear here.`)]));
         return;
       }
       gallery.setAttribute('data-kt-list', '1');
