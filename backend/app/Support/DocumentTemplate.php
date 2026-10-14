@@ -29,7 +29,7 @@ class DocumentTemplate
             'label' => 'Payslip',
             'vars' => [
                 'agency_name', 'agency_logo', 'doc_title', 'doc_number',
-                'payee_name', 'payee_role', 'recipient_type', 'period', 'period_start', 'period_end',
+                'payee_name', 'payee_id', 'payee_role', 'recipient_type', 'period', 'period_start', 'period_end',
                 'status', 'hours', 'rate', 'regular_amount',
                 'ot_hours', 'ot_mult', 'ot_amount',
                 'vacation', 'gross', 'gross_with_vacation',
@@ -41,7 +41,7 @@ class DocumentTemplate
             'label' => 'Invoice',
             'vars' => [
                 'agency_name', 'agency_logo', 'doc_title', 'doc_number',
-                'payee_name', 'payee_role', 'issued_at', 'due_at', 'period',
+                'payee_name', 'payee_id', 'payee_role', 'issued_at', 'due_at', 'period',
                 'status', 'subtotal', 'tax_label', 'tax_rate', 'tax_amount', 'total',
                 'notes', 'generated_at', 'lines',
             ],

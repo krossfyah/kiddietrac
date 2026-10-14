@@ -81,6 +81,16 @@
     return w.location.origin + path;
   }
 
+  /* The signer's reference ID (ILH-P-0031), printed beside the date in the signature block
+     (2026-10-14). Fetched when a signed-in form opens; a no-login link has none. */
+  var signerRef = '';
+  function loadSignerRef() {
+    try {
+      if (!(KT.Api && KT.Api.get)) return;
+      KT.Api.get('/refs/mine').then(function (r) { var me = (r && r.me) || {}; signerRef = me.P || me.S || ''; }, function () {});
+    } catch (e) {}
+  }
+
   /** The signed-in user's full name, for the printed signature block. */
   function signerName() {
     try {
@@ -253,6 +263,8 @@
   }
 
   function open(form) {
+    signerRef = '';
+    if (!noAuth(form)) loadSignerRef();
     return new Promise(function (resolve) {
       var ov = buildSheet(form.title || 'Form');
       document.body.appendChild(ov);
@@ -863,7 +875,7 @@
             });
 
             cy -= 13;
-            page.drawText('Date signed: ' + signedOn, { x: x + PAD, y: cy, size: 9, font: font, color: grey });
+            page.drawText('Date signed: ' + signedOn + (signerRef ? '   \u00b7   ID ' + signerRef : ''), { x: x + PAD, y: cy, size: 9, font: font, color: grey });
 
             if (formObj) { try { formObj.flatten(); } catch (e) {} }
             return pdfDoc.saveAsBase64();

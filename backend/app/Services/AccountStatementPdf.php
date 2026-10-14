@@ -63,6 +63,20 @@ final class AccountStatementPdf
         return trim('statement-' . $who . '-' . $when, '-') . '.pdf';
     }
 
+    /** The account holder's reference IDs at the agency, and their families' (2026-10-14). */
+    private function refLine(array $a): string
+    {
+        try {
+            $agencyId = (int) ($a['agency_id'] ?? 0);
+            if (! $agencyId) return '';
+            $codes = array_values(\App\Support\RefCode::userCodes((int) ($a['user_id'] ?? 0), $agencyId));
+            $codes = array_merge($codes, array_values(\App\Support\RefCode::families((array) ($a['family_ids'] ?? []))));
+            return implode(' · ', array_unique(array_filter($codes)));
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
     // ── rendering ───────────────────────────────────────────────────────
     private function html(array $st): string
     {
@@ -194,6 +208,7 @@ final class AccountStatementPdf
             . '<td style="border:0;padding:0;width:62%;">'
             . '<div class="label">Statement for</div>'
             . '<div style="font-size:12pt;font-weight:bold;color:#0F172A;margin-top:2px;">' . $e($a['name']) . '</div>'
+            . (($refs = $this->refLine($a)) !== '' ? '<div class="lh" style="margin-top:2px;">ID ' . $e($refs) . '</div>' : '')
             . ($accLines ? '<div class="lh" style="margin-top:3px;">' . implode('<br>', $accLines) . '</div>' : '')
             . ($reach ? '<div class="lh" style="margin-top:3px;">' . implode('<br>', $reach) . '</div>' : '')
             . '</td>'

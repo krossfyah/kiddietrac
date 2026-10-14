@@ -295,6 +295,18 @@ class PayrollDocumentController extends Controller
      * Formatted here rather than in the template, because the renderer deliberately does no
      * arithmetic and no formatting — that is what keeps it unable to execute anything.
      */
+    /** The payee's staff reference ID (2026-10-14, App\Support\RefCode), or ''. */
+    private static function payeeRef(object $doc): string
+    {
+        try {
+            if (empty($doc->user_id) || empty($doc->agency_id)) return '';
+            $m = \App\Support\RefCode::users([(int) $doc->user_id], (int) $doc->agency_id, 'S');
+            return (string) ($m[(int) $doc->user_id] ?? '');
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
     private static function templateData(object $doc, ?object $agency, array $settings): array
     {
         $money = fn ($v) => number_format((float) $v, 2);
@@ -318,6 +330,7 @@ class PayrollDocumentController extends Controller
             'doc_title' => $doc->kind === 'invoice' ? 'Payroll invoice' : 'Payslip',
             'doc_number' => $doc->reference ?? '',
             'payee_name' => $doc->payee_name ?? '',
+            'payee_id' => self::payeeRef($doc),
             'payee_role' => $doc->role_label ?? '',
             'recipient_type' => $doc->role_label ?? '',
             'status' => ucfirst((string) ($doc->status ?? '')),
@@ -549,7 +562,8 @@ class PayrollDocumentController extends Controller
             . '<div class="muted">' . ($doc->kind === 'invoice' ? 'Payroll invoice' : 'Payslip')
             . ' · ' . e((string) $doc->reference) . '</div>'
             . '<table><tr><td style="border:0;padding-top:14px;"><strong>' . e((string) $doc->payee_name) . '</strong>'
-            . '<div class="muted">' . e((string) $doc->role_label) . '</div></td>'
+            . '<div class="muted">' . e((string) $doc->role_label)
+            . (($pid = self::payeeRef($doc)) !== '' ? ' · ID ' . e($pid) : '') . '</div></td>'
             . '<td style="border:0;padding-top:14px;" class="r"><div class="muted">Pay period</div>' . e($period) . '</td></tr></table>'
             . '<table><thead><tr><th>Description</th><th class="r">' . e(ucfirst((string) $doc->unit_label)) . '</th>'
             . '<th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>'

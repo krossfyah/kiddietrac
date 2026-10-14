@@ -17,7 +17,7 @@
 <body>
   <div class="header">
     <h1>Account Statement</h1>
-    <div class="meta">{{ $agency->name ?? 'KiddieTrac' }} · {{ $family->family_name }}</div>
+    <div class="meta">{{ $agency->name ?? 'KiddieTrac' }} · {{ $family->family_name }}@php $famRef = isset($family->id) ? (\App\Support\RefCode::families([(int) $family->id])[(int) $family->id] ?? null) : null; @endphp @if($famRef) · {{ $famRef }}@endif</div>
     <div class="meta">Generated {{ now()->format('F j, Y') }}</div>
   </div>
   <div class="summary">

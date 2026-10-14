@@ -95,7 +95,8 @@ final class PaymentReceipt
             'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($agency->brand_primary_color ?? ''))
                 ? (string) $agency->brand_primary_color : '#1F6080',
             'agency_id' => $agencyId,
-            'family' => (string) (DB::table('families')->where('id', $p->family_id)->value('family_name') ?: 'Account'),
+            'family' => (string) (DB::table('families')->where('id', $p->family_id)->value('family_name') ?: 'Account')
+                . (($fr = \App\Support\RefCode::families([(int) $p->family_id])[(int) $p->family_id] ?? null) ? ' · ' . $fr : ''),
             'number' => (string) ($inv->invoice_number ?? $inv->number ?? ('#' . ($inv->id ?? ''))),
             'receipt_no' => 'R-' . str_pad((string) $paymentId, 6, '0', STR_PAD_LEFT),
             'amount' => '$' . number_format((float) $p->amount, 2),

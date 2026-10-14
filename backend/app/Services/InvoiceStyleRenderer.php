@@ -139,6 +139,7 @@ final class InvoiceStyleRenderer
             'issued' => $inv->issued_at,
             'due' => $inv->due_at,
             'bill_to' => (string) ($family->family_name ?? 'Family'),
+            'bill_to_ref' => (string) (\App\Support\RefCode::families([(int) $inv->family_id])[(int) $inv->family_id] ?? ''),
             'address' => $this->familyAddress($family),
             'email' => $this->primaryGuardianEmail((int) $inv->family_id) ?: (string) ($family->primary_email ?? ''),
             'rows' => $rows,
@@ -269,6 +270,7 @@ final class InvoiceStyleRenderer
         $meta = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin:18px 0">'
             . '<tr><td style="vertical-align:top;width:55%;padding:2px 0">'
             . '<span style="color:#6B7280">Bill to:</span> <strong>' . $e($d['bill_to']) . '</strong>'
+            . (! empty($d['bill_to_ref']) ? ' <span style="color:#6B7280">· ' . $e($d['bill_to_ref']) . '</span>' : '')
             . ($d['address'] ? '<div style="color:#475569;white-space:pre-line;margin-top:2px">' . $e($d['address']) . '</div>' : '')
             . ($d['email'] ? '<div style="color:#475569;margin-top:2px">' . $e($d['email']) . '</div>' : '')
             . '</td>'

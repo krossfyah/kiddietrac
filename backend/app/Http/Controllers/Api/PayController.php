@@ -172,6 +172,7 @@ class PayController extends Controller
             . '<div class="conf">' . $e($confidential) . '</div>'
             . '<table class="grid"><tr>'
             . '<td><div class="lbl">Employee</div><strong>' . $e($name) . '</strong><br>'
+            . (($staffRef = $agencyId ? (\App\Support\RefCode::users([$uid], (int) $agencyId, 'S')[$uid] ?? null) : null) ? '<span style="color:#6B7280;">ID ' . $e($staffRef) . '</span><br>' : '')
             . ($empAddr ? $empAddr . '<br>' : '')
             . '<span style="color:#6B7280;">' . $e($p['user']->email ?? '') . '</span>'
             . ($empPhone ? '<br><span style="color:#6B7280;">' . $e($empPhone) . '</span>' : '') . '</td>'

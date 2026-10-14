@@ -15,7 +15,8 @@
 <body>
   <div class="header">
     <h1>{{ $child->first_name }} {{ $child->last_name }} — Report Card</h1>
-    <div class="sub">{{ $card->term }} · {{ $agency->name ?? 'KiddieTrac' }}</div>
+    @php $childRef = isset($child->id) ? \App\Support\RefCode::ensureChild((int) $child->id) : null; @endphp
+    <div class="sub">{{ $card->term }} · {{ $agency->name ?? 'KiddieTrac' }}@if($childRef) · ID {{ $childRef }}@endif</div>
   </div>
   <div class="meta">
     <strong>Family:</strong> {{ $family->family_name }} ·

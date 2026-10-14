@@ -517,9 +517,14 @@ HTML;
         $gender = $this->esc($child->gender ? str_replace('_', ' ', $child->gender) : '—');
         $roomName = $room ? $this->esc($room->name) : '—';
         $familyName = $this->esc($family->family_name);
+        // Visible reference IDs (2026-10-14, App\Support\RefCode).
+        $childRef = $this->esc((string) (\App\Support\RefCode::ensureChild((int) $child->id) ?? ''));
+        $familyRef = isset($family->id) ? $this->esc((string) (\App\Support\RefCode::ensureFamily((int) $family->id) ?? '')) : '';
         $address = $this->esc(trim(($family->address_line1 ?? '').' '.($family->city ?? '').' '
             .($family->province ?? '').' '.($family->postal_code ?? '')));
         $hcLast4 = $this->esc($child->health_card_last4 ?: '');
+        $childRefHtml = $childRef !== '' ? '<div class="meta" style="font-weight:700;letter-spacing:.3px;">ID ' . $childRef . '</div>' : '';
+        $familyRefHtml = $familyRef !== '' ? ' · ' . $familyRef : '';
         $hcDisplay = $hcLast4 ? "xxxx-xxxx-{$hcLast4}" : $this->missing('Not recorded');
         $doctor = $child->doctor_name ? $this->esc($child->doctor_name) : $this->missing('No doctor on file');
         $doctorPhone = $this->esc($child->doctor_phone ?: '');
@@ -661,7 +666,8 @@ HTML;
     <div>
       <h2>{$name}</h2>
       <div class="meta">{$age} · DOB {$dob} · {$gender}</div>
-      <div class="meta">{$familyName} family</div>
+      <div class="meta">{$familyName} family{$familyRefHtml}</div>
+      {$childRefHtml}
     </div>
     <div class="agency-logo">
       {$agencyLogo}

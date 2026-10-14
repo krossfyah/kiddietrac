@@ -21,10 +21,11 @@
       <tr><th>Children</th><th>Family</th><th>Centre</th><th class="amount">Gross fee</th><th class="amount">Rate</th><th class="amount">Subsidy</th><th class="amount">Parent</th></tr>
     </thead>
     <tbody>
+      @php $famRefs = \App\Support\RefCode::families(array_map(fn ($x) => (int) ($x['family_id'] ?? 0), is_array($rows) ? $rows : (method_exists($rows, 'all') ? $rows->all() : []))); @endphp
       @forelse ($rows as $r)
         <tr>
           <td>{{ $r['child_name'] }}</td>
-          <td>{{ $r['family_name'] }}</td>
+          <td>{{ $r['family_name'] }}@if(!empty($famRefs[$r['family_id'] ?? 0]))<br><span style="color:#64748B;font-size:8pt;">{{ $famRefs[$r['family_id']] }}</span>@endif</td>
           <td>{{ $r['centre_name'] }}</td>
           <td class="amount">${{ number_format($r['gross_fee'], 2) }}</td>
           <td class="amount">{{ $r['subsidy_rate'] }}%</td>

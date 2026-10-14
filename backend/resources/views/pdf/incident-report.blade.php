@@ -62,6 +62,10 @@
 
 @php
   $childName = trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? ''));
+  /* Visible reference IDs (2026-10-14). The recorder's staff ID only on the staff copy. */
+  $childRef = isset($child->id) ? \App\Support\RefCode::ensureChild((int) $child->id) : null;
+  $recRef = ($recorder && isset($recorder->id) && ($audience ?? 'staff') !== 'parent' && isset($agency->id))
+      ? (\App\Support\RefCode::users([(int) $recorder->id], (int) $agency->id, 'S')[(int) $recorder->id] ?? null) : null;
   $recName   = $recorder ? trim(($recorder->first_name ?? '') . ' ' . ($recorder->last_name ?? '')) : '—';
   $providerName = $agency->name ?? ($centre->name ?? 'Childcare provider');
   $tz = \App\Support\AgencyTime::tz((int) ($agency->id ?? 0)) ?: 'America/Toronto';
@@ -118,6 +122,7 @@
 </table>
 
 <h1>{{ $childName ?: 'Child' }}</h1>
+@if($childRef)<p class="sub" style="margin:0 0 2px;">ID {{ $childRef }}</p>@endif
 <p class="sub">{{ ucwords(str_replace('_', ' ', (string) $incident->incident_type)) }}
    &middot; severity {{ $incident->severity ?: 'not set' }}
    &middot; {{ $fmt($incident->occurred_at) }}</p>
@@ -128,13 +133,13 @@
 
 <div class="sec">The incident</div>
 <table class="kv">
-  <tr><td class="k">Child</td><td class="v">{{ $childName ?: '—' }}</td></tr>
+  <tr><td class="k">Child</td><td class="v">{{ $childName ?: '—' }}@if($childRef) &middot; {{ $childRef }}@endif</td></tr>
   <tr><td class="k">Occurred</td><td class="v">{{ $fmt($incident->occurred_at) }}</td></tr>
   <tr><td class="k">Location</td><td class="v">{{ $incident->location ?: '—' }}</td></tr>
   <tr><td class="k">Type</td><td class="v">{{ ucwords(str_replace('_', ' ', (string) $incident->incident_type)) }}</td></tr>
   <tr><td class="k">Severity</td><td class="v">{{ ucfirst((string) ($incident->severity ?: 'not set')) }}</td></tr>
   <tr><td class="k">First aid given</td><td class="v">{{ $incident->first_aid_administered ? 'Yes' : 'No' }}</td></tr>
-  <tr><td class="k">Recorded by</td><td class="v">{{ $recName }}</td></tr>
+  <tr><td class="k">Recorded by</td><td class="v">{{ $recName }}@if($recRef) &middot; {{ $recRef }}@endif</td></tr>
   <tr><td class="k">Reported</td><td class="v">{{ $fmtAt($incident->created_at) }}</td></tr>
 </table>
 

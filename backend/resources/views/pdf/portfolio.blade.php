@@ -21,6 +21,8 @@
   <div class="cover">
     <h1>{{ $child->first_name }} {{ $child->last_name }}</h1>
     <div class="sub">Childcare Portfolio</div>
+    @php $childRef = isset($child->id) ? \App\Support\RefCode::ensureChild((int) $child->id) : null; @endphp
+    @if($childRef)<div class="sub">ID {{ $childRef }}</div>@endif
     <div class="sub" style="margin-top: 10px;">{{ $agency->name ?? 'KiddieTrac' }}</div>
     <div class="sub" style="margin-top: 6px; font-size:9pt;">Generated {{ now()->format('F j, Y') }}</div>
   </div>

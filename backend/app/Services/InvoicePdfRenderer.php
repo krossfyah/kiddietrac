@@ -75,6 +75,8 @@ final class InvoicePdfRenderer
         $dueDate       = htmlspecialchars((string) ($inv->due_at ?? $inv->due_date ?? ''));
         $billToName    = htmlspecialchars((string) ($inv->bill_to_name ?? $inv->family_name ?? ''));
         $billToEmail   = htmlspecialchars((string) ($inv->bill_to_email ?? ''));
+        // The family's reference ID (2026-10-14, App\Support\RefCode).
+        $billToRef     = ! empty($inv->family_id) ? htmlspecialchars((string) (\App\Support\RefCode::families([(int) $inv->family_id])[(int) $inv->family_id] ?? '')) : '';
         $childName     = htmlspecialchars((string) ($inv->child_name ?? ''));
         $totalCents    = (int) ($inv->total_cents ?? $inv->amount_cents ?? 0);
         $currency      = htmlspecialchars((string) ($inv->currency ?? 'CAD'));
@@ -299,6 +301,7 @@ HTML
       <h3>Bill To</h3>
       <div class="name">{$billToName}</div>
 HTML
+        . ($billToRef ? "<div class='detail'>Account ID: {$billToRef}</div>" : '')
         . ($billToEmail ? "<div class='detail'>{$billToEmail}</div>" : '')
         . ($childName ? "<div class='detail'>For: {$childName}</div>" : '')
         . <<<HTML

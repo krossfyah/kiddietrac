@@ -68,6 +68,7 @@ final class IlearnInvoiceRenderer
 
         // Bill-to: the family, with its primary guardian's address and email.
         $party = (string) ($family->family_name ?? 'Family');
+        $partyRef = (string) (\App\Support\RefCode::families([(int) $inv->family_id])[(int) $inv->family_id] ?? '');
         $billAddr = $this->familyAddress($family);
         $partyEmail = $this->primaryGuardianEmail((int) $inv->family_id)
             ?: (string) ($family->primary_email ?? '');
@@ -120,6 +121,7 @@ final class IlearnInvoiceRenderer
             . '<tr>'
             . '<td style="vertical-align:top;width:55%;padding:2px 0">'
             . '<span class="k">Bill to:</span> <strong>' . $e($party) . '</strong>'
+            . ($partyRef !== '' ? ' <span class="k">· ' . $e($partyRef) . '</span>' : '')
             . ($billAddr ? '<div style="margin-top:2px;font-size:.88rem;line-height:1.4;color:#334155">'
                 . '<span class="k">Address:</span> <span style="white-space:pre-line">' . $e($billAddr) . '</span></div>' : '')
             . ($partyEmail ? '<div style="margin-top:2px"><span class="k">Email:</span> ' . $e($partyEmail) . '</div>' : '')
