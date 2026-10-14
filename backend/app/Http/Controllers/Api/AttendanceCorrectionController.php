@@ -209,11 +209,16 @@ final class AttendanceCorrectionController extends Controller
         $this->audit($request, $childId, $data, $made, $tz);
         $this->recheckRatio($childId, $roomId, $day);
         $this->notifyOversight($request, $childId, 'added', [
-            'For date' => Carbon::parse($data['date'], $tz)->format('l j F Y'),
-            'Arrival' => $data['check_in'] ?? '—',
-            'Departure' => $data['check_out'] ?? '—',
+            'For date' => Carbon::parse($data['date'], $tz)->format('l, F j, Y'),
+            'Signed in' => $in ? $in->format('g:i A') : '—',
+            'Signed out' => $out ? $out->format('g:i A') : '—',
             'Reason given' => $data['reason'],
         ]);
+        /* AND THE FAMILY (2026-10-13, Anthony: "if a childs clock in and clock out gets
+           adjusted manually pls send out notifications to the parent and admin/directors -
+           word the email correctly"). Not the live "has arrived" notice — a plain account of
+           a record being corrected for a day that has passed. */
+        $this->notifyFamily($request, $childId, 'added', $day, $in, $out, null);
 
         return response()->json([
             'message' => count($made) === 2
@@ -265,10 +270,13 @@ final class AttendanceCorrectionController extends Controller
             Log::warning('attendance removal audit failed', ['event' => $eventId, 'e' => $e->getMessage()]);
         }
 
+        $this->notifyFamily($request, (int) $row->child_id, 'removed',
+            Carbon::parse($row->occurred_at)->setTimezone($tz)->startOfDay(), null, null,
+            ['type' => $row->event_type, 'at' => Carbon::parse($row->occurred_at)->setTimezone($tz)]);
         $this->notifyOversight($request, (int) $row->child_id, 'removed', [
-            'Entry' => $row->event_type === 'check_in' ? 'Arrival' : 'Departure',
-            'Was recorded as' => AgencyTime::fmt($row->occurred_at, $tz)
-                . ' on ' . Carbon::parse($row->occurred_at)->setTimezone($tz)->format('l j F Y'),
+            'Entry' => $row->event_type === 'check_in' ? 'Sign-in' : 'Sign-out',
+            'Was recorded as' => Carbon::parse($row->occurred_at)->setTimezone($tz)->format('g:i A')
+                . ' on ' . Carbon::parse($row->occurred_at)->setTimezone($tz)->format('l, F j, Y'),
             'Had been entered late' => ($row->backdated ?? false) ? 'yes' : 'no',
         ]);
 
@@ -296,8 +304,9 @@ final class AttendanceCorrectionController extends Controller
                 return;
             }
 
-            $centreIds = DB::table('centres')->where('agency_id', $agencyId)
-                ->whereNull('deleted_at')->pluck('id');
+            /* The CHILD'S centre's directors — not every centre's. A director acts on their
+               own centre only (CentreScope), and this mail names a child and their day. */
+            $centreIds = collect([$this->centreForChild($childId)])->filter()->values();
 
             $actorId = (int) $request->user()->id;
             $to = DB::table('role_assignments as ra')
@@ -334,8 +343,8 @@ final class AttendanceCorrectionController extends Controller
             }
 
             $body = '<p style="margin:0 0 14px;"><strong>' . e($actorName) . '</strong> '
-                . ($verb === 'removed' ? 'removed an attendance entry for ' : 'added a missed attendance entry for ')
-                . '<strong>' . e($childName) . '</strong>.</p>'
+                . ($verb === 'removed' ? 'removed a sign-in/out entry from ' : 'manually corrected the sign-in/out record for ')
+                . '<strong>' . e($childName) . '</strong>. The family has been told about the change.</p>'
                 . '<table role="presentation" style="border-collapse:collapse;font-size:14px;margin:0 0 16px;">'
                 . $rows . '</table>'
                 . '<p style="margin:0 0 14px;font-size:13px;color:#475569;">Entered '
@@ -362,6 +371,99 @@ final class AttendanceCorrectionController extends Controller
             });
         } catch (Throwable $e) {
             Log::warning('attendance change notice failed', ['child' => $childId, 'e' => $e->getMessage()]);
+        }
+    }
+
+    /** The centre the child attends (their room's centre, else the family's). */
+    private function centreForChild(int $childId): ?int
+    {
+        $c = DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->where('e.child_id', $childId)->orderByDesc('e.id')->value('r.centre_id');
+        if (! $c) {
+            $c = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')->where('ch.id', $childId)->value('f.centre_id');
+        }
+        return $c ? (int) $c : null;
+    }
+
+    /**
+     * Tell the child's parents that their child's attendance record was corrected.
+     *
+     * Worded as what it is — a record being put right for a day that has passed — never
+     * as "has arrived" / "has been picked up", which would read as something happening now.
+     * The staff member's typed reason is NOT included: it is an internal note ("educator
+     * forgot"), written for the record, not for the family. Pick-up-only logins are left
+     * out (attendance feeds billing, which they do not see). Best-effort.
+     */
+    private function notifyFamily(Request $request, int $childId, string $verb, Carbon $day, ?Carbon $in, ?Carbon $out, ?array $removed): void
+    {
+        try {
+            $agencyId = $this->agencyForChild($childId);
+            if (! $agencyId) return;
+            $child = DB::table('children')->where('id', $childId)->first(['first_name', 'preferred_name', 'family_id']);
+            if (! $child || ! $child->family_id) return;
+            $first = $child->preferred_name ?: $child->first_name;
+            $centreId = $this->centreForChild($childId);
+            $centre = $centreId ? (string) DB::table('centres')->where('id', $centreId)->value('name') : '';
+            $from = $centre !== '' ? $centre : 'Your childcare provider';
+            $dayText = $day->format('l, F j, Y');
+
+            $parents = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                ->where('g.family_id', $child->family_id)
+                ->where(function ($q) { $q->whereNull('g.billing_hidden')->orWhere('g.billing_hidden', 0); })
+                ->whereNull('u.deleted_at')->where('u.email', '!=', '')
+                ->get(['u.id', 'u.email', 'u.first_name']);
+            if ($parents->isEmpty()) return;
+
+            if ($verb === 'removed' && $removed) {
+                $what = $removed['type'] === 'check_in' ? 'sign-in' : 'sign-out';
+                $lead = $from . ' removed an incorrect ' . $what . ' time (' . $removed['at']->format('g:i A') . ') from '
+                    . $first . '\'s attendance record for ' . $dayText . '.';
+                $rows = [];
+                $title = $first . '\'s attendance record was updated';
+            } else {
+                $lead = $from . ' has updated ' . $first . '\'s attendance record for ' . $dayText
+                    . '. ' . ($in && $out ? 'The sign-in and sign-out times were' : ($in ? 'The sign-in time was' : 'The sign-out time was'))
+                    . ' missed on the day and have now been entered:';
+                $rows = array_filter(['Signed in' => $in ? $in->format('g:i A') : null, 'Signed out' => $out ? $out->format('g:i A') : null]);
+                $title = $first . '\'s attendance record was updated';
+            }
+            $subject = $title . ' — ' . $day->format('D, M j');
+
+            $table = '';
+            foreach ($rows as $k => $v) {
+                $table .= '<tr><td style="padding:6px 14px 6px 0;color:#64748B;">' . e($k) . '</td>'
+                    . '<td style="padding:6px 0;color:#0F172A;font-weight:700;">' . e($v) . '</td></tr>';
+            }
+            $bodyFor = function ($name) use ($lead, $table, $first) {
+                return '<p style="margin:0 0 12px;">Hi ' . e($name ?: 'there') . ',</p>'
+                    . '<p style="margin:0 0 12px;">' . e($lead) . '</p>'
+                    . ($table !== '' ? '<table role="presentation" style="border-collapse:collapse;font-size:15px;margin:0 0 14px;">' . $table . '</table>' : '')
+                    . '<p style="margin:0 0 12px;">This is a correction to ' . e($first) . '\'s record only — there is nothing you need to do.</p>'
+                    . '<p style="margin:0;color:#475569;">If these times don\'t match what you remember, simply reply to this email or speak with the centre and we\'ll look into it.</p>';
+            };
+
+            foreach ($parents as $p) {
+                if (! filter_var($p->email, FILTER_VALIDATE_EMAIL)) continue;
+                $html = \App\Services\EmailTemplate::wrap($agencyId, $bodyFor($p->first_name), [
+                    'eyebrow' => 'Attendance update',
+                    'title' => $title,
+                    'subtitle' => $dayText,
+                    'preheader' => $lead,
+                ]);
+                \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($p, $subject, $agencyId) {
+                    $m->to($p->email, $p->first_name ?: null)->subject($subject);
+                    try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); } catch (Throwable $e) {}
+                });
+                \App\Support\Notify::write([
+                    'user_id' => (int) $p->id, 'type' => 'attendance',
+                    'title' => '🕒 ' . $title,
+                    'body' => $lead . ($rows ? ' ' . implode(' · ', array_map(fn ($k, $v) => $k . ' ' . $v, array_keys($rows), $rows)) : ''),
+                    'data' => json_encode(['url' => '/dashboard.html#dashboard', 'child_id' => $childId]),
+                    'created_at' => now(),
+                ]);
+            }
+        } catch (Throwable $e) {
+            Log::warning('attendance family notice failed', ['child' => $childId, 'e' => $e->getMessage()]);
         }
     }
 

@@ -95,7 +95,7 @@
       +   'Required. This goes on the permanent record with your name against it.</div>'
       + '<div style="margin-top:12px;padding:10px 12px;background:#FEF3C7;color:#92400E;'
       +   'border-radius:9px;font-size:12px;">This is recorded as a later correction, with your '
-      +   'name and the time you entered it. The family is not notified.</div>'
+      +   'name and the time you entered it. The family is emailed that the record was corrected (your reason is not shown to them), and admins and the centre director are told.</div>'
       + '<div id="af-msg" style="font-size:13px;margin-top:10px;min-height:18px;"></div>'
       + '</div>'
       + '<div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 22px 20px;">'
