@@ -2407,6 +2407,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/countersign-reminders/preview', [\App\Http\Controllers\Api\CountersignRemindersController::class, 'preview']);
         Route::post ('/admin/countersign-reminders/test',    [\App\Http\Controllers\Api\CountersignRemindersController::class, 'test'])->middleware('throttle:6,1,csremtest');
         // Temporary (forms-only) parents not on a family yet — App\Support\TempGuardians (2026-10-13).
+        // Address autocomplete for address fields (2026-10-13) — App\Http\Controllers\Api\AddressController.
+        Route::get   ('/address/suggest', [\App\Http\Controllers\Api\AddressController::class, 'suggest'])->middleware('throttle:60,1');
         Route::get   ('/admin/temp-guardians/settings', [\App\Http\Controllers\Api\TempGuardianController::class, 'settings']);
         Route::post  ('/admin/temp-guardians/settings', [\App\Http\Controllers\Api\TempGuardianController::class, 'saveSettings']);
         Route::get   ('/admin/temp-guardians',          [\App\Http\Controllers\Api\TempGuardianController::class, 'index'])->middleware('throttle:120,1');
