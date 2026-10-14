@@ -87,12 +87,27 @@
       + '</div>'
       + '<div style="font-size:11.5px;color:#64748B;margin-top:6px;">'
       +   'Fill in whichever is missing — you do not have to give both.</div>'
+      /* A list of the usual reasons, plus notes (2026-10-13, Anthony: "why is this being added
+         late field should be a drop down to select predefined and also to add notes as well").
+         Both go on the record as one line: "Reason — notes". */
       + '<label style="' + lbl + '">Why is this being added late? '
       +   '<span style="color:#DC2626;">*</span></label>'
-      + '<input id="af-reason" type="text" maxlength="300" required style="' + inp + '"'
-      +   ' placeholder="e.g. Educator forgot to sign her in at drop-off">'
+      + '<select id="af-reason" required style="' + inp + 'background:#fff;">'
+      + '<option value="">Choose a reason…</option>'
+      + '<option>Educator forgot to sign the child in</option>'
+      + '<option>Educator forgot to sign the child out</option>'
+      + '<option>Parent / guardian forgot to sign in or out</option>'
+      + '<option>QR code, kiosk or app was not working</option>'
+      + '<option>Wrong time was recorded</option>'
+      + '<option>Child left early / arrived late and it was not recorded</option>'
+      + '<option>Signed in or out on the wrong child</option>'
+      + '<option>Other (explain in the notes)</option>'
+      + '</select>'
+      + '<label style="' + lbl + '">Notes <span id="af-notes-req" style="color:#64748B;font-weight:500;">(optional)</span></label>'
+      + '<textarea id="af-notes" maxlength="240" rows="2" style="' + inp + 'height:auto;min-height:56px;resize:vertical;font-family:inherit;"'
+      +   ' placeholder="Anything that helps explain it, e.g. who noticed and when"></textarea>'
       + '<div style="font-size:11.5px;color:#64748B;margin-top:4px;">'
-      +   'Required. This goes on the permanent record with your name against it.</div>'
+      +   'This goes on the permanent record with your name against it.</div>'
       + '<div style="margin-top:12px;padding:10px 12px;background:#FEF3C7;color:#92400E;'
       +   'border-radius:9px;font-size:12px;">This is recorded as a later correction, with your '
       +   'name and the time you entered it. The family is emailed that the record was corrected (your reason is not shown to them), and admins and the centre director are told.</div>'
@@ -197,12 +212,22 @@
     $('af-date').addEventListener('change', loadDay);
     loadDay();
 
+    // Notes become required when the reason is "Other".
+    $('af-reason').addEventListener('change', function () {
+      var other = /^Other/.test(this.value);
+      var t = $('af-notes-req');
+      if (t) { t.textContent = other ? '*' : '(optional)'; t.style.color = other ? '#DC2626' : '#64748B'; }
+    });
     $('af-save').addEventListener('click', function () {
       var btn = $('af-save');
       var body = {
         child_id: child.id,
         date: $('af-date').value,
-        reason: $('af-reason').value.trim(),
+        reason: (function () {
+          var r = ($('af-reason').value || '').replace(/\s*\(explain in the notes\)$/i, '').trim();
+          var n = ($('af-notes').value || '').trim();
+          return (r && n) ? (r + ' — ' + n) : (r || n);
+        })(),
       };
       if ($('af-in').value) { body.check_in = $('af-in').value; }
       if ($('af-out').value) { body.check_out = $('af-out').value; }
@@ -211,10 +236,15 @@
         refuse('Give an arrival time, a departure time, or both.', 'af-in');
         return;
       }
-      if (body.reason.length < 3) {
-        refuse('Say why this is being added late — it goes on the record.', 'af-reason');
+      if (!$('af-reason').value) {
+        refuse('Choose why this is being added late — it goes on the record.', 'af-reason');
         return;
       }
+      if (/^Other/.test($('af-reason').value) && ($('af-notes').value || '').trim().length < 3) {
+        refuse('Add a note explaining the reason.', 'af-notes');
+        return;
+      }
+      if (body.reason.length > 300) { body.reason = body.reason.slice(0, 300); }
 
       btn.disabled = true;
       var was = btn.textContent;
