@@ -925,13 +925,37 @@
               role: 'guardian',
             }));
             gr.appendChild(gWho);
+            var gPhones = [g.phone, g.phone2 ? (g.phone2 + (g.phone2_type ? ' (' + g.phone2_type + (g.phone2_ext ? ' ext. ' + g.phone2_ext : '') + ')' : '')) : null].filter(Boolean).join('  ·  ');
             gWho.appendChild(Dom.el('div', {}, [
-              Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, name + (bits.length ? ' · ' + bits.join(', ') : '')),
+              Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, name + (bits.length ? ' · ' + bits.join(', ') : '') + (Number(g.billing_hidden) ? ' · 🚸 pick-up login' : '')),
               g.email ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, g.email) : Dom.el('span', {}),
+              gPhones ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, '📞 ' + gPhones) : Dom.el('span', {}),
             ]));
             sec.appendChild(gr);
           });
         }
+        /* Pick-ups & emergency contacts (2026-10-13) — they belong to the family and were never
+           on the child's record. Authorised pick-ups first. */
+        var ecs = child.emergency_contacts || [];
+        sec.appendChild(Dom.el('div', { style: 'font-size:11.5px;font-weight:800;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;margin:14px 0 6px;' }, 'Pick-ups & emergency contacts'));
+        if (!ecs.length) {
+          sec.appendChild(Dom.el('div', { style: 'font-size:13px;color:#94A3B8;padding:4px 0;' }, 'None on file — add them in Families → Edit → Emergency.'));
+        }
+        ecs.forEach(function (e) {
+          var bits2 = [];
+          if (e.relationship) bits2.push(e.relationship);
+          bits2.push(e.can_pickup ? '✓ can pick up' : 'emergency contact only');
+          if (e.user_id) bits2.push('🚸 pick-up login');
+          var phones = [e.phone, e.alt_phone ? (e.alt_phone + (e.alt_phone_type ? ' (' + e.alt_phone_type + (e.alt_phone_ext ? ' ext. ' + e.alt_phone_ext : '') + ')' : '')) : null].filter(Boolean).join('  ·  ');
+          var er = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #EEF2F5;font-size:13px;' });
+          er.appendChild(_avatarEl(e.name || '?', { size: 34, photoUrl: '', role: 'contact' }));
+          er.appendChild(Dom.el('div', { style: 'min-width:0;' }, [
+            Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, (e.name || 'Contact') + ' · ' + bits2.join(', ')),
+            phones ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, '📞 ' + phones) : Dom.el('span', {}),
+            e.email ? Dom.el('div', { style: 'color:#64748B;font-size:12px;' }, e.email) : Dom.el('span', {}),
+          ]));
+          sec.appendChild(er);
+        });
         wrap.appendChild(sec);
       })();
 

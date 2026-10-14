@@ -236,9 +236,20 @@ final class ChildController extends Controller
             ->where('guardians.family_id', $child->family_id)
             ->select(
                 'users.id', 'users.first_name', 'users.last_name', 'users.email',
-                'guardians.relationship', 'guardians.is_primary', 'guardians.can_pickup',
+                'users.phone', 'users.phone2', 'users.phone2_type', 'users.phone2_ext', 'users.sex', 'users.photo_url',
+                'guardians.relationship', 'guardians.is_primary', 'guardians.can_pickup', 'guardians.billing_hidden',
             )
             ->get();
+
+        /* THE PICK-UPS AND EMERGENCY CONTACTS TOO (2026-10-13, Anthony: "all of the guardians
+           and pick ups are not showing up for rosaline ward under children contact record").
+           The record only ever sent guardians, so the people a family names as emergency
+           contacts / authorised pick-ups (Add family's step 4) were never on the child's
+           record at all. They hang off the family. */
+        $emergencyContacts = $child->family_id
+            ? DB::table('emergency_contacts')->where('family_id', $child->family_id)->orderByDesc('can_pickup')->orderBy('id')
+                ->get(['id', 'name', 'relationship', 'phone', 'alt_phone', 'alt_phone_type', 'alt_phone_ext', 'email', 'can_pickup', 'user_id', 'notes'])
+            : collect();
 
         $subsidies = DB::table('subsidies')
             ->where('child_id', $childId)
@@ -305,6 +316,7 @@ final class ChildController extends Controller
             'pronouns' => $child->pronouns ?? null,
             'family' => $family,
             'guardians' => $guardians,
+            'emergency_contacts' => $emergencyContacts,
             'room' => $room,
             'enrollment' => $enrollment,
             'health_flags' => $healthFlags,
