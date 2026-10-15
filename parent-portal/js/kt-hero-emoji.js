@@ -58,7 +58,7 @@
     'custom forms': '📝', 'daily log': '📔', 'forms': '🖊', 'forms to fill in': '🖊',
     'new visit report': '🏡',
     'children': '🧒', 'roles & permissions': '🛡', 'background checks': '🔎',
-    'room assignments': '🗺', 'tours': '🚪',
+    'room assignments': '🗺', 'room controls': '🎛️', 'tours': '🚪',
     'bus routes': '🚌', 'field trips': '🚐',
     'room rotations': '🔄', 'substitutes': '🧑‍🏫',
     'audit log': '📜', 'doc workflows': '🗃',

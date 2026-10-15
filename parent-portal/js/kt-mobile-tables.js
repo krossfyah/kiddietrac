@@ -81,6 +81,27 @@
       // Value side of each row.
       '  #appMain table:not(.kt-nomc) td > *{min-width:0;}',
       '  #appMain table:not(.kt-nomc) td{color:#334155;}',
+      /* CONDENSED CARDS (2026-10-15, Anthony: "the boxes are so big can you condense with
+         repositioning the data"). One field per full-width line made a family 327px tall,
+         two to a screen. Now: the title across the top, the select box and the ⋮ menu in
+         the top-right corner, and short fields TWO PER ROW with a small label above each
+         value; a long value or an email keeps the whole width (marked in restack()).
+         table.kt-mcards:not(.kt-nomc) out-specifies kt-mobile-app.css's
+         `#appMain table.kt-mcards td{display:flex !important}`. */
+      '  #appMain table.kt-mcards:not(.kt-nomc) tr{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:14px;row-gap:7px;position:relative;padding:11px 13px 12px !important;margin-bottom:8px !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td{display:block !important;text-align:left !important;padding:0 !important;min-width:0;line-height:1.3 !important;font-size:13px !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td::before{display:block !important;max-width:none !important;font-size:9.5px !important;letter-spacing:.35px;margin:0 0 1px !important;padding:0 !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td[data-label=""]::before{display:none !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td > .kt-mcv{text-align:left !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-title,#appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-block{grid-column:1 / -1;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-title{font-size:15px !important;padding:0 0 2px !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-title::before{display:none !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-empty{display:none !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-select,#appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-actions{position:absolute !important;top:9px;right:10px;width:auto !important;z-index:1;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-select::before,#appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-actions::before{display:none !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) tr:has(> td.kt-mcard-select) > td.kt-mcard-actions{right:42px;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) tr:has(> td.kt-mcard-select, > td.kt-mcard-actions) > td.kt-mcard-title{padding-right:40px !important;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) tr:has(> td.kt-mcard-select):has(> td.kt-mcard-actions) > td.kt-mcard-title{padding-right:84px !important;}',
       '}',
     ].join('\n');
     document.head.appendChild(s);
@@ -164,6 +185,25 @@
           if (hasText(cells[j])) { cells[j].classList.add('kt-mcard-title'); break; }
         }
       }
+      // Condensed layout (see the stylesheet): controls to the corner, wide values full width.
+      /* Only BUTTONS count as controls. A cell whose value is a link (an email, a file
+         name) is data and stays in the grid; and only the LAST button-only cell goes to
+         the corner, so two never land on the same spot. */
+      var lastActions = null, selectDone = false;
+      cells.forEach(function (td) {
+        if (/\bkt-mcard-(title|empty)\b/.test(td.className)) return;
+        var bare = td.cloneNode(true);
+        [].forEach.call(bare.querySelectorAll('button,[role="button"],input,select,label'), function (n) { n.remove(); });
+        if ((bare.textContent || '').trim() === '') {
+          var box = td.querySelector('input[type="checkbox"]');
+          if (box && !selectDone && !td.querySelector('button,[role="button"],select')) { td.classList.add('kt-mcard-select'); selectDone = true; }
+          else if (td.querySelector('button,[role="button"]')) { lastActions = td; }
+          return;
+        }
+        var t = (td.textContent || '').replace(/\s+/g, ' ').trim();
+        if (t.length > 26 || /\S+@\S+\.\S+/.test(t)) td.classList.add('kt-mcard-block');
+      });
+      if (lastActions) lastActions.classList.add('kt-mcard-actions');
     });
   }
 

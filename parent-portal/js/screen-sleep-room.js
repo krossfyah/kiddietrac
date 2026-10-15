@@ -17,7 +17,7 @@
 
    Directors and admins also get a Report tab: per child and nap, every check and every gap
    longer than the interval, with CSV and PDF — what a licensing inspector asks for.
-   Settings → Notifications → Sleep checks (KT.sleepChecks.paintSettings below).
+   Settings → Room Controls → Sleep checks (KT.sleepChecks.paintSettings below; was under Notifications until 2026-10-15).
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -209,7 +209,7 @@
     }
     h += '</div>';
     if (!d.enabled) {
-      body.innerHTML = h + '<div class="sl-card">Sleep checks are switched off for this centre. An agency admin can turn them on in Settings → Notifications → Sleep checks.</div>';
+      body.innerHTML = h + '<div class="sl-card">Sleep checks are switched off for this centre. An agency admin can turn them on in <a href="#educator-rooms?tab=sleep">Settings → Room Controls → Sleep checks</a>.</div>';
       bindRoomSel(body); return;
     }
     h += '<div id="sl-overdue" class="sl-card" style="display:none;background:#FEF2F2;border-color:#FCA5A5;color:#991B1B;font-weight:800;"></div>';
@@ -425,7 +425,7 @@
     }); });
   }
 
-  /* ── Settings → Notifications → Sleep checks (painted by screen-notification-settings.js) ── */
+  /* ── Settings → Room Controls → Sleep checks (painted by screen-educator-rooms.js) ── */
   async function paintSettings(pane) {
     css();
     var d;

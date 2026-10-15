@@ -1,5 +1,12 @@
 /* ═══════════════════════════════════════════════════════════════════
-   KIDDIETRAC — Room assignments
+   KIDDIETRAC — Room Controls (was "Room assignments")
+
+   ROOM CONTROLS (2026-10-15, Anthony: "rename room assignments to Room Controls and add
+   the headcount settings as a subtab including moving the sleep checks into room
+   controls"). Three sub-tabs on the shared KT.settingsTabs: Room assignments (this file,
+   unchanged below), Headcounts (KT.Headcount.paintSettings, screen-headcounts.js) and
+   Sleep checks (KT.sleepChecks.paintSettings, screen-sleep-room.js). #educator-rooms is
+   kept as the hash, and ?tab=headcounts|sleep opens a sub-tab.
 
    educator_rooms decides whose children a member of staff sees, and whether attendance
    and sign-out figures are attributed to a person or fall back to the whole centre.
@@ -605,10 +612,34 @@
     injectStyle();
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div class="er-wrap">'
-      + '<div class="kt-page-hero"><h2>🚪 Room assignments</h2>'
-      + '<p>Which rooms a person works in. This decides whose children they see, and lets '
+      + '<div class="kt-page-hero"><h2>🎛️ Room Controls</h2>'
+      + '<p>Who works in which room, routine headcount reminders, and sleep checks.</p></div>'
+      + '<div id="rc-tabs"></div></div>';
+    /* A painter that returns quietly (the API said this is not theirs to change) leaves
+       its pane empty; say so rather than show nothing. */
+    function guarded(fn) {
+      return function (pane) {
+        if (!fn) { pane.innerHTML = '<div class="kt-card" style="color:#64748B;">Not available.</div>'; return; }
+        return Promise.resolve(fn(pane)).then(function () {
+          if (!pane.textContent || /^\s*Loading…\s*$/.test(pane.textContent)) {
+            pane.innerHTML = '<div class="kt-card" style="max-width:680px;color:#64748B;">Only agency administrators can change this.</div>';
+          }
+        });
+      };
+    }
+    KT.settingsTabs(main.querySelector('#rc-tabs'), 'educator-rooms', [
+      { key: 'assignments', label: '🚪 Room assignments', paint: function (pane) { return renderAssignments(pane); } },
+      { key: 'headcounts', label: '👀 Headcounts', paint: function (pane) { return guarded(KT.Headcount && KT.Headcount.paintSettings)(pane); } },
+      { key: 'sleep', label: '😴 Sleep checks', paint: function (pane) { return guarded(KT.sleepChecks && KT.sleepChecks.paintSettings)(pane); } },
+    ]);
+  }
+
+  /* The Room assignments sub-tab: the screen as it was, drawn into its pane. */
+  async function renderAssignments(main) {
+    main.innerHTML = '<div>'
+      + '<p style="font-size:13px;color:#64748B;margin:0 0 12px;line-height:1.5;">Which rooms a person works in. This decides whose children they see, and lets '
       + 'attendance and sign-out figures be attributed to a person rather than a whole '
-      + 'centre. Anyone can be assigned to any room — their own centre is marked.</p></div>'
+      + 'centre. Anyone can be assigned to any room — their own centre is marked.</p>'
       + '<div id="er-summary"></div>'
       + '<div id="er-picker"></div>'
       + '<div class="er-editing" id="er-editing" style="display:none !important;">'

@@ -60,6 +60,10 @@
      wraps now; the name keeps at least 150px beside its avatar and the rest drops to a
      second line. */
   #appMain [style*="gap:14px;padding:14px 18px;border-bottom:1px solid #F3F4F6"] { flex-wrap: wrap; row-gap: 8px; }
-  #appMain [style*="gap:14px;padding:14px 18px;border-bottom:1px solid #F3F4F6"] > :nth-child(2) { flex: 1 1 150px !important; min-width: 150px; }
+  /* The TEXT column is the child the screen itself made flexible (inline flex:1) -
+     never "the second child": an unread notification has a dot first, so :nth-child(2)
+     was its bell icon, which took the 150px and squeezed the words into a sliver
+     (Anthony's screenshot, 2026-10-15). Never pick a row's parts by position. */
+  #appMain [style*="gap:14px;padding:14px 18px;border-bottom:1px solid #F3F4F6"] > [style*="flex:1"] { flex: 1 1 150px !important; min-width: 150px; }
 
 }

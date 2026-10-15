@@ -1020,6 +1020,7 @@
     'Photos & video': { fr: 'Photos et vidéos', es: 'Fotos y vídeos', hi: 'तस्वीरें और वीडियो' },
     'Pipeline': { fr: 'Pipeline', es: 'Embudo de ventas', hi: 'पाइपलाइन' },
     'Room assignments': { fr: 'Affectations de salle', es: 'Asignaciones de sala', hi: 'कक्ष आवंटन' },
+    'Room Controls': { fr: 'Gestion des salles', es: 'Control de salas', hi: 'कक्ष नियंत्रण' },
     'Tasks': { fr: 'Tâches', es: 'Tareas', hi: 'कार्य' },
     // A child leaving care, not money leaving an account.
     'Withdrawals': { fr: 'Départs', es: 'Bajas', hi: 'नाम वापसी' },

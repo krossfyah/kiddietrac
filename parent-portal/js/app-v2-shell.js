@@ -416,7 +416,7 @@
             : []),
           /* No "My profile" here (2026-10-01, Anthony): your name in the top bar opens
              it, so Settings holds agency settings only. #my-profile still routes. */
-          { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
+          { hash: 'educator-rooms', label: 'Room Controls', icon: '🎛️' },
           { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
           { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
           { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
@@ -549,7 +549,7 @@
           { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
-          { hash: 'educator-rooms', label: 'Room assignments', icon: '🚪' },
+          { hash: 'educator-rooms', label: 'Room Controls', icon: '🎛️' },
           /* No "My profile" here either: a director's name in the top bar opens
              #my-profile (kt-topbar openProfile). */
 

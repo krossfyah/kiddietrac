@@ -279,7 +279,7 @@ final class ReportsController extends Controller
      * enrolment, the waitlist, tours - is agency business, not classroom business,
      * and stays out of reach whatever the caller asks for.
      */
-    private const EDUCATOR_TYPES = ['attendance', 'staff_hours', 'observations', 'incidents'];
+    private const EDUCATOR_TYPES = ['attendance', 'staff_hours', 'observations', 'incidents', 'headcounts'];
 
     /**
      * How far a caller may see inside their own agency - null means "the whole
@@ -406,6 +406,9 @@ final class ReportsController extends Controller
             'incidents'   => ['title' => 'Incidents & injuries',  'icon' => '🩹', 'desc' => 'Logged incidents / injuries in the period.',        'dated' => true],
             'observations'=> ['title' => 'Observations',          'icon' => '🔭', 'desc' => 'Learning-story observations recorded.',            'dated' => true],
             'tours'       => ['title' => 'Tour bookings',         'icon' => '🚪', 'desc' => 'Prospective-family tour requests.',                 'dated' => true],
+            /* A DAY'S HEADCOUNTS (2026-10-15, Anthony: "make a new head count report that can
+               be pulled each day"). Pick one day for the daily log, or schedule it Daily. */
+            'headcounts'  => ['title' => 'Headcounts',            'icon' => '👀', 'desc' => 'Every headcount taken: room or outing, expected vs counted, anyone not seen and the follow-up. Pick a single day for the daily log.', 'dated' => true],
             'compliance'  => ['title' => 'Out of compliance',     'icon' => '⚠️', 'desc' => 'Children not signed in or out, staff who never clocked out, and the records the system had to close itself.', 'dated' => true],
         ];
     }
@@ -1415,6 +1418,51 @@ final class ReportsController extends Controller
                 usort($rows, fn ($a, $b) => [$rank[$a['Status']] ?? 9, $a['Child']] <=> [$rank[$b['Status']] ?? 9, $b['Child']]);
 
                 return [['Child', 'Centre', 'Age', 'Status', 'On file', 'Last dose', 'Overdue', 'Due soon', 'Next due', 'Exemption'], $rows];
+
+            case 'headcounts':
+                /* Same scope as the Headcounts screen: an educator sees their rooms' counts
+                   and any count they took themselves (an outing has no room). */
+                $q = DB::table('headcounts as h')->join('centres as c', 'c.id', '=', 'h.centre_id')
+                    ->leftJoin('rooms as r', 'r.id', '=', 'h.room_id')
+                    ->leftJoin('field_trips as t', 't.id', '=', 'h.field_trip_id')
+                    ->leftJoin('users as u', 'u.id', '=', 'h.taken_by')
+                    ->where('h.agency_id', $agencyId)->where('c.agency_id', $agencyId);
+                if ($scopeRooms !== null) {
+                    $selfId = (int) ($scope['user_id'] ?? 0);
+                    $q->where(fn ($w) => $w->whereIn('h.room_id', $scopeRooms)->orWhere('h.taken_by', $selfId));
+                }
+                if ($centreId) $q->where('h.centre_id', $centreId);
+                if ($from) $q->where('h.taken_at', '>=', $fromUtc);
+                if ($to) $q->where('h.taken_at', '<=', $toUtc);
+                $data = $q->orderBy('h.taken_at')->limit(5000)->get(['h.taken_at', 'h.context', 'h.location', 'h.note', 'h.expected_count', 'h.counted_count',
+                    'h.all_accounted', 'h.missing_child_ids', 'h.alerted_at', 'h.resolved_at', 'h.resolution_note',
+                    'c.name as centre', 'r.name as room', 't.title as trip',
+                    DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as taken_by")]);
+                $missIds = [];
+                foreach ($data as $r) { foreach (json_decode((string) $r->missing_child_ids, true) ?: [] as $i) $missIds[] = (int) $i; }
+                $kidNames = $missIds ? DB::table('children')->whereIn('id', array_unique($missIds))
+                    ->get(['id', 'first_name', 'last_name'])
+                    ->mapWithKeys(fn ($c) => [(int) $c->id => trim($c->first_name . ' ' . mb_substr((string) $c->last_name, 0, 1) . '.')])->all() : [];
+                $moments = \App\Http\Controllers\Api\HeadcountController::CONTEXTS;
+                $rows = array_map(function ($r) use ($tz, $kidNames, $moments) {
+                    $miss = array_map(fn ($i) => $kidNames[(int) $i] ?? ('#' . $i), json_decode((string) $r->missing_child_ids, true) ?: []);
+                    $follow = [];
+                    if ($r->alerted_at) $follow[] = 'Alerted ' . $this->localTime($r->alerted_at, $tz);
+                    if ($r->resolved_at) $follow[] = 'Found ' . $this->localTime($r->resolved_at, $tz) . ($r->resolution_note ? ' - ' . $r->resolution_note : '');
+                    if (! $r->all_accounted && ! $r->resolved_at) $follow[] = 'OPEN';
+                    return [
+                        'Date' => $this->localDate($r->taken_at, $tz), 'Time' => $this->localTime($r->taken_at, $tz),
+                        'Centre' => $r->centre, 'Room / outing' => $r->room ?: (($r->trip ?: 'Walk / outing') . ($r->location ? ' (' . $r->location . ')' : '')),
+                        'Moment' => $moments[$r->context] ?? ucfirst(str_replace('_', ' ', (string) $r->context)),
+                        'Expected' => (int) $r->expected_count, 'Counted' => (int) $r->counted_count,
+                        'Result' => $r->all_accounted ? 'All accounted for' : 'Not all seen',
+                        'Not seen' => $miss ? implode(', ', $miss) : '-',
+                        'Counted by' => trim((string) $r->taken_by) ?: '-',
+                        'Follow-up' => $follow ? implode('; ', $follow) : '-',
+                        'Note' => $r->note ?: '-',
+                    ];
+                }, $data->all());
+                return [['Date', 'Time', 'Centre', 'Room / outing', 'Moment', 'Expected', 'Counted', 'Result', 'Not seen', 'Counted by', 'Follow-up', 'Note'], $rows];
 
             case 'incidents':
                 $q = DB::table('incidents as inc')->join('children as ch', 'ch.id', '=', 'inc.child_id')

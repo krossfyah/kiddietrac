@@ -349,8 +349,21 @@
             : 'Name-to-face counts at transitions, washroom trips, arrival and dismissal, outings and the playground gates. ')
       + 'Times are in ' + esc(lg.timezone) + '.</div></div>';
 
+    /* SUB-TABS (2026-10-15, Anthony: "headcounts section add subtab for logs"): Rooms now
+       (take counts, acting supervisor) and Logs (the history and its filters). The filters
+       re-render the whole page, so the open tab is kept in state; a link to one headcount
+       (?id=) or ?tab=logs opens Logs. */
+    if (params.id || params.tab === 'logs') state.tab = 'logs';
+    if (!state.tab) { try { state.tab = sessionStorage.getItem('kt_hc_tab') || 'now'; } catch (e) { state.tab = 'now'; } }
+    h += '<div class="kt-subtabs" role="tablist" style="display:flex;gap:6px;border-bottom:1px solid #E2E8F0;margin:12px 0 2px;">'
+      + [['now', '👀 Rooms now'], ['logs', '📜 Logs']].map(function (t) {
+          var on = state.tab === t[0];
+          return '<button type="button" role="tab" data-hc-tab="' + t[0] + '" aria-selected="' + on + '" style="background:none;border:0;border-bottom:2px solid '
+            + (on ? '#1F6FB2' : 'transparent') + ';padding:9px 13px;font-size:13.5px;font-weight:700;color:' + (on ? '#0F172A' : '#64748B') + ';cursor:pointer;">' + t[1] + '</button>';
+        }).join('') + '</div>';
+
     // rooms now
-    h += '<div class="hcs-card"><div style="font-weight:800;font-size:15px;margin-bottom:4px;">Rooms now</div>';
+    h += '<div class="hcs-card" data-hc-pane="now"><div style="font-weight:800;font-size:15px;margin-bottom:4px;">Rooms now</div>';
     (ov.centres || []).forEach(function (c) {
       h += '<div style="padding:8px 0 2px;border-top:2px solid #F1F5F9;margin-top:6px;"><div class="hcs-row"><b style="font-size:14px;">' + esc(c.name) + '</b>'
         + '<span style="font-size:12.5px;color:#475569;flex:1;">Acting supervisor: ' + (c.acting.length ? esc(c.acting.map(function (p) { return p.name; }).join(' → ')) : '<b style="color:#B45309;">not named</b>') + '</span>'
@@ -366,7 +379,7 @@
 
     // log
     var ctxOpts = Object.keys(lg.contexts || {}).map(function (k) { return '<option value="' + k + '"' + (state.context === k ? ' selected' : '') + '>' + esc(lg.contexts[k]) + '</option>'; }).join('');
-    h += '<div class="hcs-card"><div class="hcs-row" style="margin-bottom:8px;"><div style="font-weight:800;font-size:15px;flex:1;min-width:120px;">Log' + (params.id ? ' — one headcount <a href="#headcounts" style="font-size:12px;">show all</a>' : '') + '</div>'
+    h += '<div class="hcs-card" data-hc-pane="logs"><div class="hcs-row" style="margin-bottom:8px;"><div style="font-weight:800;font-size:15px;flex:1;min-width:120px;">Logs' + (params.id ? ' — one headcount <a href="#headcounts" style="font-size:12px;">show all</a>' : '') + '</div>'
       + '<input class="hcs-i" type="date" data-f="from" value="' + esc(lg.from) + '" title="From"><input class="hcs-i" type="date" data-f="to" value="' + esc(lg.to) + '" title="To">'
       + '<select class="hcs-i" data-f="centre"><option value="">All centres</option>' + (lg.centres || []).map(function (c) { return '<option value="' + c.id + '"' + (String(c.id) === String(state.centre) ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>'
       + '<select class="hcs-i" data-f="room"><option value="">All rooms</option>' + (lg.rooms || []).filter(function (r) { return !state.centre || String(r.centre_id) === String(state.centre); }).map(function (r) { return '<option value="' + r.id + '"' + (String(r.id) === String(state.room) ? ' selected' : '') + '>' + esc(r.name) + '</option>'; }).join('') + '</select>'
@@ -389,16 +402,30 @@
             }).join('') + '</tbody></table></div>'
         : '<div style="color:#64748B;font-size:13px;">No headcounts in this period.</div>')
       + '</div>';
+    h += '<div class="hcs-card" data-hc-pane="logs" style="font-size:13.5px;color:#475569;">📄 Need it as a document? <a href="#reports" style="font-weight:700;">Reports → Headcounts</a> gives one day (or any range) as PDF or Excel, and can email it to you daily.</div>';
 
+    /* The reminder setting lives in Settings → Room Controls → Headcounts since
+       2026-10-15 (Anthony); the page says where, for the people who can change it. */
     if (ov.is_admin) {
-      var mins = [15, 20, 30, 45, 60, 90, 120];
-      h += '<div class="hcs-card"><div style="font-weight:800;font-size:15px;margin-bottom:6px;">Routine headcount reminders</div><div class="hcs-row">'
-        + '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;"><input type="checkbox" data-rem' + (ov.reminders.enabled ? ' checked' : '') + '> Remind clocked-in educators when a room has gone</label>'
-        + '<select class="hcs-i" data-rem-min>' + mins.map(function (m) { return '<option value="' + m + '"' + (ov.reminders.minutes === m ? ' selected' : '') + '>' + m + ' minutes</option>'; }).join('') + '</select>'
-        + '<span style="font-size:13.5px;">without a count (bell and push; off by default).</span></div></div>';
+      h += '<div class="hcs-card" data-hc-pane="now" style="font-size:13.5px;color:#475569;">🔔 Routine headcount reminders are '
+        + (ov.reminders && ov.reminders.enabled ? '<b>on, every ' + esc(String(ov.reminders.minutes)) + ' minutes</b>' : '<b>off</b>')
+        + '. <a href="#educator-rooms?tab=headcounts" style="font-weight:700;">Change in Room Controls →</a></div>';
     }
     h += '</div>';
     main.innerHTML = h;
+    function showTab(t) {
+      state.tab = t;
+      try { sessionStorage.setItem('kt_hc_tab', t); } catch (e) {}
+      main.querySelectorAll('[data-hc-pane]').forEach(function (p) { p.style.display = p.getAttribute('data-hc-pane') === t ? '' : 'none'; });
+      main.querySelectorAll('[data-hc-tab]').forEach(function (b) {
+        var on = b.getAttribute('data-hc-tab') === t;
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        b.style.borderBottomColor = on ? '#1F6FB2' : 'transparent';
+        b.style.color = on ? '#0F172A' : '#64748B';
+      });
+    }
+    main.querySelectorAll('[data-hc-tab]').forEach(function (b) { b.addEventListener('click', function () { showTab(b.getAttribute('data-hc-tab')); }); });
+    showTab(state.tab);
 
     function reload() { render(main, { params: {} }); }
     main.querySelectorAll('[data-take]').forEach(function (b) { b.onclick = function () { open({ room_id: +b.getAttribute('data-take'), onSaved: function () { setTimeout(reload, 400); } }); }; });
@@ -432,6 +459,33 @@
     if (params.take) { var t = params.take; params.take = null; try { history.replaceState(null, '', '#headcounts'); } catch (e) {} open({ room_id: +t, onSaved: function () { setTimeout(reload, 400); } }); }
   }
 
-  KT.Headcount = { open: open, close: close, editActing: editActing, dashboardCard: dashboardCard, todayBar: todayBar };
+  /* Settings → Room Controls → Headcounts (screen-educator-rooms.js). */
+  async function paintSettings(pane) {
+    css();
+    var ov;
+    try { ov = await Api.get('/headcounts/overview'); } catch (e) { pane.innerHTML = '<div class="kt-card" style="color:#B91C1C;">' + esc(errMsg(e)) + '</div>'; return; }
+    var r = ov.reminders || { enabled: false, minutes: 30 };
+    var mins = [15, 20, 30, 45, 60, 90, 120];
+    var ed = !!ov.is_admin, dis = ed ? '' : ' disabled';
+    pane.innerHTML = '<div class="kt-card" style="max-width:760px;"><div class="kt-card-header"><h3 class="kt-card-title">👀 Routine headcount reminders</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 10px;">When a room has gone this long without a headcount, its clocked-in educators get a bell and a push. Applies to every centre in the agency. Off by default.</div>'
+      + '<div class="hcs-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
+      + '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;"><input type="checkbox" data-rem' + (r.enabled ? ' checked' : '') + dis + '> Remind educators after</label>'
+      + '<select class="hcs-i" data-rem-min' + dis + '>' + mins.map(function (m) { return '<option value="' + m + '"' + (r.minutes === m ? ' selected' : '') + '>' + m + ' minutes</option>'; }).join('') + '</select>'
+      + '<span style="font-size:13.5px;">without a count.</span></div>'
+      + (ed ? '' : '<div style="font-size:12.5px;color:#64748B;margin-top:12px;">Only agency administrators can change this.</div>')
+      + '<div style="font-size:12.5px;margin-top:12px;"><a href="#headcounts">Open Headcounts →</a></div></div>';
+    if (!ed) return;
+    var rem2 = pane.querySelector('[data-rem]'), min2 = pane.querySelector('[data-rem-min]');
+    function save2() {
+      Api.post('/headcounts/settings', { enabled: rem2.checked, minutes: +min2.value })
+        .then(function () { toast('🔔', rem2.checked ? 'Headcount reminders on' : 'Headcount reminders off', rem2.checked ? 'Every ' + min2.value + ' minutes without a count' : '', '#16A34A'); })
+        .catch(function (e) { toast('⚠️', 'Could not save', errMsg(e), '#DC2626'); });
+    }
+    rem2.addEventListener('change', save2);
+    min2.addEventListener('change', function () { if (rem2.checked) save2(); });
+  }
+
+  KT.Headcount = { open: open, close: close, editActing: editActing, dashboardCard: dashboardCard, todayBar: todayBar, paintSettings: paintSettings };
   ['agency_admin', 'platform_admin', 'centre_director', 'educator'].forEach(function (r) { KT.Shell.registerScreen(r + ':headcounts', render); });
 })(window);
