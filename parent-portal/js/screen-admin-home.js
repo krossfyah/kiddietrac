@@ -183,7 +183,15 @@
        (Anthony, 2026-10-15) */
     if (!document.getElementById('kt-admin-home-style')) {
       var _st = document.createElement('style'); _st.id = 'kt-admin-home-style';
-      _st.textContent = '.kt-admin-home [hidden]{display:none !important;}';
+      _st.textContent = '.kt-admin-home [hidden]{display:none !important;}'
+        /* Each section is a card with the same soft gradient as the educator/parent
+           Quick access (screen-role-home.js .kt-quickaccess), so the page is not a
+           wall of white. `section.` out-specifies kt-mobile-app.css's .kt-ah-sec. */
+        + '.kt-admin-home section.kt-ah-sec{background:radial-gradient(120% 95% at 10% 6%,rgba(21,159,180,.16) 0%,rgba(21,159,180,0) 46%),radial-gradient(115% 90% at 92% 14%,rgba(124,58,237,.15) 0%,rgba(124,58,237,0) 50%),radial-gradient(130% 105% at 82% 100%,rgba(245,158,11,.14) 0%,rgba(245,158,11,0) 55%),radial-gradient(120% 100% at 14% 102%,rgba(236,72,153,.11) 0%,rgba(236,72,153,0) 55%),linear-gradient(135deg,#FBFDFF 0%,#FAF8FE 100%);border:1px solid rgba(124,58,237,.09);border-radius:18px;padding:2px 12px;margin:0 0 10px;box-shadow:0 8px 22px -14px rgba(31,96,128,.28);}'
+        + '.kt-admin-home section.kt-ah-sec .kt-ah-head{border-bottom-color:rgba(124,58,237,.08);}'
+        + '.kt-admin-home section.kt-ah-sec .kt-ah-head[aria-expanded="false"]{border-bottom-color:transparent;}'
+        + '.kt-admin-home section.kt-ah-sec .kt-ah-body{margin:10px 0 12px;}'
+        + '.kt-admin-home section.kt-ah-sec .kt-ah-count{background:rgba(255,255,255,.75);}';
       document.head.appendChild(_st);
     }
 
