@@ -8408,6 +8408,10 @@
   }
 
   async function renderBrandingTab(content) {
+    /* ONE Branding screen (2026-10-15). #admin-branding has always opened
+       screen-admin-branding.js (the legacy shim loads last), so this tab could not be
+       reached by its own hash; its cards now live there as sub-tabs. */
+    if (window.KT && KT.AdminBranding && KT.AdminBranding.render) { return KT.AdminBranding.render(content); }
     Dom.clear(content);
     content.appendChild(loading('Loading branding...'));
 
@@ -8550,11 +8554,16 @@
     }
     updatePreview();
 
+    renderPayslipCard(content);
+  }
+
     // ── Payslip appearance ───────────────────────────────────────────────
     // Agency-wide wording printed on every staff payslip PDF. It used to live at the
     // bottom of the Payroll REPORT screen, which is a date-range report, not a place
     // anyone looks for settings. It is document branding - the logo, agency name and
-    // address are already added automatically - so it belongs on this tab.
+    // address are already added automatically - so it belongs with Branding (its own
+    // Payslips sub-tab there since 2026-10-15).
+  function renderPayslipCard(content) {
     (function () {
       var wrap = Dom.el('div', { style: 'margin-top:28px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;max-width:720px;' });
       wrap.innerHTML =
@@ -8767,6 +8776,9 @@
   // card instead of each keeping a copy that drifts.
   KT.renderCountryCard = function (container) { return renderCountryCard(container); };
   KT.buildRefPrefixCard = function () { return buildRefPrefixCard(); };   // refA-2026-10-14
+  // Branding sub-tabs (screen-admin-branding.js) draw these same cards (2026-10-15).
+  KT.renderEmailDeliveryCard = function (container) { return renderEmailDeliveryCard(container); };
+  KT.renderPayslipCard = function (container) { return renderPayslipCard(container); };
 
   async function renderCountryCard(content) {
     var card = Dom.el('div', { style: 'background:white;padding:24px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:24px;' });

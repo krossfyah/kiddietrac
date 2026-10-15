@@ -1,5 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════
-   KIDDIETRAC v15 — White-label Branding (agency_admin)
+   KIDDIETRAC v15 — Branding (agency_admin + platform_admin via Reseller)
+   Sub-tabs (2026-10-15): White-label & logo · Invoices · Contact & legal ·
+   Email delivery · Payslips · Region & IDs. The last three are cards from
+   screen-admin.js (KT.renderEmailDeliveryCard / renderPayslipCard /
+   renderCountryCard / buildRefPrefixCard) and save themselves.
    ─────────────────────────────────────────────────────────────────
    Lets an agency admin (or platform admin) edit their brand fields
    on the agencies table:
@@ -61,28 +65,86 @@
     catch (e) { container.innerHTML = '<div style="padding:24px;color:#DC2626;">' + esc(e.message) + '</div>'; return; }
 
     const brand = data.branding || {};
+    const isWL = brand.powered_by_visible == 0;
+
+    /* SUB-TABS (2026-10-15, Anthony: "make sure branding is subtabbed for each of the
+       sections"). Every pane is in the DOM at once and only shown/hidden, so the one
+       Save button still reads every field it always did, whichever pane is open. The
+       open pane is in the hash (?tab=), so a link can land on e.g. Invoices. */
+    const TABS = [
+      ['whitelabel', '🏷️ White-label & logo'],
+      ['invoices',   '🧾 Invoices'],
+      ['contact',    '📇 Contact & legal'],
+      ['email',      '✉️ Email delivery'],
+      ['payslips',   '💵 Payslips'],
+      ['region',     '🌎 Region & IDs'],
+    ];
+    const SAVES_HERE = { whitelabel: 1, invoices: 1, contact: 1 };   // the rest save in their own card
+    let tab = (location.hash.match(/[?&]tab=([a-z]+)/) || [])[1] || 'whitelabel';
+    if (!TABS.some(t => t[0] === tab)) tab = 'whitelabel';
+
+    const card = 'background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);';
     container.innerHTML = `
       <div style="padding:24px;max-width:1800px;">
-        <h2 style="font-size:24px;margin:0 0 4px;">🎨 White-Label Branding</h2>
-        <p style="color:#6B7280;font-size:13px;margin:0 0 20px;">Customize how invoices and parent-facing screens appear to your families.</p>
+        <h2 style="font-size:24px;margin:0 0 4px;">🎨 Branding</h2>
+        <p style="color:#6B7280;font-size:13px;margin:0 0 14px;">How your agency appears to families and staff — in the app, on invoices, in email and on payslips.</p>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;" id="kt-brand-grid">
-          <div style="background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);">
-            <h3 style="margin:0 0 14px;font-size:15px;">Brand settings</h3>
+        <div class="kt-br-tabs" role="tablist" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:16px;">
+          ${TABS.map(t => `<button type="button" role="tab" data-tab="${t[0]}" class="kt-br-tab">${t[1]}</button>`).join('')}
+        </div>
 
-            ${field('Logo URL', 'kt-logo-url', brand.brand_logo_url || '', 'https://yourdomain.com/logo.png', 'PNG or SVG, recommended height 60-80px.')}
-            <div style="display:flex;align-items:center;gap:10px;margin:-6px 0 14px;">
-              <input type="file" id="kt-logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;">
-              <button type="button" id="kt-logo-upload" style="padding:7px 14px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">⬆ Upload a logo file</button>
+        <!-- ── White-label & logo ── -->
+        <div data-pane="whitelabel" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;" class="kt-br-grid">
+          <div style="${card}">
+            <h3 style="margin:0 0 12px;font-size:15px;">White-label licence</h3>
+            ${isPlatformAdmin() ? `
+            <div style="display:flex;align-items:center;gap:10px;padding:12px;background:#F9FAFB;border-radius:8px;margin-bottom:16px;">
+              <input type="checkbox" id="kt-poweredby" ${isWL ? '' : 'checked'} style="width:18px;height:18px;cursor:pointer;">
+              <label for="kt-poweredby" style="font-size:13px;color:#374151;cursor:pointer;flex:1;">
+                Show <em>"Powered by Kiddietrac"</em> (white-label licence <strong>off</strong>)
+                <div style="font-size:11px;color:#64748B;margin-top:2px;">Uncheck only for an agency on the white-label licence. Only a platform admin can change this.</div>
+              </label>
+            </div>` : `
+            <div style="padding:12px;background:${isWL ? '#ECFDF5' : '#F9FAFB'};border-radius:8px;margin-bottom:16px;font-size:13px;color:#374151;">
+              ${isWL
+                ? '<strong>White-label licence: on.</strong> Your logo replaces KiddieTrac throughout.'
+                : '<strong>White-label licence: off.</strong> Your logo appears on invoices and emails; the portal and app keep the KiddieTrac brand. Ask KiddieTrac about the white-label licence to show your own brand throughout.'}
+            </div>`}
+
+            <h3 style="margin:0 0 12px;font-size:15px;">Logo &amp; colour</h3>
+            ${field('Logo URL', 'kt-logo-url', brand.brand_logo_url || '', 'https://yourdomain.com/logo.png', 'PNG, JPG or WebP, up to 2 MB. A wide logo on a transparent background works best.')}
+            <div style="display:flex;align-items:center;gap:10px;margin:-6px 0 14px;flex-wrap:wrap;">
+              <input type="file" id="kt-logo-file" accept="image/png,image/jpeg,image/webp" style="display:none;">
+              <button type="button" id="kt-logo-upload" style="height:32px;padding:0 14px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">⬆ Upload a logo file</button>
               <span id="kt-logo-upmsg" style="font-size:12px;color:#64748B;">…or paste a URL above</span>
             </div>
             ${colorField('Primary colour', 'kt-color', brand.brand_primary_color || '#3BBBBE')}
-            ${field('Support email', 'kt-support', brand.brand_support_email || '', 'billing@yourdomain.com', 'Shown on invoices and parent emails.')}
-            ${textareaField('Business address (shown on invoices)', 'kt-address', brand.brand_address || '', '123 Main St\\nToronto, ON  M5V 1A1')}
-            ${textareaField('Bank info / payment details', 'kt-bank', brand.brand_bank_info || '', 'Bank: ...\nTransit: ...\nAccount: ...\nor e-Transfer: pay@yourdomain.com')}
-            ${field('Privacy policy URL', 'kt-privacy', brand.brand_privacy_url || '', 'https://yourdomain.com/privacy', 'Linked from the "Powered by Kiddietrac" footer on campaigns.')}
-            ${field('Terms & conditions URL', 'kt-terms', brand.brand_terms_url || '', 'https://yourdomain.com/terms', 'Linked from the campaign footer alongside your privacy policy.')}
+            <div style="font-size:11px;color:#64748B;margin:-4px 0 4px;">Used for the header of your invoices and white-label emails.</div>
+          </div>
 
+          <div style="${card}">
+            <h3 style="margin:0 0 4px;font-size:15px;">Where your logo appears</h3>
+            <div id="kt-wl-caption" style="font-size:12px;color:#64748B;margin-bottom:14px;"></div>
+            <div style="font-size:11px;font-weight:700;color:#94A3B8;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px;">Top bar · every role</div>
+            <div style="display:flex;align-items:center;gap:10px;height:56px;padding:0 14px;border:1px solid #E5E7EB;border-radius:10px;background:#fff;margin-bottom:16px;">
+              <img id="kt-wl-bar-logo" alt="" style="height:34px;width:auto;max-width:160px;object-fit:contain;">
+              <span style="flex:1;"></span>
+              <span style="width:28px;height:28px;border-radius:50%;background:#E2E8F0;"></span>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:#94A3B8;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px;">App loading &amp; unlock screen</div>
+            <div style="height:200px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:radial-gradient(120% 70% at 50% 0%,#12315C 0%,#081C41 62%);margin-bottom:12px;">
+              <span id="kt-wl-splash-plate" style="display:inline-block;line-height:0;border-radius:16px;padding:14px 18px;max-width:70%;">
+                <img id="kt-wl-splash-logo" alt="" style="max-width:100%;max-height:90px;width:auto;height:auto;object-fit:contain;">
+              </span>
+            </div>
+            <div style="font-size:11.5px;color:#64748B;line-height:1.55;">Also: emails, invoices, forms, and the sign-in page of your own branded app. Your own app icon and name in the app stores come with a white-label app build — ask KiddieTrac.</div>
+          </div>
+        </div>
+
+        <!-- ── Invoices ── -->
+        <div data-pane="invoices" hidden style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start;" class="kt-br-grid">
+          <div style="${card}">
+            <h3 style="margin:0 0 14px;font-size:15px;">Invoice settings</h3>
             ${(function () {
               /* INVOICE STYLE — it belongs with the logo and the colour, because the
                  invoice IS the brand as far as a family is concerned. The options come
@@ -102,7 +164,6 @@
                 + '<div id="kt-invoice-template-blurb" style="font-size:11px;color:#64748B;margin-top:4px;line-height:1.5;">' + esc(blurb) + '</div>'
                 + '</div>';
             })()}
-
             ${(function () {
               /* INVOICE NUMBERING, beside the invoice's look (2026-09-17).
 
@@ -151,26 +212,9 @@
                 + 'invoices already carry.</div>'
                 + '</div>';
             })()}
-
-            ${isPlatformAdmin() ? `
-            <div style="display:flex;align-items:center;gap:10px;padding:12px;background:#F9FAFB;border-radius:8px;margin-top:14px;">
-              <input type="checkbox" id="kt-poweredby" ${brand.powered_by_visible == 0 ? '' : 'checked'} style="width:18px;height:18px;cursor:pointer;">
-              <label for="kt-poweredby" style="font-size:13px;color:#374151;cursor:pointer;flex:1;">
-                Show <em>"Powered by Kiddietrac"</em> (white-label licence <strong>off</strong>)
-                <div style="font-size:11px;color:#64748B;margin-top:2px;">Uncheck only for an agency on the white-label licence: their logo replaces KiddieTrac in the portal top bar, the app's loading and unlock screens, emails, invoices and forms.</div>
-              </label>
-            </div>` : `
-            <div style="padding:12px;background:#F9FAFB;border-radius:8px;margin-top:14px;font-size:13px;color:#374151;">
-              ${brand.powered_by_visible == 0
-                ? '<strong>White-label licence: on.</strong> Your logo replaces KiddieTrac in the portal, the app’s loading screens, emails, invoices and forms.'
-                : '<strong>White-label licence: off.</strong> Your logo appears on invoices and emails; the portal and app keep the KiddieTrac brand. Ask KiddieTrac about the white-label licence to show your own brand throughout.'}
-            </div>`}
-
-            <div style="display:flex;gap:10px;margin-top:18px;">
-              <button id="kt-preview-btn" style="padding:10px 18px;background:#E5E7EB;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;">↻ Refresh preview</button>
-              <button id="kt-save"         style="flex:1;padding:10px 24px;background:#081C41;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save changes</button>
-            </div>
-            <div id="kt-save-msg" style="margin-top:10px;font-size:13px;text-align:right;"></div>
+            ${textareaField('Business address (shown on invoices)', 'kt-address', brand.brand_address || '', '123 Main St\\nToronto, ON  M5V 1A1')}
+            ${textareaField('Bank info / payment details', 'kt-bank', brand.brand_bank_info || '', 'Bank: ...\nTransit: ...\nAccount: ...\nor e-Transfer: pay@yourdomain.com')}
+            <button id="kt-preview-btn" type="button" style="height:32px;padding:0 14px;background:#E5E7EB;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;">↻ Refresh preview</button>
           </div>
 
           <div style="background:white;border-radius:14px;padding:0;box-shadow:0 1px 4px rgba(0,0,0,.05);overflow:hidden;">
@@ -181,36 +225,91 @@
             <iframe id="kt-preview-iframe" src="" style="width:100%;height:780px;border:0;background:#F9FAFB;"></iframe>
           </div>
         </div>
+
+        <!-- ── Contact & legal ── -->
+        <div data-pane="contact" hidden style="${card}max-width:720px;">
+          <h3 style="margin:0 0 14px;font-size:15px;">Contact &amp; legal</h3>
+          ${field('Support email', 'kt-support', brand.brand_support_email || '', 'billing@yourdomain.com', 'Shown on invoices and parent emails.')}
+          ${field('Privacy policy URL', 'kt-privacy', brand.brand_privacy_url || '', 'https://yourdomain.com/privacy', 'Linked from the footer of your emails and campaigns.')}
+          ${field('Terms & conditions URL', 'kt-terms', brand.brand_terms_url || '', 'https://yourdomain.com/terms', 'Linked beside your privacy policy.')}
+        </div>
+
+        <!-- ── Cards that save themselves ── -->
+        <div data-pane="email" hidden style="max-width:900px;"></div>
+        <div data-pane="payslips" hidden></div>
+        <div data-pane="region" hidden style="max-width:900px;"></div>
+
+        <div id="kt-br-savebar" style="display:flex;gap:10px;align-items:center;margin-top:18px;">
+          <button id="kt-save" type="button" style="height:36px;padding:0 24px;background:#081C41;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save changes</button>
+          <div id="kt-save-msg" style="font-size:13px;"></div>
+          <div style="flex:1;"></div>
+          <div style="font-size:11.5px;color:#94A3B8;">Saves White-label &amp; logo, Invoices and Contact &amp; legal together.</div>
+        </div>
       </div>
     `;
 
-    /* COUNTRY & COMPLIANCE (2026-10-09). The card used to be appended BEFORE the
-       "Loading branding…" placeholder replaced the whole container, so it was drawn and
-       wiped in the same tick and never seen. It is placed now, after the page itself is
-       built: under the heading, above the branding grid. Same card as Agency overview. */
-    try {
-      if (window.KT && KT.renderCountryCard) {
-        const grid = container.querySelector('#kt-brand-grid');
-        const countryHost = document.createElement('div');
-        countryHost.style.cssText = 'margin:0 0 20px;';
-        if (grid && grid.parentNode) grid.parentNode.insertBefore(countryHost, grid);
-        else container.appendChild(countryHost);
-        KT.renderCountryCard(countryHost);
-      }
-    } catch (e) {}
+    if (!document.getElementById('kt-br-style')) {
+      const st = document.createElement('style'); st.id = 'kt-br-style';
+      st.textContent = '.kt-br-tab{flex:0 0 auto;height:32px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#475569;font:600 13px/1 inherit;cursor:pointer;white-space:nowrap;}'
+        + '.kt-br-tab[aria-selected="true"]{background:#081C41;border-color:#081C41;color:#fff;}'
+        + '[data-pane][hidden]{display:none !important;}'
+        + '@media(max-width:900px){.kt-br-grid{grid-template-columns:minmax(0,1fr) !important;}}';
+      document.head.appendChild(st);
+    }
 
-    /* REFERENCE ID PREFIX (refA-2026-10-14): the letters in front of every child, family,
-       staff and parent ID (ILH-C-0042). The card lives in screen-admin.js. */
-    try {
-      if (window.KT && KT.buildRefPrefixCard) {
-        const grid2 = container.querySelector('#kt-brand-grid');
-        const refCard = KT.buildRefPrefixCard();
-        if (grid2 && grid2.parentNode) grid2.parentNode.insertBefore(refCard, grid2);
-        else container.appendChild(refCard);
-      }
-    } catch (e) {}
+    /* Panes that are someone else's card: drawn once, the first time they are opened. */
+    const drawn = {};
+    function drawPane(name) {
+      if (drawn[name]) return; drawn[name] = true;
+      const host = container.querySelector('[data-pane="' + name + '"]');
+      try {
+        if (name === 'email' && KT.renderEmailDeliveryCard) KT.renderEmailDeliveryCard(host);
+        else if (name === 'payslips' && KT.renderPayslipCard) KT.renderPayslipCard(host);
+        else if (name === 'region') {
+          /* COUNTRY & COMPLIANCE + REFERENCE ID PREFIX — the same cards as Agency
+             overview (both live in screen-admin.js). */
+          if (KT.renderCountryCard) { const c1 = document.createElement('div'); c1.style.cssText = 'margin:0 0 20px;'; host.appendChild(c1); KT.renderCountryCard(c1); }
+          if (KT.buildRefPrefixCard) host.appendChild(KT.buildRefPrefixCard());
+        } else if (name === 'invoices') refreshPreview(container, agencyId);
+        if (!host.firstChild && name !== 'invoices') host.innerHTML = '<div style="padding:24px;color:#6B7280;">This section is not available.</div>';
+      } catch (e) {}
+    }
+    function showTab(name) {
+      tab = name;
+      container.querySelectorAll('.kt-br-tab').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-tab') === name ? 'true' : 'false'));
+      container.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.getAttribute('data-pane') !== name; });
+      $('#kt-br-savebar', container).style.display = SAVES_HERE[name] ? 'flex' : 'none';
+      drawPane(name);
+      try {
+        const base = location.hash.replace(/\?.*$/, '') || '#admin-branding';
+        history.replaceState(history.state, '', base + (name === 'whitelabel' ? '' : '?tab=' + name));
+      } catch (e) {}
+    }
+    container.querySelectorAll('.kt-br-tab').forEach(b => b.addEventListener('click', () => showTab(b.getAttribute('data-tab'))));
 
-    refreshPreview(container, agencyId);
+    /* The preview follows the logo field and the licence switch as they change, so
+       nobody has to save to find out what families will see. */
+    function paintWlPreview() {
+      const pb = $('#kt-poweredby', container);
+      const wlOn = pb ? !pb.checked : isWL;
+      const logo = ($('#kt-logo-url', container).value || '').trim();
+      const abs = logo ? (/^(https?:|data:)/i.test(logo) ? logo : apiBase().replace(/\/api\/v1\/?$/, '') + (logo.charAt(0) === '/' ? '' : '/') + logo) : '';
+      const showAgency = wlOn && !!abs;
+      $('#kt-wl-bar-logo', container).src = showAgency ? abs : '/logo-wordmark@2x.png';
+      $('#kt-wl-splash-logo', container).src = showAgency ? abs : '/login-wordmark.png';
+      const plate = $('#kt-wl-splash-plate', container);
+      plate.style.background = showAgency ? '#fff' : 'transparent';
+      plate.style.boxShadow = showAgency ? '0 14px 40px -16px rgba(0,0,0,.55)' : 'none';
+      $('#kt-wl-caption', container).textContent = showAgency
+        ? 'White-label licence on: families and staff see your logo here.'
+        : (wlOn ? 'White-label licence on, but no logo yet — upload one to replace KiddieTrac.' : 'Licence off: KiddieTrac shows here. Your logo is used on invoices and emails.');
+    }
+    $('#kt-logo-url', container).addEventListener('input', paintWlPreview);
+    const _pb = $('#kt-poweredby', container);
+    if (_pb) _pb.addEventListener('change', paintWlPreview);
+    container._ktPaintWl = paintWlPreview;
+    paintWlPreview();
+    showTab(tab);
 
     /* The blurb follows the choice, so somebody can read what each style is before
        saving rather than after seeing an invoice go out in it. */
@@ -275,6 +374,10 @@
       try {
         const fd = new FormData();
         fd.append('logo', file);
+        /* The upload endpoint reads the target agency from the FORM (agency_id, honoured
+           for a platform admin), not from X-Active-Agency-Id — without it a super admin's
+           upload went to their own agency, or 403'd. */
+        fd.append('agency_id', String(agencyId));
         const tok = sessionStorage.getItem('kt_token');
         const headers = { 'Authorization': 'Bearer ' + tok };
         const active = sessionStorage.getItem('kt_active_agency_id');
@@ -285,7 +388,10 @@
         const url = j.url || j.logo_url || j.brand_logo_url;
         if (url) {
           $('#kt-logo-url', container).value = url;
-          logoMsg.textContent = '✓ Uploaded — click Save to apply'; logoMsg.style.color = '#16A34A';
+          // uploadLogo stores it on the agency straight away; Save is not needed for the logo.
+          logoMsg.textContent = '✓ Uploaded and saved'; logoMsg.style.color = '#16A34A';
+          if (container._ktPaintWl) container._ktPaintWl();
+          reloadChrome();
         } else {
           logoMsg.textContent = 'Uploaded but no URL returned'; logoMsg.style.color = '#DC2626';
         }
@@ -333,6 +439,13 @@
         <input type="text" id="${id}" value="${esc(value)}" style="flex:1;padding:9px 11px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;font-family:monospace;">
       </div>
     </div>`;
+  }
+
+  /* The top bar / splash logo comes from branding-loader's cache; drop it and refetch so
+     a saved logo or licence change shows in this session's chrome straight away. */
+  function reloadChrome() {
+    try { localStorage.removeItem('kt_branding'); } catch (e) {}
+    try { if (window.KT && KT.reloadBranding) KT.reloadBranding(); } catch (e) {}
   }
 
   async function refreshPreview(container, agencyId) {
@@ -385,6 +498,7 @@
       await api('PATCH', '/admin/agencies/' + agencyId + '/features', payload);
       msg.textContent = '✓ Saved'; msg.style.color = '#16A34A';
       setTimeout(() => refreshPreview(container, agencyId), 400);
+      reloadChrome();
     } catch (e) {
       msg.textContent = '✗ ' + e.message; msg.style.color = '#DC2626';
     }

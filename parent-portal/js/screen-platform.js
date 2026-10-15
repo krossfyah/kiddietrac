@@ -530,7 +530,7 @@
       '<h3 style="margin:0 0 14px;font-size:18px;">' + (isEdit ? '✏️ Edit agency' : '🌐 Create new customer agency') + '</h3>' +
       (isEdit ? '' : '<p style="font-size:13px;color:#6B7280;margin:0 0 16px;">Provisions a brand-new tenant on the platform. Starts on a 30-day trial. You can invite the first agency_admin afterwards via the User management tab once you switch into the new agency.</p>') +
       '<div id="ag-tabs" style="display:flex;gap:2px;border-bottom:1px solid #E5E7EB;margin:0 0 14px;flex-wrap:wrap;">' +
-        [['basics','Details'],['address','Address'],['email','Email'],['plan','Plan &amp; branding']].map(function (t, i) {
+        [['basics','Details'],['address','Address'],['email','Email'],['plan','Plan'],['brand','White-label']].map(function (t, i) {
           return '<button type="button" data-agtab="' + t[0] + '" style="border:none;background:none;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;'
             + 'border-bottom:2px solid ' + (i === 0 ? '#1F6080' : 'transparent') + ';color:' + (i === 0 ? '#1F6080' : '#64748B') + ';">' + t[1] + '</button>';
         }).join('') +
@@ -592,12 +592,14 @@
 
       '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">💳 Plan &amp; pricing</div>' +
       '<div id="ag-plan-slot" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;"></div>' +
+      '</div>' +
 
-
+      /* Its own tab since 2026-10-15 (branding sub-tabbed per section). Price stays on Plan. */
+      '<div data-agpane="brand" hidden>' +
       '<div style="margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
           '<div><div style="font-size:14px;font-weight:700;">🎨 White-label branding</div>' +
-            '<div style="font-size:11px;color:#6B7280;">Chargeable add-on. When enabled, the agency shows its own logo + colours and the "Powered by Kiddietrac" footer is hidden. Price baked into the monthly amount above (suggest +$50/mo).</div>' +
+            '<div style="font-size:11px;color:#6B7280;line-height:1.5;">The white-label licence (chargeable — include it in the monthly amount on Plan; suggest +$50/mo). When enabled, the agency’s logo replaces KiddieTrac in the portal top bar for every role, the app’s loading and unlock screens, the sign-in page of their branded app, and on emails, invoices and forms; the "Powered by Kiddietrac" footer is hidden. The rest of their branding (invoices, email delivery, payslips) is under Reseller › Branding while switched into the agency.</div>' +
           '</div>' +
           '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">' +
             '<input id="ag-wl" type="checkbox" ' + (whiteLabelChecked ? 'checked' : '') + '> Enable' +
