@@ -202,7 +202,7 @@
 </script>
 <!-- v17.2-shell -->
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
-<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img src="/login-wordmark.png" alt="" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div></div></div>
+<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img src="/login-wordmark.png" alt="" data-brand-logo onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div></div></div>
 <style>
 /* NAVY post-login boot (2026-08-11). This splash now only ever runs AFTER sign-in,
    while the portal loads, so it wears the brand navy rather than the light ground
@@ -253,6 +253,14 @@ html.kt-gating .loading-state{visibility:hidden!important;}
 #kt-splash .ktl-spk b:nth-child(3){--tx:26px;--ty:-18px;animation:ktl-spk .75s ease 1.5s both;}
 @keyframes ktl-spk{0%{transform:translate(0,0) scale(.2);opacity:0}35%{opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0}}
 @media(prefers-reduced-motion:reduce){#kt-splash .ktl-anim > img{animation:none;clip-path:none}#kt-splash .ktl-pen,#kt-splash .ktl-sheen,#kt-splash .ktl-spk{display:none!important}}
+/* White-label licence: the agency's logo, on a white plate (their logo is drawn for a
+   light ground; the KiddieTrac pen/sheen/sparkles trace OUR letters, so they go). */
+html.kt-wl #kt-splash .ktl-pen,html.kt-wl #kt-splash .ktl-sheen,html.kt-wl #kt-splash .ktl-spk{display:none!important}
+html.kt-wl #kt-splash .ktl-anim{width:auto;max-width:min(74vw,300px);background:#fff;border-radius:22px;padding:22px 28px;box-shadow:0 18px 50px -18px rgba(0,0,0,.55)}
+html.kt-wl #kt-splash .ktl-anim>img{width:auto;max-width:100%;max-height:min(28vh,150px);object-fit:contain;clip-path:none;animation:kt-rise .6s ease both}
+/* Top bar, every role: any logo shape fits the slot the wordmark had. */
+#navBrand img[data-kt-wl]{width:auto!important;max-width:200px;object-fit:contain}
+@media(max-width:768px){#navBrand img[data-kt-wl]{max-width:130px}}
 </style>
 <script>
 /* Biometric early re-hydrate — runs BEFORE the deferred app.js. After a
@@ -272,6 +280,25 @@ html.kt-gating .loading-state{visibility:hidden!important;}
   var a=localStorage.getItem('kt_bio_agency');if(a)sessionStorage.setItem('kt_active_agency_id',a);
   var v=localStorage.getItem('kt_bio_view');if(v)sessionStorage.setItem('kt_view_as',v);
   var n=String(Date.now());sessionStorage.setItem('kt_login_at',n);sessionStorage.setItem('kt_last_activity',n);
+}catch(e){}})();
+</script>
+<script>
+/* WHITE-LABEL SPLASH, AT PARSE TIME (2026-10-15). The splash is on screen before the
+   deferred branding-loader runs, so a white-label agency's logo is put in here from
+   the loader's cache. Same rule as the loader: white-label licence (powered_by_visible
+   false) AND the cached entry is for THIS session's agency — never another agency's.
+   After the bio re-hydrate above, so an unlock reload already knows its agency. */
+(function(){try{
+  var c=JSON.parse(localStorage.getItem('kt_branding')||'null');if(!c||!c.branding)return;
+  var b=c.branding;if(b.powered_by_visible!==false||!b.logo_url)return;
+  var a=sessionStorage.getItem('kt_active_agency_id');
+  if(!a){var u=JSON.parse(sessionStorage.getItem('kt_user')||'null');a=u&&u.agency_id;}
+  if(!a||String(a)!==String(c.agency_id))return;
+  var i=document.querySelector('#kt-splash .ktl-anim>img');if(!i)return;
+  var src=/^(https?:|data:)/i.test(b.logo_url)?b.logo_url:'https://api.kiddietrac.com'+(b.logo_url.charAt(0)==='/'?'':'/')+b.logo_url;
+  i.setAttribute('data-kt-default-src',i.getAttribute('src'));i.setAttribute('data-kt-default-alt','');
+  i.onerror=function(){i.onerror=null;i.src=i.getAttribute('data-kt-default-src');i.removeAttribute('data-kt-wl');document.documentElement.classList.remove('kt-wl');};
+  i.src=src;i.alt=b.product_name||'';i.setAttribute('data-kt-wl','1');document.documentElement.classList.add('kt-wl');
 }catch(e){}})();
 </script>
 <script>
@@ -402,7 +429,7 @@ function showReloadGate(){
   <div class="app-shell app-shell--sidebar" id="appShell">
     <aside class="app-nav app-sidebar" id="appSidebar" aria-label="Main navigation">
       <a href="#" class="nav-brand" id="navBrand">
-        <img src="/logo-wordmark@2x.png" alt="KiddieTrac" style="height:86px;width:auto;display:block;">
+        <img src="/logo-wordmark@2x.png" alt="KiddieTrac" data-brand-logo style="height:86px;width:auto;display:block;">
       </a>
       <div class="nav-links sidebar-nav" id="navLinks"></div>
       <div class="nav-user" id="navUser" title="Sign out">
@@ -501,7 +528,7 @@ function showReloadGate(){
     <script src="js/kt-onboarding-tour.js?v=20261009n2" defer></script>
   <script src="/js/tooltips-v6.js?v=20261009n2" defer></script>
   <script src="/js/app-v2-init.js?v=20261009n2" defer></script>
-  <script src="/js/branding-loader.js?v=20261009n2" defer></script>
+  <script src="/js/branding-loader.js?v=20261015wl" defer></script>
   <script src="/js/api-helpers-v10.js?v=20261009n2" defer></script>
   <script src="/js/kt-avatar-cropper.js?v=20261009n2" defer></script>
   <script src="/js/kt-mini-map.js?v=20261009n2" defer></script>
@@ -616,7 +643,7 @@ function showReloadGate(){
   <script src="/js/nav-additions-v14.js?v=20261009n2" defer></script>
   <script src="/js/screen-admin-mrr.js?v=20261009n2" defer></script>
   <script src="/js/screen-admin-features.js?v=20261013ff3" defer></script>
-  <script src="/js/screen-admin-branding.js?v=20261014ra2" defer></script>
+  <script src="/js/screen-admin-branding.js?v=20261015wl" defer></script>
   <script src="/js/screen-lesson-plans-ai.js?v=20261009n2" defer></script>
   <script src="/js/screen-observations.js?v=20261009n2" defer></script>
   <script src="/js/screen-incidents.js?v=20261013hc" defer></script>
@@ -665,7 +692,7 @@ function showReloadGate(){
   <script src="/js/kt-calculator.js?v=20261013calc2" defer></script>
   <script src="/js/kt-topbar.js?v=20261013calc" defer></script>
   <script src="/js/kt-pin.js?v=20261009n2" defer></script>
-  <script src="/js/kt-biometric.js?v=20261009n2" defer></script>
+  <script src="/js/kt-biometric.js?v=20261015wl" defer></script>
   <script src="/js/kt-passkeys.js?v=20261010pk1" defer></script>
   <script src="/js/kt-impersonate.js?v=20261009n2" defer></script>
   <script src="/js/kt-crash-report.js?v=20261009n2" defer></script>

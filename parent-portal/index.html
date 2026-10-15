@@ -98,6 +98,10 @@
    distracting artifact and made the page feel like it loaded in stages. Show the
    logo instantly with no pen/sheen/sparkle so the whole screen appears at once. */
 .ktl-anim > img{animation:none !important;clip-path:none !important;transform:none !important;opacity:1 !important;}
+/* White-label app build (?tenant=<slug>, white-label licence): the agency's logo takes
+   the wordmark's place; the pen/sheen/sparkles trace OUR letters, so they go. */
+html.kt-wl .ktl-anim .ktl-pen,html.kt-wl .ktl-anim .ktl-sheen,html.kt-wl .ktl-anim .ktl-spk{display:none !important;}
+html.kt-wl .ktl-anim > img[data-kt-wl]{width:auto !important;max-width:min(70vw,280px) !important;max-height:110px !important;height:auto !important;object-fit:contain;}
 .ktl-anim .ktl-pen,.ktl-anim .ktl-sheen,.ktl-anim .ktl-spk{display:none !important;}
 @media(prefers-reduced-motion:reduce){
   .ktl-anim > img{animation:none;clip-path:none;}
@@ -145,13 +149,13 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
     <!-- ── Sign-in ── -->
     <section class="ktl-form-side">
       <div class="ktl-mobile-hero" aria-hidden="true">
-        <div class="ktl-mhero-card"><span class="ktl-anim"><img src="/logo-wordmark-large.png" alt="KiddieTrac" onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span></div>
+        <div class="ktl-mhero-card"><span class="ktl-anim"><img src="/logo-wordmark-large.png" alt="KiddieTrac" data-brand-logo onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span></div>
         <p class="ktl-mhero-tag">Every moment, beautifully captured.</p>
       </div>
       <div class="ktl-form-inner">
         <div class="auth-logo">
           <span class="ktl-anim">
-            <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" class="ktl-logo" onerror="this.style.display='none'">
+            <img src="/logo-wordmark-large.png" alt="KiddieTrac — Smart Childcare Management Platform" class="ktl-logo" data-brand-logo onerror="this.style.display='none'">
             <span class="ktl-pen" aria-hidden="true"></span>
             <span class="ktl-sheen" aria-hidden="true"></span>
             <span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span>
@@ -497,7 +501,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
   </script>
   <script src="/js/login-v7.js?v=20260915fpu" defer></script>
   <script src="/js/session-timeout.js?v=20261001pt" defer></script>
-  <script src="/js/branding-loader.js" defer></script>
+  <script src="/js/branding-loader.js?v=20261015wl" defer></script>
   <script src="/js/api-helpers-v10.js" defer></script>
   <script src="/js/mobile-helper-v11.js" defer></script>
 <script>
@@ -525,7 +529,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
   <script src="/js/nav-additions-v15.js" defer></script>
   <script src="/js/kt-social-login.js?v=20261013app"></script>
   <script src="/js/kt-pin.js?v=20260809navy" defer></script>
-  <script src="/js/kt-biometric.js?v=202609300330" defer></script>
+  <script src="/js/kt-biometric.js?v=20261015wl" defer></script>
   <script src="/js/kt-passkeys.js?v=20261010pk1" defer></script>
   <script src="/js/kt-crash-report.js?v=20260724net" defer></script>
   <!-- Freeze watchdog on the sign-in page too: a lock-up before anybody is signed in

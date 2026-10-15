@@ -29,6 +29,10 @@
   }
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function $(s, r) { return (r || document).querySelector(s); }
+  function isPlatformAdmin() {
+    const u = getUser();
+    return !!(u.is_platform_admin || (Array.isArray(u.roles) && u.roles.indexOf('platform_admin') !== -1));
+  }
 
   async function render(container) {
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading branding…</div>';
@@ -148,13 +152,19 @@
                 + '</div>';
             })()}
 
+            ${isPlatformAdmin() ? `
             <div style="display:flex;align-items:center;gap:10px;padding:12px;background:#F9FAFB;border-radius:8px;margin-top:14px;">
               <input type="checkbox" id="kt-poweredby" ${brand.powered_by_visible == 0 ? '' : 'checked'} style="width:18px;height:18px;cursor:pointer;">
               <label for="kt-poweredby" style="font-size:13px;color:#374151;cursor:pointer;flex:1;">
-                Show <em>"Powered by Kiddietrac"</em> on invoices
-                <div style="font-size:11px;color:#64748B;margin-top:2px;">Uncheck to fully white-label. Plan must support this.</div>
+                Show <em>"Powered by Kiddietrac"</em> (white-label licence <strong>off</strong>)
+                <div style="font-size:11px;color:#64748B;margin-top:2px;">Uncheck only for an agency on the white-label licence: their logo replaces KiddieTrac in the portal top bar, the app's loading and unlock screens, emails, invoices and forms.</div>
               </label>
-            </div>
+            </div>` : `
+            <div style="padding:12px;background:#F9FAFB;border-radius:8px;margin-top:14px;font-size:13px;color:#374151;">
+              ${brand.powered_by_visible == 0
+                ? '<strong>White-label licence: on.</strong> Your logo replaces KiddieTrac in the portal, the app’s loading screens, emails, invoices and forms.'
+                : '<strong>White-label licence: off.</strong> Your logo appears on invoices and emails; the portal and app keep the KiddieTrac brand. Ask KiddieTrac about the white-label licence to show your own brand throughout.'}
+            </div>`}
 
             <div style="display:flex;gap:10px;margin-top:18px;">
               <button id="kt-preview-btn" style="padding:10px 18px;background:#E5E7EB;color:#374151;border:none;border-radius:8px;font-weight:600;cursor:pointer;">↻ Refresh preview</button>
@@ -364,8 +374,11 @@
       })(($('#kt-invnum-start', container) || {}).value),
       brand_privacy_url:    $('#kt-privacy', container).value.trim() || null,
       brand_terms_url:      $('#kt-terms',   container).value.trim() || null,
-      powered_by_visible:   $('#kt-poweredby', container).checked ? 1 : 0,
     };
+    // The white-label licence is sold, so only a platform admin's save carries it
+    // (the server ignores it from anyone else too).
+    const pb = $('#kt-poweredby', container);
+    if (pb) payload.powered_by_visible = pb.checked ? 1 : 0;
     const msg = $('#kt-save-msg', container);
     msg.textContent = 'Saving…'; msg.style.color = '#6B7280';
     try {

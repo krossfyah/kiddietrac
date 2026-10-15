@@ -449,7 +449,12 @@ final class FeatureFlagController extends Controller
                 $update[$bk] = $data[$bk] !== '' ? $data[$bk] : null;
             }
         }
-        if (array_key_exists('powered_by_visible', $data)) {
+        /* powered_by_visible = 0 IS the white-label licence: it swaps the portal chrome,
+           emails, invoices and forms to the agency's own brand. It is sold, so only a
+           platform admin sets it. An agency admin's Branding save still sends the field;
+           it is ignored here rather than refused so the rest of their save goes through.
+           (Anthony, 2026-10-15: "based on the type of license that is being sold") */
+        if (array_key_exists('powered_by_visible', $data) && $isPlatform) {
             $update['powered_by_visible'] = (int) $data['powered_by_visible'];
         }
 

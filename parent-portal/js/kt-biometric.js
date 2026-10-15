@@ -353,8 +353,16 @@
         try { sessionStorage.setItem('kt_bio_session', '1'); } catch (e) {}
         set('kt_bio_unlocked_at', String(Date.now()));
         try {
+          /* A white-label agency (branding-loader decides, for the agency this device
+             unlocked into) shows its own logo on a white plate instead of ours. */
+          var wl = '';
+          try { wl = (window.KT && KT.brandLogo) ? KT.brandLogo(get('kt_bio_agency')) : ''; } catch (e) {}
           ov.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:22px;padding:0 28px;">'
-            + '<img src="/login-wordmark.png" alt="" style="width:min(60vw,220px);height:auto;filter:drop-shadow(0 6px 20px rgba(19,183,204,.28));" onerror="this.style.display=\'none\'">'
+            + (wl
+              ? '<span style="display:inline-block;line-height:0;background:#fff;border-radius:20px;padding:18px 24px;max-width:min(66vw,260px);box-shadow:0 14px 40px -16px rgba(0,0,0,.55);">'
+                + '<img src="' + String(wl).replace(/"/g, '&quot;') + '" alt="" style="max-width:100%;max-height:120px;width:auto;height:auto;object-fit:contain;" '
+                + 'onerror="this.onerror=null;this.src=\'/login-wordmark.png\';this.parentNode.style.background=\'none\';this.parentNode.style.boxShadow=\'none\';"></span>'
+              : '<img src="/login-wordmark.png" alt="" style="width:min(60vw,220px);height:auto;filter:drop-shadow(0 6px 20px rgba(19,183,204,.28));" onerror="this.style.display=\'none\'">')
             + '<div style="font-size:14px;font-weight:700;color:#a9c2dc;">Signing you in…</div></div>';
         } catch (e) {}
         restoreSession();
