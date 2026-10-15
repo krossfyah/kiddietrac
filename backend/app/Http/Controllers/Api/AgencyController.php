@@ -105,6 +105,41 @@ final class AgencyController extends Controller
             if (empty($provPhotoByCentre[$__pp->cid])) $provPhotoByCentre[$__pp->cid] = $__pp->photo_url;
         }
 
+        /* Provider clock in / out for the card, the way children have check in / out
+           (Anthony, 2026-10-15). The provider PERSON is matched by email like the photo
+           above. Shifts come from BOTH clock tables (see staffByCentre): anything
+           punched in today, plus a shift still open from before midnight. */
+        $provUserByCentre = [];
+        foreach (DB::table('centres as c')->join('users as u', DB::raw('LOWER(u.email)'), '=', DB::raw('LOWER(c.email)'))
+            ->whereIn('c.id', $__cids)->whereNotNull('c.email')->whereNull('u.deleted_at')
+            ->orderBy('u.id')
+            ->get(['c.id as cid', 'u.id as uid', 'u.first_name', 'u.last_name', 'u.photo_url']) as $__pu) {
+            if (empty($provUserByCentre[$__pu->cid])) $provUserByCentre[$__pu->cid] = $__pu;
+        }
+        $shiftsByCentre = [];
+        $__addShift = function ($cid, $uid, $nm, $photo, $in, $out) use (&$shiftsByCentre) {
+            $s = $shiftsByCentre[$cid][$uid] ?? ["name" => $nm, "photo_url" => $photo, "in" => null, "out" => null, "open" => false];
+            if ($in && (! $s["in"] || $in < $s["in"])) $s["in"] = $in;
+            if ($out === null) { $s["open"] = true; }
+            elseif (! $s["out"] || $out > $s["out"]) { $s["out"] = $out; }
+            $shiftsByCentre[$cid][$uid] = $s;
+        };
+        $__openFloor = Carbon::now()->subHours(20);
+        foreach ([["time_punches", "punched_in_at", "punched_out_at"], ["time_entries", "clocked_in_at", "clocked_out_at"]] as [$__tbl, $__inC, $__outC]) {
+            foreach (DB::table("$__tbl as s")->join("users as u", "u.id", "=", "s.user_id")
+                ->whereIn("s.centre_id", $__cids)
+                ->where(function ($q) use ($__inC, $__outC, $dayStartUtc, $dayEndUtc, $__openFloor) {
+                    $q->whereBetween("s.$__inC", [$dayStartUtc, $dayEndUtc])
+                      ->orWhere(function ($q2) use ($__inC, $__outC, $__openFloor) {
+                          $q2->whereNull("s.$__outC")->where("s.$__inC", ">=", $__openFloor);
+                      });
+                })
+                ->selectRaw("s.centre_id as _cid, s.user_id, s.$__inC as t_in, s.$__outC as t_out, u.photo_url, TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) as nm")
+                ->get() as $__s) {
+                $__addShift($__s->_cid, $__s->user_id, $__s->nm, $__s->photo_url, $__s->t_in, $__s->t_out);
+            }
+        }
+
         $recByCentre = [];
         foreach (DB::table("invoices")->whereIn("centre_id", $__cids)
             ->whereIn("status", ["sent", "partial", "overdue"])->groupBy("centre_id")
@@ -207,6 +242,25 @@ final class AgencyController extends Controller
             $staffPresent = array_values(array_unique(array_values($staffByCentre[$c->id] ?? [])));
             sort($staffPresent);
 
+            // Provider (and anyone else who clocked at this centre today): same shape
+            // as a roster row. The provider leads, and shows "not in" when they have
+            // not clocked in today, exactly like a child who has not arrived.
+            $__fmt = fn ($t) => $t ? Carbon::parse($t, 'UTC')->timezone($ctz)->format("g:i A") : null;
+            $staffShifts = [];
+            $__prov = $provUserByCentre[$c->id] ?? null;
+            $__sh = $shiftsByCentre[$c->id] ?? [];
+            if ($__prov && ! isset($__sh[$__prov->uid])) {
+                $staffShifts[] = ["name" => trim($__prov->first_name . ' ' . ($__prov->last_name ?? '')), "photo_url" => $__prov->photo_url,
+                    "is_provider" => true, "status" => "absent", "clock_in_at" => null, "clock_out_at" => null];
+            }
+            foreach ($__sh as $__uid => $s) {
+                $staffShifts[] = ["name" => $s["name"], "photo_url" => $s["photo_url"],
+                    "is_provider" => $__prov && (int) $__prov->uid === (int) $__uid,
+                    "status" => $s["open"] ? "in" : "out",
+                    "clock_in_at" => $__fmt($s["in"]), "clock_out_at" => $s["open"] ? null : $__fmt($s["out"])];
+            }
+            usort($staffShifts, fn ($a, $b) => [! $a["is_provider"], $a["name"]] <=> [! $b["is_provider"], $b["name"]]);
+
             // Provider person's full name (first + last), when the record carries it,
             // so the overview card can show "Cassandra Miller" rather than just the
             // centre/provider `name` field. Empty for records that were only given a
@@ -224,6 +278,7 @@ final class AgencyController extends Controller
                 "present_children" => $presentChildren,
                 "staff_present" => $staffPresent,
                 "roster" => $roster,
+                "staff_shifts" => $staffShifts,
                 "checked_in_count" => $checkedInCount,
                 "not_checked_in_count" => count($roster) - $checkedInCount,
                 "staff_on_floor" => $staffOnFloor,
