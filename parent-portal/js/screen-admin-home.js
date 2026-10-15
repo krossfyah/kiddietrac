@@ -121,21 +121,21 @@
     });
 
     var openMap = openState();
-    var body = secs.map(function (s, i) {
-      var id = 'kt-ah-' + i;
-      // First section open by default; the rest remember what you left them at.
-      var isOpen = Object.prototype.hasOwnProperty.call(openMap, s.label) ? !!openMap[s.label] : (i === 0);
-      return '<section class="kt-ah-sec" data-label="' + esc(s.label) + '">'
+    function section(key, label, items, id, openByDefault) {
+      var isOpen = Object.prototype.hasOwnProperty.call(openMap, key) ? !!openMap[key] : openByDefault;
+      return '<section class="kt-ah-sec" data-label="' + esc(key) + '">'
         + '<button type="button" class="kt-ah-head" aria-expanded="' + (isOpen ? 'true' : 'false')
         + '" aria-controls="' + id + '">'
-        + '<span>' + esc(s.label) + '</span>'
-        + '<span class="kt-ah-count">' + s.items.length + '</span>'
+        + '<span>' + esc(label) + '</span>'
+        + '<span class="kt-ah-count">' + items.length + '</span>'
         + '<span class="kt-ah-chev" aria-hidden="true">▾</span>'
         + '</button>'
         + '<div class="kt-tile-grid kt-ah-body" id="' + id + '"' + (isOpen ? '' : ' hidden') + '>'
-        + s.items.map(tile).join('')
+        + items.map(tile).join('')
         + '</div></section>';
-    }).join('');
+    }
+    // First section open by default; the rest remember what you left them at.
+    var body = secs.map(function (s, i) { return section(s.label, s.label, s.items, 'kt-ah-' + i, i === 0); }).join('');
 
     main.innerHTML =
       '<div class="kt-tilehome kt-admin-home">'
@@ -150,9 +150,10 @@
       + '</div>'
       + '<div id="kt-ah-results" class="kt-ah-body" hidden></div>'
       + '<div id="kt-ah-noresult" class="kt-ah-noresult" hidden>Nothing matches that.</div>'
+      /* Quick access folds like every other section (open until you close it). It sits
+         outside #kt-ah-sections so search can hide it on its own. */
       + (quick.length
-          ? '<div class="kt-ah-quick"><div class="kt-tile-sectionhead">Quick access</div>'
-            + '<div class="kt-tile-grid">' + quick.map(tile).join('') + '</div></div>'
+          ? '<div class="kt-ah-quick">' + section('__quick', 'Quick access', quick, 'kt-ah-quickgrid', true) + '</div>'
           : '')
       + '<div id="kt-ah-sections">' + body + '</div>'
       /* The same footer parents and educators have. Their launcher carries sign-out
@@ -173,6 +174,17 @@
         try { sessionStorage.clear(); } catch (e) {}
         location.href = '/index.html';
       });
+    }
+
+    /* WHY [hidden] NEEDS A RULE. The section bodies are .kt-tile-grid, and
+       kt-topnav-fix.css gives that `display: grid` — an author rule, which beats the
+       browser's own `[hidden] { display: none }`. So the button flipped `hidden` and
+       the chevron, and the tiles stayed on screen: no section ever collapsed.
+       (Anthony, 2026-10-15) */
+    if (!document.getElementById('kt-admin-home-style')) {
+      var _st = document.createElement('style'); _st.id = 'kt-admin-home-style';
+      _st.textContent = '.kt-admin-home [hidden]{display:none !important;}';
+      document.head.appendChild(_st);
     }
 
     /* ── collapse / expand ────────────────────────────────────────────────── */
@@ -221,7 +233,7 @@
         var head = sec.querySelector('.kt-ah-head');
         var map = openState();
         var was = map[sec.getAttribute('data-label')];
-        var open = (was === undefined) ? (sec === main.querySelector('.kt-ah-sec')) : !!was;
+        var open = (was === undefined) ? (sec === main.querySelector('#kt-ah-sections .kt-ah-sec')) : !!was;
         grid.hidden = !open;
         head.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
