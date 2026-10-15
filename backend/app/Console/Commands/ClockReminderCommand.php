@@ -101,6 +101,7 @@ final class ClockReminderCommand extends Command
 
         if ($mode === 'clock_out' || $mode === 'all') {
             $sent += $this->remindMissingClockOut($today);
+            $sent += $this->remindChildrenStillSignedIn();
         }
         if ($mode === 'clock_in' || $mode === 'all') {
             $sent += $this->remindMissingClockIn($today);
@@ -163,7 +164,9 @@ final class ClockReminderCommand extends Command
             }
 
             $usual = $this->usualShiftHours((int) $e->user_id, $today);
-            $threshold = $usual === null ? 6.0 : max(5.0, $usual + 1.0);
+            // Never more than 8 hours: this runs once an evening, and a later threshold
+            // means the auto sign-off arrives first and nobody is ever reminded.
+            $threshold = $usual === null ? 6.0 : min(8.0, max(5.0, $usual + 1.0));
             // Elapsed time is the same number in any zone; only the labels moved.
             if ($in->floatDiffInHours($nowLocal) < $threshold) continue;
 
@@ -417,6 +420,12 @@ final class ClockReminderCommand extends Command
             ->where('user_id', $userId)
             ->whereNotNull('punched_out_at')
             ->where('punched_in_at', '>=', $today->copy()->subDays(28))
+            /* NOT the shifts the nightly auto sign-off closed (2026-10-14). Each one ends at
+               the sign-off time, so someone who forgets often got a 12-hour "usual day", a
+               13-hour threshold and, at the one evening run, no reminder at all — then
+               another 12-hour day for the median. Bruni, Cassandra and Sukhman: 7 forgotten
+               clock-outs in a week, 0 reminders. */
+            ->where(fn ($q) => $q->whereNull('notes')->orWhere('notes', 'not like', '%auto sign-off%'))
             ->select('punched_in_at', 'punched_out_at')
             ->get();
         if ($rows->count() < 3) return null;
@@ -441,6 +450,8 @@ final class ClockReminderCommand extends Command
         // Push + in-app notification so the reminder reaches the educator on the
         // APK, not only by email. FcmService handles device-token lookup and the
         // do-not-contact suppression for live agencies.
+        $cfgAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        $chan = $cfgAgency ? \App\Http\Controllers\Api\ClockRemindersController::read($cfgAgency) : [];
         try {
             \App\Support\Notify::write([
                 'user_id' => $userId, 'type' => 'clock_reminder',
@@ -448,11 +459,17 @@ final class ClockReminderCommand extends Command
                 'data' => json_encode(['link' => '#dashboard']),
                 'created_at' => now(),
             ]);
-            app(\App\Services\FcmService::class)->sendToUser($userId, $subject, $lead, '#dashboard');
+            // Clock settings → "Push" / "Email" switches (2026-10-14: they were ignored).
+            if (($chan['push'] ?? true) !== false) {
+                app(\App\Services\FcmService::class)->sendToUser($userId, $subject, $lead, '#dashboard');
+            }
         } catch (\Throwable $e) {
             Log::warning('Clock reminder push failed', ['user_id' => $userId, 'error' => $e->getMessage()]);
         }
 
+        if (($chan['email'] ?? true) === false) {
+            return;
+        }
         $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
         $name = $firstName ?: 'there';
         $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111827;">'
@@ -533,6 +550,112 @@ final class ClockReminderCommand extends Command
             });
         } catch (\Throwable $ex) {
             Log::warning('Clock reminder email failed', ['to' => $to, 'error' => $ex->getMessage()]);
+        }
+    }
+
+    /**
+     * CHILDREN STILL SIGNED IN — told to the EDUCATOR (2026-10-14).
+     *
+     * Anthony: "are the warning notices getting sent out for educators not clocking out kids
+     * and themselves?" Parents got an evening "please sign X out", admins saw it in the next
+     * day's digest, and the educator only inside her daily summary — which an educator with
+     * nothing else logged never received. At the agency's clock-out reminder hour, whoever
+     * signed each child in (or, if a parent did, the room's educators) is told which children
+     * are still signed in, before the nightly auto sign-off closes them.
+     */
+    private function remindChildrenStillSignedIn(): int
+    {
+        $n = 0;
+        foreach (DB::table('agencies')->whereNull('deleted_at')->pluck('id') as $agencyId) {
+            $agencyId = (int) $agencyId;
+            $centres = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')->pluck('id')->map(fn ($x) => (int) $x)->all();
+            $centres = array_values(array_filter($centres, fn ($c) => $this->agencyWants($c, 'out')));
+            if (! $centres) continue;
+            [$from] = \App\Support\AgencyTime::dayRange($agencyId, \App\Support\AgencyTime::today($agencyId));
+
+            $open = DB::table('check_events as e')
+                ->join('children as ch', 'ch.id', '=', 'e.child_id')
+                ->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->whereIn('f.centre_id', $centres)->whereNull('ch.deleted_at')
+                ->where('e.event_type', 'check_in')->where('e.occurred_at', '>=', $from)->where('e.occurred_at', '<=', now())
+                ->whereNotExists(fn ($q) => $q->select(DB::raw(1))->from('check_events as o')
+                    ->whereColumn('o.child_id', 'e.child_id')->where('o.event_type', 'check_out')
+                    ->whereColumn('o.occurred_at', '>=', 'e.occurred_at'))
+                ->orderByDesc('e.occurred_at')   // the LATEST sign-in names who has the child
+                ->get(['e.child_id', 'e.room_id', 'e.by_user_id', 'e.recorded_by_id', 'f.centre_id', 'ch.first_name', 'ch.preferred_name', 'ch.last_name']);
+            if ($open->isEmpty()) continue;
+
+            $staffIds = DB::table('role_assignments')->where('active', 1)
+                ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'home_visitor'])
+                ->where(fn ($q) => $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres))
+                ->pluck('user_id')->map(fn ($x) => (int) $x)->unique()->flip();
+            $byPerson = [];   // user id => [centre id, [child id => name]]
+            foreach ($open->unique('child_id') as $e) {
+                $who = (int) ($e->recorded_by_id ?: $e->by_user_id);
+                $targets = isset($staffIds[$who]) ? [$who]
+                    : DB::table('educator_rooms as er')->join('users as u', 'u.id', '=', 'er.user_id')
+                        ->where('er.room_id', $e->room_id)->whereNull('u.deleted_at')->where('u.status', 'active')
+                        ->pluck('u.id')->map(fn ($x) => (int) $x)->all();
+                foreach ($targets as $uid) {
+                    $byPerson[$uid][0] = (int) $e->centre_id;
+                    $byPerson[$uid][1][(int) $e->child_id] = trim(($e->preferred_name ?: $e->first_name) . ' ' . $e->last_name);
+                }
+            }
+            $auto = \App\Http\Controllers\Api\AutoSignOffController::read($agencyId);
+            $autoAt = ! empty($auto['children_enabled']) && ! empty($auto['children_at'])
+                ? Carbon::parse($auto['children_at'])->format('g:i A') : null;
+
+            foreach ($byPerson as $uid => [$centreId, $kids]) {
+                $u = DB::table('users')->where('id', $uid)->whereNull('deleted_at')->first(['email', 'first_name']);
+                if (! $u) continue;
+                $names = array_values($kids);
+                $list = count($names) === 1 ? $names[0] : implode(', ', array_slice($names, 0, -1)) . ' and ' . end($names);
+                $subject = count($names) === 1 ? $names[0] . ' is still signed in' : count($names) . ' children are still signed in';
+                $lead = $list . (count($names) === 1 ? ' is' : ' are') . ' still signed in. Please sign '
+                    . (count($names) === 1 ? 'them' : 'each of them') . ' out at pickup so today\'s attendance and ratios are right'
+                    . ($autoAt ? ' — anything still open at ' . $autoAt . ' is signed out automatically and flagged on the child\'s record.' : '.');
+                $this->sendChildrenReminder($uid, $centreId, (string) ($u->email ?? ''), $u->first_name, $subject, $lead, $names);
+                $n++;
+            }
+        }
+        return $n;
+    }
+
+    private function sendChildrenReminder(int $userId, int $centreId, string $to, ?string $firstName, string $subject, string $lead, array $names): void
+    {
+        if ($this->dryRun) {
+            $this->line("  [dry-run] would warn user {$userId} <{$to}> — {$subject}: " . implode(', ', $names));
+            return;
+        }
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        $cfg = \App\Http\Controllers\Api\ClockRemindersController::read($agencyId);
+        try {
+            \App\Support\Notify::write([
+                'user_id' => $userId, 'type' => 'children_still_in', 'title' => $subject, 'body' => $lead,
+                'data' => json_encode(['link' => '#dashboard']), 'created_at' => now(),
+            ]);
+            if (($cfg['push'] ?? true) !== false) {
+                app(\App\Services\FcmService::class)->sendToUser($userId, $subject, $lead, '#dashboard');
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Children-still-in push failed', ['user_id' => $userId, 'error' => $e->getMessage()]);
+        }
+        if (($cfg['email'] ?? true) === false || $to === '') return;
+        $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111827;">'
+            . '<p style="font-size:15px;line-height:1.6;">Hi ' . e($firstName ?: 'there') . ',</p>'
+            . '<p style="font-size:15px;line-height:1.6;">' . e($lead) . '</p>'
+            . '<ul style="font-size:15px;line-height:1.7;margin:8px 0 16px;">' . implode('', array_map(fn ($x) => '<li><strong>' . e($x) . '</strong></li>', $names)) . '</ul>'
+            . '<p style="font-size:14px;line-height:1.6;">Open the app, go to your room and tap <strong>Sign out</strong> for each child. If they were picked up earlier, use <strong>⏱ Fix</strong> to record the real pickup time.</p>'
+            . '</div>';
+        $html = \App\Services\EmailTemplate::wrap($agencyId ?: null, $body, ['eyebrow' => 'ATTENDANCE', 'title' => $subject, 'preheader' => $lead]);
+        try {
+            $svc = AgencyMailer::forAgency($agencyId ?: null);
+            $from = $svc->fromAddress(); $fn = $svc->fromName();
+            $svc->html($html, function ($msg) use ($to, $from, $fn, $subject) {
+                $msg->to($to)->from($from, $fn)->subject($subject);
+            });
+        } catch (\Throwable $ex) {
+            Log::warning('Children-still-in email failed', ['to' => $to, 'error' => $ex->getMessage()]);
         }
     }
 }

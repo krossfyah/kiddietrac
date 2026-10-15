@@ -90,7 +90,8 @@ class EducatorDailySummaryCommand extends Command
             }
 
             $today = self::statsFor((int) $ed->id, $tz, $date);
-            if (! $override && $today['moments'] === 0 && $today['minutes'] === 0) {
+            // Children signed in count as a day worked too (2026-10-14).
+            if (! $override && $today['moments'] === 0 && $today['minutes'] === 0 && $today['children'] === 0) {
                 $this->line("· {$ed->first_name}: nothing logged, skipping");
                 continue;
             }
@@ -267,7 +268,11 @@ class EducatorDailySummaryCommand extends Command
         // screen writes daily_care_logs. Reading only the first counted a real
         // day's work as a light one - and the score is 40% this number.
         $events = DB::table('daily_events')->where('recorded_by_id', $uid)
-            ->whereBetween('occurred_at', [$start, $end])->get(['event_type', 'child_id', 'occurred_at']);
+            ->whereBetween('occurred_at', [$start, $end])
+            // Not the nightly auto sign-off's note: it is filed against whoever signed the
+            // child in, but it is the system's line, not her work (2026-10-14).
+            ->where(fn ($q) => $q->whereNull('payload')->orWhere('payload', 'not like', '%"auto_sign_off":true%'))
+            ->get(['event_type', 'child_id', 'occurred_at']);
 
         $careLogs = Schema::hasTable('daily_care_logs')
             ? DB::table('daily_care_logs')->where('recorded_by_id', $uid)
@@ -324,11 +329,18 @@ class EducatorDailySummaryCommand extends Command
             ? DB::table('observations')->where('recorded_by_id', $uid)->whereBetween('created_at', [$start, $end])->count()
             : 0;
 
+        /* A shift still OPEN when the summary runs (19:00) counts up to now (2026-10-14).
+           Only closed punches counted, so an educator still on the clock — or one who
+           forgets to clock out, closed later by the auto sign-off — had 0 minutes and,
+           with no care logged, was skipped as "nothing logged" every day (Lorraine). */
         $mins = 0;
         foreach (DB::table('time_punches')->where('user_id', $uid)
-            ->whereBetween('punched_in_at', [$start, $end])->whereNotNull('punched_out_at')
+            ->whereBetween('punched_in_at', [$start, $end])
             ->get(['punched_in_at', 'punched_out_at']) as $p) {
-            try { $mins += (int) Carbon::parse($p->punched_in_at)->diffInMinutes(Carbon::parse($p->punched_out_at)); } catch (\Throwable $e) {}
+            try {
+                $out = $p->punched_out_at ? Carbon::parse($p->punched_out_at) : Carbon::now()->min(Carbon::parse($end));
+                $mins += max(0, (int) abs(Carbon::parse($p->punched_in_at)->diffInMinutes($out)));
+            } catch (\Throwable $e) {}
         }
 
         return [
