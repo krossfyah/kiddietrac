@@ -470,6 +470,9 @@ Route::post('/auth/passkey/options', [\App\Http\Controllers\Api\PasskeyControlle
 Route::post('/auth/passkey/verify',  [\App\Http\Controllers\Api\PasskeyController::class, 'loginVerify'])->middleware('throttle:30,1');
 
     Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
+    // The 6-digit code from email / text / call (2026-10-15). 10 tries a minute per IP on
+    // top of the 5-wrong-guesses limit each code carries.
+    Route::post('/auth/forgot/verify', [AuthController::class, 'verifyResetCode'])->middleware('throttle:10,1');
     Route::post('/auth/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
     Route::post('/auth/set-password', [AuthController::class, 'setPasswordFromToken'])->middleware('throttle:10,1');
     Route::get('/auth/social/providers', [\App\Http\Controllers\Api\SocialAuthController::class, 'providers']);

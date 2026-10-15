@@ -426,7 +426,7 @@
              screen registry. */
           { hash: 'sms-settings',       label: 'Carrier settings',    icon: '📡' },
           { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
-          ...(isPlatformAdmin_v22p34 ? [{ hash: 'email-seasons', label: 'Seasonal email headers', icon: '🎨' }] : []),   // 2026-10-09
+          // Seasonal email headers moved to Branding › Seasonal email headers (2026-10-15).
           { hash: 'document-templates', label: 'Document templates', icon: '📄' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
           { hash: 'xero',               label: 'Xero',                icon: '📗' },

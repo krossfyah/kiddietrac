@@ -460,12 +460,21 @@ final class VoiceController extends Controller
         ?int $startedBy = null,
         bool $bypassOptIn = false,
         bool $selfTest = false,
-        ?array $ref = null
+        ?array $ref = null,
+        /* What is SPOKEN when it must not be what is LOGGED (2026-10-15): a password-reset
+           code. $script (masked) goes in voice_calls.body for the call log; this is held
+           in the cache against the call's state for the webhook, and expires with it. */
+        ?string $spoken = null
     ): bool {
+        /* A password-reset code is security, not a broadcast (Anthony, 2026-10-15): the
+           person asked for it a moment ago, so the opt-in, category, do-not-ring and
+           duplicate gates below do not apply. The agency's own voice switch and its
+           Telnyx setup still do - the line is theirs. */
+        $security = $category === 'password_reset';
         // What the call is about (a Safe Arrival check), written on every row, placed or not.
         $refCols = $ref ? ['ref_type' => (string) $ref['type'], 'ref_id' => (int) $ref['id']] : [];
         // 1. Do-not-contact: never ring a parent at a live agency while we are testing.
-        if (\App\Support\Suppression::isUser($userId)) {
+        if (! $security && \App\Support\Suppression::isUser($userId)) {
             \App\Support\Suppression::note('voice', $userId, $category);
 
             return false;
@@ -504,11 +513,11 @@ final class VoiceController extends Controller
             if (! $selfTest && ! \App\Support\SafeArrival::settings($agencyId)['call_parents']) {
                 return $write('skipped', 'Safe Arrival calls are switched off for this agency');
             }
-        } elseif ($category !== 'test' && ! in_array($category, self::allowedCategories($agencyId), true)) {
+        } elseif ($category !== 'test' && ! $security && ! in_array($category, self::allowedCategories($agencyId), true)) {
             return $write('skipped', 'calls for this reason (' . $category . ') are switched off for this agency');
         }
         // 2c. The reasons this person wants calls for (My profile → Texts and phone calls).
-        if ($category !== 'test' && ! \App\Support\ContactCategories::userWants($userId, 'voice', $category)) {
+        if ($category !== 'test' && ! $security && ! \App\Support\ContactCategories::userWants($userId, 'voice', $category)) {
             return $write('skipped', 'this person turned off calls for ' . strtolower(self::CATEGORIES[$category] ?? $category));
         }
 
@@ -516,10 +525,10 @@ final class VoiceController extends Controller
 
         // 3. A standing "do not ring me" wins over everything, emergency included, and
         //    it belongs to the HANDSET: any account on this number (App\Support\Handset).
-        if ($user && (int) ($user->voice_opt_out ?? 0) === 1) {
+        if (! $security && $user && (int) ($user->voice_opt_out ?? 0) === 1) {
             return $write('skipped', 'this person has opted out of phone calls');
         }
-        $noRing = \App\Support\Handset::voiceOptedOut($phone);
+        $noRing = $security ? null : \App\Support\Handset::voiceOptedOut($phone);
         if ($noRing) {
             return $write('skipped', 'this phone has opted out of calls (account #' . $noRing . ')');
         }
@@ -538,7 +547,7 @@ final class VoiceController extends Controller
               a number that belongs to somebody who has opted out is refused by the
               caller before it ever reaches here. */
         $consentVia = null;
-        if (! $bypassOptIn && ! BroadcastAudience::isEmergency($category)) {
+        if (! $bypassOptIn && ! $security && ! BroadcastAudience::isEmergency($category)) {
             // Resolved for the handset within this agency, as for texts (Handset::smsConsent).
             $c = \App\Support\Handset::smsConsent($agencyId, $userId, $phone);
             if (! $c['ok']) {
@@ -549,7 +558,7 @@ final class VoiceController extends Controller
 
         // One handset, one call: the same announcement to this number just now went already.
         // Tests are exempt, so the same test can be run twice in a row.
-        if ($category !== 'test') {
+        if ($category !== 'test' && ! $security) {
             $dupOf = \App\Support\Handset::duplicateOf('voice_calls', $agencyId, $phone, $script);
             if ($dupOf !== null) {
                 return $write('skipped', 'duplicate: this phone was already called' . ($dupOf ? ' (account #' . $dupOf . ')' : '')
@@ -578,6 +587,9 @@ final class VoiceController extends Controller
            HTTP response, so a row created afterwards would not exist when it is first
            needed. */
         $state = 'kt_' . bin2hex(random_bytes(14));
+        if ($spoken !== null && $spoken !== '') {
+            \Illuminate\Support\Facades\Cache::put('vx-spoken-' . $state, $spoken, now()->addMinutes(15));
+        }
         $rowId = DB::table('voice_calls')->insertGetId($refCols + [
             'agency_id' => $agencyId,
             'to_user_id' => $userId,
@@ -715,7 +727,9 @@ final class VoiceController extends Controller
                             $r = Telnyx::gather($cfg, $callControlId, (string) $call->body, $state,
                                 \App\Support\SafeArrivalCall::digits($sa), (int) $sa['tries'], (int) $sa['wait_secs'], (string) $sa['reply_invalid']);
                         } else {
-                            $r = Telnyx::speak($cfg, $callControlId, (string) $call->body, $state);
+                            // A reset code is spoken from the cache; the row only holds it masked.
+                            $say = \Illuminate\Support\Facades\Cache::get('vx-spoken-' . $state);
+                            $r = Telnyx::speak($cfg, $callControlId, is_string($say) && $say !== '' ? $say : (string) $call->body, $state);
                         }
                         if (! $r['ok']) {
                             DB::table('voice_calls')->where('id', $call->id)->update([

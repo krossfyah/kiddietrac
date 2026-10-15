@@ -78,7 +78,9 @@
       ['email',      '✉️ Email delivery'],
       ['payslips',   '💵 Payslips'],
       ['region',     '🌎 Region & IDs'],
-    ];
+      /* The banner on every KiddieTrac email, by season — platform-wide, so super admins
+         only (it was Settings › Seasonal email headers until 2026-10-15). */
+    ].concat(isPlatformAdmin() ? [['seasons', '🍂 Seasonal email headers']] : []);
     const SAVES_HERE = { whitelabel: 1, invoices: 1, contact: 1 };   // the rest save in their own card
     let tab = (location.hash.match(/[?&]tab=([a-z]+)/) || [])[1] || 'whitelabel';
     if (!TABS.some(t => t[0] === tab)) tab = 'whitelabel';
@@ -86,8 +88,8 @@
     const card = 'background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);';
     container.innerHTML = `
       <div style="padding:24px;max-width:1800px;">
-        <h2 style="font-size:24px;margin:0 0 4px;">🎨 Branding</h2>
-        <p style="color:#6B7280;font-size:13px;margin:0 0 14px;">How your agency appears to families and staff — in the app, on invoices, in email and on payslips.</p>
+        <!-- No title here: the shell's banner already names the page (and repeating it was
+             the "name twice" problem normaliseBanners exists for). -->
 
         <div class="kt-br-tabs" role="tablist" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:16px;">
           ${TABS.map(t => `<button type="button" role="tab" data-tab="${t[0]}" class="kt-br-tab">${t[1]}</button>`).join('')}
@@ -112,12 +114,29 @@
             </div>`}
 
             <h3 style="margin:0 0 12px;font-size:15px;">Logo &amp; colour</h3>
-            ${field('Logo URL', 'kt-logo-url', brand.brand_logo_url || '', 'https://yourdomain.com/logo.png', 'PNG, JPG or WebP, up to 2 MB. A wide logo on a transparent background works best.')}
-            <div style="display:flex;align-items:center;gap:10px;margin:-6px 0 14px;flex-wrap:wrap;">
-              <input type="file" id="kt-logo-file" accept="image/png,image/jpeg,image/webp" style="display:none;">
-              <button type="button" id="kt-logo-upload" style="height:32px;padding:0 14px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">⬆ Upload a logo file</button>
-              <span id="kt-logo-upmsg" style="font-size:12px;color:#64748B;">…or paste a URL above</span>
+            <!-- THE LOGO PICKER (2026-10-15). Anthony: "I only see the logos but no replace or
+                 upload". The upload button was there, but kt-icon-buttons.js turns any button
+                 whose label says "upload" into a bare 📤, so it read as decoration beside a URL
+                 box. These buttons opt out (data-kt-iconized) and say what they do. -->
+            <label style="display:block;font-size:12px;font-weight:700;color:#6B7280;margin-bottom:6px;">Logo</label>
+            <div id="kt-logo-drop" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px;border:1.5px dashed #CBD5E1;border-radius:12px;background:#F8FAFC;margin-bottom:8px;">
+              <div style="width:132px;height:72px;flex:none;border-radius:10px;background:#fff;border:1px solid #E2E8F0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                <img id="kt-logo-thumb" alt="" style="max-width:118px;max-height:60px;object-fit:contain;display:none;">
+                <span id="kt-logo-none" style="font-size:11px;color:#94A3B8;">No logo yet</span>
+              </div>
+              <div style="flex:1;min-width:170px;">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <input type="file" id="kt-logo-file" accept="image/png,image/jpeg,image/webp" style="display:none;">
+                  <button type="button" id="kt-logo-upload" data-kt-iconized="1" style="height:32px;padding:0 14px;background:#081C41;color:#fff;border:0;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Upload logo</button>
+                  <button type="button" id="kt-logo-remove" data-kt-iconized="1" style="height:32px;padding:0 12px;background:#fff;color:#B91C1C;border:1px solid #FECACA;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Remove</button>
+                </div>
+                <div id="kt-logo-upmsg" style="font-size:12px;color:#64748B;margin-top:6px;">PNG, JPG or WebP, up to 2 MB. Drop a file here too. A wide logo on a transparent background works best.</div>
+              </div>
             </div>
+            <details style="margin:0 0 14px;">
+              <summary style="font-size:12px;color:#1F6080;cursor:pointer;font-weight:600;">Use a link to an image instead</summary>
+              <div style="margin-top:8px;">${field('Logo URL', 'kt-logo-url', brand.brand_logo_url || '', 'https://yourdomain.com/logo.png', 'Saved with "Save changes".')}</div>
+            </details>
             ${colorField('Primary colour', 'kt-color', brand.brand_primary_color || '#3BBBBE')}
             <div style="font-size:11px;color:#64748B;margin:-4px 0 4px;">Used for the header of your invoices and white-label emails.</div>
           </div>
@@ -238,6 +257,7 @@
         <div data-pane="email" hidden style="max-width:900px;"></div>
         <div data-pane="payslips" hidden></div>
         <div data-pane="region" hidden style="max-width:900px;"></div>
+        <div data-pane="seasons" hidden></div>
 
         <div id="kt-br-savebar" style="display:flex;gap:10px;align-items:center;margin-top:18px;">
           <button id="kt-save" type="button" style="height:36px;padding:0 24px;background:#081C41;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save changes</button>
@@ -252,6 +272,7 @@
       const st = document.createElement('style'); st.id = 'kt-br-style';
       st.textContent = '.kt-br-tab{flex:0 0 auto;height:32px;padding:0 14px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#475569;font:600 13px/1 inherit;cursor:pointer;white-space:nowrap;}'
         + '.kt-br-tab[aria-selected="true"]{background:#081C41;border-color:#081C41;color:#fff;}'
+        + '.kt-br-tabs{scrollbar-width:none;}.kt-br-tabs::-webkit-scrollbar{display:none;}'
         + '[data-pane][hidden]{display:none !important;}'
         + '@media(max-width:900px){.kt-br-grid{grid-template-columns:minmax(0,1fr) !important;}}';
       document.head.appendChild(st);
@@ -270,7 +291,8 @@
              overview (both live in screen-admin.js). */
           if (KT.renderCountryCard) { const c1 = document.createElement('div'); c1.style.cssText = 'margin:0 0 20px;'; host.appendChild(c1); KT.renderCountryCard(c1); }
           if (KT.buildRefPrefixCard) host.appendChild(KT.buildRefPrefixCard());
-        } else if (name === 'invoices') refreshPreview(container, agencyId);
+        } else if (name === 'seasons' && KT.EmailSeasons) KT.EmailSeasons.render(host);
+        else if (name === 'invoices') refreshPreview(container, agencyId);
         if (!host.firstChild && name !== 'invoices') host.innerHTML = '<div style="padding:24px;color:#6B7280;">This section is not available.</div>';
       } catch (e) {}
     }
@@ -295,6 +317,11 @@
       const logo = ($('#kt-logo-url', container).value || '').trim();
       const abs = logo ? (/^(https?:|data:)/i.test(logo) ? logo : apiBase().replace(/\/api\/v1\/?$/, '') + (logo.charAt(0) === '/' ? '' : '/') + logo) : '';
       const showAgency = wlOn && !!abs;
+      const thumb = $('#kt-logo-thumb', container), none = $('#kt-logo-none', container);
+      if (thumb) { thumb.style.display = abs ? '' : 'none'; if (abs) thumb.src = abs; }
+      if (none) none.style.display = abs ? 'none' : '';
+      const up = $('#kt-logo-upload', container); if (up) up.textContent = abs ? 'Replace logo' : 'Upload logo';
+      const rm = $('#kt-logo-remove', container); if (rm) rm.style.display = abs ? '' : 'none';
       $('#kt-wl-bar-logo', container).src = showAgency ? abs : '/logo-wordmark@2x.png';
       $('#kt-wl-splash-logo', container).src = showAgency ? abs : '/login-wordmark.png';
       const plate = $('#kt-wl-splash-plate', container);
@@ -366,9 +393,22 @@
     const logoFile = $('#kt-logo-file', container);
     const logoMsg = $('#kt-logo-upmsg', container);
     $('#kt-logo-upload', container).addEventListener('click', () => logoFile.click());
-    logoFile.addEventListener('change', async () => {
-      const file = logoFile.files[0];
-      if (!file) return;
+    logoFile.addEventListener('change', () => { if (logoFile.files[0]) uploadLogo(logoFile.files[0]); logoFile.value = ''; });
+    const drop = $('#kt-logo-drop', container);
+    ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.style.borderColor = '#1F6080'; }));
+    ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.style.borderColor = '#CBD5E1'; }));
+    drop.addEventListener('drop', (e) => { const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) uploadLogo(f); });
+    $('#kt-logo-remove', container).addEventListener('click', async () => {
+      logoMsg.textContent = 'Removing…'; logoMsg.style.color = '#6B7280';
+      try {
+        await api('PATCH', '/admin/agencies/' + agencyId + '/features', { brand_logo_url: null });
+        $('#kt-logo-url', container).value = '';
+        logoMsg.textContent = '✓ Logo removed'; logoMsg.style.color = '#16A34A';
+        if (container._ktPaintWl) container._ktPaintWl();
+        reloadChrome();
+      } catch (e) { logoMsg.textContent = 'Could not remove: ' + (e.message || 'error'); logoMsg.style.color = '#DC2626'; }
+    });
+    async function uploadLogo(file) {
       if (file.size > 2 * 1024 * 1024) { logoMsg.textContent = 'Max 2 MB'; logoMsg.style.color = '#DC2626'; return; }
       logoMsg.textContent = 'Uploading…'; logoMsg.style.color = '#6B7280';
       try {
@@ -398,7 +438,7 @@
       } catch (e) {
         logoMsg.textContent = 'Upload failed: ' + (e.message || 'error'); logoMsg.style.color = '#DC2626';
       }
-    });
+    }
     $('#kt-open-fullscreen',  container).addEventListener('click', async (e) => {
       e.preventDefault();
       try {

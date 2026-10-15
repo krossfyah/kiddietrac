@@ -20,6 +20,14 @@ final class AuthController extends Controller
 {
     private const RESET_TOKEN_TTL_MINUTES = 60;
 
+    /* The 6-digit code that goes with every reset (2026-10-15): email, text or a call.
+       Short-lived and few guesses, because six digits is a small space. */
+    private const RESET_CODE_TTL_MINUTES = 10;
+    private const RESET_CODE_MAX_ATTEMPTS = 5;
+    /* A token minted by a correct code only has to last until the person types a new
+       password on the next screen. */
+    private const CODE_TOKEN_TTL_MINUTES = 15;
+
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -578,7 +586,12 @@ final class AuthController extends Controller
         $data = $request->validate([
             'email' => ['required', 'string', 'max:180'],
             'username' => ['nullable', 'string', 'max:50'],
+            /* WHERE THE CODE GOES (2026-10-15, Anthony: "give them option to send text or
+               voice call along side email"). Email keeps its link and gains the code; a
+               text or a call carries the code only. Default email = the old request. */
+            'channel' => ['nullable', 'in:email,sms,voice'],
         ]);
+        $channel = $data['channel'] ?? 'email';
         $login = trim((string) $data['email']);
         $uname = ! empty($data['username']) ? mb_strtolower(trim((string) $data['username'])) : '';
         /* Lorraine Cooper, 2026-10-09: her reset arrived with her address in BOTH fields,
@@ -588,13 +601,29 @@ final class AuthController extends Controller
             $uname = '';
         }
         $looksLikeEmail = strpos($login, '@') !== false;
+        /* A MOBILE NUMBER is an identifier too, now that a code can be texted. Digits and
+           phone punctuation only, at least ten digits, and no username given. */
+        $looksLikePhone = ! $looksLikeEmail && $uname === ''
+            && preg_match('/^\+?[\d\s().-]+$/', $login) === 1
+            && \App\Support\Handset::last10($login) !== '';
         $email = $looksLikeEmail ? $login : '';
 
         $accounts = collect();
         $narrowed = false;   // a username picked ONE account out of the address
         $refusal = null;     // why nothing was sent, for the audit trail
 
-        if ($uname !== '' || ! $looksLikeEmail) {
+        if ($looksLikePhone) {
+            /* Every live account on that number (a phone can be shared, as an address can).
+               Each gets its own row; one code goes to the handset. */
+            $onPhone = \App\Support\Handset::accounts($login)->pluck('id')->all();
+            $accounts = $onPhone ? DB::table('users')->whereIn('id', $onPhone)
+                ->whereNull('deleted_at')
+                ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+                ->orderBy('id')->get() : collect();
+            if ($accounts->isEmpty()) {
+                $refusal = 'no_live_account_on_this_phone';
+            }
+        } elseif ($uname !== '' || ! $looksLikeEmail) {
             $wanted = $uname !== '' ? $uname : mb_strtolower($login);
             $q = DB::table('users')
                 ->whereRaw('LOWER(username) = ?', [$wanted])
@@ -750,10 +779,21 @@ final class AuthController extends Controller
            between accounts either way and the link must say which one it opens. */
         $sharedAddress = $email !== '' && \App\Support\EmailAccounts::live($email)->count() > 1;
 
+        /* ONE CODE PER REQUEST, random_int (CSPRNG), stored only as a hash on every row
+           this request mints - a shared address or phone gets one code, and whichever
+           account the person then picks is the one reset. */
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $codeHash = Hash::make($code);
+        $byPhone = [];
+
         foreach ($accounts as $user) {
             $acctEmail = (string) $user->email;
             $token = Str::random(64);
             DB::table('password_resets')->insert([
+                'code_hash' => $codeHash,
+                'channel' => $channel,
+                'code_attempts' => 0,
+                'code_expires_at' => now()->addMinutes(self::RESET_CODE_TTL_MINUTES),
                 'email' => $acctEmail,
                 // STAMPED. 35 existing rows carry no user_id, which is what forced the
                 // consume side to re-guess the account from the address.
@@ -772,6 +812,11 @@ final class AuthController extends Controller
             $portalUrl = 'https://app.kiddietrac.com';
             $resetUrl = $portalUrl.'/reset-password.html?token='.$token.'&email='.urlencode($acctEmail);
 
+            if ($channel !== 'email') {
+                $byPhone[] = $user;   // sent once per handset, after this loop
+                continue;
+            }
+
             try {
                 /* A password reset belongs to the PERSON, not to a tenant. Somebody
                    locked out of one agency must not be kept out because a different
@@ -783,6 +828,7 @@ final class AuthController extends Controller
                     // Only when there is something to tell apart - a single-account
                     // address gets exactly the email it got before.
                     accountLabel: $sharedAddress ? ($user->username ?: ('account #'.$user->id)) : null,
+                    code: $code,
                 ))->withSymfonyMessage(function ($msg) {
                     \App\Support\MailScope::platform($msg);
                 }));
@@ -803,9 +849,191 @@ final class AuthController extends Controller
             }
         }
 
+        if ($byPhone) {
+            $this->sendResetCodeByPhone($request, $byPhone, $channel, $code);
+        }
+
+        /* Identical for every outcome and every channel - nothing says whether an account
+           matched, which phone it has, or whether its agency can text or call. */
         return response()->json([
-            'message' => 'If that email exists in our system, you\'ll receive a reset link shortly.',
+            'message' => $channel === 'email'
+                ? 'If an account matches, we\'ve emailed a 6-digit code and a reset link.'
+                : ($channel === 'sms'
+                    ? 'If an account matches and has a mobile number, we\'ve texted it a 6-digit code.'
+                    : 'If an account matches and has a phone number, we\'re calling it now with a 6-digit code.'),
+            'code_minutes' => self::RESET_CODE_TTL_MINUTES,
         ]);
+    }
+
+    /**
+     * Text or ring the code: ONE message per handset, from the account's own agency line.
+     *
+     * Deliberately outside the broadcast gates (Anthony, 2026-10-15: "send regardless as
+     * this is outside of general marketing and used for security and reset password
+     * purposes"): no opt-in, contact-category, do-not-contact or duplicate check - the
+     * person asked for this a second ago. What still applies: the agency's own SMS / voice
+     * switch and carrier setup (the line is theirs), and the carrier's own STOP block,
+     * which no sender can override. Neither log stores the code readable.
+     */
+    private function sendResetCodeByPhone(Request $request, array $users, string $channel, string $code): void
+    {
+        $phones = DB::table('users')->whereIn('id', array_map(fn ($u) => $u->id, $users))->pluck('phone', 'id');
+        $done = [];   // last10 => true
+
+        foreach ($users as $u) {
+            $phone = (string) ($phones[$u->id] ?? '');
+            $key = \App\Support\Handset::last10($phone);
+            $agencyId = (int) (\App\Support\AgencyMail::agencyOfUser((int) $u->id) ?? 0);
+            $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)
+                ->first(['id', 'name', 'sms_enabled', 'voice_enabled', 'powered_by_visible']) : null;
+
+            $why = null;
+            if ($key === '') {
+                $why = 'no phone number on this account';
+            } elseif (isset($done[$key])) {
+                // Shared handset: the one code already went; this account is in it.
+                $this->audit($request, $u->id, 'password_reset_requested', 'user', $u->id, [
+                    'channel' => $channel, 'phone' => '•••' . substr($key, -4), 'shared_phone' => true,
+                ], $agencyId ?: null);
+                continue;
+            } elseif (! $agency) {
+                $why = 'no agency to send from';
+            } elseif ($channel === 'sms' && ! $agency->sms_enabled) {
+                $why = 'texts are switched off for this agency';
+            } elseif ($channel === 'voice' && ! $agency->voice_enabled) {
+                $why = 'phone calls are switched off for this agency';
+            }
+
+            $ok = false;
+            if ($why === null) {
+                // A white-label agency's people hear the agency's name, not ours.
+                $brand = ($agency->powered_by_visible ?? 1) ? 'KiddieTrac' : (string) $agency->name;
+                try {
+                    if ($channel === 'sms') {
+                        $body = $brand . ': your password reset code is ' . $code . '. It expires in '
+                            . self::RESET_CODE_TTL_MINUTES . ' minutes. Never share it.';
+                        $rowId = DB::table('sms_messages')->insertGetId([
+                            'agency_id' => $agencyId, 'to_user_id' => $u->id, 'to_phone' => $phone,
+                            'body' => str_replace($code, '••••••', $body),
+                            'category' => 'password_reset', 'status' => 'queued', 'created_at' => now(),
+                        ]);
+                        $r = \App\Support\SmsGateway::deliver($agencyId, $phone, $body);
+                        $ok = (bool) $r['ok'];
+                        DB::table('sms_messages')->where('id', $rowId)->update($ok
+                            ? ['status' => 'sent', 'sent_at' => now(), 'provider' => $r['provider'], 'provider_ref' => $r['ref'],
+                               'twilio_sid' => $r['provider'] === 'twilio' ? $r['ref'] : null]
+                            : ['status' => 'failed', 'provider' => $r['provider'], 'error' => $r['error']]);
+                        \App\Support\SmsInbound::audit($rowId);
+                        if (! $ok) { $why = 'carrier refused: ' . mb_substr((string) $r['error'], 0, 140); }
+                    } else {
+                        $digits = implode(', ', str_split($code));
+                        $spoken = 'Hello. This is ' . $brand . '. Your password reset code is ' . $digits
+                            . '. Again, your code is ' . $digits . '. It expires in '
+                            . self::RESET_CODE_TTL_MINUTES . ' minutes. Goodbye.';
+                        $ok = app(VoiceController::class)->callOne($agencyId, (int) $u->id, $phone,
+                            str_replace($digits, '•, •, •, •, •, •', $spoken), 'password_reset',
+                            null, true, false, null, $spoken);
+                        if (! $ok) { $why = 'the call was not placed (see the agency\'s call log)'; }
+                    }
+                } catch (Throwable $e) {
+                    Log::error('Password reset code send failed', ['channel' => $channel, 'user' => $u->id, 'error' => $e->getMessage()]);
+                    $why = 'error: ' . mb_substr($e->getMessage(), 0, 140);
+                }
+            }
+
+            if ($ok) { $done[$key] = true; }
+            $this->audit($request, $u->id, $ok ? 'password_reset_requested' : 'password_reset_send_failed', 'user', $u->id,
+                array_filter([
+                    'channel' => $channel,
+                    'phone' => $key !== '' ? '•••' . substr($key, -4) : null,
+                    'username' => $u->username ?? null,
+                    'reason' => $why,
+                ], fn ($v) => $v !== null), $agencyId ?: null);
+        }
+    }
+
+    /**
+     * POST /api/v1/auth/forgot/verify  {email (the same identifier), username?, code}
+     *
+     * The code typed on the sign-in page. A right code returns a fresh one-time reset
+     * token per matching account, and the existing reset page (with its password
+     * policy, history check and session revocation) takes over from there. A wrong one
+     * counts against every live code for those accounts; at five the codes die.
+     */
+    public function verifyResetCode(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'email' => ['required', 'string', 'max:180'],
+            'username' => ['nullable', 'string', 'max:50'],
+            'code' => ['required', 'string', 'max:20'],
+        ]);
+        $login = trim((string) $data['email']);
+        $uname = ! empty($data['username']) ? mb_strtolower(trim((string) $data['username'])) : '';
+        $code = preg_replace('/\D/', '', (string) $data['code']) ?? '';
+        $fail = fn () => response()->json([
+            'message' => 'That code didn\'t work or has expired. Check it, or send a new one.',
+        ], 422);
+
+        // The same three ways in as forgotPassword(): username, address, phone.
+        $q = DB::table('users')->whereNull('deleted_at')->whereNotIn('status', \App\Support\Audience::OFF_STATUSES);
+        if ($uname !== '' && $uname !== mb_strtolower($login)) {
+            $q->whereRaw('LOWER(username) = ?', [$uname]);
+            if (strpos($login, '@') !== false) { $q->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($login)]); }
+        } elseif (strpos($login, '@') !== false) {
+            $q->whereRaw('LOWER(TRIM(email)) = ?', [mb_strtolower($login)]);
+        } elseif (preg_match('/^\+?[\d\s().-]+$/', $login) === 1 && \App\Support\Handset::last10($login) !== '') {
+            $q->whereIn('id', \App\Support\Handset::accounts($login)->pluck('id')->all() ?: [0]);
+        } else {
+            $q->whereRaw('LOWER(username) = ?', [mb_strtolower($login)]);
+        }
+        $ids = $q->pluck('id')->all();
+
+        $rows = (strlen($code) !== 6 || ! $ids) ? collect() : DB::table('password_resets')
+            ->whereIn('user_id', $ids)->whereNull('used_at')->whereNotNull('code_hash')
+            ->where('code_expires_at', '>', now())
+            ->where('code_attempts', '<', self::RESET_CODE_MAX_ATTEMPTS)
+            ->orderByDesc('id')->get();
+        $hits = $rows->filter(fn ($r) => Hash::check($code, (string) $r->code_hash));
+
+        if ($hits->isEmpty()) {
+            if ($rows->isNotEmpty()) {
+                DB::table('password_resets')->whereIn('id', $rows->pluck('id')->all())->increment('code_attempts');
+            }
+            $this->audit($request, $ids[0] ?? null, 'password_reset_code_failed', $ids ? 'user' : null, $ids[0] ?? null, [
+                'identifier' => $login,
+                'reason' => ! $ids ? 'no_matching_account' : ($rows->isEmpty() ? 'no_live_code' : 'wrong_code'),
+                'live_codes' => $rows->count(),
+            ]);
+
+            return $fail();
+        }
+
+        $out = [];
+        foreach ($hits->unique('user_id') as $r) {
+            $u = DB::table('users')->where('id', $r->user_id)->whereNull('deleted_at')
+                ->whereNotIn('status', \App\Support\Audience::OFF_STATUSES)
+                ->first(['id', 'email', 'username', 'first_name', 'last_name']);
+            if (! $u) { continue; }
+            // Everything outstanding for this account is spent, the code included.
+            DB::table('password_resets')->where('user_id', $u->id)->whereNull('used_at')->update(['used_at' => now()]);
+            $token = Str::random(64);
+            DB::table('password_resets')->insert([
+                'email' => (string) $u->email,
+                'user_id' => $u->id,
+                'token' => hash('sha256', $token),
+                'channel' => $r->channel,
+                'expires_at' => now()->addMinutes(self::CODE_TOKEN_TTL_MINUTES),
+                'requester_ip' => $request->ip(),
+                'created_at' => now(),
+            ]);
+            $this->audit($request, $u->id, 'password_reset_code_verified', 'user', $u->id, [
+                'channel' => $r->channel, 'username' => $u->username,
+            ]);
+            $name = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''));
+            $out[] = ['label' => $u->username ?: $name, 'name' => $name, 'email' => (string) $u->email, 'token' => $token];
+        }
+
+        return $out ? response()->json(['accounts' => $out]) : $fail();
     }
 
     /**
@@ -815,14 +1043,18 @@ final class AuthController extends Controller
     public function resetPassword(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'email'],
+            /* Optional since 2026-10-15: a token minted by a texted code may belong to an
+               account with no address. The 64-character token is the secret either way;
+               when an address IS sent it still has to match. */
+            'email' => ['nullable', 'email'],
             'token' => ['required', 'string'],
             'new_password' => ['required', 'string', \App\Services\PasswordPolicy::rule()],
         ]);
+        $data['email'] = $data['email'] ?? '';
 
         $hashedToken = hash('sha256', $data['token']);
         $record = DB::table('password_resets')
-            ->where('email', $data['email'])
+            ->when($data['email'] !== '', fn ($q) => $q->where('email', $data['email']))
             ->where('token', $hashedToken)
             ->whereNull('used_at')
             ->where('expires_at', '>', now())

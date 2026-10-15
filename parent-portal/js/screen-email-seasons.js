@@ -119,5 +119,8 @@
     });
   }
 
+  /* Lives in Branding as a sub-tab since 2026-10-15 (screen-admin-branding.js draws it
+     there). The hash still works for bookmarks. */
+  KT.EmailSeasons = { render: render };
   ['platform_admin'].forEach(function (r) { KT.Shell.registerScreen(r + ':email-seasons', render); });
 })(window);

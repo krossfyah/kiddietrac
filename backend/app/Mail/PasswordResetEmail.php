@@ -29,6 +29,8 @@ final class PasswordResetEmail extends Mailable
         public readonly string $resetUrl,
         public readonly string $expiresInMinutes,
         public readonly ?string $accountLabel = null,
+        // The 6-digit code for the "enter the code" path on the sign-in page (2026-10-15).
+        public readonly ?string $code = null,
     ) {}
 
     public function envelope(): Envelope
@@ -86,6 +88,11 @@ final class PasswordResetEmail extends Mailable
                 . 'You have more than one Kiddietrac account on this email address, so we sent a '
                 . 'separate link for each one. <strong>This link resets the account with the '
                 . 'username ' . $label . '.</strong> Use that username to sign in afterwards.</p>')
+            . ($this->code === null || $this->code === '' ? '' :
+                '<p style="margin:0 0 8px;">Or enter this code on the sign-in page:</p>'
+                . '<p style="margin:0 0 18px;font:800 30px/1.1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:8px;color:#0D1B2A;'
+                . 'background:#F1F5F9;border-radius:10px;padding:12px 16px;display:inline-block;">' . htmlspecialchars($this->code) . '</p>'
+                . '<p style="margin:-8px 0 18px;font-size:12px;color:#64748B;">The code works for 10 minutes. Never share it - KiddieTrac will never ask you for it.</p>')
             . \App\Services\EmailTemplate::button('Reset my password →', $this->resetUrl)
             . '<p style="margin:16px 0 0;font-size:12px;color:#64748B;">Or paste this link into your browser:<br>'
             . '<a href="' . $safeUrl . '" style="color:#1F6080;">' . $safeUrl . '</a></p>'
