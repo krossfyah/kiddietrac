@@ -385,6 +385,8 @@ class SalesController extends Controller
             'taxes'          => $this->cleanTaxes($data['taxes'] ?? []),
             'terms'          => $data['terms'] ?? null,
             'conditions'     => array_key_exists('conditions', $data) ? $data['conditions'] : (self::proposalDefaultValues()['conditions'] ?? null),
+            'prepared_for'   => self::cleanParty($data['prepared_for'] ?? null, self::FOR_KEYS),
+            'prepared_by'    => self::cleanParty($data['prepared_by'] ?? null, self::BY_KEYS),
             'valid_until'    => $data['valid_until'] ?? null,
             'discount'       => $data['discount'] ?? 0,
             'notes'          => $data['notes'] ?? null,
@@ -404,12 +406,13 @@ class SalesController extends Controller
         $data = $this->validateQuote($r);
 
         // Snapshot for the change history (before we overwrite).
-        $qLabels = ['title' => 'Title', 'currency' => 'Currency', 'billing_period' => 'Billing period', 'valid_until' => 'Valid until', 'discount' => 'Discount', 'taxes' => 'Taxes', 'notes' => 'Notes', 'terms' => 'Terms', 'conditions' => 'Terms & conditions', 'status' => 'Status'];
+        $qLabels = ['title' => 'Title', 'currency' => 'Currency', 'billing_period' => 'Billing period', 'valid_until' => 'Valid until', 'discount' => 'Discount', 'taxes' => 'Taxes', 'notes' => 'Notes', 'terms' => 'Terms', 'conditions' => 'Terms & conditions', 'prepared_for' => 'Prepared for', 'prepared_by' => 'Prepared by', 'status' => 'Status'];
         $qFmt = function ($k, $v) use ($q) {
             if ($v === null || $v === '') { return '—'; }
             if ($k === 'discount') { return self::money($v, $q->currency); }
             if ($k === 'taxes') { return implode(', ', array_map(fn ($t) => ($t['label'] ?? 'Tax') . ' ' . rtrim(rtrim(number_format((float) ($t['rate'] ?? 0), 3), '0'), '.') . '%', (array) $v)) ?: '—'; }
             if ($k === 'conditions') { return $v ? 'edited text (' . mb_strlen((string) $v) . ' characters)' : '—'; }
+            if ($k === 'prepared_for' || $k === 'prepared_by') { return is_array($v) ? (implode(', ', array_filter(array_map('strval', $v), 'strlen')) ?: '—') : '—'; }
             if ($k === 'terms') { return mb_strimwidth(preg_replace('/\s+/', ' ', (string) $v), 0, 80, '…'); }
             if ($k === 'billing_period') { return $v === 'year' ? 'Annual' : ($v === 'month' ? 'Monthly' : (string) $v); }
             if ($k === 'valid_until') { return $v instanceof \DateTimeInterface ? $v->format('Y-m-d') : substr((string) $v, 0, 10); }
@@ -422,6 +425,8 @@ class SalesController extends Controller
         if (array_key_exists('taxes', $data)) {
             $q->taxes = $this->cleanTaxes($data['taxes'] ?? []);
         }
+        if (array_key_exists('prepared_for', $data)) $q->prepared_for = self::cleanParty($data['prepared_for'], self::FOR_KEYS);
+        if (array_key_exists('prepared_by', $data)) $q->prepared_by = self::cleanParty($data['prepared_by'], self::BY_KEYS);
         if (in_array($r->input('status'), ['draft', 'sent', 'accepted', 'declined'], true)) {
             $q->status = $r->input('status');
             if ($q->status === 'sent' && ! $q->sent_at) {
@@ -544,7 +549,55 @@ TXT;
             . "4. One-time fees (such as setup and onboarding) are due on acceptance.",
         'conditions' => self::DEFAULT_CONDITIONS,
         'taxes'      => [],
+        // "Prepared by" contact: the sales line, never the rep's own login email.
+        'sales_title' => 'KiddieTrac Sales',
+        'sales_email' => 'sales@kiddietrac.com',
+        'sales_phone' => '1-855-400-9996',
     ];
+
+    public const FOR_KEYS = ['company', 'name', 'title', 'address', 'email', 'phone'];
+    public const BY_KEYS = ['name', 'title', 'email', 'phone'];
+
+    /** Known keys only, trimmed; all empty = NULL (falls back to the lead / defaults). */
+    private static function cleanParty($v, array $keys): ?array
+    {
+        if (! is_array($v)) return null;
+        $out = [];
+        foreach ($keys as $k) $out[$k] = trim((string) ($v[$k] ?? ''));
+        return implode('', $out) === '' ? null : $out;
+    }
+
+    /** Who the proposal is for: what was typed on it, else the lead's details. */
+    private static function preparedFor(SalesQuote $q, ?SalesLead $lead): array
+    {
+        if (is_array($q->prepared_for) && $q->prepared_for) {
+            return array_merge(array_fill_keys(self::FOR_KEYS, ''), $q->prepared_for);
+        }
+        $lead = $lead ?: new SalesLead();
+        return [
+            'company' => (string) ($lead->company ?? ''), 'name' => (string) ($lead->name ?? ''), 'title' => (string) ($lead->title ?? ''),
+            'address' => trim(implode(', ', array_filter([$lead->address ?? null, $lead->city ?? null, $lead->province ?? null, $lead->postal_code ?? null]))),
+            'email' => (string) ($lead->email ?? ''), 'phone' => (string) ($lead->phone ?? ''),
+        ];
+    }
+
+    /** Who prepared it: what was typed on it, else the rep's name with the SALES email and number. */
+    private static function preparedBy(SalesQuote $q): array
+    {
+        if (is_array($q->prepared_by) && $q->prepared_by) {
+            return array_merge(array_fill_keys(self::BY_KEYS, ''), $q->prepared_by);
+        }
+        return self::defaultPreparedBy($q->created_by ? \App\Models\User::find($q->created_by) : null);
+    }
+
+    private static function defaultPreparedBy($user): array
+    {
+        $d = self::proposalDefaultValues();
+        return [
+            'name'  => $user ? trim($user->first_name . ' ' . $user->last_name) : 'KiddieTrac Sales',
+            'title' => (string) ($d['sales_title'] ?? ''), 'email' => (string) ($d['sales_email'] ?? ''), 'phone' => (string) ($d['sales_phone'] ?? ''),
+        ];
+    }
 
     private static function proposalDefaultValues(): array
     {
@@ -555,7 +608,8 @@ TXT;
 
     public function proposalDefaults()
     {
-        return response()->json(self::proposalDefaultValues());
+        // prepared_by: what a NEW proposal by this rep starts with.
+        return response()->json(self::proposalDefaultValues() + ['prepared_by' => self::defaultPreparedBy(auth()->user())]);
     }
 
     public function proposalDefaultsSave(Request $r)
@@ -567,8 +621,14 @@ TXT;
             'taxes'        => 'nullable|array|max:5',
             'taxes.*.label' => 'required|string|max:40',
             'taxes.*.rate'  => 'required|numeric|min:0|max:100',
+            'sales_title'  => 'nullable|string|max:150',
+            'sales_email'  => 'nullable|email|max:190',
+            'sales_phone'  => 'nullable|string|max:60',
         ]);
         $v = ['valid_days' => (int) $data['valid_days'], 'terms' => (string) ($data['terms'] ?? ''), 'conditions' => (string) ($data['conditions'] ?? ''), 'taxes' => $this->cleanTaxes($data['taxes'] ?? [])];
+        foreach (['sales_title', 'sales_email', 'sales_phone'] as $k) {
+            $v[$k] = $r->has($k) ? trim((string) ($data[$k] ?? '')) : (self::proposalDefaultValues()[$k] ?? '');
+        }
         DB::table('platform_settings')->updateOrInsert(['key' => 'sales.proposal_defaults'], ['value' => json_encode($v), 'updated_at' => now(), 'created_at' => now()]);
         return response()->json($v);
     }
@@ -783,6 +843,9 @@ TXT;
             Mail::html($body, function ($m) use ($lead, $q, $bytes) {
                 \App\Support\MailScope::platform($m);   // sales, not tenant mail
                 $m->to($lead->email, $lead->name ?: null)->subject('Your KiddieTrac proposal ' . ($q->number ?: ''));
+                // The email says "just reply": send replies to the sales contact, not the no-reply sender.
+                $pbm = self::preparedBy($q);
+                if (! empty($pbm['email']) && filter_var($pbm['email'], FILTER_VALIDATE_EMAIL)) $m->replyTo($pbm['email'], $pbm['name'] ?: 'KiddieTrac Sales');
                 $m->attachData($bytes, ($q->number ?: 'proposal') . '.pdf', ['mime' => 'application/pdf']);
             });
         } catch (\Throwable $e) {
@@ -812,7 +875,11 @@ TXT;
         $navy = '#1E2A5E'; $teal = '#1F6080'; $muted = '#5B6B7C';
         $first = trim((string) strtok((string) ($lead->name ?: ''), ' ')) ?: 'there';
         $org = $lead->company ?: 'your centre';
-        $rep = $this->preparedByName($q) ?: 'The KiddieTrac Team';
+        $pb = self::preparedBy($q);
+        $rep = $pb['name'] ?: 'The KiddieTrac Team';
+        $repLine = implode(' · ', array_filter([$pb['title'] ? e($pb['title']) : null,
+            $pb['email'] ? '<a href="mailto:' . e($pb['email']) . '" style="color:' . $teal . ';text-decoration:none">' . e($pb['email']) . '</a>' : null,
+            $pb['phone'] ? '<a href="tel:' . e(preg_replace('/[^0-9+]/', '', $pb['phone'])) . '" style="color:' . $teal . ';text-decoration:none">' . e($pb['phone']) . '</a>' : null])) ?: 'KiddieTrac';
 
         $tile = fn ($icon, $bg, $title, $text) => '<td class="kt-col" width="33%" valign="top" style="padding:0 6px">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F6F9FB;border-radius:12px"><tr><td style="padding:18px 14px 16px;text-align:center">'
@@ -864,7 +931,7 @@ TXT;
             . '</td></tr></table>'
             . '<p style="margin:18px 0 14px;font-size:15px;line-height:1.65">Take your time looking it over. If anything raises a question, or you would like us to walk your team through KiddieTrac, just reply to this email. When you are ready to go ahead, sign the acceptance page and send it back to us.</p>'
             . '<p style="margin:0 0 4px;font-size:15px;line-height:1.65">We look forward to making a difference together.</p>'
-            . '<p style="margin:18px 0 26px;font-size:15px;line-height:1.6">Warm regards,<br><strong style="color:' . $navy . '">' . e($rep) . '</strong><br><span style="color:' . $muted . '">KiddieTrac</span></p>'
+            . '<p style="margin:18px 0 26px;font-size:15px;line-height:1.6">Warm regards,<br><strong style="color:' . $navy . '">' . e($rep) . '</strong><br><span style="color:' . $muted . ';font-size:13.5px">' . $repLine . '</span></p>'
             . '</td></tr>'
 
             // Confidentiality.
@@ -940,17 +1007,20 @@ TXT;
         $billing = ['month' => 'Monthly', 'year' => 'Annual'][$q->billing_period] ?? 'One-time';
         $perWord = ['month' => 'per month', 'year' => 'per year'][$q->billing_period] ?? '';
 
-        // Prepared for: company, contact, address, email, phone.
-        $addr = trim(implode(', ', array_filter([$lead->address ?? null, $lead->city ?? null, $lead->province ?? null, $lead->postal_code ?? null])));
-        $for = '<div style="font-size:13px;font-weight:bold;color:' . $navy . '">' . e($lead->company ?: ($lead->name ?: 'Prospect')) . '</div>'
-            . ($lead->company && $lead->name ? '<div>' . e($lead->name) . ($lead->title ? ', ' . e($lead->title) : '') . '</div>' : '')
-            . ($addr !== '' ? '<div>' . e($addr) . '</div>' : '')
-            . ($lead->email ? '<div>' . e($lead->email) . '</div>' : '')
-            . ($lead->phone ? '<div>' . e($lead->phone) . '</div>' : '');
-        $byUser = $q->created_by ? \App\Models\User::find($q->created_by) : null;
-        $by = '<div style="font-size:13px;font-weight:bold;color:' . $navy . '">' . e($byUser ? trim($byUser->first_name . ' ' . $byUser->last_name) : 'KiddieTrac Sales') . '</div>'
-            . '<div>KiddieTrac</div>'
-            . ($byUser && $byUser->email ? '<div>' . e($byUser->email) . '</div>' : '<div>info@kiddietrac.com</div>')
+        // Prepared for / by: as edited on the proposal, else from the lead and the sales contact.
+        $pf = self::preparedFor($q, $lead);
+        $pb = self::preparedBy($q);
+        $head = $pf['company'] ?: ($pf['name'] ?: 'Prospect');
+        $who = $pf['company'] ? trim($pf['name'] . ($pf['name'] && $pf['title'] ? ', ' : '') . $pf['title']) : $pf['title'];
+        $for = '<div style="font-size:13px;font-weight:bold;color:' . $navy . '">' . e($head) . '</div>'
+            . ($who !== '' ? '<div>' . e($who) . '</div>' : '')
+            . ($pf['address'] !== '' ? '<div>' . e($pf['address']) . '</div>' : '')
+            . ($pf['email'] !== '' ? '<div>' . e($pf['email']) . '</div>' : '')
+            . ($pf['phone'] !== '' ? '<div>' . e($pf['phone']) . '</div>' : '');
+        $by = '<div style="font-size:13px;font-weight:bold;color:' . $navy . '">' . e($pb['name'] ?: 'KiddieTrac Sales') . '</div>'
+            . ($pb['title'] !== '' ? '<div>' . e($pb['title']) . '</div>' : '')
+            . ($pb['email'] !== '' ? '<div>' . e($pb['email']) . '</div>' : '')
+            . ($pb['phone'] !== '' ? '<div>' . e($pb['phone']) . '</div>' : '')
             . '<div>kiddietrac.com</div>';
 
         $label = fn ($t) => '<div style="font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:' . $muted . ';font-weight:bold;margin-bottom:5px">' . $t . '</div>';
@@ -1154,6 +1224,18 @@ TXT;
             'notes'               => 'nullable|string|max:5000',
             'terms'               => 'nullable|string|max:10000',
             'conditions'          => 'nullable|string|max:60000',
+            'prepared_for'        => 'nullable|array',
+            'prepared_for.company' => 'nullable|string|max:150',
+            'prepared_for.name'   => 'nullable|string|max:150',
+            'prepared_for.title'  => 'nullable|string|max:150',
+            'prepared_for.address' => 'nullable|string|max:300',
+            'prepared_for.email'  => 'nullable|email|max:190',
+            'prepared_for.phone'  => 'nullable|string|max:60',
+            'prepared_by'         => 'nullable|array',
+            'prepared_by.name'    => 'nullable|string|max:150',
+            'prepared_by.title'   => 'nullable|string|max:150',
+            'prepared_by.email'   => 'nullable|email|max:190',
+            'prepared_by.phone'   => 'nullable|string|max:60',
             'taxes'               => 'nullable|array|max:5',
             'taxes.*.label'       => 'nullable|string|max:40',
             'taxes.*.rate'        => 'nullable|numeric|min:0|max:100',
@@ -1406,6 +1488,7 @@ TXT;
                 'status' => $q->status, 'total' => $q->total, 'subtotal' => $q->subtotal,
                 'discount' => $q->discount, 'billing_period' => $q->billing_period, 'currency' => $q->currency ?: 'CAD',
                 'taxes' => $q->taxes ?: [], 'tax_total' => $q->tax_total, 'terms' => $q->terms, 'conditions' => $q->conditions,
+                'prepared_for' => self::preparedFor($q, $l), 'prepared_by' => self::preparedBy($q),
                 'valid_until' => optional($q->valid_until)->toDateString(),
                 'notes' => $q->notes,
                 'items' => $q->items->map(fn ($it) => [

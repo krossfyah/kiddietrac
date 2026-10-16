@@ -19,6 +19,8 @@ class SalesQuote extends Model
         'total'       => 'decimal:2',
         'tax_total'   => 'decimal:2',
         'taxes'       => 'array',   // [{label, rate}] — 2026-10-16
+        'prepared_for' => 'array',  // {company,name,title,address,email,phone}; NULL = from the lead
+        'prepared_by'  => 'array',  // {name,title,email,phone}; NULL = rep name + sales contact
     ];
 
     public function items()

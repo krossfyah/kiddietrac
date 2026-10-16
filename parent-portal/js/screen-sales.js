@@ -1202,6 +1202,28 @@
     });
     box.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [el('div', { style: 'font-size:18px;font-weight:800' }, [quote ? ('Proposal ' + (quote.number || '')) : 'New proposal']), el('button', { style: 'border:0;background:none;font-size:22px;cursor:pointer;color:#64748B', onclick: function () { ov.remove(); } }, ['×'])]));
     box.appendChild(field('Title', titleIn));
+    // Prepared for / by (2026-10-16): editable per proposal. "By" starts with the SALES email and
+    // number from the proposal defaults, never the rep's own login email.
+    var lead0 = CURRENT_LEAD && String(CURRENT_LEAD.id) === String(leadId) ? CURRENT_LEAD : {};
+    var pfSrc = (quote && quote.prepared_for) || {
+      company: lead0.company || '', name: lead0.name || '', title: lead0.title || '',
+      address: [lead0.address, lead0.city, lead0.province, lead0.postal_code].filter(function (x) { return x && String(x).trim(); }).join(', '),
+      email: lead0.email || '', phone: lead0.phone || '',
+    };
+    var pbSrc = (quote && quote.prepared_by) || defaults.prepared_by || {};
+    function partyBox(heading, src, spec) {
+      var ins = {};
+      var grid = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:6px 8px' });
+      spec.forEach(function (sp) {
+        ins[sp[0]] = input({ value: src[sp[0]] || '', type: sp[0] === 'email' ? 'email' : (sp[0] === 'phone' ? 'tel' : 'text'), 'aria-label': heading + ' ' + sp[1], style: 'width:100%;padding:6px 9px;border:1px solid var(--kt-border,#d9e1ea);border-radius:8px;font-size:13.5px;box-sizing:border-box' });
+        grid.appendChild(el('label', { style: 'display:block;min-width:0' + (sp[2] ? ';grid-column:1 / -1' : '') }, [el('div', { style: 'font-size:11px;color:#64748B;margin-bottom:2px' }, [sp[1]]), ins[sp[0]]]));
+      });
+      return { ins: ins, node: el('div', { style: 'background:#F4F7FA;border-radius:10px;padding:10px 12px;min-width:0' }, [el('div', { style: 'font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:#5a7080;margin-bottom:6px' }, [heading]), grid]) };
+    }
+    var pfBox = partyBox('Prepared for', pfSrc, [['company', 'Organisation', 1], ['name', 'Contact name'], ['title', 'Job title'], ['address', 'Address', 1], ['email', 'Email', 1], ['phone', 'Phone']]);
+    var pbBox = partyBox('Prepared by', pbSrc, [['name', 'Name'], ['title', 'Title / team'], ['email', 'Email', 1], ['phone', 'Phone']]);
+    function partyVal(b) { var o = {}; Object.keys(b.ins).forEach(function (k) { o[k] = b.ins[k].value.trim(); }); return o; }
+    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-top:12px;align-items:start' }, [pfBox.node, pbBox.node]));
     curSel.addEventListener('change', function () { try { localStorage.setItem('kt_sales_currency', curSel.value); } catch (e) {} recalc(); });
     perSel.addEventListener('change', function () {
       var from = period, to = perSel.value; if (from === to) return;
@@ -1257,7 +1279,8 @@
         });
         var body = { title: titleIn.value, currency: curSel.value, billing_period: perSel.value, terms: termsIn.value, conditions: condIn.value,
           taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }),
-          discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: lines };
+          discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: lines,
+          prepared_for: partyVal(pfBox), prepared_by: partyVal(pbBox) };
         if (quote) body.status = statusSel.value;
         try {
           if (quote) await Api.patch('/sales/quotes/' + quote.id, body); else await Api.post('/sales/leads/' + leadId + '/quotes', body);
@@ -1337,6 +1360,9 @@
       terms.style.setProperty('min-height', '150px', 'important');
       var conds = textarea({ value: dfl.conditions || '', style: 'width:100%;resize:vertical;line-height:1.45;' + FLD });
       conds.style.setProperty('min-height', '320px', 'important');
+      var sTitle = input({ value: dfl.sales_title || '', placeholder: 'KiddieTrac Sales', style: 'width:100%;' + FLD });
+      var sEmail = input({ type: 'email', value: dfl.sales_email || '', placeholder: 'sales@kiddietrac.com', style: 'width:100%;' + FLD });
+      var sPhone = input({ type: 'tel', value: dfl.sales_phone || '', placeholder: '1-855-400-9996', style: 'width:100%;' + FLD });
       var taxes = (dfl.taxes || []).map(function (t) { return { label: t.label, rate: t.rate }; });
       var taxHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
       function drawTaxes() {
@@ -1355,6 +1381,8 @@
         el('div', { style: 'margin:0 0 12px;font-size:13px;color:#64748B' }, ['Every new proposal starts with these. Each proposal can then change its own copy.']),
         card([
           el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px' }, [el('span', { style: 'font-size:13px;font-weight:700;color:#334155' }, ['Proposals are valid for']), days, el('span', { style: 'font-size:13px;font-weight:700;color:#334155' }, ['days'])]),
+          el('div', { style: 'font-size:12px;font-weight:700;color:#5a7080;margin-bottom:6px' }, ['"Prepared by" contact (shown under the rep\'s name; replies to the proposal email go here)']),
+          el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:14px' }, [field('Title / team', sTitle), field('Sales email', sEmail), field('Sales phone', sPhone)]),
           field('Proposal terms (short, under the prices)', terms),
           el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 14px' }, ['{days} is replaced with the number of days above.']),
           field('Terms & conditions (their own page, before the signatures)', conds),
@@ -1364,7 +1392,7 @@
           el('div', { style: 'display:flex;justify-content:flex-end;margin-top:14px' }, [btn('Save', 'primary', async function (ev) {
             ev.target.disabled = true;
             try {
-              await Api.put('/sales/proposal-defaults', { valid_days: Number(days.value || 90), terms: terms.value, conditions: conds.value, taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }) });
+              await Api.put('/sales/proposal-defaults', { valid_days: Number(days.value || 90), terms: terms.value, conditions: conds.value, sales_title: sTitle.value.trim(), sales_email: sEmail.value.trim(), sales_phone: sPhone.value.trim(), taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }) });
               toast('✅', 'Proposal defaults saved');
             } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); }
             ev.target.disabled = false;
