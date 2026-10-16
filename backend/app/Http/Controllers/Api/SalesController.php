@@ -894,13 +894,13 @@ TXT;
             . '[data-ogsc] .kt-band,[data-ogsb] .kt-band{background:#081C41 !important}[data-ogsc] .kt-card,[data-ogsb] .kt-card{background:#ffffff !important}[data-ogsc] .kt-h{color:#1E2A5E !important}'
             . '@media (max-width:600px){.kt-col{display:block !important;width:100% !important;padding:0 0 10px !important}.kt-pad{padding-left:20px !important;padding-right:20px !important}}</style></head>'
             . '<body style="margin:0;padding:0;background:#EEF3F6">'
-            . '<div style="display:none;max-height:0;overflow:hidden">Thank you for your interest in KiddieTrac. Your proposal is attached.</div>'
+            . '<div style="display:none;max-height:0;overflow:hidden">Thank you for your interest in KiddieTrac, the Smart Childcare Management Platform. Your proposal is attached.</div>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF3F6"><tr><td align="center" style="padding:24px 10px">'
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="kt-card" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#0D1B2A">'
 
             // Logo + brand bar. Light-on-navy wordmark on a band that is navy in both schemes
             // (Outlook dark mode darkened the card under the dark-ink logo and it went speckled).
-            . '<tr><td bgcolor="#081C41" class="kt-band" style="background:#081C41;padding:22px 24px;text-align:center"><img src="https://app.kiddietrac.com/login-wordmark.png" width="220" alt="KiddieTrac" style="display:block;margin:0 auto;border:0;width:220px;max-width:70%;height:auto"></td></tr>'
+            . '<tr><td bgcolor="#081C41" class="kt-band" style="background:#081C41;padding:22px 24px;text-align:center"><img src="https://api.kiddietrac.com/email/wordmark-tagline-navy.png" width="250" alt="KiddieTrac - Smart Childcare Management Platform" style="display:block;margin:0 auto;border:0;width:250px;max-width:78%;height:auto"></td></tr>'
             . '<tr><td style="font-size:0;line-height:0"><img src="https://api.kiddietrac.com/email/brand-gradient.png" width="600" height="6" alt="" style="display:block;border:0;width:100%;max-width:600px;height:6px"></td></tr>'
 
             // Graphic 1: photo.
@@ -911,7 +911,7 @@ TXT;
             . '<div class="kt-h" style="font-size:24px;line-height:1.3;font-weight:bold;color:' . $navy . ';margin:0 0 14px">Thank you for considering KiddieTrac</div>'
             . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Hi ' . e($first) . ',</p>'
             . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Thank you for your interest in working with us. Every early-years team we meet shares the same purpose we do: making a real difference for children, and for the parents who trust you with them every day. We are genuinely glad to be talking with ' . e($org) . '.</p>'
-            . '<p style="margin:0 0 6px;font-size:15px;line-height:1.65">KiddieTrac is a childcare management platform built around that purpose. It brings the whole day together in one place, so your educators spend less time on paperwork and more time with the children, and families feel close to their child\'s day even when they are apart.</p>'
+            . '<p style="margin:0 0 6px;font-size:15px;line-height:1.65">KiddieTrac, the <strong style="color:' . $teal . '">Smart Childcare Management Platform</strong>, is built around that purpose. It brings the whole day together in one place, so your educators spend less time on paperwork and more time with the children, and families feel close to their child\'s day even when they are apart.</p>'
             . '</td></tr>'
 
             // Graphic 2: what it brings.
