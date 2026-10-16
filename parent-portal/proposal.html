@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KiddieTrac — Your Proposal</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <!-- Proposal e-signing (2026-10-16). The prospect signs here; KiddieTrac countersigns in the CRM. -->
+  <style>
+    *{box-sizing:border-box} body{margin:0;font-family:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;background:#F4F6F8;color:#0F172A}
+    .wrap{max-width:900px;margin:0 auto;padding:24px 16px 60px}
+    .hero{background:#081C41;color:#fff;border-radius:18px;padding:22px 26px;margin-bottom:16px;overflow:hidden}
+    .hero img{display:block;width:210px;max-width:62%;height:auto;margin-bottom:12px}
+    .bar{height:5px;border-radius:3px;background:linear-gradient(90deg,#1F6080,#2C8AAC 55%,#8EC73C);margin:0 0 14px}
+    .hero h1{margin:0 0 4px;font-size:23px} .hero p{margin:0;opacity:.88;font-size:14px;line-height:1.5}
+    .card{background:#fff;border-radius:16px;box-shadow:0 1px 4px rgba(15,23,42,.06);padding:22px 24px;margin-bottom:16px}
+    .card h2{margin:0 0 6px;font-size:18px}
+    .lead{font-size:14px;color:#475569;line-height:1.55;margin:0 0 12px}
+    iframe.doc{display:block;width:100%;height:70vh;border:1px solid #E2E8F0;border-radius:12px;background:#fff}
+    label{display:block;font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px}
+    input,textarea{width:100%;padding:11px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;font-family:inherit}
+    input:focus,textarea:focus{outline:none;border-color:#1F6080}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:600px){.row{grid-template-columns:1fr} .card{padding:18px 16px} .hero{padding:18px}}
+    canvas{width:100%;height:170px;border:1.5px dashed #94A3B8;border-radius:12px;background:#fff;touch-action:none;display:block}
+    .btn{display:inline-block;padding:13px 22px;border-radius:12px;border:0;background:#1F6080;color:#fff;font-weight:800;font-size:15px;cursor:pointer;text-decoration:none}
+    .btn.light{background:#EEF4F8;color:#1F6080}
+    .btn[disabled]{opacity:.5;cursor:not-allowed} .link{background:none;border:0;color:#1F6080;font-weight:700;cursor:pointer;font-size:13px;padding:0}
+    .msg{font-size:14px;margin-top:12px;line-height:1.5} .err{color:#B91C1C} .ok{color:#047857}
+    .agree{display:flex;gap:10px;align-items:flex-start;font-size:14px;margin-top:14px;text-transform:none;letter-spacing:0;font-weight:600;color:#334155;line-height:1.5}
+    .agree input{width:18px;height:18px;margin-top:2px;flex:0 0 auto}
+    .pill{display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:800}
+    .pill.ok{background:#DCFCE7;color:#166534} .pill.wait{background:#FEF3C7;color:#92400E} .pill.no{background:#FEE2E2;color:#991B1B}
+    .conf{font-size:12px;color:#64748B;line-height:1.5;margin-top:4px}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <img src="/login-wordmark.png" alt="KiddieTrac">
+    <div class="bar"></div>
+    <h1 id="h1">Your proposal</h1>
+    <p id="sub">Loading…</p>
+  </div>
+  <div id="main"></div>
+  <div class="conf">🔒 Private and confidential. This proposal is intended only for the organisation it is addressed to. Please do not share or distribute it.</div>
+</div>
+<script>
+(function () {
+  var API = 'https://api.kiddietrac.com/api/v1';
+  var token = (new URLSearchParams(location.search)).get('t') || '';
+  var main = document.getElementById('main'), sub = document.getElementById('sub'), h1 = document.getElementById('h1');
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function card(html) { var d = document.createElement('div'); d.className = 'card'; d.innerHTML = html; main.appendChild(d); return d; }
+  var pdfUrl = API + '/public/proposal/' + token + '/pdf';
+  if (!/^[A-Za-z0-9]{40}$/.test(token)) { sub.textContent = ''; card('<p>This link is incomplete. Please use the button in your email, or contact sales@kiddietrac.com.</p>'); return; }
+
+  function docCard(intro) {
+    var c = card('<h2>Proposal</h2><p class="lead">' + intro + '</p><iframe class="doc" title="Proposal" sandbox="allow-same-origin"></iframe>'
+      + '<div class="actions"><a class="btn light" href="' + pdfUrl + '">⬇ Download PDF</a></div>');
+    return c.querySelector('iframe');
+  }
+  function fit(frame) {
+    // Same-origin sandbox without scripts: we can read its height, it can run nothing.
+    try { var h = frame.contentDocument.documentElement.scrollHeight; if (h > 200) frame.style.height = Math.min(h + 4, 4000) + 'px'; } catch (e) {}
+  }
+
+  fetch(API + '/public/proposal/' + token, { headers: { Accept: 'application/json' } })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (x) {
+      var j = x.j || {};
+      if (!x.ok) { sub.textContent = ''; card('<p>' + esc(j.message || 'This link is not valid.') + '</p>'); return; }
+      var pf = j.prepared_for || {}, pb = j.prepared_by || {};
+      h1.textContent = j.title || 'Your proposal';
+      sub.textContent = 'Proposal ' + (j.number || '') + (pf.company ? ' · prepared for ' + pf.company : '') + (j.valid_until && j.state === 'open' ? ' · valid until ' + j.valid_until : '');
+      var contact = esc(pb.name || 'KiddieTrac Sales') + (pb.email ? ' · <a href="mailto:' + esc(pb.email) + '">' + esc(pb.email) + '</a>' : '') + (pb.phone ? ' · ' + esc(pb.phone) : '');
+
+      if (j.state === 'complete') {
+        card('<span class="pill ok">✅ Signed by both parties</span><h2 style="margin-top:10px">Thank you — this proposal is complete</h2>'
+          + '<p class="lead">Signed by ' + esc(j.client.name) + (j.client.org ? ' for ' + esc(j.client.org) : '') + ' on ' + esc(j.client.at) + ', and countersigned by KiddieTrac (' + esc(j.countersigned.name) + ') on ' + esc(j.countersigned.at) + '.</p>'
+          + '<div class="actions"><a class="btn" href="' + pdfUrl + '">⬇ Download the signed copy (PDF)</a></div>');
+      } else if (j.state === 'awaiting_countersign') {
+        card('<span class="pill wait">✍️ Signed — awaiting KiddieTrac</span><h2 style="margin-top:10px">Thank you for signing</h2>'
+          + '<p class="lead">Signed by ' + esc(j.client.name) + (j.client.org ? ' for ' + esc(j.client.org) : '') + ' on ' + esc(j.client.at) + '. KiddieTrac will countersign and email you the fully signed copy.</p>'
+          + '<p class="lead">Questions? ' + contact + '</p>');
+      } else if (j.state === 'declined') {
+        card('<span class="pill no">Declined</span><p class="lead" style="margin-top:10px">This proposal was declined. If you would like to talk again, contact ' + contact + '.</p>');
+        return;
+      } else if (j.state === 'expired') {
+        card('<span class="pill no">Expired</span><p class="lead" style="margin-top:10px">This proposal was valid until ' + esc(j.valid_until || '') + '. Please contact ' + contact + ' and we will send you an updated one.</p>');
+        return;
+      }
+
+      var frame = docCard(j.state === 'open' ? 'Please read the proposal and its terms and conditions, then sign below.' : 'The proposal as signed.');
+      frame.srcdoc = j.html || '';
+      frame.addEventListener('load', function () { fit(frame); setTimeout(function () { fit(frame); }, 400); });
+      var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { frame.style.height = '200px'; fit(frame); }, 150); });
+      if (j.state === 'open') signCard(pf);
+    })
+    .catch(function () { sub.textContent = ''; card('<p>We could not load this right now. Please try again in a moment.</p>'); });
+
+  function signCard(pf) {
+    var c = card('<h2>Sign the proposal</h2>'
+      + '<p class="lead">Signing accepts this proposal and its terms and conditions. KiddieTrac then countersigns and emails you the fully signed copy.</p>'
+      + '<label for="org">Organisation (legal name)</label><input id="org" autocomplete="organization" value="' + esc(pf.company || '') + '">'
+      + '<div class="row"><div><label for="sn">Your full name</label><input id="sn" autocomplete="name" value="' + esc(pf.name || '') + '"></div>'
+      + '<div><label for="st">Your title</label><input id="st" autocomplete="organization-title" value="' + esc(pf.title || '') + '" placeholder="e.g. Owner, Director"></div></div>'
+      + '<label>Signature</label><canvas id="pad" aria-label="Draw your signature"></canvas><button type="button" class="link" id="clr" style="margin-top:6px">Clear signature</button>'
+      + '<label class="agree"><input type="checkbox" id="ag"> <span>I have read and accept this proposal and its Terms &amp; Conditions on behalf of the organisation named above, and I am authorised to sign for it. I agree that my electronic signature is as valid as a handwritten one.</span></label>'
+      + '<div class="actions"><button class="btn" id="go">✍️ Sign the proposal</button></div><div class="msg" id="m"></div>'
+      + '<div style="margin-top:18px;border-top:1px solid #EEF2F6;padding-top:12px"><button type="button" class="link" id="decl">Not going ahead? Let us know</button><div id="declBox" style="display:none">'
+      + '<label for="why">Anything you would like to tell us? (optional)</label><textarea id="why" rows="3" maxlength="1000"></textarea>'
+      + '<div class="actions"><button class="btn light" id="declGo">Decline this proposal</button></div><div class="msg" id="dm"></div></div></div>');
+
+    var cv = c.querySelector('#pad'), ctx, drawing = false, inked = false;
+    function size() { var r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1; cv.width = r.width * d; cv.height = r.height * d; ctx = cv.getContext('2d'); ctx.scale(d, d); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0F172A'; inked = false; }
+    size();
+    function pos(e) { var r = cv.getBoundingClientRect(), t = e.touches ? e.touches[0] : e; return [t.clientX - r.left, t.clientY - r.top]; }
+    function start(e) { e.preventDefault(); drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]); }
+    function move(e) { if (!drawing) return; e.preventDefault(); var p = pos(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); inked = true; }
+    function end() { drawing = false; }
+    cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+    cv.addEventListener('touchstart', start, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', end);
+    c.querySelector('#clr').onclick = size;
+    var m = c.querySelector('#m'), go = c.querySelector('#go');
+    function v(id) { return c.querySelector('#' + id).value.trim(); }
+    function post(path, body) {
+      return fetch(API + '/public/proposal/' + token + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
+    }
+    go.onclick = function () {
+      var miss = [];
+      if (v('org').length < 2) miss.push('organisation');
+      if (v('sn').length < 2) miss.push('your name');
+      if (v('st').length < 2) miss.push('your title');
+      if (!inked) miss.push('your signature');
+      if (!c.querySelector('#ag').checked) miss.push('the acceptance checkbox');
+      if (miss.length) { m.className = 'msg err'; m.textContent = 'Please add: ' + miss.join(', ') + '.'; return; }
+      go.disabled = true; m.className = 'msg'; m.textContent = 'Signing…';
+      post('/sign', { organisation: v('org'), signer_name: v('sn'), signer_title: v('st'), signature: cv.toDataURL('image/png'), agree: true })
+        .then(function (x) {
+          if (!x.ok) { go.disabled = false; m.className = 'msg err'; m.textContent = (x.j && x.j.message) || 'That did not go through. Please try again.'; return; }
+          main.innerHTML = '';
+          sub.textContent = 'Signed — thank you.';
+          card('<span class="pill wait">✍️ Signed — awaiting KiddieTrac</span><h2 style="margin-top:10px">Thank you</h2><p class="lead">' + esc(x.j.message || '') + '</p>'
+            + '<p class="lead">Signed ' + esc(x.j.signed_at || '') + '.</p>');
+          window.scrollTo(0, 0);
+        })
+        .catch(function () { go.disabled = false; m.className = 'msg err'; m.textContent = 'Network problem. Please try again.'; });
+    };
+    c.querySelector('#decl').onclick = function () { var b = c.querySelector('#declBox'); b.style.display = b.style.display === 'none' ? '' : 'none'; };
+    c.querySelector('#declGo').onclick = function () {
+      var dm = c.querySelector('#dm'), b = c.querySelector('#declGo');
+      if (!window.confirm('Decline this proposal? You can always contact us later.')) return;
+      b.disabled = true;
+      post('/decline', { reason: v('why') }).then(function (x) {
+        if (!x.ok) { b.disabled = false; dm.className = 'msg err'; dm.textContent = (x.j && x.j.message) || 'That did not go through.'; return; }
+        main.innerHTML = ''; sub.textContent = 'Declined.';
+        card('<span class="pill no">Declined</span><p class="lead" style="margin-top:10px">' + esc(x.j.message || 'Thank you for letting us know.') + '</p>');
+      }).catch(function () { b.disabled = false; dm.className = 'msg err'; dm.textContent = 'Network problem. Please try again.'; });
+    };
+  }
+})();
+</script>
+</body>
+</html>

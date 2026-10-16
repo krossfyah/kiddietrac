@@ -629,6 +629,11 @@ Route::post('/public/give/{slug}', [\App\Http\Controllers\Api\DonationController
 Route::get ('/public/nda/{token}',      [\App\Http\Controllers\Api\ProspectNdaController::class, 'publicShow'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:60,1,ndav');
 Route::post('/public/nda/{token}/sign', [\App\Http\Controllers\Api\ProspectNdaController::class, 'publicSign'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:8,10,ndas');
 Route::get ('/public/nda/{token}/pdf',  [\App\Http\Controllers\Api\ProspectNdaController::class, 'publicPdf'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:30,1,ndap');
+// Proposal e-signing (2026-10-16): the prospect's side, token-only (proposal.html?t=…).
+Route::get ('/public/proposal/{token}',         [\App\Http\Controllers\Api\ProposalSignController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:60,1,propv');
+Route::post('/public/proposal/{token}/sign',    [\App\Http\Controllers\Api\ProposalSignController::class, 'sign'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:8,10,props');
+Route::post('/public/proposal/{token}/decline', [\App\Http\Controllers\Api\ProposalSignController::class, 'decline'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:8,10,propd');
+Route::get ('/public/proposal/{token}/pdf',     [\App\Http\Controllers\Api\ProposalSignController::class, 'pdf'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:30,1,propp');
 Route::get ('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'publicEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpget');
 Route::post('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'submitEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsub');
 Route::get ('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'publicInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpgeti');
@@ -795,6 +800,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\SalesController::class, 'quoteSend'])->where('quote','[0-9]+');
             // Proposal view / delete + proposal defaults (terms, valid-for days, taxes) — 2026-10-16.
             Route::get('/quotes/{quote}/preview', [\App\Http\Controllers\Api\SalesController::class, 'quotePreview'])->where('quote','[0-9]+');
+            // Online signing (2026-10-16): the private link, and KiddieTrac's countersignature.
+            Route::post('/quotes/{quote}/sign-link', [\App\Http\Controllers\Api\SalesController::class, 'quoteSignLink'])->where('quote','[0-9]+');
+            Route::post('/quotes/{quote}/countersign', [\App\Http\Controllers\Api\SalesController::class, 'quoteCountersign'])->where('quote','[0-9]+');
             Route::delete('/quotes/{quote}', [\App\Http\Controllers\Api\SalesController::class, 'quoteDestroy'])->where('quote','[0-9]+');
             Route::get('/proposal-defaults', [\App\Http\Controllers\Api\SalesController::class, 'proposalDefaults']);
             Route::put('/proposal-defaults', [\App\Http\Controllers\Api\SalesController::class, 'proposalDefaultsSave']);

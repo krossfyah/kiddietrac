@@ -403,6 +403,10 @@ class SalesController extends Controller
     public function quoteUpdate(Request $r, int $quote)
     {
         $q = SalesQuote::findOrFail($quote);
+        // Once the customer has signed, what they signed is fixed (its fingerprint is on record).
+        if ($q->client_signed_at) {
+            return response()->json(['message' => 'This proposal has been signed by the customer and can no longer be changed. Create a new proposal if something needs to change.'], 409);
+        }
         $data = $this->validateQuote($r);
 
         // Snapshot for the change history (before we overwrite).
@@ -481,6 +485,153 @@ class SalesController extends Controller
         $q = SalesQuote::with('items', 'lead')->findOrFail($quote);
         return response()->json(['html' => $this->quoteHtml($q), 'number' => $q->number]);
     }
+
+    /* ---------------------------------------------------------------- Online signing (2026-10-16)
+       The prospect signs at proposal.html?t=… (ProposalSignController); KiddieTrac countersigns
+       here. Countersigning stores the fully signed PDF, emails it, files it on the lead and
+       marks the lead Won. */
+
+    public static function ensureSignToken(SalesQuote $q): string
+    {
+        if (! $q->sign_token) {
+            $q->sign_token = \Illuminate\Support\Str::random(40);
+            $q->save();
+        }
+        return $q->sign_token;
+    }
+
+    public static function signUrl(SalesQuote $q): string
+    {
+        return 'https://app.kiddietrac.com/proposal.html?t=' . self::ensureSignToken($q);
+    }
+
+    /** POST /sales/quotes/{id}/sign-link — the private signing link, to copy and share. */
+    public function quoteSignLink(int $quote)
+    {
+        $q = SalesQuote::findOrFail($quote);
+        if ($q->client_signed_at || $q->status === 'declined') {
+            return response()->json(['message' => 'This proposal is already ' . ($q->client_signed_at ? 'signed' : 'declined') . '.'], 422);
+        }
+        return response()->json(['url' => self::signUrl($q)]);
+    }
+
+    /** POST /sales/quotes/{id}/countersign — KiddieTrac's signature completes the proposal. */
+    public function quoteCountersign(Request $r, int $quote)
+    {
+        $q = SalesQuote::with('items', 'lead')->findOrFail($quote);
+        if (! $q->client_signed_at) {
+            return response()->json(['message' => 'The customer has not signed this proposal yet.'], 422);
+        }
+        if ($q->countersigned_at) {
+            return response()->json(['message' => 'This proposal has already been countersigned.'], 422);
+        }
+        $d = $r->validate([
+            'name'      => ['required', 'string', 'min:2', 'max:160'],
+            'title'     => ['nullable', 'string', 'max:160'],
+            'signature' => ['required', 'string', 'starts_with:data:image/png;base64,', 'max:600000'],
+            'agree'     => ['accepted'],
+        ]);
+        $png = base64_decode(substr($d['signature'], strlen('data:image/png;base64,')), true);
+        if (! $png || strlen($png) < 200 || @getimagesizefromstring($png) === false) {
+            return response()->json(['message' => 'Please draw your signature.', 'errors' => ['signature' => ['Please draw your signature.']]], 422);
+        }
+
+        $q->countersigned_at = now();
+        $q->countersigner_id = auth()->id();
+        $q->countersigner_name = trim($d['name']);
+        $q->countersigner_title = trim((string) ($d['title'] ?? '')) ?: null;
+        $q->countersignature = $d['signature'];
+        $q->countersign_ip = substr((string) $r->ip(), 0, 45);
+        $q->status = 'accepted';
+        $q->save();
+
+        // The fully signed copy is the record: stored once, served from then on.
+        $bytes = $this->quotePdfBytes($q);
+        $path = 'sales-proposals/' . $q->id . '-' . \Illuminate\Support\Str::random(12) . '.pdf';
+        \Illuminate\Support\Facades\Storage::disk('local')->put($path, $bytes);
+        $q->signed_pdf_path = $path;
+        $q->save();
+
+        $lead = $q->lead;
+        $mailed = 'not sent (no email on the lead)';
+        if ($lead) {
+            if ($lead->stage !== 'won') {
+                $from = self::STAGES[$lead->stage] ?? $lead->stage;
+                $this->logActivity($lead, 'stage', "Stage moved: {$from} → Won (proposal {$q->number} signed by both parties)", null);
+                $lead->stage = 'won';
+                $lead->status = 'won';
+            }
+            $lead->last_activity_at = now();
+            $lead->save();
+            if ($lead->email) {
+                $mailed = $this->mailFullySigned($q, $lead, $bytes);
+            }
+            $act = $this->logActivity($lead, 'note', "✅ Proposal {$q->number} countersigned by {$q->countersigner_name} — signed by both parties. Signed copy: {$mailed}.", null);
+            $this->fileSignedOnLead($q, $lead, $act, $bytes);
+        }
+        try {
+            \App\Support\Audit::write(['user_id' => auth()->id(), 'agency_id' => null, 'action' => 'sales_quote.countersigned', 'entity_type' => 'sales_quote', 'entity_id' => (int) $q->id,
+                'payload' => json_encode(['summary' => "Proposal {$q->number} countersigned by {$q->countersigner_name}; signed copy {$mailed}"]),
+                'ip_address' => substr((string) $r->ip(), 0, 45), 'created_at' => now()]);
+        } catch (\Throwable $e) {}
+
+        return response()->json(['ok' => true, 'email' => $mailed]);
+    }
+
+    /** The fully signed copy to the customer, with the sales contact copied. Reports what the mail log says. */
+    private function mailFullySigned(SalesQuote $q, SalesLead $lead, string $bytes): string
+    {
+        $pb = self::preparedBy($q);
+        $first = trim((string) strtok((string) ($q->client_signer_name ?: $lead->name ?: ''), ' ')) ?: 'there';
+        $html = \App\Services\EmailTemplate::wrap(null,
+            '<p style="margin:0 0 14px;line-height:1.6">Hi ' . e($first) . ',</p>'
+            . '<p style="margin:0 0 14px;line-height:1.6">Thank you for choosing KiddieTrac. Your proposal <strong>' . e($q->number) . '</strong> has now been signed by both parties, and the fully signed copy is attached for your records.</p>'
+            . '<p style="margin:0 0 14px;line-height:1.6">' . e($pb['name'] ?: 'Our team') . ' will be in touch shortly about next steps and getting your team set up. We look forward to making a difference together.</p>'
+            . '<p style="margin:0;font-size:12.5px;color:#64748B;line-height:1.6">Private and confidential: please do not share or distribute this proposal outside your organisation.</p>',
+            ['force_brand' => 'kt', 'eyebrow' => 'SIGNED BY BOTH PARTIES', 'title' => 'Your KiddieTrac proposal', 'subtitle' => $q->number, 'preheader' => 'Your fully signed KiddieTrac proposal is attached.']);
+        $before = (int) DB::table('email_logs')->max('id');
+        try {
+            Mail::html($html, function ($m) use ($q, $lead, $bytes, $pb) {
+                \App\Support\MailScope::platform($m);
+                $m->to($lead->email, $q->client_signer_name ?: ($lead->name ?: null))->subject('Signed: your KiddieTrac proposal ' . $q->number);
+                if (! empty($pb['email']) && filter_var($pb['email'], FILTER_VALIDATE_EMAIL) && strcasecmp($pb['email'], $lead->email) !== 0) {
+                    $m->cc($pb['email'], $pb['name'] ?: 'KiddieTrac Sales');
+                    $m->replyTo($pb['email'], $pb['name'] ?: 'KiddieTrac Sales');
+                }
+                $m->attachData($bytes, ($q->number ?: 'proposal') . '-signed.pdf', ['mime' => 'application/pdf']);
+            });
+        } catch (\Throwable $e) {
+            return 'failed: ' . mb_substr($e->getMessage(), 0, 160);
+        }
+        $row = DB::table('email_logs')->where('id', '>', $before)->where('to_email', 'like', '%' . strtolower($lead->email) . '%')->orderByDesc('id')->first(['status']);
+        return 'emailed to ' . $lead->email . ($row && $row->status !== 'sent' ? ' (' . $row->status . ')' : '');
+    }
+
+    /** The signed PDF beside the lead's other files, attached to the history entry (like the NDA). */
+    private function fileSignedOnLead(SalesQuote $q, SalesLead $lead, ?SalesActivity $act, string $bytes): void
+    {
+        if (! $act) return;
+        try {
+            $rel = 'sales-activity/' . (int) $lead->id . '/' . \Illuminate\Support\Str::uuid() . '.pdf';
+            \Illuminate\Support\Facades\Storage::disk('public')->put($rel, $bytes);
+            DB::table('sales_activity_files')->insert(['activity_id' => $act->id, 'lead_id' => (int) $lead->id, 'kind' => 'document',
+                'original_name' => ($q->number ?: 'proposal') . '-signed.pdf', 'file_url' => '/storage/' . $rel, 'mime' => 'application/pdf', 'size' => strlen($bytes),
+                'uploaded_by_id' => auth()->id(), 'created_at' => now(), 'updated_at' => now()]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('signed proposal filing failed', ['quote' => $q->id, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** For ProposalSignController (public signing page). */
+    public function proposalHtmlFor(SalesQuote $q, bool $forPdf = false): string { return $this->quoteHtml($q, $forPdf); }
+    public function proposalPdfFor(SalesQuote $q): string { return $this->quotePdfBytes($q); }
+    public function logOnProposalLead(SalesQuote $q, string $type, string $body): ?SalesActivity
+    {
+        $lead = SalesLead::find($q->lead_id);
+        return $lead ? $this->logActivity($lead, $type, $body, null) : null;
+    }
+    public static function preparedForOf(SalesQuote $q): array { return self::preparedFor($q, $q->lead); }
+    public static function preparedByOf(SalesQuote $q): array { return self::preparedBy($q); }
 
     public function quoteDestroy(int $quote)
     {
@@ -808,6 +959,12 @@ TXT;
     public function quotePdf(int $quote)
     {
         $q = SalesQuote::with('items', 'lead')->findOrFail($quote);
+        if ($q->signed_pdf_path && \Illuminate\Support\Facades\Storage::disk('local')->exists($q->signed_pdf_path)) {
+            return response(\Illuminate\Support\Facades\Storage::disk('local')->get($q->signed_pdf_path), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . ($q->number ?: 'proposal') . '-signed.pdf"',
+            ]);
+        }
 
         return response($this->quotePdfBytes($q), 200, [
             'Content-Type' => 'application/pdf',
@@ -853,6 +1010,9 @@ TXT;
         $toLc = strtolower(trim($lead->email));
         $cc = array_values(array_diff($cc, [$toLc]));
         $bcc = array_values(array_diff($bcc, [$toLc], $cc));
+        if (! $q->client_signed_at && ! in_array($q->status, ['declined'], true)) {
+            self::ensureSignToken($q);
+        }
         $bytes = $this->quotePdfBytes($q);
 
         try {
@@ -897,6 +1057,7 @@ TXT;
         $org = $lead->company ?: 'your centre';
         $pb = self::preparedBy($q);
         $rep = $pb['name'] ?: 'The KiddieTrac Team';
+        $signUrl = ($q->sign_token && ! $q->client_signed_at && $q->status !== 'declined') ? self::signUrl($q) : null;
         $repLine = implode(' · ', array_filter([$pb['title'] ? e($pb['title']) : null,
             $pb['email'] ? '<a href="mailto:' . e($pb['email']) . '" style="color:' . $teal . ';text-decoration:none">' . e($pb['email']) . '</a>' : null,
             $pb['phone'] ? '<a href="tel:' . e(preg_replace('/[^0-9+]/', '', $pb['phone'])) . '" style="color:' . $teal . ';text-decoration:none">' . e($pb['phone']) . '</a>' : null])) ?: 'KiddieTrac';
@@ -949,7 +1110,10 @@ TXT;
             . '<div style="font-weight:bold;color:' . $navy . ';margin-bottom:4px">&#128206; Your proposal is attached</div>'
             . 'We have put together a proposal for ' . e($org) . ', attached to this email as a PDF together with our terms and conditions.'
             . '</td></tr></table>'
-            . '<p style="margin:18px 0 14px;font-size:15px;line-height:1.65">Take your time looking it over. If anything raises a question, or you would like us to walk your team through KiddieTrac, just reply to this email. When you are ready to go ahead, sign the acceptance page and send it back to us.</p>'
+            . ($signUrl ? '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px auto 4px"><tr><td align="center" bgcolor="#1F6080" style="border-radius:10px;background:#1F6080">'
+                . '<a href="' . e($signUrl) . '" style="display:inline-block;padding:14px 26px;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:10px">&#9997;&#65039; Review &amp; sign online</a></td></tr></table>'
+                . '<div style="text-align:center;font-size:12px;color:' . $muted . ';margin:0 0 4px">Takes about a minute. Your link is private to you.</div>' : '')
+            . '<p style="margin:18px 0 14px;font-size:15px;line-height:1.65">Take your time looking it over. If anything raises a question, or you would like us to walk your team through KiddieTrac, just reply to this email. ' . ($signUrl ? 'When you are ready to go ahead, review and sign it online with the button above. Once KiddieTrac countersigns, you will receive the fully signed copy by email.' : 'When you are ready to go ahead, sign the acceptance page and send it back to us.') . '</p>'
             . '<p style="margin:0 0 4px;font-size:15px;line-height:1.65">We look forward to making a difference together.</p>'
             . '<p style="margin:18px 0 26px;font-size:15px;line-height:1.6">Warm regards,<br><strong style="color:' . $navy . '">' . e($rep) . '</strong><br><span style="color:' . $muted . ';font-size:13.5px">' . $repLine . '</span></p>'
             . '</td></tr>'
@@ -1108,18 +1272,38 @@ TXT;
                 . '<div style="font-size:9.4px;line-height:1.42;color:#334155">' . self::conditionsHtml($conditions, $navy) . '</div>';
         }
 
-        // Acceptance: signature lines for both sides.
-        $sig = fn ($who) => '<td style="width:50%;padding:0 10px 0 0;vertical-align:top">'
+        // Acceptance: signature lines for both sides, filled in as each side signs online.
+        $tzHq = 'America/Toronto';
+        $sigDate = fn ($d) => $d ? $d->copy()->setTimezone($tzHq)->format('M j, Y') : '';
+        $sig = fn ($who, ?string $img = null, string $nameTitle = '', string $date = '') => '<td style="width:50%;padding:0 10px 0 0;vertical-align:top">'
             . $label($who)
-            . '<div style="border-bottom:1px solid #94a3b8;height:26px"></div><div style="font-size:8.5px;color:' . $muted . ';margin:2px 0 6px">Signature</div>'
+            . ($img ? '<div style="border-bottom:1px solid #94a3b8;height:36px"><img src="' . e($img) . '" alt="Signature" style="height:34px;max-width:210px"></div>'
+                    : '<div style="border-bottom:1px solid #94a3b8;height:26px"></div>')
+            . '<div style="font-size:8.5px;color:' . $muted . ';margin:2px 0 6px">Signature</div>'
             . '<table style="width:100%;border-collapse:collapse"><tr>'
-            . '<td style="width:64%;padding:0 8px 0 0"><div style="border-bottom:1px solid #94a3b8;height:18px"></div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">Name and title</div></td>'
-            . '<td style="width:36%;padding:0"><div style="border-bottom:1px solid #94a3b8;height:18px"></div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">Date</div></td>'
+            . '<td style="width:64%;padding:0 8px 0 0"><div style="border-bottom:1px solid #94a3b8;height:16px;padding-bottom:3px;font-size:9.5px;line-height:15px;white-space:nowrap;overflow:hidden">' . e($nameTitle) . '</div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">Name and title</div></td>'
+            . '<td style="width:36%;padding:0"><div style="border-bottom:1px solid #94a3b8;height:16px;padding-bottom:3px;font-size:9.5px;line-height:15px;white-space:nowrap">' . e($date) . '</div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">Date</div></td>'
             . '</tr></table></td>';
+        $cName = trim((string) $q->client_signer_name . ($q->client_signer_title ? ', ' . $q->client_signer_title : ''));
+        $kName = trim((string) $q->countersigner_name . ($q->countersigner_title ? ', ' . $q->countersigner_title : ''));
+        $record = '';
+        if ($q->client_signed_at) {
+            $at = fn ($d) => $d->copy()->setTimezone($tzHq)->format('M j, Y g:i A T');
+            $record = '<div style="margin-top:8px;font-size:7.6px;line-height:1.45;color:' . $muted . ';border-top:1px dashed #CBD5E1;padding-top:6px">'
+                . '<strong style="color:#475569">Electronic signature record.</strong> '
+                . 'Customer: ' . e($cName) . ($q->client_signer_org ? ' for ' . e($q->client_signer_org) : '') . ', signed online ' . e($at($q->client_signed_at))
+                . ($q->client_sign_ip ? ' from IP ' . e($q->client_sign_ip) : '') . ' using the private link sent to ' . e((string) ($lead->email ?: 'the customer')) . '. '
+                . ($q->countersigned_at ? 'KiddieTrac: ' . e($kName) . ', countersigned ' . e($at($q->countersigned_at)) . '. ' : 'Awaiting KiddieTrac countersignature. ')
+                . ($q->document_hash ? 'Document fingerprint (SHA-256) at signing: ' . e($q->document_hash) . '.' : '')
+                . '</div>';
+        }
         $accept = '<div style="margin-top:16px;page-break-inside:avoid;border:1px solid ' . $line . ';border-radius:8px;padding:12px 16px">'
             . '<div style="font-size:12px;font-weight:bold;color:' . $navy . ';margin-bottom:4px">Acceptance</div>'
             . '<div style="font-size:10px;color:#334155;margin-bottom:10px">By signing, the customer accepts this proposal' . ($conditions !== '' ? ' and the Terms &amp; Conditions above' : '') . ($q->valid_until ? ', before ' . e($validTxt) : '') . '.</div>'
-            . '<table class="r-stack" style="width:100%;border-collapse:collapse"><tr>' . $sig('For ' . e($lead->company ?: ($lead->name ?: 'the customer'))) . $sig('For KiddieTrac') . '</tr></table></div>';
+            . '<table class="r-stack" style="width:100%;border-collapse:collapse"><tr>'
+            . $sig('For ' . e($q->client_signer_org ?: ($pf['company'] ?: ($pf['name'] ?: 'the customer'))), $q->client_signature, $cName, $sigDate($q->client_signed_at))
+            . $sig('For KiddieTrac', $q->countersignature, $kName, $sigDate($q->countersigned_at))
+            . '</tr></table>' . $record . '</div>';
 
         $css = '@page{margin:34px 40px 50px}'
             . 'body{font-family:"DejaVu Sans",sans-serif;color:#0D1B2A;font-size:11px;margin:0;' . ($forPdf ? '' : 'padding:24px;max-width:780px;margin:0 auto;') . '}'
@@ -1509,6 +1693,12 @@ TXT;
                 'discount' => $q->discount, 'billing_period' => $q->billing_period, 'currency' => $q->currency ?: 'CAD',
                 'taxes' => $q->taxes ?: [], 'tax_total' => $q->tax_total, 'terms' => $q->terms, 'conditions' => $q->conditions,
                 'prepared_for' => self::preparedFor($q, $l), 'prepared_by' => self::preparedBy($q),
+                'sign_url' => ($q->sign_token && ! $q->client_signed_at && $q->status !== 'declined') ? 'https://app.kiddietrac.com/proposal.html?t=' . $q->sign_token : null,
+                'sign_viewed_at' => optional($q->sign_viewed_at)->toIso8601String(),
+                'client_signed_at' => optional($q->client_signed_at)->toIso8601String(), 'client_signer_name' => $q->client_signer_name,
+                'client_signer_title' => $q->client_signer_title, 'client_signer_org' => $q->client_signer_org,
+                'countersigned_at' => optional($q->countersigned_at)->toIso8601String(), 'countersigner_name' => $q->countersigner_name,
+                'declined_at' => optional($q->declined_at)->toIso8601String(), 'decline_reason' => $q->decline_reason,
                 'valid_until' => optional($q->valid_until)->toDateString(),
                 'notes' => $q->notes,
                 'items' => $q->items->map(fn ($it) => [

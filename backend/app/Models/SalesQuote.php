@@ -11,6 +11,9 @@ class SalesQuote extends Model
 
     protected $guarded = [];
 
+    // Signature images and the private link never leave in a plain toArray()/JSON.
+    protected $hidden = ['client_signature', 'countersignature', 'sign_token'];
+
     protected $casts = [
         'valid_until' => 'date',
         'sent_at'     => 'datetime',
@@ -21,6 +24,11 @@ class SalesQuote extends Model
         'taxes'       => 'array',   // [{label, rate}] — 2026-10-16
         'prepared_for' => 'array',  // {company,name,title,address,email,phone}; NULL = from the lead
         'prepared_by'  => 'array',  // {name,title,email,phone}; NULL = rep name + sales contact
+        // Online signing (2026-10-16)
+        'sign_viewed_at'   => 'datetime',
+        'client_signed_at' => 'datetime',
+        'countersigned_at' => 'datetime',
+        'declined_at'      => 'datetime',
     ];
 
     public function items()

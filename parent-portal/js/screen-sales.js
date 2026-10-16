@@ -1016,6 +1016,87 @@
     document.head.appendChild(st);
   }
 
+  /* ONLINE SIGNING (2026-10-16, Anthony: "can we make this where it can be signed virtually and
+     countersigned by kiddietrac virtually to complete the proposal process"). The prospect signs
+     at proposal.html?t=… (link in the proposal email, or ⋮ → Copy signing link); KiddieTrac
+     countersigns here; the fully signed PDF is emailed, filed on the lead, and the lead is Won. */
+  var QSTATUS_LABEL = { draft: 'Draft', sent: 'Sent', signed: '✍️ Signed — countersign', accepted: '✅ Signed by both', declined: 'Declined' };
+  var QSTATUS_COLOR = { draft: '#94A3B8', sent: '#0EA5E9', signed: '#D97706', accepted: '#10B981', declined: '#EF4444' };
+  function signLine(leadId, q, container, ctx) {
+    var t = null, extra = null, st = 'font-size:12px;margin-top:6px;line-height:1.45;';
+    if (q.status === 'signed' && q.client_signed_at) {
+      t = el('div', { style: st + 'color:#92400E' }, ['Signed by ' + (q.client_signer_name || 'the customer') + (q.client_signer_title ? ' (' + q.client_signer_title + ')' : '') + ' · ' + fmtStamp(q.client_signed_at) + ' — waiting for KiddieTrac to countersign.']);
+      extra = el('div', { style: 'margin-top:6px' }, [btn('✍️ Countersign', 'primary', function (ev) { ev.stopPropagation(); countersignQuote(q, container, ctx); })]);
+    } else if (q.countersigned_at) {
+      t = el('div', { style: st + 'color:#047857' }, ['Signed by ' + (q.client_signer_name || 'the customer') + ' · ' + fmtStamp(q.client_signed_at) + ' and countersigned by ' + (q.countersigner_name || 'KiddieTrac') + ' · ' + fmtStamp(q.countersigned_at)]);
+    } else if (q.status === 'declined' && q.declined_at) {
+      t = el('div', { style: st + 'color:#B91C1C' }, ['Declined online · ' + fmtStamp(q.declined_at) + (q.decline_reason ? ' — “' + q.decline_reason + '”' : '')]);
+    } else if (q.sign_viewed_at) {
+      t = el('div', { style: st + 'color:#64748B' }, ['👁 Opened by the prospect · ' + fmtStamp(q.sign_viewed_at) + ' · not signed yet']);
+    }
+    return t ? el('div', {}, [t, extra]) : null;
+  }
+  async function copySignLink(q) {
+    try {
+      var r = await Api.post('/sales/quotes/' + q.id + '/sign-link', {});
+      var ok = false;
+      try { await navigator.clipboard.writeText(r.url); ok = true; } catch (e) {}
+      if (ok) toast('🔗', 'Signing link copied', 'Anyone with this link can sign for the prospect. Share it only with them.');
+      else if (window.KT && KT.prompt) await KT.prompt({ title: 'Signing link', description: 'Copy this link and send it only to the prospect.', fields: [{ key: 'url', label: 'Link', value: r.url }], okLabel: 'Done' });
+    } catch (e) { toast('⚠️', 'Could not get the link', e.message || '', '#DC2626'); }
+  }
+  function countersignQuote(q, container, ctx) {
+    var ov = el('div', { style: 'position:fixed;inset:0;z-index:10000;background:rgba(13,27,42,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto', onclick: function (ev) { if (ev.target === ov) ov.remove(); } });
+    var pb = q.prepared_by || {};
+    var nameIn = input({ value: pb.name || '', autocomplete: 'name' });
+    var titleIn = input({ value: pb.title || 'KiddieTrac Sales' });
+    var pad = el('canvas', { 'aria-label': 'Draw your signature', style: 'width:100%;height:150px;border:1.5px dashed #94A3B8;border-radius:12px;background:#fff;touch-action:none;display:block' });
+    var agree = el('input', { type: 'checkbox', style: 'width:18px;height:18px;flex:0 0 auto;margin-top:2px' });
+    var msg = el('div', { style: 'font-size:13px;margin-top:8px;color:#B91C1C' });
+    var go;
+    var box = el('div', { style: 'background:#fff;border-radius:16px;max-width:560px;width:100%;padding:22px;box-sizing:border-box' }, [
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px' }, [
+        el('div', { style: 'font-size:18px;font-weight:800' }, ['Countersign ' + (q.number || 'proposal')]),
+        el('button', { type: 'button', 'aria-label': 'Close', style: 'border:0;background:none;font-size:22px;cursor:pointer;color:#64748B', onclick: function () { ov.remove(); } }, ['×']),
+      ]),
+      el('div', { style: 'font-size:13px;color:#475569;line-height:1.5;margin-bottom:10px' }, ['Signed by ' + (q.client_signer_name || 'the customer') + (q.client_signer_title ? ', ' + q.client_signer_title : '') + (q.client_signer_org ? ' for ' + q.client_signer_org : '') + ' · ' + fmtStamp(q.client_signed_at) + ' — your signature completes the proposal: the fully signed PDF is emailed to the prospect (copying the sales contact), filed on the lead, and the lead moves to Won.']),
+      el('div', { style: 'margin-bottom:10px' }, [btn('👁 View what they signed', 'light', function () { viewQuote(q.lead_id, q, container, ctx); })]),
+      el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px' }, [field('Your name', nameIn), field('Title', titleIn)]),
+      el('div', { style: 'font-size:12px;font-weight:700;color:#5a7080;margin:12px 0 6px' }, ['Signature']),
+      pad,
+      el('button', { type: 'button', 'data-kt-inpage': '1', style: 'border:0;background:none;color:' + ACCENT + ';font:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:0;margin-top:6px', onclick: function () { sizePad(); } }, ['Clear signature']),
+      el('label', { style: 'display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:#334155;margin-top:12px;line-height:1.45' }, [agree, el('span', {}, ['I countersign this proposal on behalf of KiddieTrac and I am authorised to do so.'])]),
+      msg,
+      el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px' }, [
+        btn('Cancel', 'ghost', function () { ov.remove(); }),
+        go = btn('✍️ Countersign & send', 'primary', async function () {
+          var miss = [];
+          if (nameIn.value.trim().length < 2) miss.push('your name');
+          if (!inked) miss.push('your signature');
+          if (!agree.checked) miss.push('the checkbox');
+          if (miss.length) { msg.textContent = 'Please add: ' + miss.join(', ') + '.'; return; }
+          go.disabled = true; msg.style.color = '#475569'; msg.textContent = 'Countersigning and sending the signed copy…';
+          try {
+            var r = await Api.post('/sales/quotes/' + q.id + '/countersign', { name: nameIn.value.trim(), title: titleIn.value.trim(), signature: pad.toDataURL('image/png'), agree: true });
+            ov.remove(); toast('✅', 'Proposal complete', 'Signed by both parties. Signed copy ' + (r.email || 'sent') + '.');
+            renderDetail(container, ctx);
+          } catch (e) { go.disabled = false; msg.style.color = '#B91C1C'; msg.textContent = e.message || 'Could not countersign.'; }
+        }),
+      ]),
+    ]);
+    ov.appendChild(box); document.body.appendChild(ov);
+    var c2, drawing = false, inked = false;
+    function sizePad() { var r = pad.getBoundingClientRect(), d = window.devicePixelRatio || 1; pad.width = r.width * d; pad.height = r.height * d; c2 = pad.getContext('2d'); c2.scale(d, d); c2.lineWidth = 2.2; c2.lineCap = 'round'; c2.lineJoin = 'round'; c2.strokeStyle = '#0F172A'; inked = false; }
+    function pos(e) { var r = pad.getBoundingClientRect(), t = e.touches ? e.touches[0] : e; return [t.clientX - r.left, t.clientY - r.top]; }
+    pad.addEventListener('mousedown', function (e) { e.preventDefault(); drawing = true; var p = pos(e); c2.beginPath(); c2.moveTo(p[0], p[1]); });
+    pad.addEventListener('mousemove', function (e) { if (!drawing) return; var p = pos(e); c2.lineTo(p[0], p[1]); c2.stroke(); inked = true; });
+    pad.addEventListener('touchstart', function (e) { e.preventDefault(); drawing = true; var p = pos(e); c2.beginPath(); c2.moveTo(p[0], p[1]); }, { passive: false });
+    pad.addEventListener('touchmove', function (e) { if (!drawing) return; e.preventDefault(); var p = pos(e); c2.lineTo(p[0], p[1]); c2.stroke(); inked = true; }, { passive: false });
+    var stop = function () { drawing = false; };
+    window.addEventListener('mouseup', stop); pad.addEventListener('touchend', stop);
+    sizePad();
+  }
+
   function renderQuotesPanel(id, lead, container, ctx) {
     var panel = card([el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [
       el('div', { style: 'font-weight:800' }, ['Proposals']),
@@ -1025,11 +1106,12 @@
     (lead.quotes || []).forEach(function (q) {
       list.appendChild(el('div', { style: 'border:1px solid #e6ebf1;border-radius:10px;padding:10px 12px;cursor:pointer', onclick: function () { viewQuote(id, q, container, ctx); } }, [
         el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, [
-          el('div', { style: 'font-weight:700;font-size:13px' }, [q.number || 'Proposal', ' ', el('span', { style: 'font-size:11px;font-weight:700;color:#fff;background:' + ({ draft: '#94A3B8', sent: '#0EA5E9', accepted: '#10B981', declined: '#EF4444' }[q.status] || '#94A3B8') + ';border-radius:999px;padding:1px 8px;margin-left:4px' }, [q.status])]),
+          el('div', { style: 'font-weight:700;font-size:13px' }, [q.number || 'Proposal', ' ', el('span', { style: 'font-size:11px;font-weight:700;color:#fff;background:' + (QSTATUS_COLOR[q.status] || '#94A3B8') + ';border-radius:999px;padding:1px 8px;margin-left:4px;white-space:nowrap' }, [QSTATUS_LABEL[q.status] || q.status])]),
           el('div', { style: 'margin-left:auto;font-weight:800;color:#047857;white-space:nowrap' }, [moneyIn(q.total, q.currency), el('span', { style: 'font-size:11px;font-weight:700;color:#64748B' }, [' ' + (q.currency || 'CAD') + periodShort(q.billing_period)])]),
           quoteMenuButton(id, q, container, ctx),
         ]),
         q.title ? el('div', { style: 'font-size:12px;color:#64748B;margin-top:2px' }, [q.title]) : null,
+        signLine(id, q, container, ctx),
       ]));
     });
     if (!(lead.quotes || []).length) list.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No proposals yet.']));
@@ -1056,10 +1138,13 @@
         onclick: function (e) { e.stopPropagation(); closeQuoteMenu(); fn(); } }, [label]);
     };
     var m = el('div', { id: 'kt-quote-menu', role: 'menu', style: 'position:fixed;z-index:10001;min-width:190px;background:#fff;border:1px solid #E2E8F0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:6px 0;overflow:hidden' }, [
+      q.status === 'signed' ? item('✍️ Countersign', function () { countersignQuote(q, container, ctx); }) : null,
       item('👁 View', function () { viewQuote(leadId, q, container, ctx); }),
-      item('✏️ Edit', function () { openQuoteBuilder(leadId, q, container, ctx); }),
-      item('⬇ Download PDF', function () { downloadQuotePdf(q.id, q.number); }),
-      item('📧 Email to prospect', function () { emailQuote(q, container, ctx); }),
+      // What the customer signed is fixed: no editing or re-sending once they have signed.
+      q.client_signed_at ? null : item('✏️ Edit', function () { openQuoteBuilder(leadId, q, container, ctx); }),
+      item(q.countersigned_at ? '⬇ Download signed PDF' : '⬇ Download PDF', function () { downloadQuotePdf(q.id, q.number); }),
+      q.client_signed_at || q.status === 'declined' ? null : item('📧 Email to prospect', function () { emailQuote(q, container, ctx); }),
+      q.client_signed_at || q.status === 'declined' ? null : item('🔗 Copy signing link', function () { copySignLink(q); }),
       el('div', { style: 'height:1px;background:#EEF2F6;margin:4px 0' }),
       item('🗑 Delete', function () { deleteQuote(q, container, ctx); }, true),
     ]);
@@ -1079,7 +1164,7 @@
     function split(v) { return String(v || '').split(/[\s,;]+/).map(function (x) { return x.trim(); }).filter(Boolean); }
     for (;;) {
       var r = await window.KT.prompt({ title: 'Email ' + (q.number || 'this proposal'), okLabel: 'Send email',
-        description: 'The PDF goes to ' + to + '.' + (q.status === 'draft' ? ' The proposal will be marked Sent.' : '') + ' Add CC or BCC to send copies (separate addresses with commas).',
+        description: 'The PDF goes to ' + to + ', with a private “Review & sign online” button.' + (q.status === 'draft' ? ' The proposal will be marked Sent.' : '') + ' Add CC or BCC to send copies (separate addresses with commas); the signing button works for whoever opens the email.',
         fields: [{ key: 'cc', label: 'CC (optional)', value: cc, placeholder: 'name@example.com, other@example.com' }, { key: 'bcc', label: 'BCC (optional)', value: bcc, placeholder: 'name@example.com' }] });
       if (!r) return;
       cc = r.cc || ''; bcc = r.bcc || '';
@@ -1112,8 +1197,8 @@
       frame,
       el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap' }, [
         btn('⬇ Download PDF', 'light', function () { downloadQuotePdf(q.id, q.number); }),
-        btn('📧 Email', 'light', function () { ov.remove(); emailQuote(q, container, ctx); }),
-        btn('✏️ Edit', 'primary', function () { ov.remove(); openQuoteBuilder(leadId, q, container, ctx); }),
+        q.client_signed_at || q.status === 'declined' ? null : btn('📧 Email', 'light', function () { ov.remove(); emailQuote(q, container, ctx); }),
+        q.client_signed_at ? null : btn('✏️ Edit', 'primary', function () { ov.remove(); openQuoteBuilder(leadId, q, container, ctx); }),
       ]),
     ]);
     ov.appendChild(box); document.body.appendChild(ov);
