@@ -607,7 +607,7 @@ def main():
         for l in LANGS:
             x.append('<url><loc>%s</loc><lastmod>%s</lastmod>%s</url>' % (url(l, rest), lastmod, alts))
     # /terms is not listed: it is a redirect to /privacy#terms, and its canonical says so.
-    x.append('<url><loc>%s/privacy</loc></url>' % BASE)
+    x.append('<url><loc>%s/privacy/</loc></url>' % BASE)   # a directory: /privacy answers 301 -> /privacy/
     x.append('</urlset>')
     if not only:
         put('sitemap.xml', '\n'.join(x) + '\n')
