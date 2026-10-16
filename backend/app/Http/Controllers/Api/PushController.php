@@ -44,7 +44,7 @@ final class PushController extends Controller
     {
         $data = $request->validate([
             'subscription' => ['required', 'array'],
-            'subscription.endpoint' => ['required', 'url', 'max:500'],
+            'subscription.endpoint' => ['required', 'url', 'max:1800'],
             'subscription.keys' => ['required', 'array'],
             'subscription.keys.p256dh' => ['required', 'string'],
             'subscription.keys.auth' => ['required', 'string'],
@@ -55,11 +55,12 @@ final class PushController extends Controller
         $endpoint = $data['subscription']['endpoint'];
         $tokenJson = json_encode($data['subscription']);
 
-        // Truncate if longer than column allows (500 chars)
-        if (strlen($tokenJson) > 500) {
-            // Some endpoints are very long; store just the endpoint as the unique token
-            // and a compact form in device_name
-            $tokenJson = substr($tokenJson, 0, 500);
+        /* Never cut a subscription short: a truncated one is invalid JSON that can never be
+           pushed to (it used to be cut at 500 — Windows/WNS subscriptions are longer). The
+           column holds 2048 since 2026-10-16; anything longer is refused, not mangled. */
+        if (strlen($tokenJson) > 2048) {
+            Log::warning('Push subscribe refused: subscription too long', ['user_id' => $user->id, 'length' => strlen($tokenJson), 'host' => parse_url($endpoint, PHP_URL_HOST)]);
+            return response()->json(['message' => 'This browser\'s push subscription is too long to save.'], 422);
         }
 
         /* One row per browser: the ENDPOINT identifies the subscription, the keys can be
@@ -85,7 +86,8 @@ final class PushController extends Controller
                 'user_id' => $user->id,
                 'token' => $tokenJson,
                 'platform' => 'web',
-                'device_name' => $data['device_name'] ?? $request->header('User-Agent'),
+                // The silent re-sync sends no name, and a browser's User-Agent can pass 120.
+                'device_name' => mb_substr((string) ($data['device_name'] ?? $request->header('User-Agent')), 0, 120) ?: null,
                 'last_active_at' => now(),
                 'created_at' => now(),
             ]);
