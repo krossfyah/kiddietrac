@@ -57,6 +57,45 @@
 
   var COLLAPSE_KEY = 'kt_admin_home_open';
 
+  /* YOUR OWN QUICK ACCESS (2026-10-16). Anthony: "quick access in mobile for directors/
+     admins should allow to add remove functions". The eight defaults above are a starting
+     point; ✏️ Customize lets each person add, remove and reorder their tiles. Kept per
+     ROLE (a director and an agency-admin view of the same person want different things)
+     in the account's ui-prefs, so it follows them to another phone, with a local copy so
+     the launcher draws instantly. A hash this role cannot open is dropped on the way in —
+     the tiles still come only from navItemsForRole. */
+  var QA_MAX = 16;
+  var QA_LOCAL = 'kt_quick_access';
+  function qaUserId() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return u && u.id ? String(u.id) : '';
+    } catch (e) { return ''; }
+  }
+  function qaReadLocal(role) {
+    try {
+      var all = JSON.parse(localStorage.getItem(QA_LOCAL) || '{}') || {};
+      var mine = all[qaUserId()] || {};
+      return Array.isArray(mine[role]) ? mine[role] : null;
+    } catch (e) { return null; }
+  }
+  function qaWriteLocal(map) {
+    try {
+      var all = JSON.parse(localStorage.getItem(QA_LOCAL) || '{}') || {};
+      all[qaUserId()] = map;
+      localStorage.setItem(QA_LOCAL, JSON.stringify(all));
+    } catch (e) {}
+  }
+  function qaLocalMap() {
+    try { return (JSON.parse(localStorage.getItem(QA_LOCAL) || '{}') || {})[qaUserId()] || {}; } catch (e) { return {}; }
+  }
+  function qaSave(role, list) {
+    var map = qaLocalMap();
+    if (list) map[role] = list; else delete map[role];
+    qaWriteLocal(map);
+    try { if (KT.Api && KT.Api.put) KT.Api.put('/auth/me/ui-prefs', { quick_access: Object.keys(map).length ? map : null }).catch(function () {}); } catch (e) {}
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
@@ -114,11 +153,22 @@
     });
     var total = Object.keys(byHash).length;
 
-    var quick = [];
-    var wanted = isSuperAdmin() ? QUICK_PLATFORM.concat(QUICK) : QUICK;
-    wanted.forEach(function (h) {
-      if (byHash[h] && quick.length < 8 && quick.indexOf(byHash[h]) === -1) { quick.push(byHash[h]); }
-    });
+    function defaultQuick() {
+      var out = [];
+      var wanted = isSuperAdmin() ? QUICK_PLATFORM.concat(QUICK) : QUICK;
+      wanted.forEach(function (h) {
+        if (byHash[h] && out.length < 8 && out.indexOf(byHash[h]) === -1) { out.push(byHash[h]); }
+      });
+      return out;
+    }
+    function quickFrom(hashes) {
+      var out = [];
+      (hashes || []).forEach(function (h) { if (byHash[h] && out.indexOf(byHash[h]) === -1 && out.length < QA_MAX) out.push(byHash[h]); });
+      return out;
+    }
+    var saved = qaReadLocal(role);
+    var customised = !!saved;
+    var quick = saved ? quickFrom(saved) : defaultQuick();
 
     var openMap = openState();
     function section(key, label, items, id, openByDefault) {
@@ -152,9 +202,7 @@
       + '<div id="kt-ah-noresult" class="kt-ah-noresult" hidden>Nothing matches that.</div>'
       /* Quick access folds like every other section (open until you close it). It sits
          outside #kt-ah-sections so search can hide it on its own. */
-      + (quick.length
-          ? '<div class="kt-ah-quick">' + section('__quick', 'Quick access', quick, 'kt-ah-quickgrid', true) + '</div>'
-          : '')
+      + '<div class="kt-ah-quick"></div>'
       + '<div id="kt-ah-sections">' + body + '</div>'
       /* The same footer parents and educators have. Their launcher carries sign-out
          because the phone bar has no Menu; neither does this one now. */
@@ -191,12 +239,156 @@
         + '.kt-admin-home section.kt-ah-sec .kt-ah-head{border-bottom-color:rgba(124,58,237,.08);}'
         + '.kt-admin-home section.kt-ah-sec .kt-ah-head[aria-expanded="false"]{border-bottom-color:transparent;}'
         + '.kt-admin-home section.kt-ah-sec .kt-ah-body{margin:10px 0 12px;}'
-        + '.kt-admin-home section.kt-ah-sec .kt-ah-count{background:rgba(255,255,255,.75);}';
+        + '.kt-admin-home section.kt-ah-sec .kt-ah-count{background:rgba(255,255,255,.75);}'
+        + '.kt-qa-tools{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin:-4px 0 10px;}'
+        + '.kt-qa-btn{height:30px;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font:700 12.5px/1 inherit;cursor:pointer;}'
+        + '.kt-qa-btn.p{background:#1F6080;border-color:#1F6080;color:#fff;}'
+        + '.kt-qa-editing .kt-tile{position:relative;}'
+        + '.kt-qa-editing .kt-tile .kt-tile-icon{animation:kt-qa-wiggle .9s ease-in-out infinite;}'
+        + '@keyframes kt-qa-wiggle{0%,100%{transform:rotate(-2deg);}50%{transform:rotate(2deg);}}'
+        + '@media (prefers-reduced-motion:reduce){.kt-qa-editing .kt-tile .kt-tile-icon{animation:none;}}'
+        + '.kt-qa-x{position:absolute;top:2px;right:2px;width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:#DC2626;color:#fff;font:800 14px/1 inherit;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;box-shadow:0 2px 6px rgba(0,0,0,.25);padding:0;}'
+        + '.kt-qa-mv{display:flex;gap:4px;justify-content:center;margin-top:4px;}'
+        + '.kt-qa-mv button{width:30px;height:24px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#334155;font:700 12px/1 inherit;cursor:pointer;padding:0;}'
+        + '.kt-qa-mv button:disabled{opacity:.35;cursor:default;}'
+        + '.kt-qa-add .kt-tile-icon{border:2px dashed #94A3B8 !important;background:#F8FAFC !important;color:#1F6080;}'
+        + '.kt-qa-pick{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #F1F5F9;}'
+        + '.kt-qa-pick .ic{width:30px;text-align:center;font-size:20px;}'
+        + '.kt-qa-pick .nm{flex:1;min-width:0;font-weight:700;font-size:14px;color:#0F172A;}'
+        + '.kt-qa-pick .sc{font-weight:500;font-size:12px;color:#64748B;}';
       document.head.appendChild(_st);
     }
 
+    /* ── Quick access: normal and ✏️ Customize ──────────────────────────────── */
+    var qaEditing = false;
+    var sectionOf = {};
+    secs.forEach(function (sc) { sc.items.forEach(function (it) { if (it && it.hash && !sectionOf[it.hash]) sectionOf[it.hash] = sc.label; }); });
+    function qaPersist() { customised = true; qaSave(role, quick.map(function (it) { return it.hash; })); }
+    function paintQuick() {
+      var wrap = main.querySelector('.kt-ah-quick');
+      if (!wrap) return;
+      openMap = openState();   // the open/closed state as it is now, not as it was at first paint
+      wrap.innerHTML = section('__quick', 'Quick access', quick, 'kt-ah-quickgrid', true);
+      var sec = wrap.querySelector('.kt-ah-sec');
+      var grid = sec.querySelector('.kt-ah-body');
+      var head = sec.querySelector('.kt-ah-head');
+      head.addEventListener('click', function () {
+        var open = grid.hidden;
+        grid.hidden = !open;
+        tools.hidden = !open;
+        head.setAttribute('aria-expanded', open ? 'true' : 'false');
+        var map = openState(); map.__quick = open; rememberOpen(map);
+      });
+      if (qaEditing) {
+        sec.classList.add('kt-qa-editing');
+        [].forEach.call(grid.querySelectorAll('.kt-tile'), function (t, i) {
+          t.removeAttribute('href');
+          t.setAttribute('role', 'group');
+          var x = document.createElement('button');
+          x.type = 'button'; x.className = 'kt-qa-x'; x.textContent = '✕';
+          x.setAttribute('aria-label', 'Remove ' + (quick[i].label || quick[i].hash) + ' from Quick access');
+          x.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); quick.splice(i, 1); qaPersist(); paintQuick(); });
+          t.appendChild(x);
+          var mv = document.createElement('div'); mv.className = 'kt-qa-mv';
+          mv.innerHTML = '<button type="button" data-mv="-1" aria-label="Move earlier">◀</button><button type="button" data-mv="1" aria-label="Move later">▶</button>';
+          mv.querySelector('[data-mv="-1"]').disabled = i === 0;
+          mv.querySelector('[data-mv="1"]').disabled = i === quick.length - 1;
+          [].forEach.call(mv.querySelectorAll('button'), function (b) {
+            b.addEventListener('click', function (e) {
+              e.preventDefault(); e.stopPropagation();
+              var j = i + parseInt(b.getAttribute('data-mv'), 10);
+              if (j < 0 || j >= quick.length) return;
+              var tmp = quick[i]; quick[i] = quick[j]; quick[j] = tmp;
+              qaPersist(); paintQuick();
+            });
+          });
+          t.appendChild(mv);
+        });
+        if (quick.length < QA_MAX) {
+          var add = document.createElement('a');
+          add.className = 'kt-tile kt-qa-add'; add.setAttribute('role', 'button'); add.tabIndex = 0;
+          add.innerHTML = '<span class="kt-tile-icon" aria-hidden="true">＋</span><span class="kt-tile-label">Add</span>';
+          add.addEventListener('click', function (e) { e.preventDefault(); openPicker(); });
+          grid.appendChild(add);
+        }
+      }
+      var tools = document.createElement('div');
+      tools.className = 'kt-qa-tools';
+      tools.hidden = grid.hidden;
+      tools.innerHTML = qaEditing
+        ? '<span style="font-size:12px;color:#64748B;margin-right:auto;">' + quick.length + ' of ' + QA_MAX + ' · tap ✕ to remove, ◀ ▶ to move</span>'
+          + (customised ? '<button type="button" class="kt-qa-btn" data-qa="reset">Reset to default</button>' : '')
+          + '<button type="button" class="kt-qa-btn p" data-qa="done">Done</button>'
+        : '<button type="button" class="kt-qa-btn" data-qa="edit">✏️ Customize</button>';
+      sec.appendChild(tools);
+      [].forEach.call(tools.querySelectorAll('[data-qa]'), function (b) {
+        b.addEventListener('click', function () {
+          var act = b.getAttribute('data-qa');
+          if (act === 'edit') { qaEditing = true; var m = openState(); m.__quick = true; rememberOpen(m); paintQuick(); }
+          else if (act === 'done') { qaEditing = false; paintQuick(); }
+          else if (act === 'reset') { quick = defaultQuick(); customised = false; qaSave(role, null); paintQuick(); }
+        });
+      });
+      if (!quick.length && !qaEditing) {
+        var none = document.createElement('div');
+        none.style.cssText = 'font-size:13px;color:#64748B;padding:4px 2px 10px;';
+        none.textContent = 'Nothing pinned. Tap ✏️ Customize to add the places you use most.';
+        grid.appendChild(none);
+      }
+    }
+    /* + Add: every place this role has, searchable, grouped by its menu section. */
+    function openPicker() {
+      var M = KT.Shell && KT.Shell.Modal;
+      if (!M || !M.open) return;
+      var body = document.createElement('div');
+      body.innerHTML = '<input type="search" class="kt-qa-find" placeholder="🔍 Find a place…" autocomplete="off" '
+        + 'style="display:block;width:100%;box-sizing:border-box;height:40px;padding:0 12px;border:1px solid #CBD5E1;border-radius:10px;font-size:14px;margin-bottom:8px;">'
+        + '<div class="kt-qa-list"></div>';
+      var list = body.querySelector('.kt-qa-list');
+      var find = body.querySelector('.kt-qa-find');
+      function paintList() {
+        var q = (find.value || '').trim().toLowerCase();
+        var all = Object.keys(byHash).map(function (h) { return byHash[h]; }).filter(function (it) {
+          return !q || ((it.label || '') + ' ' + it.hash + ' ' + (sectionOf[it.hash] || '')).toLowerCase().indexOf(q) !== -1;
+        });
+        list.innerHTML = all.length ? all.map(function (it) {
+          var on = quick.indexOf(it) !== -1;
+          return '<div class="kt-qa-pick"><span class="ic" aria-hidden="true">' + (it.icon || '▫️') + '</span>'
+            + '<span class="nm">' + esc(it.label || it.hash) + '<div class="sc">' + esc(sectionOf[it.hash] || '') + '</div></span>'
+            + '<button type="button" class="kt-qa-btn' + (on ? '' : ' p') + '" data-h="' + esc(it.hash) + '"'
+            + (!on && quick.length >= QA_MAX ? ' disabled' : '') + '>' + (on ? '✓ Added' : '+ Add') + '</button></div>';
+        }).join('') : '<div style="padding:12px;color:#64748B;">Nothing matches that.</div>';
+        [].forEach.call(list.querySelectorAll('[data-h]'), function (b) {
+          b.addEventListener('click', function () {
+            var it = byHash[b.getAttribute('data-h')];
+            var k = quick.indexOf(it);
+            if (k === -1) { if (quick.length >= QA_MAX) return; quick.push(it); } else { quick.splice(k, 1); }
+            qaPersist(); paintQuick(); paintList();
+          });
+        });
+      }
+      find.addEventListener('input', paintList);
+      paintList();
+      M.open({ title: 'Add to Quick access', body: body, actions: [{ label: 'Done', primary: true }] });
+    }
+    paintQuick();
+    /* The account copy wins when it differs: chosen on another phone, it should show here. */
+    try {
+      if (KT.Api && KT.Api.get) KT.Api.get('/auth/me/ui-prefs').then(function (j) {
+        var map = j && j.prefs && j.prefs.quick_access;
+        if (!map || typeof map !== 'object') return;
+        var local = qaLocalMap();
+        qaWriteLocal(map);
+        if (JSON.stringify(map[role] || null) === JSON.stringify(local[role] || null) || qaEditing) return;
+        if (!main.isConnected) return;
+        customised = Array.isArray(map[role]);
+        quick = customised ? quickFrom(map[role]) : defaultQuick();
+        paintQuick();
+      }).catch(function () {});
+    } catch (e) {}
+
     /* ── collapse / expand ────────────────────────────────────────────────── */
-    main.querySelectorAll('.kt-ah-head').forEach(function (h) {
+    main.querySelectorAll('#kt-ah-sections .kt-ah-head').forEach(function (h) {
       h.addEventListener('click', function () {
         var sec = h.parentNode;
         var grid = sec.querySelector('.kt-ah-body');

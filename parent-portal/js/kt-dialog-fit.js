@@ -280,6 +280,14 @@
           g = g.parentElement;
         }
         if (!g || g === dlg || g.getAttribute('data-kt-fit')) { continue; }
+        /* FEWER, NEVER MORE (2026-10-16). auto-fit packs as many 118px columns as fit, so a
+           ONE-column form (the bus route form: a long placeholder overflowed its input) was
+           turned into two cramped columns on a phone. Only act when it really reduces. */
+        var gcs = window.getComputedStyle(g);
+        var cols = String(gcs.gridTemplateColumns || '').trim().split(/\s+(?![^(]*\))/).length;
+        var gap = parseFloat(gcs.columnGap) || 0;
+        var fit = Math.max(1, Math.floor((g.clientWidth + gap) / (MIN_COL + gap)));
+        if (cols <= 1 || fit >= cols) { continue; }
         g.style.gridTemplateColumns = 'repeat(auto-fit,minmax(' + MIN_COL + 'px,1fr))';
         g.setAttribute('data-kt-fit', 'grid-roomier');
         changed++;

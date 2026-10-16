@@ -1053,7 +1053,7 @@
         : !kids.length ? '<div style="padding:8px;color:#64748B;font-size:13px;">No current children at this centre.</div>'
         : !shown.length ? '<div style="padding:8px;color:#64748B;font-size:13px;">No match.</div>'
         : shown.map(k => `<label style="display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid #F1F5F9;cursor:pointer;font-size:13.5px;">
-            <input type="checkbox" data-kid="${k.id}" ${chosen.has(String(k.id)) ? 'checked' : ''} style="width:18px;height:18px;flex:0 0 auto;">
+            <input type="checkbox" data-kid="${k.id}" ${chosen.has(String(k.id)) ? 'checked' : ''} style="flex:0 0 auto;">
             <span style="flex:1;min-width:0;"><b>${esc(k.name)}</b>${k.ref ? ` <span style="color:#64748B;font-size:12px;">${esc(k.ref)}</span>` : ''}${k.school ? `<div style="color:#64748B;font-size:12px;">🏫 ${esc(k.school)}</div>` : ''}</span></label>`).join('');
       listEl.querySelectorAll('[data-kid]').forEach(cb => cb.onchange = () => { if (cb.checked) chosen.add(cb.dataset.kid); else chosen.delete(cb.dataset.kid); count(); });
       count();

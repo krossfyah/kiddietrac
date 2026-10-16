@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Schema;
 final class UiPrefsController extends Controller
 {
     /** Keys this endpoint will store. An unknown key is ignored rather than persisted. */
-    private const ALLOWED = ['chat_dock'];
+    private const ALLOWED = ['chat_dock', 'quick_access'];   // quick_access: the launcher's own tiles, per role (2026-10-16)
 
     /** Guards against a client pushing something large into a shared table. */
     private const MAX_BYTES = 4000;
