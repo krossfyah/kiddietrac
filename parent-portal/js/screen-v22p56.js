@@ -916,27 +916,239 @@
   }
 
   // ============================ Bus routes (transport) =================================
+  /* MANAGED HERE (2026-10-16). Anthony: "how do you add bus routes" — you could not: this
+     screen only listed routes. Now a route is added, edited, paused and deleted here, and
+     each route has its roster of children: stop order, pick-up address (started from the
+     family's address), pick-up and drop-off times. House table pattern (CONVENTIONS.md).
+     The API confines all of it to the active agency and a director's own centres. */
+  const BUS = { main: null, data: null };
+  const busT12 = (t) => {
+    const m = /^(\d{1,2}):(\d{2})/.exec(String(t || ''));
+    if (!m) return '';
+    const h = +m[1];
+    return ((h % 12) || 12) + ':' + m[2] + (h < 12 ? ' am' : ' pm');
+  };
+  const busToast = (msg, kind) => { if (KT.Dom && KT.Dom.toast) KT.Dom.toast(msg, kind || 'success'); };
+  const BUS_F = 'display:block;width:100%;box-sizing:border-box;height:38px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;background:#fff;margin-top:4px;';
+  const BUS_L = 'display:block;font-size:13px;font-weight:700;color:#334155;';
+
   async function renderBusRoutes(main) {
+    BUS.main = main;
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const r = await Api.get('/operations/bus-routes').catch(() => ({ data: [] }));
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <div class="kt-page-hero">
-        <h2>🚐 Bus routes</h2>
-        <p>Pickup + dropoff rosters per route. Track every child on each route with stop order, time, address.</p>
+    main.innerHTML = '<div style="padding:24px;color:#64748B;">Loading bus routes…</div>';
+    let d;
+    try { d = await Api.get('/operations/bus-routes'); }
+    catch (e) { main.innerHTML = `<div class="kt-card" style="color:#B91C1C;">${esc((e && e.message) || 'Could not load bus routes.')}</div>`; return; }
+    BUS.data = d;
+    const rows = d.data || [];
+    const box = document.createElement('div');
+    box.innerHTML = `
+      <div class="kt-hero" style="background:linear-gradient(135deg,#7C2D12 0%,#C2410C 55%,#F59E0B 100%);">
+        <div class="kt-hero-greet">🚐 TRANSPORTATION</div><h1>Bus routes</h1>
+        <div class="kt-hero-sub">Set up each route with its centre, driver and vehicle, then add the children who ride it — in stop order, with their pick-up address and times.</div>
       </div>
-      <div class="kt-card">
-        <table>
-          <thead><tr><th>Route</th><th>Driver</th><th>Vehicle</th><th>Active</th></tr></thead>
-          <tbody>${(r.data || []).map(b => `<tr>
-            <td><strong>${esc(b.route_name)}</strong></td>
-            <td>${esc(b.driver_name || '—')}</td>
-            <td>${esc(b.vehicle_label || '—')}</td>
-            <td><span class="kt-pill ${b.active ? 'kt-pill-success' : 'kt-pill-warning'}">${b.active ? 'Active' : 'Paused'}</span></td>
-          </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;padding:40px;color:#64748B;">No routes set up.</td></tr>'}</tbody>
-        </table>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0 12px;">
+        <span style="font-size:13px;color:#64748B;">${rows.length} route${rows.length === 1 ? '' : 's'} · ${rows.reduce((n, r) => n + (r.children_count || 0), 0)} children riding</span>
+        <span style="flex:1"></span>
+        <button type="button" id="bus-add" class="btn btn-primary" style="height:34px;">+ Add route</button>
       </div>
+      <div id="bus-list"></div>`;
+    main.innerHTML = '';
+    main.appendChild(box);
+    box.querySelector('#bus-add').onclick = () => openBusRoute(null);
+    const host = box.querySelector('#bus-list');
+    if (!rows.length) {
+      host.innerHTML = `<div class="kt-card" style="color:#475569;font-size:13.5px;line-height:1.6;">
+        <b>No routes yet.</b> Press <b>+ Add route</b>, give it a name (e.g. “Morning — North loop”), pick the centre, and optionally a driver and vehicle.
+        Then open the route’s <b>Children</b> to add who rides it.${(d.centres || []).length ? '' : '<br><span style="color:#B45309;">You have no open centres to add a route to.</span>'}</div>`;
+      return;
+    }
+    host.innerHTML = '<div class="kt-card"><table data-kt-no-bulk><thead><tr><th>Route</th><th>Centre</th><th>Driver</th><th>Vehicle</th><th>Riders</th><th>Status</th><th></th></tr></thead><tbody>'
+      + rows.map(b => `<tr>
+          <td><strong>${esc(b.route_name)}</strong></td>
+          <td>${esc(b.centre_name || '—')}</td>
+          <td>${esc(b.driver_name || '—')}</td>
+          <td>${esc(b.vehicle_label || '—')}</td>
+          <td>${b.children_count || 0}</td>
+          <td><span class="kt-pill ${b.active ? 'kt-pill-success' : 'kt-pill-warning'}">${b.active ? 'Active' : 'Paused'}</span></td>
+          <td style="text-align:right;white-space:nowrap;">
+            <button type="button" class="btn btn-secondary btn-sm" data-kids="${b.id}">🧒 Children</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-edit="${b.id}">✏️ Edit</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-pause="${b.id}">${b.active ? '⏸ Pause' : '▶️ Resume'}</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-del="${b.id}">🗑 Delete</button>
+          </td></tr>`).join('')
+      + '</tbody></table></div>';
+    const byId = (id) => rows.find(r => String(r.id) === String(id));
+    host.querySelectorAll('[data-kids]').forEach(b => b.onclick = () => openBusChildren(byId(b.dataset.kids)));
+    host.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openBusRoute(byId(b.dataset.edit)));
+    host.querySelectorAll('[data-pause]').forEach(b => b.onclick = async () => {
+      const r = byId(b.dataset.pause);
+      try { await Api.patch('/operations/bus-routes/' + r.id, { active: !r.active }); }
+      catch (e) { busToast((e && e.message) || 'Could not update', 'error'); return; }
+      busToast(r.active ? 'Route paused' : 'Route resumed');
+      renderBusRoutes(BUS.main);
+    });
+    host.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      const r = byId(b.dataset.del);
+      const ok = await KT.confirm({ title: 'Delete “' + r.route_name + '”?', description: (r.children_count ? r.children_count + ' child' + (r.children_count === 1 ? '' : 'ren') + ' will be taken off this route. ' : '') + 'To stop using a route for now, Pause keeps it. This cannot be undone.', okLabel: 'Delete route' });
+      if (!ok) return;
+      try { await Api.delete('/operations/bus-routes/' + r.id); }
+      catch (e) { busToast((e && e.message) || 'Could not delete', 'error'); return; }
+      busToast('Route deleted');
+      renderBusRoutes(BUS.main);
+    });
+  }
+
+  function openBusRoute(route) {
+    const d = BUS.data || {};
+    const centres = d.centres || [];
+    const drivers = (d.drivers || []).slice();
+    if (route && route.driver_id && !drivers.some(x => String(x.id) === String(route.driver_id))) drivers.unshift({ id: route.driver_id, name: route.driver_name || 'Current driver' });
+    const body = document.createElement('div');
+    body.innerHTML = `<div style="display:grid;gap:12px;">
+      <label style="${BUS_L}">Route name
+        <input id="bus-name" maxlength="120" placeholder="e.g. Morning — North loop" value="${route ? esc(route.route_name) : ''}" style="${BUS_F}"></label>
+      <label style="${BUS_L}">Centre
+        <select id="bus-centre" style="${BUS_F}">
+          ${centres.length === 1 ? '' : '<option value="">— choose a centre —</option>'}
+          ${centres.map(c => `<option value="${c.id}" ${route && String(route.centre_id) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+        </select></label>
+      <label style="${BUS_L}">Driver <span style="font-weight:500;color:#64748B;">(optional)</span>
+        <select id="bus-driver" style="${BUS_F}">
+          <option value="">— no driver yet —</option>
+          ${drivers.map(x => `<option value="${x.id}" ${route && String(route.driver_id) === String(x.id) ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}
+        </select></label>
+      <label style="${BUS_L}">Vehicle <span style="font-weight:500;color:#64748B;">(optional)</span>
+        <input id="bus-vehicle" maxlength="80" placeholder="e.g. Van 2 · ABCD 123" value="${route ? esc(route.vehicle_label || '') : ''}" style="${BUS_F}"></label>
+      ${route ? `<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;"><input type="checkbox" id="bus-active" ${route.active ? 'checked' : ''}> Active (running)</label>` : ''}
+      <div id="bus-err" style="color:#B91C1C;font-size:13px;min-height:16px;"></div>
     </div>`;
+    KT.Shell.Modal.open({
+      title: route ? 'Edit route' : 'Add a bus route',
+      body,
+      actions: [
+        { label: 'Cancel' },
+        { label: route ? 'Save changes' : 'Add route', primary: true, handler: async () => {
+          const err = body.querySelector('#bus-err');
+          const payload = {
+            route_name: body.querySelector('#bus-name').value.trim(),
+            centre_id: parseInt(body.querySelector('#bus-centre').value, 10) || null,
+            driver_id: parseInt(body.querySelector('#bus-driver').value, 10) || null,
+            vehicle_label: body.querySelector('#bus-vehicle').value.trim(),
+          };
+          if (!payload.route_name) { err.textContent = 'Give the route a name.'; return false; }
+          if (!payload.centre_id) { err.textContent = 'Choose the centre.'; return false; }
+          if (route) payload.active = body.querySelector('#bus-active').checked;
+          try {
+            if (route) await Api.patch('/operations/bus-routes/' + route.id, payload);
+            else await Api.post('/operations/bus-routes', payload);
+          } catch (e) { err.textContent = (e && e.message) || 'Could not save.'; return false; }
+          busToast(route ? 'Route updated' : 'Route added — now add its children');
+          renderBusRoutes(BUS.main);
+        } },
+      ],
+    });
+  }
+
+  /* The roster of one route: who rides, in stop order, and a form to add or change one. */
+  function openBusChildren(route) {
+    if (!route) return;
+    const body = document.createElement('div');
+    body.innerHTML = '<div style="color:#64748B;">Loading…</div>';
+    KT.Shell.Modal.open({
+      title: '🚐 ' + route.route_name + ' — children',
+      body,
+      large: true,
+      actions: [{ label: 'Done', primary: true }],
+    });
+    let editing = null;   // the roster row being changed, or null when adding
+    const paint = async () => {
+      let d;
+      try { d = await Api.get('/operations/bus-routes/' + route.id + '/children'); }
+      catch (e) { body.innerHTML = `<div style="color:#B91C1C;">${esc((e && e.message) || 'Could not load the roster.')}</div>`; return; }
+      const rows = d.data || [];
+      const cands = d.candidates || [];
+      const nextStop = rows.reduce((m, r) => Math.max(m, +r.stop_order || 0), 0) + 1;
+      const pick = editing
+        ? `<input value="${esc(editing.child_name)}" disabled style="${BUS_F}background:#F8FAFC;">`
+        : `<select id="bk-child" style="${BUS_F}"><option value="">${cands.length ? '— choose a child —' : 'Every child at this centre is on the route'}</option>${cands.map(c => `<option value="${c.id}">${esc(c.name)}${c.ref ? ' · ' + esc(c.ref) : ''}${c.school ? ' · ' + esc(c.school) : ''}</option>`).join('')}</select>`;
+      body.innerHTML = `
+        <div style="font-size:13px;color:#64748B;margin-bottom:10px;">${esc(route.centre_name || '')}${route.driver_name ? ' · Driver ' + esc(route.driver_name) : ''}${route.vehicle_label ? ' · ' + esc(route.vehicle_label) : ''}</div>
+        ${rows.length ? '<div class="kt-card" style="padding:0;overflow:auto;"><table data-kt-no-bulk data-kt-no-filter data-kt-noexport><thead><tr><th>Stop</th><th>Child</th><th>Pick-up address</th><th>Pick-up</th><th>Drop-off</th><th></th></tr></thead><tbody>'
+          + rows.map(r => `<tr>
+              <td>${r.stop_order != null ? esc(r.stop_order) : '—'}</td>
+              <td><strong>${esc(r.child_name)}</strong>${r.child_ref ? `<div style="font-size:12px;color:#64748B;">${esc(r.child_ref)}</div>` : ''}${r.school ? `<div style="font-size:12px;color:#64748B;">🏫 ${esc(r.school)}</div>` : ''}</td>
+              <td>${esc(r.pickup_address || '—')}</td>
+              <td style="white-space:nowrap;">${busT12(r.pickup_time) || '—'}</td>
+              <td style="white-space:nowrap;">${busT12(r.dropoff_time) || '—'}</td>
+              <td style="text-align:right;white-space:nowrap;">
+                <button type="button" class="btn btn-secondary btn-sm" data-ed="${r.child_id}">✏️ Edit</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-rm="${r.child_id}">🗑 Remove</button>
+              </td></tr>`).join('')
+          + '</tbody></table></div>'
+          : '<div style="background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:12px;padding:14px;color:#475569;font-size:13.5px;">No children on this route yet. Add the first one below.</div>'}
+        <div style="margin-top:16px;padding:14px;border:1px solid #E2E8F0;border-radius:12px;background:#fff;">
+          <div style="font-weight:800;font-size:14px;margin-bottom:10px;">${editing ? 'Change ' + esc(editing.child_name) : '➕ Add a child to this route'}</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+            <label style="${BUS_L}">Child ${pick}</label>
+            <label style="${BUS_L}">Stop #
+              <input id="bk-stop" type="number" min="0" max="999" value="${editing ? esc(editing.stop_order != null ? editing.stop_order : '') : nextStop}" style="${BUS_F}"></label>
+            <label style="${BUS_L}">Pick-up time
+              <input id="bk-pu" type="time" value="${editing && editing.pickup_time ? esc(editing.pickup_time) : ''}" style="${BUS_F}"></label>
+            <label style="${BUS_L}">Drop-off time
+              <input id="bk-do" type="time" value="${editing && editing.dropoff_time ? esc(editing.dropoff_time) : ''}" style="${BUS_F}"></label>
+          </div>
+          <label style="${BUS_L}margin-top:12px;">Pick-up address
+            <input id="bk-addr" maxlength="255" placeholder="Filled in from the family's address — change it if the stop is somewhere else" value="${editing ? esc(editing.pickup_address || '') : ''}" style="${BUS_F}"></label>
+          <div id="bk-err" style="color:#B91C1C;font-size:13px;min-height:16px;margin-top:6px;"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+            ${editing ? '<button type="button" id="bk-cancel" class="btn btn-secondary">Cancel</button>' : ''}
+            <button type="button" id="bk-save" class="btn btn-primary">${editing ? 'Save changes' : 'Add to route'}</button>
+          </div>
+        </div>`;
+      const sel = body.querySelector('#bk-child');
+      if (sel) sel.onchange = () => {
+        const c = cands.find(x => String(x.id) === sel.value);
+        const a = body.querySelector('#bk-addr');
+        if (c && !a.value.trim()) a.value = c.address || '';
+      };
+      const cancel = body.querySelector('#bk-cancel');
+      if (cancel) cancel.onclick = () => { editing = null; paint(); };
+      body.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { editing = rows.find(r => String(r.child_id) === b.dataset.ed); paint(); });
+      body.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => {
+        const r = rows.find(x => String(x.child_id) === b.dataset.rm);
+        const ok = await KT.confirm({ title: 'Take ' + r.child_name + ' off this route?', description: 'They can be added again later.', okLabel: 'Remove' });
+        if (!ok) return;
+        try { await Api.delete('/operations/bus-routes/' + route.id + '/children/' + r.child_id); }
+        catch (e) { busToast((e && e.message) || 'Could not remove', 'error'); return; }
+        renderBusRoutes(BUS.main);   // the list's child count, underneath if (editing && String(editing.child_id) === String(r.child_id)) editing = null;
+        busToast(r.child_name + ' removed from the route');
+        paint();
+      });
+      body.querySelector('#bk-save').onclick = async () => {
+        const err = body.querySelector('#bk-err');
+        const childId = editing ? editing.child_id : parseInt((sel && sel.value) || '', 10);
+        if (!childId) { err.textContent = 'Choose the child.'; return; }
+        const pu = body.querySelector('#bk-pu').value, dof = body.querySelector('#bk-do').value;
+        const stop = body.querySelector('#bk-stop').value;
+        const btn = body.querySelector('#bk-save');
+        btn.disabled = true;
+        try {
+          await Api.post('/operations/bus-routes/' + route.id + '/children', {
+            child_id: childId,
+            stop_order: stop === '' ? null : parseInt(stop, 10),
+            pickup_time: pu || null,
+            dropoff_time: dof || null,
+            pickup_address: body.querySelector('#bk-addr').value.trim(),
+          });
+        } catch (e) { err.textContent = (e && e.message) || 'Could not save.'; btn.disabled = false; return; }
+        renderBusRoutes(BUS.main);   // the list's child count, underneath
+        busToast(editing ? 'Saved' : 'Added to the route');
+        editing = null;
+        paint();
+      };
+    };
+    paint();
   }
 
   // ============================ Room rotation candidates =================================

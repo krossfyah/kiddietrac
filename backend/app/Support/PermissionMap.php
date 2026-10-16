@@ -167,6 +167,8 @@ final class PermissionMap
         'DELETE api/v1/immunization/schedule/{id}' => 'immunizations.manage',
         'DELETE api/v1/marketing/assets/{id}' => 'marketing.manage',
         'DELETE api/v1/marketing/campaigns/{id}' => 'marketing.manage',
+        'DELETE api/v1/operations/bus-routes/{id}' => 'bus_routes.manage',   // added by hand 2026-10-16
+        'DELETE api/v1/operations/bus-routes/{id}/children/{child}' => 'bus_routes.manage',
         'DELETE api/v1/operations/closures/{id}' => 'closures.manage',
         'DELETE api/v1/operations/field-trips/{id}' => 'field_trips.manage',
         'DELETE api/v1/parent/chats/{conversation}' => 'own_children.view',
@@ -637,6 +639,7 @@ final class PermissionMap
         'PATCH api/v1/home-visits/{report}' => 'home_visits.file',
         'PATCH api/v1/inspection-forms/{id}' => 'home_visits.file',
         'PATCH api/v1/marketing/campaigns/{id}' => 'marketing.manage',
+        'PATCH api/v1/operations/bus-routes/{id}' => 'bus_routes.manage',   // added by hand 2026-10-16
         'PATCH api/v1/operations/closures/{id}' => 'closures.manage',
         'PATCH api/v1/operations/inspection/{id}' => 'reports.compliance',
         'PATCH api/v1/parent/messages/{message}' => 'own_children.view',

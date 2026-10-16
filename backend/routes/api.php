@@ -2792,6 +2792,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'createBusRoute']);
         Route::get   ('/operations/bus-routes/{id}/children', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'routeChildren']);
         Route::post  ('/operations/bus-routes/{id}/children', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'addChildToRoute']);
+        // Edit / pause / delete a route, and take a child off one (2026-10-16).
+        Route::patch ('/operations/bus-routes/{id}',   [\App\Http\Controllers\Api\OperationsV2Controller::class, 'updateBusRoute'])->whereNumber('id');
+        Route::delete('/operations/bus-routes/{id}',   [\App\Http\Controllers\Api\OperationsV2Controller::class, 'deleteBusRoute'])->whereNumber('id');
+        Route::delete('/operations/bus-routes/{id}/children/{child}', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'removeChildFromRoute'])->whereNumber('id')->whereNumber('child');
         Route::get   ('/operations/rotation-candidates', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'rotationCandidates']);
         Route::post  ('/operations/room-rotations',    [\App\Http\Controllers\Api\OperationsV2Controller::class, 'planRotation']);
         Route::get   ('/billing/vacation-holds',       [\App\Http\Controllers\Api\BillingV2Controller::class, 'listHolds']);

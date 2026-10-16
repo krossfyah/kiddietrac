@@ -523,77 +523,214 @@ final class OperationsV2Controller extends Controller
     // =========================================================
     // Bus routes + transportation
     // =========================================================
+    /* MANAGED FROM THE PORTAL (2026-10-16). Anthony: "how do you add bus routes" — there was
+       no way to: the screen only listed routes, and the API could create one but never edit,
+       pause or remove it. Now: routes are added, edited, paused and deleted; each route has
+       a roster of children (stop order, pick-up address, pick-up and drop-off times).
+
+       Scope, the same rules as everywhere else: the ACTIVE agency only, and a centre director
+       only their own centres (App\Support\CentreScope). A driver must be current staff of the
+       agency; a child must be a current child of the route's own centre. Rosters list live
+       children only — a withdrawn child drops off the list without being deleted. */
+    private const BUS_DRIVER_ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor'];
+
+    /** Centres of the active agency this caller may manage routes for (open centres only). */
+    private function busCentres(Request $request, int $agencyId): array
+    {
+        $ids = \App\Support\Live::centreIds($agencyId);
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope !== null) $ids = array_values(array_intersect($ids, $scope));
+        return array_map('intval', $ids);
+    }
+
+    /** A route of the active agency at a centre this caller manages — else 404. */
+    private function busRoute(Request $request, int $routeId): object
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $route = DB::table('bus_routes')->where('id', $routeId)->where('agency_id', $agencyId)->first();
+        abort_unless($route && in_array((int) $route->centre_id, $this->busCentres($request, $agencyId), true), 404);
+        return $route;
+    }
+
+    /** Current staff who may drive (ids) for these centres. */
+    private function busDriverIds(int $agencyId, array $centreIds): array
+    {
+        $ids = DB::table('role_assignments')->where('active', true)->whereIn('role', self::BUS_DRIVER_ROLES)
+            ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds ?: [0]))
+            ->pluck('user_id')->unique()->all();
+        if (! $ids) return [];
+        return \App\Support\Audience::excludeOff(DB::table('users as u')->whereIn('u.id', $ids)->whereNull('u.deleted_at'))
+            ->pluck('u.id')->map(fn ($v) => (int) $v)->all();
+    }
+
     public function busRoutes(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
+        $centreIds = $this->busCentres($request, $agencyId);
         $rows = DB::table('bus_routes as br')
             ->leftJoin('users as u', 'u.id', '=', 'br.driver_id')
+            ->leftJoin('centres as c', 'c.id', '=', 'br.centre_id')
             ->where('br.agency_id', $agencyId)
-            ->select('br.*', DB::raw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) as driver_name"))
+            ->whereIn('br.centre_id', $centreIds ?: [0])
+            ->orderByDesc('br.active')->orderBy('br.route_name')
+            ->select('br.*', 'c.name as centre_name',
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as driver_name"))
             ->get();
-        return response()->json(['data' => $rows]);
+        $counts = $rows->count()
+            ? \App\Support\Live::children(DB::table('bus_route_children as brc')->join('children', 'children.id', '=', 'brc.child_id'))
+                ->whereIn('brc.bus_route_id', $rows->pluck('id')->all())->where('brc.active', 1)
+                ->groupBy('brc.bus_route_id')->select('brc.bus_route_id', DB::raw('count(*) as n'))->pluck('n', 'brc.bus_route_id')
+            : collect();
+        $rows->transform(function ($r) use ($counts) {
+            $r->active = (bool) $r->active;
+            $r->children_count = (int) ($counts[$r->id] ?? 0);
+            return $r;
+        });
+
+        $centres = DB::table('centres')->whereIn('id', $centreIds ?: [0])->orderBy('name')->get(['id', 'name']);
+        $drivers = DB::table('users')->whereIn('id', $this->busDriverIds($agencyId, $centreIds) ?: [0])
+            ->orderBy('first_name')->orderBy('last_name')->get(['id', 'first_name', 'last_name'])
+            ->map(fn ($u) => ['id' => (int) $u->id, 'name' => trim($u->first_name . ' ' . $u->last_name)])->values();
+
+        return response()->json(['data' => $rows, 'centres' => $centres, 'drivers' => $drivers]);
+    }
+
+    private function busRouteFields(Request $request, int $agencyId, bool $partial): array
+    {
+        $req = $partial ? 'sometimes' : 'required';
+        $data = $request->validate([
+            'centre_id' => $req . '|integer',
+            'route_name' => $req . '|string|max:120',
+            'driver_id' => 'nullable|integer',
+            'vehicle_label' => 'nullable|string|max:80',
+            'active' => 'sometimes|boolean',
+        ]);
+        $centreIds = $this->busCentres($request, $agencyId);
+        if (isset($data['centre_id'])) abort_unless(in_array((int) $data['centre_id'], $centreIds, true), 422, 'Choose one of your centres.');
+        if (! empty($data['driver_id'])) {
+            abort_unless(in_array((int) $data['driver_id'], $this->busDriverIds($agencyId, $centreIds), true), 422, 'Choose a driver from your staff.');
+        }
+        if (isset($data['route_name'])) {
+            $data['route_name'] = trim((string) $data['route_name']);
+            abort_if($data['route_name'] === '', 422, 'Give the route a name.');
+        }
+        if (array_key_exists('vehicle_label', $data)) $data['vehicle_label'] = trim((string) $data['vehicle_label']) ?: null;
+        if (array_key_exists('driver_id', $data)) $data['driver_id'] = $data['driver_id'] ? (int) $data['driver_id'] : null;
+        return $data;
     }
 
     public function createBusRoute(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'centre_id' => 'required|integer',
-            'route_name' => 'required|string|max:120',
-            'driver_id' => 'nullable|integer',
-            'vehicle_label' => 'nullable|string|max:80',
-        ]);
-        $this->assertCentreAccess($request, (int) $data['centre_id']);
-        $centre = DB::table('centres')->where('id', $data['centre_id'])->first();
+        $agencyId = $this->resolveAgencyId($request);
+        $data = $this->busRouteFields($request, $agencyId, false);
         $id = DB::table('bus_routes')->insertGetId([
-            'agency_id' => $centre->agency_id,
-            'centre_id' => $data['centre_id'],
+            'agency_id' => $agencyId,
+            'centre_id' => (int) $data['centre_id'],
             'route_name' => $data['route_name'],
             'driver_id' => $data['driver_id'] ?? null,
             'vehicle_label' => $data['vehicle_label'] ?? null,
-            'active' => 1,
+            'active' => array_key_exists('active', $data) ? (int) (bool) $data['active'] : 1,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
         return response()->json(['id' => $id], 201);
     }
 
+    public function updateBusRoute(Request $request, int $id): JsonResponse
+    {
+        $route = $this->busRoute($request, $id);
+        $data = $this->busRouteFields($request, (int) $route->agency_id, true);
+        if (array_key_exists('active', $data)) $data['active'] = (int) (bool) $data['active'];
+        if ($data) DB::table('bus_routes')->where('id', $route->id)->update($data + ['updated_at' => now()]);
+        return response()->json(['status' => 'updated']);
+    }
+
+    public function deleteBusRoute(Request $request, int $id): JsonResponse
+    {
+        $route = $this->busRoute($request, $id);
+        DB::transaction(function () use ($route) {
+            DB::table('bus_route_children')->where('bus_route_id', $route->id)->delete();
+            DB::table('bus_routes')->where('id', $route->id)->delete();
+        });
+        return response()->json(['status' => 'deleted']);
+    }
+
     public function routeChildren(Request $request, int $routeId): JsonResponse
     {
-        // SECURITY (v22p96): scope the bus roster to the caller's active agency
-        // (bus_routes.agency_id). Was readable by route id for any caller.
-        $routeAgency = (int) DB::table('bus_routes')->where('id', $routeId)->value('agency_id');
-        abort_unless($routeAgency, 404);
-        abort_unless($routeAgency === (int) $this->resolveAgencyId($request), 403);
-        $rows = DB::table('bus_route_children as brc')
-            ->join('children as c', 'c.id', '=', 'brc.child_id')
-            ->where('brc.bus_route_id', $routeId)
-            ->orderBy('brc.stop_order')
-            ->select('brc.*',
-                DB::raw("CONCAT(c.first_name,' ',c.last_name) as child_name"))
+        $route = $this->busRoute($request, $routeId);
+        $rows = \App\Support\Live::children(DB::table('bus_route_children as brc')->join('children', 'children.id', '=', 'brc.child_id'))
+            ->leftJoin('families as f', 'f.id', '=', 'children.family_id')
+            ->where('brc.bus_route_id', $route->id)
+            ->orderByRaw('COALESCE(brc.stop_order, 9999)')->orderBy('children.first_name')
+            ->select('brc.*', 'children.school', 'f.family_name',
+                DB::raw("TRIM(CONCAT(COALESCE(children.preferred_name, children.first_name),' ',children.last_name)) as child_name"))
             ->get();
-        return response()->json(['data' => $rows]);
+        $ref = $rows->count() ? \App\Support\RefCode::children($rows->pluck('child_id')->all()) : [];
+        $rows->transform(function ($r) use ($ref) {
+            $r->child_ref = $ref[(int) $r->child_id] ?? null;
+            $r->pickup_time = $r->pickup_time ? substr((string) $r->pickup_time, 0, 5) : null;
+            $r->dropoff_time = $r->dropoff_time ? substr((string) $r->dropoff_time, 0, 5) : null;
+            return $r;
+        });
+
+        // Who could be added: current children of the route's centre not already on it,
+        // with the family's address to start the pick-up address from.
+        $on = $rows->pluck('child_id')->all();
+        $candidates = \App\Support\Live::children(DB::table('children')->join('families as f', 'f.id', '=', 'children.family_id'))
+            ->whereNull('f.deleted_at')
+            ->where('f.centre_id', $route->centre_id)
+            ->when($on, fn ($q) => $q->whereNotIn('children.id', $on))
+            ->orderBy('children.first_name')->orderBy('children.last_name')
+            ->get(['children.id', 'children.first_name', 'children.last_name', 'children.preferred_name', 'children.school',
+                'f.address_line1', 'f.address_line2', 'f.city', 'f.postal_code']);
+        $cref = $candidates->count() ? \App\Support\RefCode::children($candidates->pluck('id')->all()) : [];
+        $candidates = $candidates->map(fn ($c) => [
+            'id' => (int) $c->id,
+            'name' => trim(($c->preferred_name ?: $c->first_name) . ' ' . $c->last_name),
+            'ref' => $cref[(int) $c->id] ?? null,
+            'school' => $c->school,
+            'address' => trim(implode(', ', array_filter([$c->address_line1, $c->address_line2, $c->city, $c->postal_code]))),
+        ])->values();
+
+        return response()->json(['data' => $rows, 'candidates' => $candidates]);
     }
 
     public function addChildToRoute(Request $request, int $routeId): JsonResponse
     {
+        $route = $this->busRoute($request, $routeId);
         $data = $request->validate([
             'child_id' => 'required|integer',
             'pickup_address' => 'nullable|string|max:255',
-            'pickup_time' => 'nullable',
-            'dropoff_time' => 'nullable',
-            'stop_order' => 'nullable|integer',
+            'pickup_time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
+            'dropoff_time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
+            'stop_order' => 'nullable|integer|min:0|max:999',
         ]);
+        $ok = \App\Support\Live::children(DB::table('children')->join('families as f', 'f.id', '=', 'children.family_id'))
+            ->where('children.id', $data['child_id'])->where('f.centre_id', $route->centre_id)->whereNull('f.deleted_at')->exists();
+        abort_unless($ok, 422, 'Choose a child enrolled at this route\'s centre.');
+        $stop = $data['stop_order'] ?? null;
+        if ($stop === null) {
+            $stop = (int) DB::table('bus_route_children')->where('bus_route_id', $route->id)->where('child_id', '!=', $data['child_id'])->max('stop_order') + 1;
+        }
         DB::table('bus_route_children')->updateOrInsert(
-            ['bus_route_id' => $routeId, 'child_id' => $data['child_id']],
+            ['bus_route_id' => $route->id, 'child_id' => (int) $data['child_id']],
             [
-                'pickup_address' => $data['pickup_address'] ?? null,
+                'pickup_address' => isset($data['pickup_address']) ? (trim((string) $data['pickup_address']) ?: null) : null,
                 'pickup_time' => $data['pickup_time'] ?? null,
                 'dropoff_time' => $data['dropoff_time'] ?? null,
-                'stop_order' => $data['stop_order'] ?? 0,
+                'stop_order' => (int) $stop,
                 'active' => 1,
             ]
         );
         return response()->json(['status' => 'added']);
+    }
+
+    public function removeChildFromRoute(Request $request, int $routeId, int $childId): JsonResponse
+    {
+        $route = $this->busRoute($request, $routeId);
+        $n = DB::table('bus_route_children')->where('bus_route_id', $route->id)->where('child_id', $childId)->delete();
+        abort_unless($n, 404);
+        return response()->json(['status' => 'removed']);
     }
 
     // =========================================================
