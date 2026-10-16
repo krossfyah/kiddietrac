@@ -1736,6 +1736,15 @@
     roles.forEach(function (r) { var o = document.createElement('option'); o.value = r[0]; o.textContent = r[1]; if (r[0] === cur) o.selected = true; sel.appendChild(o); });
     sel.addEventListener('change', function () { window.ktViewAs(sel.value); });
     wrap.appendChild(lab); wrap.appendChild(sel);
+    /* Desktop: the label sits on its own line so the picker gets the full width. Beside
+       it the select was 99px and "Super admin (default)" read "Supe..." (2026-10-16 sweep);
+       every role fits at full width. Phones keep their own layout (kt-mobile-app.css). */
+    if (!document.getElementById('kt-view-as-fit')) {
+      var st = document.createElement('style'); st.id = 'kt-view-as-fit';
+      st.textContent = '@media (min-width:769px){#kt-view-as{flex-wrap:wrap !important;row-gap:4px;padding-top:6px !important;padding-bottom:7px !important}'
+        + '#kt-view-as>span{flex:1 1 100%}#kt-view-as>select{flex:1 1 100% !important;width:100%}}';
+      document.head.appendChild(st);
+    }
     var _sb = document.getElementById('appSidebar');
     // Slot 20: below the name and the agency selector, above the person picker.
     if (_sb && window.KT && KT.sidebarFoot && KT.sidebarFoot(20, wrap)) { /* placed */ }

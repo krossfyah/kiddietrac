@@ -1074,8 +1074,25 @@
   async function emailQuote(q, container, ctx) {
     var to = (CURRENT_LEAD && CURRENT_LEAD.email) || '';
     if (!to) { toast('⚠️', 'No email address', 'Add an email to this lead first.', '#DC2626'); return; }
-    if (!(await window.KT.confirm({ title: 'Email ' + (q.number || 'this proposal') + '?', description: 'The PDF goes to ' + to + '.' + (q.status === 'draft' ? ' The proposal will be marked Sent.' : ''), okLabel: 'Send email' }))) return;
-    try { await Api.post('/sales/quotes/' + q.id + '/send', {}); toast('📧', 'Proposal emailed', 'Sent to ' + to + '.'); if (container) renderDetail(container, ctx); }
+    // CC / BCC (2026-10-16): optional, several addresses separated by commas.
+    var cc = '', bcc = '';
+    function split(v) { return String(v || '').split(/[\s,;]+/).map(function (x) { return x.trim(); }).filter(Boolean); }
+    for (;;) {
+      var r = await window.KT.prompt({ title: 'Email ' + (q.number || 'this proposal'), okLabel: 'Send email',
+        description: 'The PDF goes to ' + to + '.' + (q.status === 'draft' ? ' The proposal will be marked Sent.' : '') + ' Add CC or BCC to send copies (separate addresses with commas).',
+        fields: [{ key: 'cc', label: 'CC (optional)', value: cc, placeholder: 'name@example.com, other@example.com' }, { key: 'bcc', label: 'BCC (optional)', value: bcc, placeholder: 'name@example.com' }] });
+      if (!r) return;
+      cc = r.cc || ''; bcc = r.bcc || '';
+      var bad = split(cc).concat(split(bcc)).filter(function (x) { return !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x); });
+      if (!bad.length) break;
+      toast('⚠️', 'Check the addresses', 'Not an email address: ' + bad.join(', '), '#DC2626');
+    }
+    var copies = split(cc).concat(split(bcc));
+    try {
+      await Api.post('/sales/quotes/' + q.id + '/send', { cc: split(cc), bcc: split(bcc) });
+      toast('📧', 'Proposal emailed', 'Sent to ' + to + (copies.length ? ' and ' + copies.length + ' cop' + (copies.length === 1 ? 'y' : 'ies') : '') + '.');
+      if (container) renderDetail(container, ctx);
+    }
     catch (e) { toast('⚠️', 'Email failed', e.message || '', '#DC2626'); }
   }
   async function deleteQuote(q, container, ctx) {
@@ -1177,12 +1194,16 @@
       clear(itemsHost);
       items.forEach(function (it, idx) {
         var isDisc = !!it._disc;
-        var d = input({ value: it.description || '', placeholder: 'Line item', style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' + (isDisc ? ';color:#047857;font-weight:700' : '') });
+        var d = textarea({ value: it.description || '', placeholder: 'Line item', rows: 1, maxlength: 255, style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;line-height:1.35;box-sizing:border-box;resize:none;overflow:hidden;font-family:inherit' + (isDisc ? ';color:#047857;font-weight:700' : '') });
+        d.style.setProperty('min-height', '0', 'important');
+        var grow = function () { d.style.setProperty('height', 'auto', 'important'); d.style.setProperty('height', (d.scrollHeight + 2) + 'px', 'important'); };   // a global rule fixes textarea height
+        d.addEventListener('input', grow); requestAnimationFrame(grow); setTimeout(grow, 60);
+        d.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') ev.preventDefault(); });   // one line of text; it just wraps
         var q = input({ type: 'number', step: '0.01', value: it.qty == null ? 1 : it.qty, style: 'width:60px;flex:0 0 60px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
         var p = input({ type: 'number', step: '0.01', value: it.unit_price == null ? 0 : it.unit_price, style: 'width:104px;flex:0 0 104px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' + (isDisc ? ';color:#047857;background:#F0FDF4' : '') });
         if (isDisc) { q.disabled = true; p.readOnly = true; p.title = 'Worked out from the discount plan'; it._pIn = p; }
         d.addEventListener('input', function () { it.description = d.value; }); q.addEventListener('input', function () { it.qty = q.value; recalc(); }); p.addEventListener('input', function () { it.unit_price = p.value; recalc(); });
-        itemsHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' }, [d, q, p, el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer;flex:0 0 auto', onclick: function () { items.splice(idx, 1); drawItems(); recalc(); } }, ['×'])]));
+        itemsHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:flex-start' }, [d, q, p, el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer;flex:0 0 auto', onclick: function () { items.splice(idx, 1); drawItems(); recalc(); } }, ['×'])]));
       });
     }
     drawItems(); recalc(); discIn.addEventListener('input', recalc);
@@ -1223,7 +1244,7 @@
     var pfBox = partyBox('Prepared for', pfSrc, [['company', 'Organisation', 1], ['name', 'Contact name'], ['title', 'Job title'], ['address', 'Address', 1], ['email', 'Email', 1], ['phone', 'Phone']]);
     var pbBox = partyBox('Prepared by', pbSrc, [['name', 'Name'], ['title', 'Title / team'], ['email', 'Email', 1], ['phone', 'Phone']]);
     function partyVal(b) { var o = {}; Object.keys(b.ins).forEach(function (k) { o[k] = b.ins[k].value.trim(); }); return o; }
-    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px;margin-top:12px;align-items:start' }, [pfBox.node, pbBox.node]));
+    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px' }, [pfBox.node, pbBox.node]));
     curSel.addEventListener('change', function () { try { localStorage.setItem('kt_sales_currency', curSel.value); } catch (e) {} recalc(); });
     perSel.addEventListener('change', function () {
       var from = period, to = perSel.value; if (from === to) return;

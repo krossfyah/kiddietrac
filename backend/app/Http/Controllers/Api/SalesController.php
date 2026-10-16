@@ -829,20 +829,39 @@ TXT;
         return $pdf->output();
     }
 
-    public function quoteSend(int $quote)
+    public function quoteSend(Request $r, int $quote)
     {
         $q = SalesQuote::with('items', 'lead')->findOrFail($quote);
         $lead = $q->lead;
         if (! $lead || ! $lead->email) {
             return response()->json(['message' => 'This lead has no email address to send the proposal to.'], 422);
         }
+        // Optional CC / BCC (2026-10-16): arrays or comma-separated strings, every address checked.
+        $list = function ($v) {
+            $parts = is_array($v) ? $v : preg_split('/[\s,;]+/', (string) $v);
+            return array_values(array_unique(array_filter(array_map(fn ($x) => strtolower(trim((string) $x)), (array) $parts), 'strlen')));
+        };
+        $cc = $list($r->input('cc', []));
+        $bcc = $list($r->input('bcc', []));
+        $bad = array_values(array_filter(array_merge($cc, $bcc), fn ($x) => ! filter_var($x, FILTER_VALIDATE_EMAIL)));
+        if ($bad) {
+            return response()->json(['message' => 'Not an email address: ' . implode(', ', $bad)], 422);
+        }
+        if (count($cc) > 10 || count($bcc) > 10) {
+            return response()->json(['message' => 'Up to 10 CC and 10 BCC addresses.'], 422);
+        }
+        $toLc = strtolower(trim($lead->email));
+        $cc = array_values(array_diff($cc, [$toLc]));
+        $bcc = array_values(array_diff($bcc, [$toLc], $cc));
         $bytes = $this->quotePdfBytes($q);
 
         try {
             $body = $this->proposalEmailHtml($q, $lead);
-            Mail::html($body, function ($m) use ($lead, $q, $bytes) {
+            Mail::html($body, function ($m) use ($lead, $q, $bytes, $cc, $bcc) {
                 \App\Support\MailScope::platform($m);   // sales, not tenant mail
                 $m->to($lead->email, $lead->name ?: null)->subject('Your KiddieTrac proposal ' . ($q->number ?: ''));
+                if ($cc) $m->cc($cc);
+                if ($bcc) $m->bcc($bcc);
                 // The email says "just reply": send replies to the sales contact, not the no-reply sender.
                 $pbm = self::preparedBy($q);
                 if (! empty($pbm['email']) && filter_var($pbm['email'], FILTER_VALIDATE_EMAIL)) $m->replyTo($pbm['email'], $pbm['name'] ?: 'KiddieTrac Sales');
@@ -857,7 +876,8 @@ TXT;
             $q->sent_at = now();
             $q->save();
         }
-        $this->logActivity($lead, 'email', 'Proposal ' . ($q->number ?: '') . ' emailed to ' . $lead->email, null);
+        $this->logActivity($lead, 'email', 'Proposal ' . ($q->number ?: '') . ' emailed to ' . $lead->email
+            . ($cc ? ' · CC ' . implode(', ', $cc) : '') . ($bcc ? ' · BCC ' . implode(', ', $bcc) : ''), null);
 
         return response()->json(['ok' => true]);
     }
