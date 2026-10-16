@@ -834,9 +834,7 @@ TXT;
             // Logo + brand bar. Light-on-navy wordmark on a band that is navy in both schemes
             // (Outlook dark mode darkened the card under the dark-ink logo and it went speckled).
             . '<tr><td bgcolor="#081C41" class="kt-band" style="background:#081C41;padding:22px 24px;text-align:center"><img src="https://app.kiddietrac.com/login-wordmark.png" width="220" alt="KiddieTrac" style="display:block;margin:0 auto;border:0;width:220px;max-width:70%;height:auto"></td></tr>'
-            . '<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-            . '<td width="45%" height="5" style="background:#1F6080;font-size:0;line-height:0">&nbsp;</td><td width="35%" height="5" style="background:#2C8AAC;font-size:0;line-height:0">&nbsp;</td><td width="20%" height="5" style="background:#8EC73C;font-size:0;line-height:0">&nbsp;</td>'
-            . '</tr></table></td></tr>'
+            . '<tr><td style="font-size:0;line-height:0"><img src="https://api.kiddietrac.com/email/brand-gradient.png" width="600" height="6" alt="" style="display:block;border:0;width:100%;max-width:600px;height:6px"></td></tr>'
 
             // Graphic 1: photo.
             . '<tr><td><img src="https://www.kiddietrac.com/images/life/colouring-800.jpg" width="600" alt="An educator and a child colouring a butterfly together" style="display:block;border:0;width:100%;max-width:600px;height:auto"></td></tr>'
@@ -882,6 +880,15 @@ TXT;
             . '</td></tr>'
 
             . '</table></td></tr></table></body></html>';
+    }
+
+    private function brandBarHtml(): string
+    {
+        $f = public_path('email/brand-gradient.png');
+        if (! is_file($f)) {
+            return '<div style="height:5px;background:#2C8AAC;margin:14px 0 18px"></div>';
+        }
+        return '<div style="margin:14px 0 18px;line-height:0;font-size:0"><img src="data:image/png;base64,' . base64_encode((string) file_get_contents($f)) . '" alt="" style="display:block;width:100%;height:5px"></div>';
     }
 
     private function preparedByName(SalesQuote $q): ?string
@@ -1048,9 +1055,8 @@ TXT;
             . ($issuedTxt ? '<tr><td style="color:' . $muted . ';padding:1px 8px 1px 0;text-align:right">Issued</td><td style="text-align:right">' . e($issuedTxt) . '</td></tr>' : '')
             . '<tr><td style="color:' . $muted . ';padding:1px 8px 1px 0;text-align:right">Valid until</td><td style="text-align:right">' . e($validTxt) . '</td></tr>'
             . '</table></td></tr></table>'
-            // Brand bar (dompdf has no gradients: three blocks of the brand colours).
-            . '<table style="width:100%;border-collapse:collapse;margin:14px 0 18px"><tr>'
-            . '<td style="height:5px;background:#1F6080;width:45%"></td><td style="height:5px;background:#2C8AAC;width:35%"></td><td style="height:5px;background:#8EC73C;width:20%"></td></tr></table>'
+            // Brand bar: a gradient image, embedded (dompdf has no CSS gradients and remote images are off).
+            . $this->brandBarHtml()
             . ($q->title ? '<div style="font-size:16px;font-weight:bold;color:' . $navy . ';margin-bottom:14px">' . e($q->title) . '</div>' : '')
             // Prepared for / by.
             . '<table class="r-stack r-cards" style="width:100%;border-collapse:collapse;font-size:10.5px;line-height:1.5;color:#334155"><tr>'
