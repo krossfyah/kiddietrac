@@ -613,7 +613,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div class="er-wrap">'
       + '<div class="kt-page-hero"><h2>🎛️ Room Controls</h2>'
-      + '<p>Who works in which room, routine headcount reminders, and sleep checks.</p></div>'
+      + '<p>Who works in which room, headcount reminders, sleep checks, daily records reminders and auto sign-off.</p></div>'
       + '<div id="rc-tabs"></div></div>';
     /* A painter that returns quietly (the API said this is not theirs to change) leaves
        its pane empty; say so rather than show nothing. */
@@ -631,6 +631,9 @@
       { key: 'assignments', label: '🚪 Room assignments', paint: function (pane) { return renderAssignments(pane); } },
       { key: 'headcounts', label: '👀 Headcounts', paint: function (pane) { return guarded(KT.Headcount && KT.Headcount.paintSettings)(pane); } },
       { key: 'sleep', label: '😴 Sleep checks', paint: function (pane) { return guarded(KT.sleepChecks && KT.sleepChecks.paintSettings)(pane); } },
+      // Daily records reminders and auto sign-off (2026-10-15).
+      { key: 'records', label: '📝 Daily records', paint: function (pane) { return guarded(KT.RecordReminders && KT.RecordReminders.paintSettings)(pane); } },
+      { key: 'signoff', label: '⏱️ Auto sign-off', paint: function (pane) { return guarded(KT.ClockSettings && KT.ClockSettings.paintSignoff)(pane); } },
     ]);
   }
 

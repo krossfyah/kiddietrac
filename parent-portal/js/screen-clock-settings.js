@@ -320,7 +320,8 @@
     });
   }
 
-  KT.ClockSettings = { render: render };
+  // paintSignoff is also drawn in Settings → Room Controls → Auto sign-off (2026-10-15).
+  KT.ClockSettings = { render: render, paintSignoff: paintSignoff };
   ['agency_admin', 'centre_director', 'platform_admin'].forEach(function (r) {
     KT.Shell.registerScreen(r + ':clock-settings', render);
   });

@@ -51,6 +51,9 @@ Schedule::command('drills:remind')->everyFifteenMinutes()->withoutOverlapping(14
 /* Headcount reminders: only agencies that switched them on (Headcounts screen); rooms with children
    signed in and no count within the agency's interval. Bell + push to clocked-in educators, never SMS. */
 Schedule::command('headcounts:remind')->everyFiveMinutes()->withoutOverlapping(10);
+/* Daily records reminders (2026-10-15): each agency after its own send time (Settings > Room
+   Controls > Daily records), once per educator per day - App\Support\RecordReminders. */
+Schedule::command('records:remind')->everyFifteenMinutes()->withoutOverlapping(14);
 // Overdue sleep checks (2026-10-13, Ontario O. Reg. 137/15 s.33.1): one cheap query a minute instead of phones polling.
 Schedule::command('sleep-checks:alert')->everyMinute()->withoutOverlapping(5)->runInBackground();
 /* Ontario drill schedule (O. Reg. 137/15 s.68 / s.68.2, 2026-10-13): missing-child drill due within 14 days or

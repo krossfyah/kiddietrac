@@ -2295,6 +2295,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hazards/{id}/audience',   [\App\Http\Controllers\Api\HazardController::class, 'audienceCount'])->whereNumber('id');
         Route::post  ('/hazards/{id}/notify',     [\App\Http\Controllers\Api\HazardController::class, 'notify'])->whereNumber('id');
     });
+    /* DAILY RECORDS REMINDERS (2026-10-15): Settings > Room Controls > Daily records. Admins edit,
+       directors read (their centres' reminders) - enforced in RecordReminderController. */
+    Route::middleware('role:agency_admin,platform_admin,centre_director')->group(function () {
+        Route::get ('/admin/record-reminders', [\App\Http\Controllers\Api\RecordReminderController::class, 'show']);
+        Route::post('/admin/record-reminders', [\App\Http\Controllers\Api\RecordReminderController::class, 'update']);
+    });
     /* POLICY LIBRARY + STAFF SIGN-OFFS + TRAINING MATRIX (2026-10-13; O. Reg. 137/15 s.6.1, s.46, s.58(1.1)).
        Managing: admins (agency) and directors (their centres) — scoped again in the controller.
        Reading and signing: every staff member the policy applies to. */
