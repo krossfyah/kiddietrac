@@ -16,8 +16,8 @@ Keeping your details current means the centre can always reach you, your forms p
 3. Save.
 4. For your child's photo, allergies or immunisations, use the setup step you were shown
    when you joined — or message your director.
-5. For emergency contacts and pickup people, message your director. That one is
-   deliberate: it decides who may collect your child.
+5. For emergency contacts and pick-up people, open **Family & pick-ups** from the menu.
+   You can add, edit and remove them yourself, and the centre is told every time.
 
 ## What you can update yourself
 
@@ -31,26 +31,61 @@ In **Settings** you can usually update:
 
 Changes save immediately and are visible to your centre.
 
+In **Family & pick-ups** you can also keep your **emergency contacts and pick-up people** up to date (see below).
+
 ## What the centre controls
 
 For safety and accuracy, some things are managed by your director rather than edited freely:
 
 - **Your child's enrolment, room, and schedule**
-- **Emergency contacts and authorised pickup people**
-- **Adding another guardian** to your family
+- **The parents and guardians on your family**, including **adding another guardian**
 - **Your child's date of birth**
 
-To change any of these, send your director a message or email with the details. They'll update it — and because these affect who can collect your child, that extra step is deliberate.
+To change any of these, send your director a message or email with the details. They'll update it.
 
-## Emergency contacts and pickup people
+## Emergency contacts and pick-up people
 
-These are among the most important details in the whole system: they decide who the centre can call in an emergency and who is allowed to collect your child. Please:
+These are among the most important details in the whole system: they decide who the centre can call in an emergency and who is allowed to collect your child. Educators see this list on your child's record and check it at pickup.
+
+[[open: #family-contacts | Open Family & pick-ups]]
+
+Menu → **Family & pick-ups** (the **Pickup people** tile opens the same list). It shows:
+
+- **Parents & guardians** — who is on your family's file, and whether each one has signed in. To change these, contact the centre.
+- **Emergency contacts & pick-ups** — the people you've named. Each one says **✓ may pick up** or **emergency contact only**.
+
+### Adding someone
+
+1. Press **＋ Add contact**.
+2. Enter their **Full name** and a **Phone** number. Both are required.
+3. Add their **Relationship to the child** (for example Grandmother, Aunt, Neighbour), and a **Second phone** if they have one. Choose its type (Mobile, Home, Work or Other). A work number can have an extension.
+4. Add their **Email** if you have it.
+5. Tick **Allowed to pick up the children** if they may collect your child. Leave it unticked for an emergency contact only.
+6. Add **Notes for the centre** if there's anything staff should know.
+7. Press **Add contact**.
+
+> **Tip:** The centre will ask a new pick-up person for photo ID the first time they come.
+
+### Changing or removing someone
+
+- **Edit** — change any of their details, or untick **Allowed to pick up the children**.
+- **Remove** — takes them off the list completely. You're asked to confirm.
+
+### Who is told
+
+Every addition, change and removal is sent straight to your child's educators, the centre director and your agency's admins. Your family's other parents are told too. The change is also kept on record, so the centre can always see what changed and when.
+
+A family can have up to 20 contacts.
+
+Please:
 
 - Keep at least one emergency contact who **isn't** you
-- Tell your director promptly if a phone number changes
-- Ask to update the pickup list whenever it changes (a new grandparent, a nanny, or removing someone)
+- Update a phone number as soon as it changes
+- Update the list whenever it changes (a new grandparent, a nanny, or removing someone)
 
-Educators check this list at pickup, so it needs to be right.
+### A login of their own
+
+A pick-up person can have their own **pick-up login**: their own QR code to check your children in and out, without seeing any billing. Press **🔑 Request pick-up login** next to their name. See [Pick-up logins](pick-up-logins).
 
 ## Your child's photo, allergies and immunisations
 
@@ -68,16 +103,21 @@ On the same step you can record:
 To change any of it afterwards, message your director. Allergies especially: tell them
 straight away rather than waiting, because that list is read every single day.
 
+Your child's record in the app also shows **Pick-ups & emergency contacts**, with an **Add or change pick-ups →** link to the list.
+
 ## Texts and phone calls
 
 Your mobile number is also how the centre texts you, and how an urgent announcement call
-reaches you. In **Settings → Profile**, the **Texts and phone calls** card lets you agree
+reaches you. In **Settings → Notifications**, the **📱 Texts & calls** tab lets you agree
 to texts and choose which kinds of text and call you want.
 
-[[show: #settings @ Profile > Texts and phone calls | Show me my text and call settings]]
+[[open: #settings?tab=notifications&sub=texts | Open my text and call settings]]
 
 See [Texts and phone calls](texts-and-phone-calls).
 
 ## Keeping it tidy
 
 A five-minute check at the start of each term — photo, phone, email, address, emergency contacts — saves a lot of hassle later. If in doubt, message your director and ask them to confirm what's on file.
+
+??? I can't see Add contact or Edit. | If you signed in with a pick-up login, the list is read-only for you. Only the family's parents and guardians can change it.
+??? Can I add another parent here? | No. Parents and guardians are set by the centre. Message your director.

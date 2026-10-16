@@ -29,6 +29,7 @@ You can withdraw a request while it is waiting, and even after it has been appro
 Withdrawing puts the calendar back to normal and lets the right people know.
 
 ??? Can I request part of a day across two dates? | No — part of a day is always a single date. Make two requests if you need both.
+??? Will my centre close while I'm away? | Your director or admin decides when they approve the request. If they close the centre, families are emailed and get the usual closure reminders.
 ??? Who sees my reason? | Your director and the agency admins who decide on the request.
 
 See also: [My hours and pay](my-hours-and-pay), [Clocking in and out](clocking-in-and-out).

@@ -28,6 +28,19 @@ The screen turns red and lists who was not seen.
 - **Serious occurrence report** opens a new incident form for that child, already filled in.
 - When everyone is found, tap **✅ Found — all accounted for** and say where. Anyone you alerted is told.
 
+## The Headcounts screen
+
+Open **Headcounts** from the menu. It has two tabs:
+
+- **👀 Rooms now** — each of your rooms, how many children are signed in, when the last count was done, and a **👀 Headcount** button.
+- **📜 Logs** — the history of counts, with filters for date, room, moment and result.
+
+[[open: #headcounts | Open Headcounts]]
+
+Need it as a document? **Reports → Headcounts** gives one day, or any range, for your rooms and the counts you took. You can download it as PDF, Excel or CSV.
+
 ## Reminders
 
 Your agency can switch on reminders. If a room has gone a set time without a count, the educators clocked in to that room get a reminder.
+
+Reminders stop at the end of your rostered shift that day. If you have no roster, they stop at the centre's closing time. You will not keep getting them if you stay late.

@@ -31,6 +31,20 @@ The Messages tab is your way to communicate with your child's room. Each child h
 
 The educator sees the message in their tablet view.
 
+## 🚨 Emergency messages
+
+If something is truly urgent, **phone the centre first**. You can also flag a message as an
+emergency:
+
+1. Press **🚨** beside **Send** and confirm **Yes, emergency**. The button turns red.
+2. Type your message and send it.
+
+The staff who receive it have their phones **ring and vibrate until they open it, for up to
+2 minutes**. The message shows a red **🚨 EMERGENCY** label. The flag applies to that one
+message only, and every emergency message is recorded.
+
+Everyday messages arrive as an ordinary notification, so please keep 🚨 for real emergencies.
+
 ## Response time
 
 Educators are caring for your child during the day — they can't always reply quickly. Reasonable expectations:

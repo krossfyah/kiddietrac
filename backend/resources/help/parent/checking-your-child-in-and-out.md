@@ -58,6 +58,19 @@ Just scan once more to check back in. Or ask an educator to correct it.
 **"Do I have to scan, or will the educator always do it?"**
 Either works. Scanning yourself is faster and unambiguous, but the centre can always check your child in for you.
 
+## "Please confirm your pick-up time"
+
+If nobody signed your child out at pick-up, the centre's system signs them out automatically in the evening. That time is a placeholder, not when you actually picked up.
+
+When this happens you get a notification and an email called **Please confirm your pick-up time**. It shows when your child was signed in and the automatic sign-out time.
+
+1. Read the times in the email.
+2. Let the centre know when you really picked up. The email includes the centre's phone number or email address when the centre has them on file.
+
+Nothing is wrong, and you don't need to do anything else. The real time keeps your child's attendance record accurate for ratios, your statements and any subsidy or CWELCC claim.
+
+> **Tip:** Scan out at pick-up, or ask an educator to sign your child out, and you won't get this email.
+
 ## Why it matters
 
 Accurate check-in/out keeps your child safe (the centre always knows exactly who is present), supports correct staff-to-child ratios, and gives you an honest record of your child's hours. It only takes a second — please make it part of your routine.

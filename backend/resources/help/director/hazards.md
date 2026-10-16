@@ -9,7 +9,9 @@ Keep a record of any **non-routine hazard** at a centre — a broken fence board
 
 ## Where it is
 
-Sidebar → **Hazards** (beside the Drill log). Admins see every centre; directors see their own. Educators see **Report a hazard** in their menu and on their home screen.
+Sidebar → **Hazards** (beside the Drill log). Admins see every centre; directors see their own. Educators and home visitors see **Report a hazard** in their menu and on their home screen.
+
+[[open: #hazards | Open Hazards]]
 
 ## Recording a hazard
 
@@ -18,7 +20,9 @@ Sidebar → **Hazards** (beside the Drill log). Admins see every centre; directo
 3. Write the **steps taken** — this is what parents will read.
 4. Tick **Not routine — parents need to be told** if it applies.
 
-When an educator reports a hazard, the centre's directors get an in-app notice and an email straight away (the agency admins, if the centre has no director). Directors and admins can then edit it and add the steps taken.
+## Who hears about a new report
+
+When someone reports a hazard, the centre's **directors and the agency admins** both get an in-app notice and an email straight away. The person who reported it is not sent a copy of their own report. Directors and admins can then edit it and add the steps taken.
 
 ## Notifying parents
 
@@ -26,8 +30,17 @@ From the row's actions choose **Notify parents**. The confirmation tells you how
 
 The notice cannot be sent until the steps taken are recorded. After sending, the **Parents** column shows when and how many families were told; anything held back by your email settings is reported rather than counted as sent.
 
+## Staff get a copy
+
+Every parent notice, and every "it is resolved" update, is also copied to the centre's **educators, home visitors and directors** and to the **agency admins** — an in-app notice and an email marked **Copy**, saying how many families it went to. That way whoever is asked about it at pick-up has read exactly what parents read. Anyone who already received the parent email (for example, a staff member who is also a parent at the centre) is not emailed twice.
+
+The message after sending tells you how many staff got the copy.
+
 ## Resolving
 
-Choose **Mark resolved** and say what was done. Then **Tell parents it is resolved** sends a short update. A hazard resolved by mistake can be **reopened**.
+Choose **Mark resolved** and say what was done. Then **Tell parents it is resolved** sends a short update (staff are copied on this too). A hazard resolved by mistake can be **reopened**.
 
 Every report, change, notice and resolution is in the audit log.
+
+??? Who is told when an educator reports a hazard? | The centre's directors and the agency admins, by in-app notice and email.
+??? Do parents get a text? | No. Parent notices are in-app and email only.

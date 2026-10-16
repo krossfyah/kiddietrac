@@ -32,6 +32,20 @@ Either way, giving as much notice as you can is appreciated — especially for m
 
 For an unexpected sick day, the fastest thing is a short message to the room first thing in the morning: *"Aria won't be in today — she's got a cold. Back tomorrow we hope!"* That way the educators aren't wondering, and it's on the record.
 
+## "Has your child arrived?" messages and calls
+
+Some centres use **Safe Arrival**. If your child was expected today, hasn't been signed in a little after their usual drop-off time, and no absence was reported, you get a message asking whether they've arrived. Tap **Not attending today** in the app if they're staying home.
+
+If nobody answers, your centre may **phone** you. The automated call names your child and asks you to press a key:
+
+- **1** — your child is absent today. The absence is recorded and the centre is told.
+- **2** — you're on the way and arriving late. The centre is told to expect your child.
+- **3** — you've already dropped your child off. Your child isn't signed in, so the centre is alerted straight away to find and sign them in. If you can, call the centre as well.
+
+Your centre may offer only some of these choices, and may word the call differently. Guardians are usually called one at a time, primary first. If you've turned off phone calls in your settings, you won't be called.
+
+> **Tip:** Telling the centre about an absence in advance means you won't get these messages or calls that day.
+
 ## Does an absence change my bill?
 
 That depends entirely on **your centre's policy**. Some centres charge a flat monthly fee regardless of attendance; others credit vacation days or have a set number of paid absences a year. Kiddietrac records the absence — how it's billed is up to your director. If you're unsure, ask them directly.

@@ -30,7 +30,18 @@ The rules come from your agency's **province / state** (Agency overview → Edit
 2. Add the evacuation time, how many children were present, which staff took part, and anything to fix (a blocked exit, a slow room).
 3. Press **Record drill**.
 
-Drills can't be dated in the future. The person who recorded a drill, a director or an admin can remove it. Every recording and removal goes in the audit log.
+Drills can't be dated in the future, and a recorded drill can't be edited. Check the details before you press **Record drill**.
+
+## Removing a drill
+
+Drill records are kept for **12 months**. They are your evidence for inspections.
+
+- The person who recorded a drill, a director or an admin can remove it **within 24 hours of entering it**. Use this to undo a mistake, such as the wrong centre or date, then record it again correctly.
+- After 24 hours, the drill stays in the log until it is a year old. If you try to remove it, the portal tells you the date from which it can be removed.
+
+Every recording and removal goes in the audit log.
+
+??? I entered a drill with the wrong date yesterday. Can I fix it? | Only within 24 hours of entering it: remove it and record it again. After that the record stays for 12 months.
 
 ## Reminders
 

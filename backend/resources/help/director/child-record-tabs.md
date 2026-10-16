@@ -35,7 +35,7 @@ anyone's timezone.
 
 ## Tabs
 
-- **Overview** — guardians and active health flags.
+- **Overview** — guardians, pick-ups and emergency contacts, and active health flags. See below.
 - **Enrolment** — the child's current placement (**agency, centre, room**),
   status, enrolled-since date and monthly fee; **school details** (for
   school-age children); and the full **enrolment history**.
@@ -51,6 +51,17 @@ anyone's timezone.
   plans for the rooms they were in. Sections start collapsed with a count beside each;
   open one to page through it 25 at a time. This works for archived children too — see
   [Archived records and retention](archived-records).
+
+## Guardians, pick-ups and emergency contacts
+
+The **Overview** tab lists everyone on the family's file.
+
+- **Guardians** — with relationship, **primary**, their phone numbers (a second number shows its type, such as work, and any extension) and **🚸 pick-up login** if that is what they have. Each shows **✓ Signs in**, or **✉ Send login invite** if they have never signed in.
+- **Pick-ups & emergency contacts** — the people the family has named, authorised pick-ups first. Each says **✓ can pick up** or **emergency contact only**, with their phones and email. Contacts show initials rather than a photo.
+
+Next to each contact, directors and admins can **🔑 Set up login**, **✓ Approve** or **Decline** a parent's request, or **Remove** a login. See [Pick-up logins](pick-up-logins).
+
+Parents keep this list themselves in their app. When they add, change or remove someone, the child's educators, the centre's directors and your agency's admins are notified (directors and admins by email too), and the before and after is kept in the audit log. If nobody is on file, add contacts in Families → **Edit** → **Emergency**.
 
 ## Children list
 

@@ -22,7 +22,7 @@ Each agency gets a SEO-friendly public page at `api.kiddietrac.com/api/v1/public
 
 ## Customizing
 
-The page uses your `agencies.brand_primary_color` and `agencies.brand_logo_url`. Update them in **Settings → Branding** and the public page reflects within seconds.
+The page uses your agency's logo and primary colour. Change them on the **🏷️ White-label & logo** tab of **Branding** (**Agency overview → ✏️ Edit agency → Open Branding →**), and the public page reflects them within seconds. See [White-label branding](white-label-branding).
 
 ## SEO
 

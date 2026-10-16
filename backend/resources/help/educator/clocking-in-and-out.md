@@ -64,13 +64,28 @@ deposit — live under **Settings → My profile & security**. See
 
 In Kiddietrac, the time clock records **hours worked** — it is not a payroll or pay-rate system. Your centre uses these hours in whatever way they run payroll. If a shift looks wrong, tell your director; they can correct a punch.
 
+## Reminders and automatic clock-outs
+
+Your agency can send you reminders, by email, push notification or both, plus a notice in the app.
+
+- **Still clocked in.** If you are still on the clock after your rostered shift has ended, or after your usual day plus about an hour (never more than 8 hours), you get a "you're still clocked in" reminder in the evening. A shift left open on an earlier day gets a reminder too, asking you to have your director set the correct out time.
+- **Children still signed in.** At the same time, if children you signed in have not been signed out, you get a list of them. Sign each one out at pick-up. If they left earlier, use **⏱ Fix** to record the real pick-up time.
+- **Clocked out automatically.** If you still did not clock out, the agency's auto sign-off closes your shift that evening. You get a notification, a push and an email saying so, and your director and the agency admins get a copy.
+
+If it happens **3 or more times in 7 days**, your director and the agency admins are told it has become a pattern.
+
+Headcount reminders stop at the end of your rostered shift, or the centre's closing time if you have no roster, so staying late does not mean a stream of reminders.
+
 ## Common questions
 
 **"I forgot to clock in this morning."**
 Tell your director as soon as you remember — they can add or adjust the punch so your hours are right.
 
 **"I forgot to clock out and it ran overnight."**
-Same thing — let your director know and they'll fix the shift length.
+Same thing — let your director know and they'll fix the shift length. Don't clock out the next day to close it: that would record every hour since you clocked in.
+
+**"I got an email saying I was clocked out automatically."**
+Your agency closes shifts nobody clocked out of, at a set time each evening. The time it used is a placeholder, not when you left. Tell your director or administrator the time you actually left so they can correct it. See **Reminders and automatic clock-outs** above.
 
 **"The clock says I'm clocked in but I'm sure I clocked out."**
 Tap the strip to check the current state, then clock out if needed. If it's genuinely stuck, refresh the app; if it persists, tell your director.

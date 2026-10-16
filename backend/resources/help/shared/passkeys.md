@@ -1,6 +1,6 @@
 ---
 title: Signing in with a passkey
-category: Your account
+category: Your Account
 order: 12
 ---
 # Signing in with a passkey

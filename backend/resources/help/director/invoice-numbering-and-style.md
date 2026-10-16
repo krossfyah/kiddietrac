@@ -6,15 +6,13 @@ roles: agency_admin, platform_admin
 ---
 # Invoice style and numbering
 
-**Branding → Invoice style / Invoice numbering.** This is where you choose how your invoices look and how they are numbered. It sits beside your logo and brand colour, because the invoice is your brand as far as a family is concerned.
+**Branding → 🧾 Invoices.** This is where you choose how your invoices look and how they are numbered. It sits beside your logo and brand colour, because the invoice is your brand as far as a family is concerned.
 
-[[open: #admin-branding | Open Branding]]
+[[open: #admin-branding?tab=invoices | Open Branding → Invoices]]
 
-**To get there:** agency admins go to **Agency overview → ✏️ Edit agency → Open Branding →**. Platform admins can also use **Reseller → Branding**. Either way, the screen works on the agency you are currently viewing.
+**To get there:** agency admins go to **Agency overview → ✏️ Edit agency → Open Branding →**. Platform admins can also use **Reseller → Branding**. Either way, the screen works on the agency you are currently viewing. Branding opens on its first tab; choose **🧾 Invoices** in the row of tabs at the top.
 
 ## Invoice style
-
-[[show: #admin-branding @ Invoice style | Show me the Invoice style list]]
 
 Pick a style from the **Invoice style** list. A short description of the style appears under the list, and the **Live invoice preview** on the right switches to that style straight away, so you can see it **before** you save.
 
@@ -26,13 +24,11 @@ There are twelve styles:
 
 These are different layouts, not one layout in different colours. Every style still carries **your own logo, business details and support address**: the style decides the shape of the document, and the brand inside it stays yours.
 
-Click **Save changes** to apply it.
+Click **Save changes** to apply it. The button saves the **White-label & logo**, **Invoices** and **Contact & legal** tabs together.
 
 > **Important:** The style is applied when an invoice is **drawn**, not when it is issued. After you change it, every invoice, past and future, uses the new style the next time it is viewed, downloaded or emailed. Copies already sitting in a family's inbox do not change. So a copy of an old invoice that you send again will not match the one the family first received.
 
 ## Invoice numbering
-
-[[show: #admin-branding @ Invoice numbering | Show me Invoice numbering]]
 
 You can set the format of your invoice numbers, and where a running number starts. Either choose one of the presets from **Start from a preset…**, or type your own format in the box.
 
@@ -44,7 +40,7 @@ A format is ordinary text with tokens in curly brackets. Anything that is not a 
 | `{YY}` | the short year, e.g. 26 |
 | `{MM}` | the month, e.g. 10 |
 | `{DD}` | the day |
-| `{FAMILY}` | the family number, four digits |
+| `{FAMILY}` | the family's account number, four digits |
 | `{N}` | the instalment number within a schedule or plan, two digits |
 | `{SEQ}` | a running number for your agency |
 
@@ -61,6 +57,7 @@ A format is ordinary text with tokens in curly brackets. Anything that is not a 
 
 ### Good to know
 
+- `{FAMILY}` is an internal account number. It is **not** the family's reference ID (such as ILH-F-0017), and it has not changed. Every invoice style also prints the family's reference ID beside the bill-to name, so you do not need it in the invoice number. See [Reference IDs](reference-ids).
 - The default format is `INV-{YYYY}{MM}-{FAMILY}-{N}`, for example **INV-202610-0081-01**. If you never change the setting, your numbers look exactly as they always have.
 - A new format applies to **new** invoices only. Existing invoices keep the numbers they were issued with.
 - No two invoices can share a number. If a format produces a number that already exists, a suffix such as **-2** is added.
@@ -73,4 +70,4 @@ A format is ordinary text with tokens in curly brackets. Anything that is not a 
 ??? Why is my new start number being ignored? | The counter never moves backwards. If it has already passed the number you typed, it carries on from where it is.
 ??? Can I preview a style without changing it for everyone? | Yes. Choosing a style updates the preview immediately. Nothing changes until you click Save changes.
 
-See also: [White-label branding & invoices](white-label-branding) · [Billing setup & settings](billing-setup) · [Payment schedules](payment-plans)
+See also: [White-label branding & invoices](white-label-branding) · [Reference IDs](reference-ids) · [Billing setup & settings](billing-setup) · [Payment schedules](payment-plans)

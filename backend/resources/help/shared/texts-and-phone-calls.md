@@ -1,6 +1,6 @@
 ---
 title: Texts and phone calls — choosing what you get
-category: Your account
+category: Your Account
 order: 20
 ---
 # Texts and phone calls — choosing what you get
@@ -8,11 +8,11 @@ order: 20
 Your agency can reach you by text message and, for urgent notices, by an automated phone
 call. You decide which kinds you want.
 
-[[show: #settings @ Profile > Texts and phone calls | Show me my text and call settings]]
+[[open: #settings?tab=notifications&sub=texts | Open my text and call settings]]
 
 ## Where to find it
 
-- **Everyone:** **Settings → Profile**, the **Texts and phone calls** card.
+- **Everyone:** **Settings → Notifications**, then the **📱 Texts & calls** tab. (It used to be on the Profile tab.)
 - **Agency admins** can also open **My profile** and choose the **💬 Texts & calls** tab.
 
 Both show the same settings, so a change in one appears in the other.

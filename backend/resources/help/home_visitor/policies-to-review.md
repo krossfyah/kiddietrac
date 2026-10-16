@@ -1,6 +1,6 @@
 ---
 title: Policies to review
-category: Your account
+category: Your Account
 order: 23
 roles: educator, home_visitor, centre_director
 ---

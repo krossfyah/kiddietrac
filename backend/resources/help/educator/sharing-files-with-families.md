@@ -6,7 +6,7 @@ order: 5
 
 # Sharing files with families
 
-**Files** (📎 in the menu) is where you send printables, homework and notes to the families you work with, and where you see what they send back.
+**Files** (📎 in the menu, and the **📎 Files** tile on your home screen) is where you send printables, homework and notes to the families you work with, and where you see what they send back.
 
 ## Sending a file
 
@@ -20,11 +20,19 @@ You can only send to the families of children in your care — the same children
 
 ## What families see
 
-Parents get a notification in their app (and, unless your agency has switched it off, an email saying a new file is waiting — the file itself is never attached to the email). They open it in **Files**, where they can view or download it.
+Parents get a notification in their app and, unless your agency has switched it off, an email saying a new file is waiting. The file itself is never attached to the email. They open it in **Files**, where they can view or download it.
 
 ## Files families send you
 
-When a parent sends something back — finished homework, a signed note — it appears under **Received** with a dot until someone opens it, and the staff who care for that family get a notification.
+When a parent sends something back — finished homework, a signed note — it appears under **Received** with a dot until someone opens it. The tab shows how many are new, for example **Received (2 new)**.
+
+The staff who care for that family get a notification in the app and, unless your agency has switched it off, an email saying a file is waiting.
+
+## The tabs
+
+- **Received**: files families sent.
+- **Sent**: files you sent.
+- **All with my families**: every file exchanged with the families you work with, both ways, whoever sent it. The **From → To** column shows who sent it to whom. Use it to see a file a colleague or your director sent to one of your families.
 
 ## Deleting
 

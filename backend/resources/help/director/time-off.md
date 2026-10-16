@@ -34,16 +34,40 @@ Under **Team requests** there are two tabs:
 
 [[show: #time-off @ Awaiting decision | Show me the Awaiting decision tab]]
 
-The person who asked is told your decision in the app and by email.
+When you press **Approve**, a short **Approve time off** dialog opens (see below). You
+can add a **Note back to them** there. The person who asked is told your decision in the
+app and by email.
 
-## When approved time off closes a centre
+## Choosing whether the centre closes
 
-If the person is the **only** active staff member at their centre, like a home provider
-working alone, approving a full-day request also marks the centre **closed** for those
-dates. Families are then told through your agency's normal closure reminders.
+When you approve, you decide whether the person's centre stays open or closes for those
+dates. The **Approve time off** dialog shows the dates and the centre, and two choices:
 
-A centre with other staff is not closed, because someone covers. **Part-day time off
-never closes a centre.** The provider is still there for the rest of the day.
+- **Someone covers**: the centre stays open. Below it you see who else works at that centre, or "Nobody else works at this centre."
+- **Close** *centre name* **for these dates**: the centre is marked closed. Parents of the children still enrolled there, and the agency's admins and directors, are emailed straight away. The dialog tells you how many parents will be emailed. Closure reminders then follow on your usual schedule.
+
+Press **Approve** to save your choice.
+
+**Close** is ticked for you when the person is the **only** staff member at their centre
+and the request is for whole days, like a home provider working alone. Otherwise
+**Someone covers** is ticked. You can change either one, for example when a director
+also holds an educator role at a home daycare but is not actually there.
+
+If the centre is already closed for those dates, the dialog says so and nothing more is
+needed.
+
+The **Approve** link in the email works the same way. When there is one centre to close,
+the approval page has a **Close** *centre name* **for these dates** box, ticked by the
+same rule. It only takes effect if you approve.
+
+> **Tip:** Someone who works at several centres has no single centre to close, so the choice is not shown for them.
+
+## Closing the centre after approving
+
+Approved the request but forgot to close the centre? On the approved request, press
+**🔒 Mark** *centre name* **closed** (or **Mark centre closed** in the table) and confirm.
+Parents, admins and directors are emailed at once. The request then shows
+**🔒 Centre closed**.
 
 ## Withdrawing a request
 

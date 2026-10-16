@@ -62,15 +62,16 @@ policy, and it is common in childcare because licensing audits and insurers ask 
 
 ## If you forget your password
 
-You can reset it yourself.
+You can reset it yourself, with a 6-digit code sent by email, text or phone call.
 
 1. On the sign-in page, press **Forgot?** next to the password box.
-2. Enter your **Email**. If more than one account uses that address, also fill in
-   **Username**, so the reset goes to the right account.
-3. Open the email and follow the link to **Set a new password**.
+2. Type your **email, username or mobile number**, and choose **Email**, **Text** or
+   **Call** under **Send my code by**.
+3. Press **Send code**, then type the code you receive. The **Set a new password** page
+   opens.
 
-The reset link **works once and lasts 60 minutes**. If it has expired, request another
-one from the sign-in page.
+The code works for **10 minutes**. The email also has a reset link, which **works once
+and lasts 60 minutes**. See [Forgot your password?](forgot-password) for the full steps.
 
 ## Too many wrong attempts
 
@@ -89,5 +90,6 @@ protects your account from somebody guessing at it, and it cannot lock you out f
 ??? I changed my password and I'm still being asked to change it. | Use **Settings → Security → Change password** while signed in. That is the change that starts a new 90-day period.
 ??? My invitation link says it is invalid. | Links expire, and a newer invitation replaces an older one. Ask your centre to send it again.
 
-See also: [Opening and printing documents](opening-and-printing-documents),
+See also: [Forgot your password?](forgot-password),
+[Opening and printing documents](opening-and-printing-documents),
 [Privacy and data security](privacy-and-data-security).

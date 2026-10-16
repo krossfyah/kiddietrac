@@ -57,7 +57,7 @@ We're adding per-category controls — until then, your phone's own notification
 
 Separately from app notifications, your centre may **text** you (sign-in and sign-out,
 reminders, broadcasts) and, for urgent news like a closure, **phone** you with a recorded
-message. You choose which kinds you get under **Settings → Profile → Texts and phone
+message. You choose which kinds you get under **Settings → Notifications → 📱 Texts &
 calls** — see [Texts and phone calls](texts-and-phone-calls).
 
 ## A note on timing

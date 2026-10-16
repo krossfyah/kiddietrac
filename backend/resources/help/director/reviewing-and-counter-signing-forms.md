@@ -103,7 +103,7 @@ Its signed copies show **Not required** in Completed and are never included in r
 
 ## Daily reminders to counter-sign
 
-**Settings → Notifications → Forms waiting for counter-signature.** Admins and directors get one
+**Settings → Notifications → ✍️ Counter-signature** tab. Admins and directors get one
 email listing the signed forms still waiting for them, on your schedule: every day, weekdays,
 weekly or every few days, at the time you choose. Directors only see forms from their own
 provider; if a provider has no director, its forms go to the admins. You can also turn on a bell

@@ -29,7 +29,19 @@ Each child has a conversation thread between their parent(s) and the room. Use i
 3. Type your message
 4. Tap **Send**
 
-Parents see the message in their app and (if they have notifications on their phone enabled) get a push notification.
+Parents see the message in their app and (if they have notifications on their phone enabled) get a push notification. An ordinary message is one ordinary notification.
+
+## 🚨 Emergency messages
+
+For a real emergency, press **🚨** beside **Send** and confirm **Yes, emergency** before you send.
+Everyone who receives that message has their phone **ring and vibrate until they open it, for up
+to 2 minutes**, and the message shows a red **🚨 EMERGENCY** label.
+
+- It applies to that one message. The button switches off after you send.
+- Every emergency message is recorded in the audit log. Use it only for real emergencies.
+- **Still phone the parent.** The 🚨 flag doesn't replace a call.
+
+Parents can flag a message as an emergency too, so your phone may ring for one of theirs.
 
 ## Texting or emailing a parent
 

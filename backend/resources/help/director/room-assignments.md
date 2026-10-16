@@ -5,7 +5,13 @@ order: 30
 ---
 # Assigning educators to rooms
 
-**Staff → Room assignments.** One person at a time: pick them, see their rooms, done.
+**Settings → Room Controls → Room assignments.** One person at a time: pick them, see
+their rooms, done.
+
+[[open: #educator-rooms | Open Room Controls]]
+
+Room assignments is the first tab of **Room Controls**, which also holds the headcount,
+sleep check, daily records and auto sign-off settings. See [Room Controls](room-controls).
 
 ## Why it matters
 
@@ -46,7 +52,9 @@ and the save has always been validated against the whole agency regardless.
   repeated on the room — it would just say the same thing twice.
 - A banner counts how many people still have no room at all. That number is worth getting
   to zero.
+- Room assignments also decide who gets headcount reminders and which daily records
+  count towards an educator's lesson plan check.
 
-See also: [Understanding ratios](understanding-ratios),
+See also: [Room Controls](room-controls), [Understanding ratios](understanding-ratios),
 [Roles and responsibilities](roles-and-responsibilities),
 [Closing a provider, off-boarding an educator](closing-a-provider-or-educator).
