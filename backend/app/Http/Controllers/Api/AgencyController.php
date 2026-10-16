@@ -242,6 +242,23 @@ final class AgencyController extends Controller
             $staffPresent = array_values(array_unique(array_values($staffByCentre[$c->id] ?? [])));
             sort($staffPresent);
 
+            /* END OF THE DAY (2026-10-15, Anthony: "show Absent at the end of the shift and
+               during the shift if they are not in keep the not in and not clocked in
+               statuses"). Children: past the centre's closing time (else the agency's
+               automatic sign-off time for children, else 6 p.m.). The provider: past their
+               rostered end today, else the same closing time. Wall clock, agency zone. */
+            $__nowL = Carbon::now($ctz);
+            $__close = $c->close_time ?? null;
+            if (! $__close) {
+                static $__autoAt = [];
+                if (! array_key_exists($c->agency_id, $__autoAt)) {
+                    try { $__autoAt[$c->agency_id] = \App\Http\Controllers\Api\AutoSignOffController::read((int) $c->agency_id)['children_at'] ?? null; }
+                    catch (\Throwable $e) { $__autoAt[$c->agency_id] = null; }
+                }
+                $__close = $__autoAt[$c->agency_id] ?: '18:00:00';
+            }
+            $dayOver = $__nowL->format('H:i:s') >= substr((string) $__close . ':00', 0, 8);
+
             // Provider (and anyone else who clocked at this centre today): same shape
             // as a roster row. The provider leads, and shows "not in" when they have
             // not clocked in today, exactly like a child who has not arrived.
@@ -250,8 +267,12 @@ final class AgencyController extends Controller
             $__prov = $provUserByCentre[$c->id] ?? null;
             $__sh = $shiftsByCentre[$c->id] ?? [];
             if ($__prov && ! isset($__sh[$__prov->uid])) {
+                $__end = DB::table('shifts as s')->join('rooms as r', 'r.id', '=', 's.room_id')
+                    ->where('r.centre_id', $c->id)->where('s.user_id', $__prov->uid)->whereIn('s.status', ['scheduled', 'active'])
+                    ->whereRaw('DATE(s.starts_at) = ?', [$__nowL->toDateString()])->max('s.ends_at');
                 $staffShifts[] = ["name" => trim($__prov->first_name . ' ' . ($__prov->last_name ?? '')), "photo_url" => $__prov->photo_url,
-                    "is_provider" => true, "status" => "absent", "clock_in_at" => null, "clock_out_at" => null];
+                    "is_provider" => true, "status" => "absent", "clock_in_at" => null, "clock_out_at" => null,
+                    "day_over" => $__end ? $__nowL->format('Y-m-d H:i:s') >= (string) $__end : $dayOver];
             }
             foreach ($__sh as $__uid => $s) {
                 $staffShifts[] = ["name" => $s["name"], "photo_url" => $s["photo_url"],
@@ -279,6 +300,7 @@ final class AgencyController extends Controller
                 "staff_present" => $staffPresent,
                 "roster" => $roster,
                 "staff_shifts" => $staffShifts,
+                "day_over" => $dayOver,
                 "checked_in_count" => $checkedInCount,
                 "not_checked_in_count" => count($roster) - $checkedInCount,
                 "staff_on_floor" => $staffOnFloor,

@@ -863,6 +863,8 @@
         const _statusHtml = (r) => {
           if (r.status === 'in') return `<span style="color:#16A34A;font-weight:700;white-space:nowrap;">✓ In ${esc(r.check_in_at || '')}</span>`;
           if (r.status === 'out') return `<span style="color:#64748B;white-space:nowrap;">${esc(r.check_in_at || '')} → ${esc(r.check_out_at || '')}</span>`;
+          /* During the day "Not in"; once the centre's day is over, "Absent" (2026-10-15). */
+          if (c.day_over) return `<span style="color:#B91C1C;background:#FEE2E2;font-weight:700;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Absent</span>`;
           return `<span style="color:#B45309;background:#FEF3C7;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not in</span>`;
         };
         const _rosterRows = _roster.map((r, i) => `
@@ -878,6 +880,7 @@
         const _shiftStatus = (s) => {
           if (s.status === 'in') return `<span style="color:#16A34A;font-weight:700;white-space:nowrap;">✓ Clocked in ${esc(s.clock_in_at || '')}</span>`;
           if (s.status === 'out') return `<span style="color:#64748B;white-space:nowrap;">${esc(s.clock_in_at || '')} → ${esc(s.clock_out_at || '')}</span>`;
+          if (s.day_over) return `<span style="color:#B91C1C;background:#FEE2E2;font-weight:700;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Absent</span>`;   // past their rostered end / closing time
           return `<span style="color:#B45309;background:#FEF3C7;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not clocked in</span>`;
         };
         const providerHtml = _shifts.length === 0 ? '' : `
@@ -894,7 +897,7 @@
             <div style="border-top:1px dashed var(--kt-border,#E5E9F0); padding:8px 16px 6px;">
               <div style="display:flex; gap:16px; font-size:12px; font-weight:700; margin-bottom:4px;">
                 <span style="color:#16A34A;">● ${c.checked_in_count || 0} checked in</span>
-                <span style="color:#B45309;">● ${c.not_checked_in_count || 0} not in</span>
+                <span style="color:${c.day_over ? '#B91C1C' : '#B45309'};">● ${c.not_checked_in_count || 0} ${c.day_over ? 'absent' : 'not in'}</span>
               </div>
               <div style="max-height:196px; overflow-y:auto; margin:0 -2px;">${_rosterRows}</div>
             </div>`);
