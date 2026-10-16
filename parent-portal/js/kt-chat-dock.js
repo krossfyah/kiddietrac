@@ -364,8 +364,8 @@
     if (typeof saved.w !== 'number' || typeof saved.h !== 'number') { return; }
     // Clamped to THIS screen: a size chosen on a large monitor must not open a dock
     // that hangs off a laptop display.
-    var maxW = Math.max(MIN_W, w.innerWidth - 20);
-    var maxH = Math.max(MIN_H, w.innerHeight - 76);
+    var maxW = Math.max(MIN_W, w.innerWidth - 16);
+    var maxH = Math.max(MIN_H, w.innerHeight - 16);
     /* The saved width is the width of the THREAD — that is what the person dragged.
        With the conversation list expanded the dock has to be that much WIDER, or the
        list eats the thread: a dock saved at 417px left only 243px to read in. */
@@ -451,7 +451,7 @@
           // Write the new size into the shared record, then let savePos persist + sync.
           try {
             var cur = JSON.parse(localStorage.getItem(POS_KEY) || '{}') || {};
-            cur.w = Math.round(rr.width);
+            cur.w = Math.round(rr.width - sideWidth());   // the THREAD width: applySize adds the list back
             cur.h = Math.round(rr.height);
             localStorage.setItem(POS_KEY, JSON.stringify(cur));
           } catch (e2) {}
@@ -986,13 +986,15 @@
        stamped a new name onto whatever key was saved last, and the dock came back
        later labelled with somebody who was not in the conversation.
        rememberThread(key, title) owns the session, and takes both together. */
+    var wasHidden = dock.style.display === 'none' || !dock.__ktPlaced;
     minimized = false;
     dock.classList.remove('kt-cd-mini', 'kt-cd-flash');
     dock.style.display = '';
     try { fillSideList(); } catch (e) {}
     // After display, never before: a hidden element measures as zero and every
     // clamp below would collapse the restored position to the top-left corner.
-    applyPos();
+    // Only when it was hidden: a re-render of an open thread must not move or resize it.
+    if (wasHidden) { applyPos(); dock.__ktPlaced = true; }
   }
 
   function minimize() {
