@@ -37,7 +37,25 @@ final class HeadcountRemindCommand extends Command
             $every = max(10, min(240, (int) ($s['headcount_reminders']['minutes'] ?? 30)));
             [$dayFrom, $dayTo] = AgencyTime::dayRange((int) $a->id);
 
+            /* AFTER HOURS, NO REMINDERS (2026-10-15). Bruni stayed clocked in after work and
+               got 90 "headcount due" bells, every half hour until the 8 p.m. auto clock-out.
+               An educator is only reminded up to the end of their rostered shift today, or,
+               with no roster line, the centre's closing time. Rosters and closing times are
+               wall clock in the agency's zone (see ClockReminderCommand::scheduledShift). */
+            $tz = AgencyTime::tz((int) $a->id) ?: 'America/Toronto';
+            $localNow = Carbon::now($tz);
+            $nowStr = $localNow->format('Y-m-d H:i:s');
+
             foreach (Live::centreIds((int) $a->id) as $cid) {
+                $closeAt = DB::table('centres')->where('id', $cid)->value('close_time');
+                $onShift = function (int $u) use ($cid, $localNow, $nowStr, $closeAt): bool {
+                    $end = DB::table('shifts as s')->join('rooms as r', 'r.id', '=', 's.room_id')
+                        ->where('r.centre_id', $cid)->where('s.user_id', $u)->whereIn('s.status', ['scheduled', 'active'])
+                        ->whereRaw('DATE(s.starts_at) = ?', [$localNow->toDateString()])->max('s.ends_at');
+                    if ($end) return $nowStr <= (string) $end;
+                    if ($closeAt) return $localNow->format('H:i:s') <= (string) $closeAt;
+                    return true;
+                };
                 $punched = DB::table('time_punches')->where('centre_id', $cid)->where('punched_in_at', '>=', $dayFrom)
                     ->where('punched_in_at', '<', $dayTo)->whereNull('punched_out_at')->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all();
                 if (! $punched) continue;
@@ -58,6 +76,7 @@ final class HeadcountRemindCommand extends Command
                         $assigned = DB::table('role_assignments')->where('centre_id', $cid)->where('role', 'educator')->where('active', true)
                             ->whereIn('user_id', array_values(array_diff($punched, $withRooms)) ?: [0])->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
                     }
+                    $assigned = array_values(array_filter($assigned, $onShift));
                     if (! $assigned) continue;
                     if ($this->option('dry')) { $this->line("agency {$a->id} room {$room->id} {$room->name}: " . count($present) . " here, {$mins} min → " . count($assigned) . ' educator(s)'); continue; }
                     if (! Cache::add('kt-hc-remind:' . $room->id, 1, now()->addMinutes($every - 1))) continue;

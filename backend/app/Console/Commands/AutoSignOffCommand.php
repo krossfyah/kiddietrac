@@ -112,7 +112,7 @@ class AutoSignOffCommand extends Command
             ->join('users as u', 'u.id', '=', 'p.user_id')
             ->whereIn('p.centre_id', $centreIds)
             ->whereNull('p.punched_out_at')
-            ->get(['p.id', 'p.punched_in_at', 'p.notes', 'u.first_name', 'u.last_name']);
+            ->get(['p.id', 'p.user_id', 'p.centre_id', 'p.punched_in_at', 'p.notes', 'u.first_name', 'u.last_name']);
 
         $n = 0;
         foreach ($open as $p) {
@@ -152,6 +152,10 @@ class AutoSignOffCommand extends Command
                 // child (child_id is NOT NULL), and filing an educator's clock-out against
                 // some arbitrary child would put a false entry on a real child's day. The
                 // punch carries the marker, and the admin digest reports it.
+
+                // And TELL people, tonight (2026-10-15): the person, their director and the
+                // agency admins; an escalation after 3 in 7 days. See AutoSignOffNotices.
+                \App\Support\AutoSignOffNotices::staffClosed($agencyId, (int) $p->id, (int) $p->user_id, (int) $p->centre_id, $in, $cutoff);
             }
             $n++;
         }
@@ -173,7 +177,7 @@ class AutoSignOffCommand extends Command
                    // Carried through so the automatic check-out can be attributed to
                    // whoever checked the child IN — see the insert below.
                    'e.by_user_id', 'e.recorded_by_id',
-                   'ch.first_name', 'ch.last_name']);
+                   'ch.first_name', 'ch.last_name', 'ch.family_id', 'f.centre_id']);
 
         $last = [];
         foreach ($events as $e) {
@@ -181,6 +185,7 @@ class AutoSignOffCommand extends Command
         }
 
         $n = 0;
+        $closed = [];   // centre id => children signed out in this run, for the notices
         foreach ($last as $childId => $e) {
             if (! str_contains(strtolower((string) $e->event_type), 'in')) {
                 continue;   // already out
@@ -247,8 +252,15 @@ class AutoSignOffCommand extends Command
                     'Signed out automatically at ' . $cutoff->format('g:i A')
                         . ' — no sign-out was recorded. Please sign children out at pickup so the day is accurate.'
                 );
+                $closed[(int) $e->centre_id][] = ['child_id' => (int) $childId, 'family_id' => (int) $e->family_id,
+                    'name' => $name, 'in' => $in, 'out' => $cutoff];
             }
             $n++;
+        }
+        // One summary per centre to staff and admins, and a "please confirm" to each
+        // family (2026-10-15). See AutoSignOffNotices.
+        foreach ($closed as $centreId => $kids) {
+            \App\Support\AutoSignOffNotices::childrenClosed($agencyId, (int) $centreId, $kids);
         }
         return $n;
     }
