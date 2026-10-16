@@ -779,26 +779,7 @@ TXT;
         $bytes = $this->quotePdfBytes($q);
 
         try {
-            $cur = $q->currency ?: 'CAD';
-            $per = ['month' => ' per month', 'year' => ' per year'][$q->billing_period] ?? '';
-            $row = fn ($k, $v) => '<tr><td style="padding:6px 0;color:#64748b;font-size:13px">' . $k . '</td><td style="padding:6px 0;text-align:right;font-size:13px;font-weight:700;color:#1E2A5E">' . $v . '</td></tr>';
-            $body = '<div style="background:#F4F7FA;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#0D1B2A">'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0">'
-                . '<tr><td style="padding:22px 28px 14px"><img src="https://api.kiddietrac.com/email/logo-wordmark.png" width="132" alt="KiddieTrac" style="display:block;border:0"></td></tr>'
-                . '<tr><td style="height:4px;line-height:4px;font-size:0;background:#2C8AAC">&nbsp;</td></tr>'
-                . '<tr><td style="padding:24px 28px 8px;font-size:15px;line-height:1.55">'
-                . '<p style="margin:0 0 12px">Hi ' . e($lead->name ?: 'there') . ',</p>'
-                . '<p style="margin:0 0 12px">Thank you for your interest in KiddieTrac. Your proposal is attached as a PDF, including our terms and conditions.</p>'
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 14px;border-top:1px solid #E2E8F0;border-bottom:1px solid #E2E8F0">'
-                . $row('Proposal', e($q->number ?: ''))
-                . $row('Total', e(self::money($q->total, $cur)) . ' ' . e($cur) . $per)
-                . ($q->valid_until ? $row('Valid until', e($q->valid_until->format('F j, Y'))) : '')
-                . '</table>'
-                . '<p style="margin:0 0 12px">To accept, sign the acceptance section and send it back, or simply reply to this email. Happy to walk you through any part of it.</p>'
-                . '<p style="margin:0 0 4px">Warm regards,<br>' . e($this->preparedByName($q) ?: 'The KiddieTrac Team') . '<br><span style="color:#64748b">KiddieTrac</span></p>'
-                . '</td></tr>'
-                . '<tr><td style="padding:16px 28px 22px;font-size:11.5px;color:#94a3b8">KiddieTrac · Smart Childcare Management Platform · kiddietrac.com · info@kiddietrac.com</td></tr>'
-                . '</table></div>';
+            $body = $this->proposalEmailHtml($q, $lead);
             Mail::html($body, function ($m) use ($lead, $q, $bytes) {
                 \App\Support\MailScope::platform($m);   // sales, not tenant mail
                 $m->to($lead->email, $lead->name ?: null)->subject('Your KiddieTrac proposal ' . ($q->number ?: ''));
@@ -816,6 +797,87 @@ TXT;
         $this->logActivity($lead, 'email', 'Proposal ' . ($q->number ?: '') . ' emailed to ' . $lead->email, null);
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * The email that carries a proposal (2026-10-16, Anthony: "do not add the commercial numbers
+     * on the email only the pdf attachment ... introducing the kiddietrac solution and thanking
+     * those that are interested in working with us to making a difference for child and parent
+     * ... and that all proposals are treated as private and confidential"). No prices, totals or
+     * dates here — they live only in the attached PDF. Email-client safe: tables, inline styles,
+     * hosted https images, no background images.
+     */
+    private function proposalEmailHtml(SalesQuote $q, SalesLead $lead): string
+    {
+        $navy = '#1E2A5E'; $teal = '#1F6080'; $muted = '#5B6B7C';
+        $first = trim((string) strtok((string) ($lead->name ?: ''), ' ')) ?: 'there';
+        $org = $lead->company ?: 'your centre';
+        $rep = $this->preparedByName($q) ?: 'The KiddieTrac Team';
+
+        $tile = fn ($icon, $bg, $title, $text) => '<td class="kt-col" width="33%" valign="top" style="padding:0 6px">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F6F9FB;border-radius:12px"><tr><td style="padding:18px 14px 16px;text-align:center">'
+            . '<div style="width:52px;height:52px;line-height:52px;margin:0 auto 10px;border-radius:26px;background:' . $bg . ';font-size:26px;text-align:center">' . $icon . '</div>'
+            . '<div style="font-size:14px;font-weight:bold;color:' . $navy . ';margin-bottom:5px">' . $title . '</div>'
+            . '<div style="font-size:12.5px;line-height:1.5;color:' . $muted . '">' . $text . '</div>'
+            . '</td></tr></table></td>';
+
+        return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<style>@media (max-width:600px){.kt-col{display:block !important;width:100% !important;padding:0 0 10px !important}.kt-pad{padding-left:20px !important;padding-right:20px !important}}</style></head>'
+            . '<body style="margin:0;padding:0;background:#EEF3F6">'
+            . '<div style="display:none;max-height:0;overflow:hidden">Thank you for your interest in KiddieTrac. Your proposal is attached.</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF3F6"><tr><td align="center" style="padding:24px 10px">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#0D1B2A">'
+
+            // Logo + brand bar.
+            . '<tr><td class="kt-pad" style="padding:22px 32px 16px"><img src="https://api.kiddietrac.com/email/logo-wordmark.png" width="140" alt="KiddieTrac" style="display:block;border:0;width:140px;height:auto"></td></tr>'
+            . '<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+            . '<td width="45%" height="5" style="background:#1F6080;font-size:0;line-height:0">&nbsp;</td><td width="35%" height="5" style="background:#2C8AAC;font-size:0;line-height:0">&nbsp;</td><td width="20%" height="5" style="background:#8EC73C;font-size:0;line-height:0">&nbsp;</td>'
+            . '</tr></table></td></tr>'
+
+            // Graphic 1: photo.
+            . '<tr><td><img src="https://www.kiddietrac.com/images/life/colouring-800.jpg" width="600" alt="An educator and a child colouring a butterfly together" style="display:block;border:0;width:100%;max-width:600px;height:auto"></td></tr>'
+
+            // Thank you + introduction.
+            . '<tr><td class="kt-pad" style="padding:28px 40px 6px">'
+            . '<div style="font-size:24px;line-height:1.3;font-weight:bold;color:' . $navy . ';margin:0 0 14px">Thank you for considering KiddieTrac</div>'
+            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Hi ' . e($first) . ',</p>'
+            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Thank you for your interest in working with us. Every early-years team we meet shares the same purpose we do: making a real difference for children, and for the parents who trust you with them every day. We are genuinely glad to be talking with ' . e($org) . '.</p>'
+            . '<p style="margin:0 0 6px;font-size:15px;line-height:1.65">KiddieTrac is a childcare management platform built around that purpose. It brings the whole day together in one place, so your educators spend less time on paperwork and more time with the children, and families feel close to their child\'s day even when they are apart.</p>'
+            . '</td></tr>'
+
+            // Graphic 2: what it brings.
+            . '<tr><td class="kt-pad" style="padding:18px 34px 6px">'
+            . '<div style="font-size:12px;letter-spacing:1.5px;text-transform:uppercase;font-weight:bold;color:' . $teal . ';text-align:center;margin:0 0 14px">What KiddieTrac brings to your centre</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+            . $tile('&#128106;', '#E6F4F1', 'Closer families', 'Daily updates, photos and messages in the parent app, so families never miss a moment.')
+            . $tile('&#128203;', '#E8F0FB', 'Less paperwork', 'Attendance, ratios, daily records and billing in one place for your whole team.')
+            . $tile('&#128737;&#65039;', '#F1F8E6', 'Safe and ready', 'Secure sign-in and sign-out, and records that are ready whenever you need them.')
+            . '</tr></table></td></tr>'
+
+            // The proposal + next steps.
+            . '<tr><td class="kt-pad" style="padding:22px 40px 4px">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid #2C8AAC;background:#F4F9FB;border-radius:0 10px 10px 0"><tr><td style="padding:16px 18px;font-size:14.5px;line-height:1.6">'
+            . '<div style="font-weight:bold;color:' . $navy . ';margin-bottom:4px">&#128206; Your proposal is attached</div>'
+            . 'We have put together a proposal for ' . e($org) . ', attached to this email as a PDF together with our terms and conditions.'
+            . '</td></tr></table>'
+            . '<p style="margin:18px 0 14px;font-size:15px;line-height:1.65">Take your time looking it over. If anything raises a question, or you would like us to walk your team through KiddieTrac, just reply to this email. When you are ready to go ahead, sign the acceptance page and send it back to us.</p>'
+            . '<p style="margin:0 0 4px;font-size:15px;line-height:1.65">We look forward to making a difference together.</p>'
+            . '<p style="margin:18px 0 26px;font-size:15px;line-height:1.6">Warm regards,<br><strong style="color:' . $navy . '">' . e($rep) . '</strong><br><span style="color:' . $muted . '">KiddieTrac</span></p>'
+            . '</td></tr>'
+
+            // Confidentiality.
+            . '<tr><td class="kt-pad" style="padding:0 40px 26px">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFF8E6;border:1px solid #F3DFA6;border-radius:10px"><tr><td style="padding:14px 16px;font-size:12.5px;line-height:1.55;color:#5C4A12">'
+            . '<strong>&#128274; Private and confidential.</strong> This email and the attached proposal are intended only for the person and organisation they are addressed to. All KiddieTrac proposals are treated as private and confidential: please do not share, forward, copy or distribute them outside your organisation without our written permission. If you received this email by mistake, please let us know and delete it.'
+            . '</td></tr></table></td></tr>'
+
+            // Footer.
+            . '<tr><td style="background:' . $navy . ';padding:18px 32px;text-align:center;font-size:12px;line-height:1.6;color:#C9D3E6">'
+            . '<strong style="color:#ffffff">KiddieTrac</strong> · Smart Childcare Management Platform<br>'
+            . '<a href="https://www.kiddietrac.com" style="color:#9FE0F0;text-decoration:none">kiddietrac.com</a> · <a href="mailto:info@kiddietrac.com" style="color:#9FE0F0;text-decoration:none">info@kiddietrac.com</a>'
+            . '</td></tr>'
+
+            . '</table></td></tr></table></body></html>';
     }
 
     private function preparedByName(SalesQuote $q): ?string
@@ -971,7 +1033,7 @@ TXT;
                 . '.r-tot{width:100% !important;margin-left:0 !important}}');
 
         return '<html><head><meta charset="utf-8"><style>' . $css . '</style></head><body>'
-            . ($forPdf ? '<div class="foot">KiddieTrac · Smart Childcare Management Platform · kiddietrac.com · info@kiddietrac.com</div>' : '')
+            . ($forPdf ? '<div class="foot"><strong style="color:#64748b">Private &amp; confidential. Not for distribution.</strong> · KiddieTrac · kiddietrac.com · info@kiddietrac.com</div>' : '')
             // Header: logo left, PROPOSAL + number + dates right.
             . '<table class="r-stack r-head" style="width:100%;border-collapse:collapse"><tr>'
             . '<td style="vertical-align:middle">' . $logo . '</td>'
@@ -1007,7 +1069,7 @@ TXT;
             . $notes . $terms
             . $tc
             . $accept
-            . ($forPdf ? '' : '<div style="margin-top:18px;font-size:9px;color:#94a3b8">KiddieTrac · Smart Childcare Management Platform · kiddietrac.com · info@kiddietrac.com</div>')
+            . ($forPdf ? '' : '<div style="margin-top:18px;font-size:9px;color:#94a3b8"><strong style="color:#64748b">Private &amp; confidential. Not for distribution.</strong> · KiddieTrac · kiddietrac.com · info@kiddietrac.com</div>')
             . '</body></html>';
     }
 
