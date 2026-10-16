@@ -584,8 +584,11 @@
       header.appendChild(headerLeft);
 
 
+      /* Wraps: four buttons (Edit · Emergency card · Archive · Compliance report) are wider
+         than a phone, and unwrapped the row was turned into a hidden sideways scroller with
+         Archive cut off at the edge (Anthony's screenshot, 2026-10-15). */
       var headerActions = Dom.el('div', {
-        style: 'display:flex;gap:8px;',
+        style: 'display:flex;gap:8px;flex-wrap:wrap;',
       });
       /* Edit is now a MODE, not a single modal. The modal still owns the core fields
          and is reachable from inside the mode — but the tabs' own editors only come

@@ -122,7 +122,11 @@
       if ((k.textContent || '').trim().length > 26) { return false; }
       buttons++;
     }
-    return buttons >= 3;
+    /* Four or more. At three this caught the child record's ACTION row — Edit · Emergency
+       card · Archive — and turned it into a hidden sideways scroller, so on a phone Archive
+       showed as "Arch" cut off at the edge (Anthony's screenshot, 2026-10-15). Real tab
+       strips here have 8-9 tabs; an action row wraps instead (fitElement). */
+    return buttons >= 4;
   }
 
   function fitElement(n) {
@@ -142,6 +146,16 @@
     }
 
     if (display === 'flex' || display === 'inline-flex') {
+      // A row of buttons wraps whole: a squeezed button breaks its own label in two.
+      var allButtons = n.children.length > 0;
+      for (var b = 0; b < n.children.length; b++) {
+        if (n.children[b].tagName !== 'BUTTON' && n.children[b].tagName !== 'A') { allButtons = false; break; }
+      }
+      if (allButtons) {
+        n.style.flexWrap = 'wrap';
+        n.setAttribute('data-kt-fit', 'wrap');
+        return !overflowsX(n);
+      }
       // let the children shrink first; wrap only if that is not enough
       for (var j = 0; j < n.children.length; j++) { n.children[j].style.minWidth = '0'; }
       if (!overflowsX(n)) { n.setAttribute('data-kt-fit', 'shrink'); return true; }

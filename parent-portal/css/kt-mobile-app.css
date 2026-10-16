@@ -3320,3 +3320,31 @@ html.kt-ios-inset-fallback #appMain {
     flex: 0 0 auto !important;
   }
 }
+
+/* ── POPUPS USE THE WHOLE PHONE (2026-10-15) ──
+   Anthony, phone screenshot of a child's "At a glance": "look how the popup looks not
+   utilizing the full screen properly - full sweep". Every Shell.Modal dialog sat inside
+   three desktop paddings — the backdrop's 16px, .modal-body's 28px and the embedded
+   screen's own 24px page padding — so the record got 270px of a 390px screen, the name
+   wrapped onto three lines and the Archive button was cut off. On a phone: a large dialog
+   is full-screen, any other dialog spans the width with an 8px margin, and the body keeps
+   one 14px gutter. kt-phone-gutter.js removes the embedded screen's page padding. */
+@media (max-width: 768px) {
+  .modal-backdrop { padding-left: 8px !important; padding-right: 8px !important; }
+  .modal { max-width: 100% !important; width: 100% !important; }
+  .modal-header { padding: 14px 16px 12px !important; }
+  .modal-header h2 { font-size: 19px !important; }
+  .modal-body { padding: 14px !important; }
+  .modal-footer { padding: 12px 14px !important; flex-wrap: wrap; }
+  .modal-backdrop:has(> .modal-large) {
+    padding: env(safe-area-inset-top) 0 0 0 !important;
+    align-items: stretch !important;
+  }
+  .modal.modal-large {
+    max-height: 100% !important; height: 100% !important;
+    border-radius: 0 !important;
+    padding-bottom: var(--kt-safe-bottom, env(safe-area-inset-bottom));
+  }
+  /* A body that sized itself for the old dialog (child record: min(76vh, 860px)) fills it. */
+  .modal.modal-large .modal-body > div[style*="vh"] { height: 100% !important; }
+}
