@@ -1,0 +1,215 @@
+{
+ "/": {
+  "d": "2026-10-13",
+  "h": "4b2d807343d4b512ad38f36073d763c43a630b67"
+ },
+ "/about": {
+  "d": "2026-10-13",
+  "h": "044ae1b5ce8bae2083055ee1c7970a3a479988c9"
+ },
+ "/accessibility": {
+  "d": "2026-10-13",
+  "h": "307943db61d2e6b75d1e76c2bbbdf7129b214fd5"
+ },
+ "/blog": {
+  "d": "2026-10-13",
+  "h": "b728161a5c71df6c15841df5f7692e1049a8221f"
+ },
+ "/blog/allergy-and-medication-safety": {
+  "d": "2026-09-28",
+  "h": "19b2cc147904671d505e12a2bd5153a514d2087c"
+ },
+ "/blog/best-parent-communication-apps-for-childcare": {
+  "d": "2026-09-29",
+  "h": "2bcffc76b93d0762e6ccb069865351c7962f4a21"
+ },
+ "/blog/billing-cad-and-usd": {
+  "d": "2025-02-07",
+  "h": "69dd900de7d563e3164acd89fe246353f5dca3c1"
+ },
+ "/blog/childcare-revenue-leaks": {
+  "d": "2025-03-18",
+  "h": "0016dfc6f42d455f873daa3be26c3f2f2953a39f"
+ },
+ "/blog/cwelcc-explained-ontario": {
+  "d": "2025-04-02",
+  "h": "b467387fca5d867b4bffe9134042923493060403"
+ },
+ "/blog/daily-reports-families-read": {
+  "d": "2026-09-28",
+  "h": "cabb6c805f784921a0eff63e233878203169aa70"
+ },
+ "/blog/documenting-observations-efficiently": {
+  "d": "2026-09-28",
+  "h": "7a34d91b4b12cdca52764972b93a7946ff046b71"
+ },
+ "/blog/emergency-preparedness-checklist": {
+  "d": "2026-09-28",
+  "h": "57141b4d5163e8dda004a185c620a9ad89ffadc3"
+ },
+ "/blog/home-daycare-to-licensed-agency": {
+  "d": "2025-01-22",
+  "h": "0641411e98e91dc0407a92e8d865a9b227cb985a"
+ },
+ "/blog/how-to-choose-childcare-management-software": {
+  "d": "2026-09-28",
+  "h": "1b35304a2a644474f8fa3dfe36f102564050c898"
+ },
+ "/blog/keeping-immunization-records-up-to-date": {
+  "d": "2026-09-28",
+  "h": "a053e3b408cc07ee198de87346e06702f6f33800"
+ },
+ "/blog/managing-your-waitlist-fairly": {
+  "d": "2026-09-28",
+  "h": "f07872b343599e66d6562279dc6d11f9f20bfdfe"
+ },
+ "/blog/parent-communication-that-builds-trust": {
+  "d": "2026-09-28",
+  "h": "2686bf10611720107d5473b73ca71df9cba64598"
+ },
+ "/blog/play-based-learning-day-to-day": {
+  "d": "2026-09-28",
+  "h": "2e0369f8adfb2cc0cd2af9119af8f780e09e480e"
+ },
+ "/blog/qr-check-in-vs-paper-sign-in": {
+  "d": "2025-03-05",
+  "h": "9f8a8e28ecbea89e0683023a1d38f95eb2667d8b"
+ },
+ "/blog/staff-ratios-and-scheduling": {
+  "d": "2026-09-28",
+  "h": "b79c04061055a3eb2c60af96eb452539ccff967f"
+ },
+ "/blog/starting-a-home-daycare-in-canada": {
+  "d": "2026-09-28",
+  "h": "a926603840e63ddb3ddd4d3850cabaf4a8c5485e"
+ },
+ "/blog/white-label-parent-apps": {
+  "d": "2025-02-20",
+  "h": "be1787bcda60598dd5d6d46c84565df1add55132"
+ },
+ "/careers": {
+  "d": "2026-10-13",
+  "h": "66c1ddb0eb7b12079e984aaec57b6d295322abee"
+ },
+ "/centre": {
+  "d": "2026-10-13",
+  "h": "3dd84e3b76bdb3db93c7d49f8f1e1fb71920c5e3"
+ },
+ "/changelog": {
+  "d": "2026-10-13",
+  "h": "adb3a298e942bb9b98106b4d2ac27a6f56a16720"
+ },
+ "/checklist": {
+  "d": "2026-10-13",
+  "h": "6f26796a508afe43c100eab9cebcc17ebb3618b4"
+ },
+ "/childcare-software-canada": {
+  "d": "2026-10-13",
+  "h": "94dd19cd63c2c6842197db7c733b634080332c3e"
+ },
+ "/contact": {
+  "d": "2026-10-13",
+  "h": "672de6865ff83f2e418acaaafa373e931c8ef187"
+ },
+ "/cwelcc-billing-software": {
+  "d": "2026-10-13",
+  "h": "bcc666bc2818d847a07dd0e102ddcd053819b959"
+ },
+ "/cwelcc-calculator": {
+  "d": "2026-10-13",
+  "h": "d8439d4895f174e4be208230b407bdb89d758f1e"
+ },
+ "/daycare-software-ontario": {
+  "d": "2026-10-13",
+  "h": "4b4923656d9f9b084893dd239f569432a08d7e6f"
+ },
+ "/dei-policy": {
+  "d": "2026-10-13",
+  "h": "278ecd6fcf8915648e4cc32378b21c441dfe4831"
+ },
+ "/global": {
+  "d": "2026-10-13",
+  "h": "619e68f400fc03c92d4d02576387a21eb6526716"
+ },
+ "/home-daycare": {
+  "d": "2026-10-13",
+  "h": "685efa044f7ce769d9b64469f484473050195d3d"
+ },
+ "/ilearn": {
+  "d": "2026-10-13",
+  "h": "0916f26a6a913dcc92ff181ab5754a24bd7482ca"
+ },
+ "/internet-safety": {
+  "d": "2026-10-13",
+  "h": "3487d0aa8ba0617fd792011139d4ac014cd2553d"
+ },
+ "/multi-site": {
+  "d": "2026-10-13",
+  "h": "1f6e943da08fb43f76e9910a04f7a71e64597dd4"
+ },
+ "/parentportal": {
+  "d": "2026-10-13",
+  "h": "f7763ea9e1c837ef89082c2962b72b4313e25519"
+ },
+ "/pricing": {
+  "d": "2026-10-13",
+  "h": "35b7da0918bd4387b261fbf2b3bcfd6266f60901"
+ },
+ "/privacy": {
+  "d": "2026-10-13",
+  "h": null
+ },
+ "/ratio-calculator": {
+  "d": "2026-10-13",
+  "h": "5598be75e050f2190f0f92da21b34fef08103b44"
+ },
+ "/referrals": {
+  "d": "2026-10-13",
+  "h": "3a2c59cf8fcdae82b061a6aaa738fb94d516e05e"
+ },
+ "/safe-arrival": {
+  "d": "2026-10-13",
+  "h": "8c8ecedbcd72e79beb7daf3c06f2d0413824c638"
+ },
+ "/security": {
+  "d": "2026-10-13",
+  "h": "8a116388469f9369125c8a283be3a6246512374e"
+ },
+ "/shop": {
+  "d": "2026-10-13",
+  "h": "bacc2f3757c71a4e689d9a7b8f3d432a4314d458"
+ },
+ "/solutions": {
+  "d": "2026-10-13",
+  "h": "59c7d2232afc5912da387fc1a72d8320f6b19a48"
+ },
+ "/support": {
+  "d": "2026-10-13",
+  "h": "f543d4e7cfad38e2ddd269e556294743deb36559"
+ },
+ "/terms": {
+  "d": "2026-10-13",
+  "h": null
+ },
+ "/testimonials": {
+  "d": "2026-10-13",
+  "h": "b5dc239defdd7c96b77750f677aea78d5c1fea1e"
+ },
+ "/vscompetitor": {
+  "d": "2026-10-13",
+  "h": "10223ce4ad1f49241d640c9476d497d08f1be6dd"
+ },
+ "/vulnerability-reporting": {
+  "d": "2026-10-13",
+  "h": "c130bb4ac97fc56d2f2596fc2063bc2ec78dcc9b"
+ },
+ "/webinars": {
+  "d": "2026-10-13",
+  "h": "174ba26abb2aacb6d5116ba812c089852336deaf"
+ },
+ "/whitelabel": {
+  "d": "2026-10-13",
+  "h": "fac18d7146d2f6da7b280ab0b0961dcf17ceba3f"
+ },
+ "_seeded": true
+}

@@ -13,6 +13,13 @@ at every address, so only the home page could be indexed. This takes the built s
   <docroot>/p/[<lang>/]blog/<slug>.html   every article, rendered in its language
   <docroot>/blog/body/<slug>.<lang>.html  article bodies, fetched on demand
   <docroot>/sitemap.xml             every address, with its language alternates
+  <docroot>/sections/<lang>/<page>.html   every page's content, fetched when someone goes there
+
+ONE PAGE PER FILE (2026-10-16). Each file used to carry all 36 sections (18,600 words, one
+visible); Google saw near-identical documents at every address. Now each file carries only
+its own section: the others are empty placeholders that the page fills from /sections/ just
+before it shows them (ktHydrate, wrapped around showPage), so moving around the site still
+happens in place. Sections listed in KEEP_INLINE stay in every file.
 
 .htaccess serves /x from p/x.html when that file exists. Each file has its own title,
 description, canonical, hreflang alternates, Open Graph and structured data, and its own
@@ -29,6 +36,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 
 import ssr_i18n
@@ -39,6 +47,14 @@ HTML_LANG = {'en': 'en', 'fr': 'fr-CA', 'es': 'es', 'hi': 'hi'}
 OG_LOCALE = {'en': 'en_CA', 'fr': 'fr_CA', 'es': 'es_US', 'hi': 'hi_IN'}
 # admin is the sign-in portal link; privacy and terms are real directories of their own.
 SKIP = {'admin', 'privacy', 'terms'}
+# Sections that stay in every file (their scripts expect them at load). Filled in by testing.
+KEEP_INLINE = set()
+FULL_NAV = ['home', 'shop']
+LAZY = '<!--kt-lazy-->'
+# Structured data and footer links that pointed nowhere (2026-10-16 audit): "facebook.com"
+# is the bare site, youtube.com/@kiddietrac does not exist. Add real profiles here.
+SAME_AS = ['https://linkedin.com/company/kiddietrac']
+DEAD_SOCIAL = ['https://facebook.com', 'https://youtube.com/@kiddietrac']
 UI = {
     'en': {'min read': 'min read', 'KiddieTrac team': 'KiddieTrac team', '← All articles': '← All articles',
            'See it in KiddieTrac': 'See it in KiddieTrac',
@@ -219,6 +235,172 @@ def inner_span(doc, el_id):
     raise AssertionError('no #' + el_id)
 
 
+def split_sections(doc):
+    """(skeleton, {pid: inner html}): every page section's content cut out, leaving a marker."""
+    tree = ssr_i18n.Tree(doc)
+    spans = []
+    stack = list(tree.root.kids)
+    while stack:
+        e = stack.pop()
+        if isinstance(e, ssr_i18n.El):
+            i = e.attrs.get('id') or ''
+            cls = e.attrs.get('class') or ''
+            if i.startswith('page-') and e.tag == 'div' and cls.split()[:1] == ['page']:
+                spans.append((e.end, e.cstart, i[5:]))
+                continue        # sections do not nest
+            stack.extend(e.kids)
+    frags = {}
+    out = []
+    pos = 0
+    for a, b, pid in sorted(spans):
+        frags[pid] = doc[a:b]
+        out.append(doc[pos:a])
+        out.append('<!--kt-sec:%s-->' % pid)
+        pos = b
+    out.append(doc[pos:])
+    return ''.join(out), frags
+
+
+def mark_reruns(doc, frags):
+    """Inline scripts that set up a lazy section at load (and do nothing else global, i.e. do not
+    touch showPage) are tagged data-kt-rerun="<pid> ..." so the loader runs them again when
+    that section arrives. Their own guards (if (!el) return) make the first, empty run a no-op."""
+    ids = {pid: set(re.findall(r'\sid="([^"]+)"', h)) for pid, h in frags.items()}
+
+    def tag(m):
+        attrs, body = m.group(1), m.group(2)
+        if 'src=' in attrs or 'ld+json' in attrs or 'showPage' in body:
+            return m.group(0)
+        refs = set(re.findall(r'getElementById\(\s*[\'"]([^\'"]+)[\'"]', body))
+        refs |= set(re.findall(r'querySelector(?:All)?\(\s*[\'"]#([A-Za-z0-9_-]+)', body))
+        refs |= set('data-kt-ratio' for _ in [0] if 'data-kt-ratio' in body)
+        pids = sorted(pid for pid, ii in ids.items() if refs & ii or ('data-kt-ratio' in refs and 'data-kt-ratio' in frags[pid]))
+        if not pids:
+            return m.group(0)
+        return '<script data-kt-rerun="%s"%s>%s</script>' % (' '.join(pids), attrs, body)
+    return re.sub(r'<script([^>]*)>(.*?)</script>', tag, doc, flags=re.S)
+
+
+def fill_sections(d, frags, active):
+    """Put back the active section (and KEEP_INLINE ones); the rest become lazy placeholders."""
+    def rep(m):
+        pid = m.group(1)
+        if pid in active or pid in KEEP_INLINE:
+            return frags[pid]
+        return LAZY
+    return re.sub(r'<!--kt-sec:([a-z0-9-]+)-->', rep, d)
+
+
+LOADER_HEAD = """<script>
+/* Sections on demand (2026-10-16). Only this address's section is in the file; the others
+   are fetched from /sections/<lang>/<page>.html just before they are shown. */
+(function () {
+  var L = window.KT_SSR_LANG || 'en', V = '%s', cache = {};
+  // The placeholder comes first; scripts may already have added their own boxes after it.
+  function lazy(p) { return !!(p && p.firstChild && p.firstChild.nodeType === 8 && p.firstChild.nodeValue === 'kt-lazy'); }
+  function get(id) {
+    if (cache[id]) return cache[id];
+    var x = new XMLHttpRequest();
+    x.open('GET', '/sections/' + L + '/' + id + '.html?v=' + V, false);
+    try { x.send(); } catch (e) { return null; }
+    return x.status === 200 ? (cache[id] = x.responseText) : null;
+  }
+  function insert(id) {
+    var p = document.getElementById('page-' + id);
+    if (!lazy(p)) return false;
+    var h = get(id);
+    if (h == null) return false;
+    var t = document.createElement('div');
+    t.innerHTML = h;
+    var scripts = [].slice.call(t.querySelectorAll('script'));
+    p.removeChild(p.firstChild);
+    var first = p.firstChild;
+    while (t.firstChild) p.insertBefore(t.firstChild, first);
+    scripts.forEach(function (o) {
+      var n = document.createElement('script');
+      for (var i = 0; i < o.attributes.length; i++) n.setAttribute(o.attributes[i].name, o.attributes[i].value);
+      n.text = o.text;
+      o.parentNode.replaceChild(n, o);
+    });
+    return true;
+  }
+  window.ktHydrate = function (id) {
+    if (!insert(id)) return false;
+    [].slice.call(document.querySelectorAll('script[data-kt-rerun]')).forEach(function (o) {
+      var group = o.getAttribute('data-kt-rerun').split(' ');
+      if (group.indexOf(id) < 0) return;
+      group.forEach(function (g) { if (g !== id) insert(g); });
+      var n = document.createElement('script');
+      n.text = o.text;
+      document.body.appendChild(n);
+    });
+    try { document.dispatchEvent(new CustomEvent('kt:hydrated', { detail: id })); } catch (e) {}
+    return true;
+  };
+  /* Sections that set themselves up only at page load: go to their own address instead. */
+  window.ktNeedsFullLoad = function (id) {
+    if (%s.indexOf(id) < 0 || !lazy(document.getElementById('page-' + id))) return false;
+    var pre = L === 'en' ? '' : '/' + L;
+    location.href = (id === 'home' ? (pre || '/') : pre + '/' + id);
+    return true;
+  };
+  /* Warm the browser cache with the main pages once the visit has settled (not inserted). */
+  window.ktPrefetchSections = function (ids) {
+    ids.filter(function (id) { return %s.indexOf(id) < 0; }).forEach(function (id, i) {
+      setTimeout(function () {
+        var p = document.getElementById('page-' + id);
+        if (!lazy(p) || cache[id]) return;
+        try { fetch('/sections/' + L + '/' + id + '.html?v=' + V).then(function (r) { return r.ok ? r.text() : null; }).then(function (t) { if (t != null) cache[id] = t; }); } catch (e) {}
+      }, 2500 + i * 300);
+    });
+  };
+})();
+</script>
+"""
+
+LOADER_TAIL = """<script>
+/* Outermost wrapper: the section is in place before any other showPage wrapper runs. */
+(function () {
+  var sp = window.showPage;
+  if (typeof sp !== 'function' || sp.__ktHydrating) return;
+  var w = function (id) {
+    try { if (window.ktNeedsFullLoad(id || 'home')) return; window.ktHydrate(id || 'home'); } catch (e) {}
+    return sp.apply(this, arguments);
+  };
+  w.__ktHydrating = true;
+  window.showPage = w;
+  window.addEventListener('load', function () {
+    window.ktPrefetchSections(['home', 'solutions', 'pricing', 'contact', 'blog', 'safe-arrival', 'about']);
+  });
+})();
+</script>
+"""
+
+
+def fix_social(doc):
+    for u in DEAD_SOCIAL:
+        doc = re.sub(r'<a href="%s" target="_blank" class="social-btn"[^>]*>.*?</a>\s*' % re.escape(u), '', doc, flags=re.S)
+    def org(m):
+        try:
+            j = json.loads(m.group(1))
+        except ValueError:
+            return m.group(0)
+        changed = False
+        for x in (j if isinstance(j, list) else j.get('@graph', [j])):
+            if x.get('@type') == 'Organization' and 'sameAs' in x:
+                x['sameAs'] = SAME_AS
+                changed = True
+            # No visible, checkable reviews behind this number: Google's rules require them,
+            # and an unsupported rating can cost the whole site its rich results.
+            if x.get('@type') == 'SoftwareApplication' and 'aggregateRating' in x:
+                del x['aggregateRating']
+                changed = True
+        if not changed:
+            return m.group(0)
+        return '<script type="application/ld+json">' + json.dumps(j, ensure_ascii=False) + '</script>'
+    return re.sub(r'<script type="application/ld\+json">(.*?)</script>', org, doc, flags=re.S)
+
+
 def lang_base(doc, lang, posts, d):
     """The whole page in one language: blog cards in that language, then every sentence the
     page's translator would translate, translated on the server."""
@@ -315,11 +497,22 @@ def main():
             put('blog/body/%s.%s.html' % (slug, l), b)
 
     sitemap = []
-    slim_doc = doc
-    for lang in LANGS:
+    slim_doc = fix_social(doc)
+    build = time.strftime('%Y%m%d%H%M', time.gmtime())
+    only = os.environ.get('KT_SEO_LANGS')
+    content = {}          # rest -> the words a reader sees at that address (for lastmod)
+    for lang in (only.split(',') if only else LANGS):
         doc = lang_base(slim_doc, lang, posts, None if lang == 'en' else load_dict(root, lang))
+        doc = prefix_links(doc, lang, page_ids)
+        doc = doc.replace('</head>', LOADER_HEAD % (build, json.dumps(FULL_NAV), json.dumps(FULL_NAV)) + '</head>', 1)
+        doc = doc.replace('</body>', LOADER_TAIL + '</body>', 1)
+        doc, frags = split_sections(doc)
+        doc = mark_reruns(doc, {k: v for k, v in frags.items() if k not in KEEP_INLINE})
+        for pid, h in frags.items():
+            if pid not in KEEP_INLINE:
+                put('sections/%s/%s.html' % (lang, pid), h)
         if lang == 'en':
-            nf = not_found_page(doc)
+            nf = fill_sections(not_found_page(doc), frags, set())
             put('p/404.html', nf)
             # The host's own config sends every 404 to /404.shtml (the .htaccess ErrorDocument
             # is not honoured), so that file IS the not-found page.
@@ -333,7 +526,9 @@ def main():
             d = head(doc, lang, rest, info['t'], info['d'], ld, keep_faq=(pid == 'home'))
             if pid != 'home':
                 d = activate(d, pid)
-            d = prefix_links(d, lang, page_ids)
+            d = fill_sections(d, frags, {pid})
+            if lang == 'en':
+                content[rest] = frags.get(pid, '')
             if pid == 'home' and lang == 'en':
                 put('index.html', d)
             elif pid == 'home':
@@ -356,14 +551,52 @@ def main():
             if img:
                 art['image'] = img
             ld = [art, crumbs(lang, [(UI[lang]['Home'], url(lang, '/')), (UI[lang]['Blog'], url(lang, '/blog')), (title, url(lang, rest))])]
-            d = head(doc, lang, rest, title + ' | ' + blog_t, desc, ld, image=img)
+            # Google shows about 60 characters: ' | KiddieTrac Blog' pushed most titles past that.
+            d = head(doc, lang, rest, title + ' | KiddieTrac' if len(title) <= 48 else title, desc, ld, image=img)
             d = activate(d, 'blog', reading=True)
+            d = fill_sections(d, frags, {'blog'})
             d = one(d, '<div class="page active reading" id="page-blog">',
                     '<div class="page active reading" id="page-blog">' + article(p, lang, posts))
-            d = prefix_links(d, lang, page_ids)
+            if lang == 'en':
+                content[rest] = article(p, lang, posts)
             put('p/%sblog/%s.html' % ('' if lang == 'en' else lang + '/', p['slug']), d)
             if lang == 'en':
                 sitemap.append((rest, p['date']))
+
+    # lastmod = the day an address's content last changed, not the build date (2026-10-16:
+    # every address said "changed today" on every build, which teaches Google to ignore it).
+    import hashlib
+    state_path = os.path.join(here, 'page_state.json')
+    try:
+        state = json.load(open(state_path, encoding='utf-8'))
+    except (IOError, ValueError):
+        state = {}
+    if not state:
+        # First run: start from the dates already published, not from today.
+        try:
+            prev = open(os.path.join(root, 'sitemap.xml'), encoding='utf-8').read()
+            for loc, lm in re.findall(r'<loc>%s([^<]*)</loc><lastmod>([^<]+)</lastmod>' % re.escape(BASE), prev):
+                if not re.match(r'/(fr|es|hi)(/|$)', loc):
+                    state[loc or '/'] = {'h': None, 'd': lm}
+        except IOError:
+            pass
+    dated = []
+    for rest, lastmod in sitemap:
+        hsh = hashlib.sha1(re.sub(r'\s+', ' ', content.get(rest, '')).encode('utf-8')).hexdigest()
+        old = state.get(rest)
+        if rest.startswith('/blog/'):
+            when = lastmod                                   # an article keeps its own date
+        elif old and (old.get('h') == hsh or old.get('h') is None):
+            when = old['d']                                  # unchanged (or first run: as published)
+        else:
+            when = today
+        state[rest] = {'h': hsh, 'd': when}
+        dated.append((rest, when))
+    sitemap = dated
+    if not dry and not only:
+        state['_seeded'] = True
+        with open(state_path, 'w', encoding='utf-8') as f:
+            json.dump(state, f, indent=1, sort_keys=True)
 
     # Sitemap: every address, each listing its language versions.
     x = ['<?xml version="1.0" encoding="UTF-8"?>',
@@ -373,14 +606,15 @@ def main():
         alts += '<xhtml:link rel="alternate" hreflang="x-default" href="%s"/>' % url('en', rest)
         for l in LANGS:
             x.append('<url><loc>%s</loc><lastmod>%s</lastmod>%s</url>' % (url(l, rest), lastmod, alts))
-    for extra in ['/privacy', '/terms']:
-        x.append('<url><loc>%s%s</loc><lastmod>%s</lastmod></url>' % (BASE, extra, today))
+    # /terms is not listed: it is a redirect to /privacy#terms, and its canonical says so.
+    x.append('<url><loc>%s/privacy</loc></url>' % BASE)
     x.append('</urlset>')
-    put('sitemap.xml', '\n'.join(x) + '\n')
+    if not only:
+        put('sitemap.xml', '\n'.join(x) + '\n')
 
     pages = [k for k in written if k.startswith('p/') or k == 'index.html']
     print('pages %d, bodies %d, sitemap urls %d' % (len(pages), len([k for k in written if k.startswith('blog/body/')]), len(x) - 3))
-    print('page size: index %d KB (was %d KB)' % (written['index.html'] // 1024, len(open(src, encoding='utf-8').read().encode('utf-8')) // 1024))
+    print('page size: index %d KB (was %d KB)' % (written.get('index.html', 0) // 1024, len(open(src, encoding='utf-8').read().encode('utf-8')) // 1024))
 
 
 if __name__ == '__main__':
