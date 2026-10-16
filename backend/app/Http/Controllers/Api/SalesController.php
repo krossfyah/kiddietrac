@@ -10,6 +10,7 @@ use App\Models\SalesQuote;
 use App\Models\SalesQuoteItem;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 /**
@@ -379,7 +380,10 @@ class SalesController extends Controller
             'lead_id'        => $l->id,
             'title'          => $data['title'] ?? 'Proposal',
             'status'         => 'draft',
-            'billing_period' => $data['billing_period'] ?? null,
+            'billing_period' => $data['billing_period'] ?? 'month',
+            'currency'       => $data['currency'] ?? 'CAD',
+            'taxes'          => $this->cleanTaxes($data['taxes'] ?? []),
+            'terms'          => $data['terms'] ?? null,
             'valid_until'    => $data['valid_until'] ?? null,
             'discount'       => $data['discount'] ?? 0,
             'notes'          => $data['notes'] ?? null,
@@ -399,17 +403,23 @@ class SalesController extends Controller
         $data = $this->validateQuote($r);
 
         // Snapshot for the change history (before we overwrite).
-        $qLabels = ['title' => 'Title', 'billing_period' => 'Billing period', 'valid_until' => 'Valid until', 'discount' => 'Discount', 'notes' => 'Notes', 'status' => 'Status'];
-        $qFmt = function ($k, $v) {
+        $qLabels = ['title' => 'Title', 'currency' => 'Currency', 'billing_period' => 'Billing period', 'valid_until' => 'Valid until', 'discount' => 'Discount', 'taxes' => 'Taxes', 'notes' => 'Notes', 'terms' => 'Terms', 'status' => 'Status'];
+        $qFmt = function ($k, $v) use ($q) {
             if ($v === null || $v === '') { return '—'; }
-            if ($k === 'discount') { return '$' . number_format((float) $v, 2); }
+            if ($k === 'discount') { return self::money($v, $q->currency); }
+            if ($k === 'taxes') { return implode(', ', array_map(fn ($t) => ($t['label'] ?? 'Tax') . ' ' . rtrim(rtrim(number_format((float) ($t['rate'] ?? 0), 3), '0'), '.') . '%', (array) $v)) ?: '—'; }
+            if ($k === 'terms') { return mb_strimwidth(preg_replace('/\s+/', ' ', (string) $v), 0, 80, '…'); }
+            if ($k === 'billing_period') { return $v === 'year' ? 'Annual' : ($v === 'month' ? 'Monthly' : (string) $v); }
             if ($k === 'valid_until') { return $v instanceof \DateTimeInterface ? $v->format('Y-m-d') : substr((string) $v, 0, 10); }
             return (string) $v;
         };
         $qBefore = [];
         foreach ($qLabels as $k => $lb) { $qBefore[$k] = $qFmt($k, $q->getAttribute($k)); }
 
-        $q->fill(array_intersect_key($data, array_flip(['title', 'billing_period', 'valid_until', 'discount', 'notes'])));
+        $q->fill(array_intersect_key($data, array_flip(['title', 'billing_period', 'currency', 'valid_until', 'discount', 'notes', 'terms'])));
+        if (array_key_exists('taxes', $data)) {
+            $q->taxes = $this->cleanTaxes($data['taxes'] ?? []);
+        }
         if (in_array($r->input('status'), ['draft', 'sent', 'accepted', 'declined'], true)) {
             $q->status = $r->input('status');
             if ($q->status === 'sent' && ! $q->sent_at) {
@@ -429,6 +439,8 @@ class SalesController extends Controller
         $q->save();
         if ($r->has('items')) {
             $this->syncItems($q, $data['items'] ?? []);
+        } else {
+            $this->recomputeTotals($q);   // discount or taxes may have changed
         }
 
         // Log field-level edits to the lead's change history (Salesforce-style).
@@ -454,6 +466,89 @@ class SalesController extends Controller
     public function quoteShow(int $quote)
     {
         return response()->json(SalesQuote::with('items', 'lead:id,name,company,email')->findOrFail($quote));
+    }
+
+    /** The proposal as it prints, for the in-app viewer (2026-10-16). */
+    public function quotePreview(int $quote)
+    {
+        $q = SalesQuote::with('items', 'lead')->findOrFail($quote);
+        return response()->json(['html' => $this->quoteHtml($q), 'number' => $q->number]);
+    }
+
+    public function quoteDestroy(int $quote)
+    {
+        $q = SalesQuote::findOrFail($quote);
+        $q->delete();   // soft delete
+        if ($lead = SalesLead::find($q->lead_id)) {
+            $this->logActivity($lead, 'note', "Proposal {$q->number} deleted", null);
+        }
+        return response()->json(['ok' => true]);
+    }
+
+    /* Proposal defaults (2026-10-16, Anthony: "add the terms to the proposal (valid for 90
+       days and add other words and ability to edit these words)"). One platform-wide set in
+       platform_settings 'sales.proposal_defaults'; each new proposal starts from it and its
+       own copy can then be edited. {days} in the terms is replaced with valid_days. */
+    public const PROPOSAL_DEFAULTS = [
+        'valid_days' => 90,
+        'terms'      => "1. This proposal is valid for {days} days from the date issued.
+"
+            . "2. Prices are in the currency shown. Taxes are added where listed.
+"
+            . "3. Subscription fees are billed in advance for each billing period and renew automatically until cancelled in writing.
+"
+            . "4. One-time fees (such as setup and onboarding) are due on acceptance.",
+        'taxes'      => [],
+    ];
+
+    private static function proposalDefaultValues(): array
+    {
+        $raw = DB::table('platform_settings')->where('key', 'sales.proposal_defaults')->value('value');
+        $v = $raw ? json_decode($raw, true) : null;
+        return array_merge(self::PROPOSAL_DEFAULTS, is_array($v) ? $v : []);
+    }
+
+    public function proposalDefaults()
+    {
+        return response()->json(self::proposalDefaultValues());
+    }
+
+    public function proposalDefaultsSave(Request $r)
+    {
+        $data = $r->validate([
+            'valid_days'   => 'required|integer|min:1|max:730',
+            'terms'        => 'nullable|string|max:10000',
+            'taxes'        => 'nullable|array|max:5',
+            'taxes.*.label' => 'required|string|max:40',
+            'taxes.*.rate'  => 'required|numeric|min:0|max:100',
+        ]);
+        $v = ['valid_days' => (int) $data['valid_days'], 'terms' => (string) ($data['terms'] ?? ''), 'taxes' => $this->cleanTaxes($data['taxes'] ?? [])];
+        DB::table('platform_settings')->updateOrInsert(['key' => 'sales.proposal_defaults'], ['value' => json_encode($v), 'updated_at' => now(), 'created_at' => now()]);
+        return response()->json($v);
+    }
+
+    private function cleanTaxes(?array $taxes): array
+    {
+        $out = [];
+        foreach ((array) $taxes as $t) {
+            $label = trim((string) ($t['label'] ?? ''));
+            if ($label === '') continue;
+            $out[] = ['label' => mb_substr($label, 0, 40), 'rate' => round((float) ($t['rate'] ?? 0), 3)];
+        }
+        return array_slice($out, 0, 5);
+    }
+
+    /** Subtotal less discount, plus each tax on that amount. */
+    private function recomputeTotals(SalesQuote $q): void
+    {
+        $taxable = max(0, round((float) $q->subtotal - (float) $q->discount, 2));
+        $tax = 0;
+        foreach ((array) ($q->taxes ?: []) as $t) {
+            $tax += round($taxable * (float) ($t['rate'] ?? 0) / 100, 2);
+        }
+        $q->tax_total = round($tax, 2);
+        $q->total = round($taxable + $tax, 2);
+        $q->save();
     }
 
     // ---------------------------------------------------------------- Products (preset plans)
@@ -656,11 +751,25 @@ class SalesController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Currencies a proposal can be priced in (code => name). Prices are typed in that currency; nothing is converted. */
+    public const CURRENCIES = [
+        'CAD' => 'Canadian dollar', 'USD' => 'US dollar', 'GBP' => 'British pound', 'EUR' => 'Euro',
+        'AUD' => 'Australian dollar', 'NZD' => 'New Zealand dollar', 'JMD' => 'Jamaican dollar',
+        'TTD' => 'Trinidad and Tobago dollar', 'BBD' => 'Barbados dollar', 'XCD' => 'East Caribbean dollar',
+        'INR' => 'Indian rupee', 'PHP' => 'Philippine peso', 'ZAR' => 'South African rand', 'MXN' => 'Mexican peso',
+    ];
+
+    private static function money($v, ?string $cur): string
+    {
+        $sym = ['GBP' => '£', 'EUR' => '€', 'INR' => '₹', 'PHP' => '₱', 'ZAR' => 'R'][$cur ?: 'CAD'] ?? '$';
+        return ((float) $v < 0 ? '-' : '') . $sym . number_format(abs((float) $v), 2);
+    }
+
     private function quoteHtml(SalesQuote $q): string
     {
         $lead = $q->lead;
-        $num = fn ($v) => number_format((float) $v, 2);
-        $money = fn ($v) => ((float) $v < 0 ? '-$' : '$') . number_format(abs((float) $v), 2);
+        $cur = $q->currency ?: 'CAD';
+        $money = fn ($v) => self::money($v, $cur);
         $rows = '';
         foreach ($q->items as $it) {
             $qty = rtrim(rtrim(number_format((float) $it->qty, 2), '0'), '.');
@@ -671,13 +780,29 @@ class SalesController extends Controller
                 . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right;' . $neg . '">' . $money($it->unit_price) . '</td>'
                 . '<td style="padding:7px 10px;border-bottom:1px solid #e6ebf1;text-align:right;' . $neg . '">' . $money($it->line_total) . '</td></tr>';
         }
-        $disc = (float) $q->discount > 0
-            ? '<tr><td colspan="3" style="padding:6px 10px;text-align:right;color:#64748b">Discount</td><td style="padding:6px 10px;text-align:right">-$' . $num($q->discount) . '</td></tr>'
-            : '';
+        $foot = fn ($label, $v) => '<tr><td colspan="3" style="padding:6px 10px;text-align:right;color:#64748b">' . $label . '</td><td style="padding:6px 10px;text-align:right">' . $money($v) . '</td></tr>';
+        $taxes = (array) ($q->taxes ?: []);
+        $disc = '';
+        if ((float) $q->discount > 0 || $taxes) {
+            $disc .= $foot('Subtotal', $q->subtotal);
+        }
+        if ((float) $q->discount > 0) {
+            $disc .= $foot('Discount', -(float) $q->discount);
+        }
+        $taxable = max(0, round((float) $q->subtotal - (float) $q->discount, 2));
+        foreach ($taxes as $t) {
+            $rate = rtrim(rtrim(number_format((float) ($t['rate'] ?? 0), 3), '0'), '.');
+            $disc .= $foot(e($t['label'] ?? 'Tax') . ' (' . $rate . '%)', round($taxable * (float) ($t['rate'] ?? 0) / 100, 2));
+        }
         $valid = $q->valid_until ? '<p style="color:#64748b;font-size:12px;margin:2px 0 0">Valid until ' . e($q->valid_until->format('M j, Y')) . '</p>' : '';
         $notes = $q->notes ? '<div style="margin-top:16px;font-size:12px;color:#334155"><strong>Notes</strong><br>' . nl2br(e($q->notes)) . '</div>' : '';
+        if (trim((string) $q->terms) !== '') {
+            $notes .= '<div style="margin-top:16px;font-size:11.5px;color:#334155;border-top:1px solid #e6ebf1;padding-top:10px"><strong>Terms</strong><br>' . nl2br(e($q->terms)) . '</div>';
+        }
         $forWhom = e($lead->company ?: ($lead->name ?? 'Prospect')) . ($lead->name && $lead->company ? ' (' . e($lead->name) . ')' : '');
-        $period = $q->billing_period ? ' <span style="font-weight:400;font-size:11px;color:#64748b">/' . e($q->billing_period) . '</span>' : '';
+        $periodWord = ['month' => 'per month', 'year' => 'per year'][$q->billing_period] ?? ($q->billing_period ? 'per ' . $q->billing_period : '');
+        $period = ' <span style="font-weight:400;font-size:11px;color:#64748b">' . e($cur) . ($periodWord ? ' ' . $periodWord : '') . '</span>';
+        $billing = ['month' => 'Monthly', 'year' => 'Annual'][$q->billing_period] ?? null;
 
         return '<html><body style="font-family:DejaVu Sans,sans-serif;color:#0D1B2A;padding:14px">'
             . '<div style="background:#5B2A86;color:#fff;padding:20px 24px;border-radius:10px">'
@@ -685,11 +810,13 @@ class SalesController extends Controller
             . '<div style="opacity:.9;font-size:12px">Smart Childcare Management Platform</div></div>'
             . '<h2 style="margin:18px 0 0">Proposal ' . e($q->number ?: '') . '</h2>' . $valid
             . '<table style="margin:12px 0 6px;font-size:13px"><tr><td style="color:#64748b;padding-right:14px">Prepared for</td><td><strong>' . $forWhom . '</strong></td></tr>'
-            . ($lead->email ? '<tr><td style="color:#64748b">Email</td><td>' . e($lead->email) . '</td></tr>' : '') . '</table>'
+            . ($lead->email ? '<tr><td style="color:#64748b">Email</td><td>' . e($lead->email) . '</td></tr>' : '')
+            . ($billing ? '<tr><td style="color:#64748b">Billing</td><td>' . $billing . '</td></tr>' : '')
+            . '<tr><td style="color:#64748b">Currency</td><td>' . e(self::CURRENCIES[$cur] ?? $cur) . ' (' . e($cur) . ')</td></tr></table>'
             . '<table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px">'
             . '<thead><tr style="background:#f4f6f9;text-align:left"><th style="padding:8px 10px">Item</th><th style="padding:8px 10px;text-align:center">Qty</th><th style="padding:8px 10px;text-align:right">Unit</th><th style="padding:8px 10px;text-align:right">Amount</th></tr></thead>'
             . '<tbody>' . ($rows ?: '<tr><td colspan="4" style="padding:10px;color:#94a3b8">No line items.</td></tr>') . '</tbody>'
-            . '<tfoot>' . $disc . '<tr><td colspan="3" style="padding:9px 10px;text-align:right;font-weight:800">Total</td><td style="padding:9px 10px;text-align:right;font-weight:800;color:#047857">$' . $num($q->total) . $period . '</td></tr></tfoot>'
+            . '<tfoot>' . $disc . '<tr><td colspan="3" style="padding:9px 10px;text-align:right;font-weight:800">Total</td><td style="padding:9px 10px;text-align:right;font-weight:800;color:#047857">' . $money($q->total) . $period . '</td></tr></tfoot>'
             . '</table>' . $notes
             . '<p style="margin-top:26px;color:#94a3b8;font-size:11px">KiddieTrac · Smart Childcare Management Platform · kiddietrac.com</p>'
             . '</body></html>';
@@ -735,10 +862,15 @@ class SalesController extends Controller
     {
         return $r->validate([
             'title'               => 'nullable|string|max:200',
-            'billing_period'      => 'nullable|string|max:20',
+            'billing_period'      => 'nullable|in:month,year',
+            'currency'            => 'nullable|in:' . implode(',', array_keys(self::CURRENCIES)),
             'valid_until'         => 'nullable|date',
             'discount'            => 'nullable|numeric|min:0',
             'notes'               => 'nullable|string|max:5000',
+            'terms'               => 'nullable|string|max:10000',
+            'taxes'               => 'nullable|array|max:5',
+            'taxes.*.label'       => 'nullable|string|max:40',
+            'taxes.*.rate'        => 'nullable|numeric|min:0|max:100',
             'items'               => 'nullable|array',
             'items.*.description' => 'required|string|max:255',
             'items.*.qty'         => 'nullable|numeric|min:0',
@@ -767,8 +899,7 @@ class SalesController extends Controller
             ]);
         }
         $q->subtotal = round($subtotal, 2);
-        $q->total = round($subtotal - (float) $q->discount, 2);
-        $q->save();
+        $this->recomputeTotals($q);
     }
 
     /** Human labels for the lead fields we track in the change history. */
@@ -987,7 +1118,8 @@ class SalesController extends Controller
             'quotes' => $l->quotes->map(fn ($q) => [
                 'id' => $q->id, 'number' => $q->number, 'title' => $q->title,
                 'status' => $q->status, 'total' => $q->total, 'subtotal' => $q->subtotal,
-                'discount' => $q->discount, 'billing_period' => $q->billing_period,
+                'discount' => $q->discount, 'billing_period' => $q->billing_period, 'currency' => $q->currency ?: 'CAD',
+                'taxes' => $q->taxes ?: [], 'tax_total' => $q->tax_total, 'terms' => $q->terms,
                 'valid_until' => optional($q->valid_until)->toDateString(),
                 'notes' => $q->notes,
                 'items' => $q->items->map(fn ($it) => [

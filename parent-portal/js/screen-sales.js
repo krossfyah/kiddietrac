@@ -76,6 +76,14 @@
   function go(hash) { window.location.hash = '#' + hash; }
   // A discount line is negative: "−$19.35", never "$-19.35" (2026-10-14).
   function money(v) { if (v == null || v === '') return '—'; var n = Number(v); return (n < 0 ? '−$' : '$') + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+  /* PROPOSAL CURRENCY + BILLING (2026-10-16, Anthony: "when creating proposal allow to choose
+     currency type and if annual or monthly"). Prices are typed in the chosen currency; nothing is
+     converted. Billing is 'month' | 'year': preset plans priced per month are x12 on an annual
+     proposal (and yearly ones /12 on a monthly one), and switching it re-prices those lines. */
+  var CURRENCIES = [['CAD', 'Canadian dollar'], ['USD', 'US dollar'], ['GBP', 'British pound'], ['EUR', 'Euro'], ['AUD', 'Australian dollar'], ['NZD', 'New Zealand dollar'], ['JMD', 'Jamaican dollar'], ['TTD', 'Trinidad and Tobago dollar'], ['BBD', 'Barbados dollar'], ['XCD', 'East Caribbean dollar'], ['INR', 'Indian rupee'], ['PHP', 'Philippine peso'], ['ZAR', 'South African rand'], ['MXN', 'Mexican peso']];
+  var CUR_SYM = { GBP: '£', EUR: '€', INR: '₹', PHP: '₱', ZAR: 'R' };
+  function moneyIn(v, cur) { if (v == null || v === '') return '—'; var n = Number(v); return (n < 0 ? '−' : '') + (CUR_SYM[cur || 'CAD'] || '$') + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function periodShort(p) { return p === 'year' ? '/yr' : (p === 'month' ? '/mo' : ''); }
   /* An instant from the server (UTC, "YYYY-MM-DD HH:MM:SS") shown with its time in the
      AGENCY's zone — "Oct 9, 2026, 8:57 AM". (Anthony, 2026-10-09: "when adding notes to
      leads add the timestamp to the notes as well".) */
@@ -96,6 +104,8 @@
     if (String(s).length <= 10 && window.KT && KT.dayLabel) { return KT.dayLabel(s); }
     try { return new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return s; } }
   function todayISO() { return new Date().toISOString().slice(0, 10); }
+  function addDaysISO(iso, n) { var t = new Date(iso + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+  var CURRENT_LEAD = null;   // the lead on screen (the proposal Email action names its address)
   function fmtTime(s) { if (!s) return ''; try { var d = new Date(s.replace(' ', 'T')); return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch (e) { return s; } }
   function me() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function salesAuthed() { var r = (me().roles) || []; return r.indexOf('sales_rep') > -1 || r.indexOf('platform_admin') > -1; }
@@ -120,10 +130,10 @@
   }
   function tok() { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
   function apiBase() { return (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
-  function downloadQuotePdf(id) {
+  function downloadQuotePdf(id, number) {
     fetch(apiBase() + '/sales/quotes/' + id + '/pdf', { headers: { Authorization: 'Bearer ' + tok() } })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
-      .then(function (b) { var u = URL.createObjectURL(b); var a = document.createElement('a'); a.href = u; a.download = 'proposal-' + id + '.pdf'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 1500); })
+      .then(function (b) { var u = URL.createObjectURL(b); var a = document.createElement('a'); a.href = u; a.download = (number || ('proposal-' + id)) + '.pdf'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 1500); })
       .catch(function (e) { toast('⚠️', 'PDF failed', e.message || '', '#DC2626'); });
   }
 
@@ -706,6 +716,7 @@
     container.appendChild(el('div', { style: 'padding:20px;color:#64748B' }, ['Loading lead…']));
     var lead;
     try { lead = await Api.get('/sales/leads/' + id); } catch (e) { clear(container); container.appendChild(hero('Lead', '', '🏢')); container.appendChild(card([el('div', { style: 'color:#DC2626' }, ['Lead not found.'])])); return; }
+    CURRENT_LEAD = lead;
     if (!META) { try { var d = await Api.get('/sales/leads'); META = { owners: d.owners || [], products: d.products || [] }; } catch (e) { META = { owners: [], products: [] }; } }
     clear(container);
 
@@ -1012,10 +1023,11 @@
     ])]);
     var list = el('div', { style: 'display:flex;flex-direction:column;gap:8px' });
     (lead.quotes || []).forEach(function (q) {
-      list.appendChild(el('div', { style: 'border:1px solid #e6ebf1;border-radius:10px;padding:10px 12px;cursor:pointer', onclick: function () { openQuoteBuilder(id, q, container, ctx); } }, [
-        el('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, [
+      list.appendChild(el('div', { style: 'border:1px solid #e6ebf1;border-radius:10px;padding:10px 12px;cursor:pointer', onclick: function () { viewQuote(id, q, container, ctx); } }, [
+        el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:8px' }, [
           el('div', { style: 'font-weight:700;font-size:13px' }, [q.number || 'Proposal', ' ', el('span', { style: 'font-size:11px;font-weight:700;color:#fff;background:' + ({ draft: '#94A3B8', sent: '#0EA5E9', accepted: '#10B981', declined: '#EF4444' }[q.status] || '#94A3B8') + ';border-radius:999px;padding:1px 8px;margin-left:4px' }, [q.status])]),
-          el('div', { style: 'font-weight:800;color:#047857' }, [money(q.total)]),
+          el('div', { style: 'margin-left:auto;font-weight:800;color:#047857;white-space:nowrap' }, [moneyIn(q.total, q.currency), el('span', { style: 'font-size:11px;font-weight:700;color:#64748B' }, [' ' + (q.currency || 'CAD') + periodShort(q.billing_period)])]),
+          quoteMenuButton(id, q, container, ctx),
         ]),
         q.title ? el('div', { style: 'font-size:12px;color:#64748B;margin-top:2px' }, [q.title]) : null,
       ]));
@@ -1025,7 +1037,81 @@
     return panel;
   }
 
-  function openQuoteBuilder(leadId, quote, container, ctx) {
+  /* PROPOSAL ACTIONS (2026-10-16, Anthony: "i need the ability to view the proposal - make a
+     kebab to view, download, delete, email and edit"). The proposals tab is a CARD LIST, not a
+     table, so kt-row-actions has nothing to collapse — this is the one hand-rolled ⋮ on the
+     lead screen (CONVENTIONS.md: allowed where no table exists). The menu lives on <body>. */
+  function quoteMenuButton(leadId, q, container, ctx) {
+    return el('button', { type: 'button', title: 'Proposal actions', 'aria-label': 'Proposal actions', 'aria-haspopup': 'menu', 'data-kt-inpage': '1', 'data-kt-iconized': '1',
+      style: 'flex:0 0 auto;width:30px;height:30px;min-height:30px;border:1px solid #E2E8F0;background:#fff;border-radius:8px;cursor:pointer;font-size:18px;line-height:1;color:#334155;display:inline-flex;align-items:center;justify-content:center;padding:0',
+      onclick: function (ev) { ev.preventDefault(); ev.stopPropagation(); openQuoteMenu(ev.currentTarget, leadId, q, container, ctx); } }, ['⋮']);
+  }
+  function closeQuoteMenu() { var m = document.getElementById('kt-quote-menu'); if (m) m.remove(); document.removeEventListener('mousedown', quoteMenuOutside, true); }
+  function quoteMenuOutside(ev) { var m = document.getElementById('kt-quote-menu'); if (m && !m.contains(ev.target)) closeQuoteMenu(); }
+  function openQuoteMenu(anchor, leadId, q, container, ctx) {
+    closeQuoteMenu();
+    var item = function (label, fn, danger) {
+      return el('button', { type: 'button', role: 'menuitem', style: 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;padding:9px 14px;font:inherit;font-size:14px;cursor:pointer;color:' + (danger ? '#B91C1C' : '#0D1B2A'),
+        onmouseenter: function (e) { e.currentTarget.style.background = danger ? '#FEF2F2' : '#F1F5F9'; }, onmouseleave: function (e) { e.currentTarget.style.background = 'none'; },
+        onclick: function (e) { e.stopPropagation(); closeQuoteMenu(); fn(); } }, [label]);
+    };
+    var m = el('div', { id: 'kt-quote-menu', role: 'menu', style: 'position:fixed;z-index:10001;min-width:190px;background:#fff;border:1px solid #E2E8F0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:6px 0;overflow:hidden' }, [
+      item('👁 View', function () { viewQuote(leadId, q, container, ctx); }),
+      item('✏️ Edit', function () { openQuoteBuilder(leadId, q, container, ctx); }),
+      item('⬇ Download PDF', function () { downloadQuotePdf(q.id, q.number); }),
+      item('📧 Email to prospect', function () { emailQuote(q, container, ctx); }),
+      el('div', { style: 'height:1px;background:#EEF2F6;margin:4px 0' }),
+      item('🗑 Delete', function () { deleteQuote(q, container, ctx); }, true),
+    ]);
+    document.body.appendChild(m);
+    var r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+    var left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+    var top = r.bottom + 4; if (top + mh > window.innerHeight - 8) top = Math.max(8, r.top - mh - 4);
+    m.style.left = left + 'px'; m.style.top = top + 'px';
+    setTimeout(function () { document.addEventListener('mousedown', quoteMenuOutside, true); }, 0);
+    window.addEventListener('scroll', closeQuoteMenu, { once: true, capture: true });
+  }
+  async function emailQuote(q, container, ctx) {
+    var to = (CURRENT_LEAD && CURRENT_LEAD.email) || '';
+    if (!to) { toast('⚠️', 'No email address', 'Add an email to this lead first.', '#DC2626'); return; }
+    if (!(await window.KT.confirm({ title: 'Email ' + (q.number || 'this proposal') + '?', description: 'The PDF goes to ' + to + '.' + (q.status === 'draft' ? ' The proposal will be marked Sent.' : ''), okLabel: 'Send email' }))) return;
+    try { await Api.post('/sales/quotes/' + q.id + '/send', {}); toast('📧', 'Proposal emailed', 'Sent to ' + to + '.'); if (container) renderDetail(container, ctx); }
+    catch (e) { toast('⚠️', 'Email failed', e.message || '', '#DC2626'); }
+  }
+  async function deleteQuote(q, container, ctx) {
+    if (!(await window.KT.confirm({ title: 'Delete ' + (q.number || 'this proposal') + '?', description: 'It is removed from this lead. The history keeps a note that it was deleted.', okLabel: 'Delete' }))) return;
+    try { await Api.delete('/sales/quotes/' + q.id); toast('🗑', 'Proposal deleted'); renderDetail(container, ctx); }
+    catch (e) { toast('⚠️', 'Delete failed', e.message || '', '#DC2626'); }
+  }
+  // View: the proposal exactly as the PDF prints it, in a sandboxed frame (no scripts).
+  async function viewQuote(leadId, q, container, ctx) {
+    var ov = el('div', { style: 'position:fixed;inset:0;z-index:10000;background:rgba(13,27,42,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto', onclick: function (ev) { if (ev.target === ov) ov.remove(); } });
+    var frame = el('iframe', { title: 'Proposal ' + (q.number || ''), sandbox: '', style: 'display:block;width:100%;height:min(72vh,900px);border:1px solid #E2E8F0;border-radius:10px;background:#fff' });
+    var box = el('div', { style: 'background:#fff;border-radius:16px;max-width:860px;width:100%;padding:18px;box-sizing:border-box' }, [
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px' }, [
+        el('div', { style: 'font-size:18px;font-weight:800' }, ['Proposal ' + (q.number || '')]),
+        el('button', { type: 'button', 'aria-label': 'Close', style: 'border:0;background:none;font-size:22px;cursor:pointer;color:#64748B', onclick: function () { ov.remove(); } }, ['×']),
+      ]),
+      frame,
+      el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap' }, [
+        btn('⬇ Download PDF', 'light', function () { downloadQuotePdf(q.id, q.number); }),
+        btn('📧 Email', 'light', function () { ov.remove(); emailQuote(q, container, ctx); }),
+        btn('✏️ Edit', 'primary', function () { ov.remove(); openQuoteBuilder(leadId, q, container, ctx); }),
+      ]),
+    ]);
+    ov.appendChild(box); document.body.appendChild(ov);
+    try { var r = await Api.get('/sales/quotes/' + q.id + '/preview'); frame.srcdoc = r.html; }
+    catch (e) { frame.srcdoc = '<p style="font-family:sans-serif;color:#B91C1C;padding:20px">Could not load the proposal.</p>'; }
+  }
+
+  function openQuoteBuilder(leadId, quote, container, ctx, defaults) {
+    // A new proposal starts from the proposal defaults (terms, valid-for days, taxes).
+    if (!quote && !defaults) {
+      Api.get('/sales/proposal-defaults').then(function (d) { openQuoteBuilder(leadId, quote, container, ctx, d || {}); })
+        .catch(function () { openQuoteBuilder(leadId, quote, container, ctx, {}); });
+      return;
+    }
+    defaults = defaults || {};
     var products = (META && META.products) || [];
     var byId = {}; products.forEach(function (p) { byId[String(p.id)] = p; });
     var ov = el('div', { style: 'position:fixed;inset:0;z-index:10000;background:rgba(13,27,42,.55);display:flex;align-items:flex-start;justify-content:center;padding:30px 16px;overflow:auto', onclick: function (ev) { if (ev.target === ov) ov.remove(); } });
@@ -1034,12 +1120,24 @@
     var items = quote && quote.items ? quote.items.map(function (i) { return { description: i.description, qty: i.qty, unit_price: i.unit_price, product_id: i.product_id, _disc: discRule(i.product_id) }; }) : [];
     var box = el('div', { style: 'background:#fff;border-radius:16px;max-width:640px;width:100%;padding:22px' });
     var titleIn = input({ value: quote ? (quote.title || '') : 'KiddieTrac Proposal', placeholder: 'Proposal title' });
+    var lastCur = null; try { lastCur = localStorage.getItem('kt_sales_currency'); } catch (e) {}
+    var curNow = (quote && quote.currency) || lastCur || 'CAD';
+    var curSel = selectEl(CURRENCIES.map(function (c) { return { v: c[0], l: c[0] + ' — ' + c[1] }; }), curNow);
+    var period = (quote && quote.billing_period) || 'month';
+    var perSel = selectEl([{ v: 'month', l: 'Monthly' }, { v: 'year', l: 'Annual' }], period);
     var discIn = input({ type: 'number', step: '0.01', value: quote ? (quote.discount || 0) : 0 });
-    var validIn = input({ type: 'date', value: quote ? (quote.valid_until || '') : '' });
+    var validDays = Number(defaults.valid_days || 0);
+    var validIn = input({ type: 'date', value: quote ? (quote.valid_until || '') : (validDays ? addDaysISO(todayISO(), validDays) : '') });
+    var termsIn = textarea({ value: quote ? (quote.terms || '') : String(defaults.terms || '').replace(/\{days\}/g, String(validDays || 90)), style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:13.5px;box-sizing:border-box;min-height:120px;resize:vertical' });
+    termsIn.style.setProperty('min-height', '120px', 'important');   // a global rule zeroes textarea min-height
+    var taxes = ((quote ? quote.taxes : defaults.taxes) || []).map(function (t) { return { label: t.label, rate: t.rate }; });
+    var taxHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
     var notesIn = textarea({ value: quote ? (quote.notes || '') : '' });
     var itemsHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px;margin:6px 0' });
     var totalEl = el('div', { style: 'text-align:right;font-weight:800;font-size:18px;color:#047857;margin-top:8px' }, ['$0.00']);
     function unitOf(it) { var p = byId[String(it.product_id)]; return p ? p.unit : null; }
+    // A recurring preset's price for this proposal's billing period.
+    function priceFor(unit, price, per) { price = Number(price || 0); if (unit === 'month' && per === 'year') return Math.round(price * 12 * 100) / 100; if (unit === 'year' && per === 'month') return Math.round(price / 12 * 100) / 100; return price; }
     // What a discount line takes off, from the lines it applies to (never more than they come to).
     function discountAmount(it) {
       var r = it._disc; if (!r) return 0;
@@ -1060,8 +1158,16 @@
         if (it._pIn) it._pIn.value = it.unit_price.toFixed(2);
       });
       var s = 0; items.forEach(function (i) { s += (Number(i.qty || 0) * Number(i.unit_price || 0)); });
-      var t = s - Number(discIn.value || 0);
-      totalEl.textContent = money(t) + (Number(discIn.value || 0) ? '  (−' + money(discIn.value) + ')' : '');
+      var disc = Number(discIn.value || 0), cur = curSel.value;
+      var taxable = Math.max(0, Math.round((s - disc) * 100) / 100), tsum = 0;
+      var rows = [];
+      var row = function (l, v, strong) { return el('div', { style: 'display:flex;justify-content:flex-end;gap:16px;' + (strong ? 'font-weight:800;font-size:18px;color:#047857;margin-top:4px' : 'font-size:13px;color:#475569;font-weight:600') }, [el('span', {}, [l]), el('span', { style: 'min-width:110px;text-align:right' }, [v])]); };
+      var live = taxes.filter(function (t) { return String(t.label || '').trim(); });
+      if (disc || live.length) rows.push(row('Subtotal', moneyIn(s, cur)));
+      if (disc) rows.push(row('Discount', moneyIn(-disc, cur)));
+      live.forEach(function (t) { var a = Math.round(taxable * Number(t.rate || 0)) / 100; tsum += a; rows.push(row(t.label + ' (' + Number(t.rate || 0) + '%)', moneyIn(a, cur))); });
+      rows.push(row('Total ' + cur + (period === 'year' ? ' per year' : ' per month'), moneyIn(taxable + tsum, cur), true));
+      clear(totalEl); rows.forEach(function (r) { totalEl.appendChild(r); });
     }
     function drawItems() {
       clear(itemsHost);
@@ -1069,7 +1175,7 @@
         var isDisc = !!it._disc;
         var d = input({ value: it.description || '', placeholder: 'Line item', style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' + (isDisc ? ';color:#047857;font-weight:700' : '') });
         var q = input({ type: 'number', step: '0.01', value: it.qty == null ? 1 : it.qty, style: 'width:60px;flex:0 0 60px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
-        var p = input({ type: 'number', step: '0.01', value: it.unit_price == null ? 0 : it.unit_price, style: 'width:90px;flex:0 0 90px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' + (isDisc ? ';color:#047857;background:#F0FDF4' : '') });
+        var p = input({ type: 'number', step: '0.01', value: it.unit_price == null ? 0 : it.unit_price, style: 'width:104px;flex:0 0 104px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' + (isDisc ? ';color:#047857;background:#F0FDF4' : '') });
         if (isDisc) { q.disabled = true; p.readOnly = true; p.title = 'Worked out from the discount plan'; it._pIn = p; }
         d.addEventListener('input', function () { it.description = d.value; }); q.addEventListener('input', function () { it.qty = q.value; recalc(); }); p.addEventListener('input', function () { it.unit_price = p.value; recalc(); });
         itemsHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' }, [d, q, p, el('button', { style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer;flex:0 0 auto', onclick: function () { items.splice(idx, 1); drawItems(); recalc(); } }, ['×'])]));
@@ -1085,24 +1191,55 @@
         if (p.kind === 'discount') {
           items.push({ description: p.name + ' (' + discountLabel(p) + ')' + (p.description ? ' — ' + p.description : ''), qty: 1, unit_price: 0, product_id: p.id, _disc: discRule(p.id) });
         } else {
-          items.push({ description: p.name + (p.description ? ' — ' + p.description : ''), qty: 1, unit_price: Number(p.price), product_id: p.id });
+          items.push({ description: p.name + (p.description ? ' — ' + p.description : ''), qty: 1, unit_price: priceFor(p.unit, p.price, period), product_id: p.id });
         }
         drawItems(); recalc(); planSel.value = '';
       }
     });
     box.appendChild(el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px' }, [el('div', { style: 'font-size:18px;font-weight:800' }, [quote ? ('Proposal ' + (quote.number || '')) : 'New proposal']), el('button', { style: 'border:0;background:none;font-size:22px;cursor:pointer;color:#64748B', onclick: function () { ov.remove(); } }, ['×'])]));
     box.appendChild(field('Title', titleIn));
-    box.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;margin:14px 0 6px' }, [el('div', { style: 'flex:1;font-size:12px;font-weight:700;color:#5a7080' }, ['Line items']), el('div', { style: 'width:60px;font-size:11px;color:#64748B;text-align:center' }, ['Qty']), el('div', { style: 'width:90px;font-size:11px;color:#64748B;text-align:center' }, ['Price']), el('div', { style: 'width:34px' })]));
+    curSel.addEventListener('change', function () { try { localStorage.setItem('kt_sales_currency', curSel.value); } catch (e) {} recalc(); });
+    perSel.addEventListener('change', function () {
+      var from = period, to = perSel.value; if (from === to) return;
+      items.forEach(function (it) {
+        if (it._disc) return;
+        var u = unitOf(it); if (u !== 'month' && u !== 'year') return;
+        var n = Number(it.unit_price || 0);
+        it.unit_price = Math.round((to === 'year' ? n * 12 : n / 12) * 100) / 100;
+      });
+      period = to; drawItems(); recalc();
+    });
+    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:12px' }, [field('Currency', curSel), field('Billing', perSel)]));
+    box.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-top:4px' }, ['Prices are in the currency you choose (nothing is converted). On an annual proposal, monthly plans are priced ×12.']));
+    box.appendChild(el('div', { style: 'display:flex;gap:8px;align-items:center;margin:14px 0 6px' }, [el('div', { style: 'flex:1;font-size:12px;font-weight:700;color:#5a7080' }, ['Line items']), el('div', { style: 'width:60px;font-size:11px;color:#64748B;text-align:center' }, ['Qty']), el('div', { style: 'width:104px;font-size:11px;color:#64748B;text-align:center' }, ['Price']), el('div', { style: 'width:34px' })]));
     box.appendChild(itemsHost);
     box.appendChild(el('div', { style: 'display:flex;gap:8px;margin-bottom:14px' }, [el('div', { style: 'flex:1;min-width:0' }, [planSel]), btn('+ Blank line', 'light', function () { items.push({ description: '', qty: 1, unit_price: 0 }); drawItems(); })]));
-    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px' }, [field('Extra discount ($)', discIn), field('Valid until', validIn)]));
+    box.appendChild(el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:14px' }, [field('Extra discount (amount)', discIn), field('Valid until', validIn)]));
+    function drawTaxes() {
+      clear(taxHost);
+      taxes.forEach(function (t, idx) {
+        var l = input({ value: t.label || '', placeholder: 'Tax name (e.g. HST)', style: 'flex:1;min-width:0;padding:7px 9px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+        var r = input({ type: 'number', step: '0.001', min: '0', max: '100', value: t.rate == null ? '' : t.rate, placeholder: '%', style: 'width:90px;flex:0 0 90px;padding:7px;border:1px solid #d9e1ea;border-radius:8px;font-size:14px;box-sizing:border-box' });
+        l.addEventListener('input', function () { t.label = l.value; recalc(); }); r.addEventListener('input', function () { t.rate = r.value; recalc(); });
+        taxHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center' }, [l, r, el('span', { style: 'font-size:13px;color:#64748B' }, ['%']), el('button', { type: 'button', 'aria-label': 'Remove tax', style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer;flex:0 0 auto', onclick: function () { taxes.splice(idx, 1); drawTaxes(); recalc(); } }, ['×'])]));
+      });
+      if (!taxes.length) taxHost.appendChild(el('div', { style: 'font-size:12.5px;color:#94A3B8' }, ['No taxes on this proposal.']));
+    }
+    drawTaxes();
+    box.appendChild(el('div', { style: 'margin-top:14px' }, [
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px' }, [el('div', { style: 'font-size:12px;font-weight:700;color:#5a7080' }, ['Taxes (on the total after discount)']), btn('+ Add tax', 'light', function () { if (taxes.length >= 5) return; taxes.push({ label: '', rate: '' }); drawTaxes(); recalc(); })]),
+      taxHost,
+    ]));
     box.appendChild(el('div', { style: 'margin-top:14px' }, [field('Notes', notesIn)]));
+    box.appendChild(el('div', { style: 'margin-top:14px' }, [field('Terms', termsIn)]));
     box.appendChild(totalEl);
+    recalc();
     var statusSel = quote ? selectEl([{ v: 'draft', l: 'Draft' }, { v: 'sent', l: 'Sent' }, { v: 'accepted', l: 'Accepted' }, { v: 'declined', l: 'Declined' }], quote.status, { style: 'width:auto;padding:7px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:13px' }) : null;
     box.appendChild(el('div', { style: 'display:flex;gap:8px;justify-content:flex-end;margin-top:16px;align-items:center;flex-wrap:wrap' }, [
       quote ? el('div', { style: 'margin-right:auto;display:flex;align-items:center;gap:6px' }, [el('span', { style: 'font-size:12px;color:#64748B' }, ['Status']), statusSel]) : null,
-      quote ? btn('⬇ PDF', 'light', function () { downloadQuotePdf(quote.id); }) : null,
-      quote && leadId ? btn('📧 Email', 'light', async function (ev) { ev.target.disabled = true; try { await Api.post('/sales/quotes/' + quote.id + '/send', {}); toast('📧', 'Proposal emailed', 'Sent to the prospect.'); } catch (e) { toast('⚠️', 'Email failed', e.message || '', '#DC2626'); ev.target.disabled = false; } }) : null,
+      quote ? btn('👁 View', 'light', function () { ov.remove(); viewQuote(leadId, quote, container, ctx); }) : null,
+      quote ? btn('⬇ PDF', 'light', function () { downloadQuotePdf(quote.id, quote.number); }) : null,
+      quote && leadId ? btn('📧 Email', 'light', function () { emailQuote(quote, null, null); }) : null,
       btn('Cancel', 'ghost', function () { ov.remove(); }),
       btn(quote ? 'Save proposal' : 'Create proposal', 'primary', async function (ev) {
         ev.target.disabled = true;
@@ -1110,7 +1247,9 @@
         var lines = items.filter(function (i) { return (i.description || '').trim(); }).map(function (i) {
           return { description: i.description, qty: i.qty, unit_price: i.unit_price, product_id: i.product_id || null };
         });
-        var body = { title: titleIn.value, discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: lines };
+        var body = { title: titleIn.value, currency: curSel.value, billing_period: perSel.value, terms: termsIn.value,
+          taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }),
+          discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: lines };
         if (quote) body.status = statusSel.value;
         try {
           if (quote) await Api.patch('/sales/quotes/' + quote.id, body); else await Api.post('/sales/leads/' + leadId + '/quotes', body);
@@ -1180,6 +1319,46 @@
         if (!discounts.length) clear(dgrid);
         dgrid.insertBefore(discountCard({ name: '', description: '', price: 10, kind: 'discount', discount_type: 'percent', applies_to: 'all', active: true }, load, true), dgrid.firstChild);
       })]));
+      host.appendChild(await proposalDefaultsCard());
+    }
+    // Terms, valid-for days and taxes every NEW proposal starts with (each proposal keeps its own copy).
+    async function proposalDefaultsCard() {
+      var dfl = {}; try { dfl = await Api.get('/sales/proposal-defaults'); } catch (e) {}
+      var days = input({ type: 'number', min: '1', max: '730', step: '1', value: dfl.valid_days || 90, style: 'width:110px;' + FLD });
+      var terms = textarea({ value: dfl.terms || '', style: 'width:100%;min-height:150px;resize:vertical;' + FLD });
+      terms.style.setProperty('min-height', '150px', 'important');
+      var taxes = (dfl.taxes || []).map(function (t) { return { label: t.label, rate: t.rate }; });
+      var taxHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
+      function drawTaxes() {
+        clear(taxHost);
+        taxes.forEach(function (t, idx) {
+          var l = input({ value: t.label || '', placeholder: 'Tax name (e.g. HST)', style: 'flex:1;min-width:0;' + FLD });
+          var r = input({ type: 'number', step: '0.001', min: '0', max: '100', value: t.rate == null ? '' : t.rate, placeholder: '%', style: 'width:90px;flex:0 0 90px;' + FLD });
+          l.addEventListener('input', function () { t.label = l.value; }); r.addEventListener('input', function () { t.rate = r.value; });
+          taxHost.appendChild(el('div', { style: 'display:flex;gap:6px;align-items:center;max-width:460px' }, [l, r, el('span', { style: 'font-size:13px;color:#64748B' }, ['%']), el('button', { type: 'button', 'aria-label': 'Remove tax', style: 'border:0;background:#FEE2E2;color:#B91C1C;border-radius:8px;padding:6px 9px;cursor:pointer;flex:0 0 auto', onclick: function () { taxes.splice(idx, 1); drawTaxes(); } }, ['×'])]));
+        });
+        if (!taxes.length) taxHost.appendChild(el('div', { style: 'font-size:12.5px;color:#94A3B8' }, ['None — add one if most proposals carry the same tax.']));
+      }
+      drawTaxes();
+      return el('div', {}, [
+        el('div', { style: 'margin:26px 0 4px;font-size:16px;font-weight:800;color:#0D1B2A' }, ['📄 Proposal terms & defaults']),
+        el('div', { style: 'margin:0 0 12px;font-size:13px;color:#64748B' }, ['Every new proposal starts with these. Each proposal can then change its own copy.']),
+        card([
+          el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px' }, [el('span', { style: 'font-size:13px;font-weight:700;color:#334155' }, ['Proposals are valid for']), days, el('span', { style: 'font-size:13px;font-weight:700;color:#334155' }, ['days'])]),
+          field('Terms', terms),
+          el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 14px' }, ['{days} is replaced with the number of days above.']),
+          el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;max-width:460px' }, [el('div', { style: 'font-size:12px;font-weight:700;color:#5a7080' }, ['Default taxes']), btn('+ Add tax', 'light', function () { if (taxes.length >= 5) return; taxes.push({ label: '', rate: '' }); drawTaxes(); })]),
+          taxHost,
+          el('div', { style: 'display:flex;justify-content:flex-end;margin-top:14px' }, [btn('Save', 'primary', async function (ev) {
+            ev.target.disabled = true;
+            try {
+              await Api.put('/sales/proposal-defaults', { valid_days: Number(days.value || 90), terms: terms.value, taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }) });
+              toast('✅', 'Proposal defaults saved');
+            } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); }
+            ev.target.disabled = false;
+          })]),
+        ], 'max-width:900px'),
+      ]);
     }
     function actions(p, reload, bodyFn) {
       return el('div', { style: 'display:flex;gap:8px;margin-top:12px;justify-content:flex-end;align-items:center' }, [

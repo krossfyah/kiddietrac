@@ -793,6 +793,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/demo-token', [\App\Http\Controllers\Api\SalesController::class, 'demoToken']);
             Route::get('/quotes/{quote}/pdf', [\App\Http\Controllers\Api\SalesController::class, 'quotePdf'])->where('quote','[0-9]+');
             Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\SalesController::class, 'quoteSend'])->where('quote','[0-9]+');
+            // Proposal view / delete + proposal defaults (terms, valid-for days, taxes) — 2026-10-16.
+            Route::get('/quotes/{quote}/preview', [\App\Http\Controllers\Api\SalesController::class, 'quotePreview'])->where('quote','[0-9]+');
+            Route::delete('/quotes/{quote}', [\App\Http\Controllers\Api\SalesController::class, 'quoteDestroy'])->where('quote','[0-9]+');
+            Route::get('/proposal-defaults', [\App\Http\Controllers\Api\SalesController::class, 'proposalDefaults']);
+            Route::put('/proposal-defaults', [\App\Http\Controllers\Api\SalesController::class, 'proposalDefaultsSave']);
             // Live website chat inbox (WebChatController).
             Route::post('/web-chats/presence', [\App\Http\Controllers\Api\WebChatController::class, 'presence']);
             Route::get('/web-chats', [\App\Http\Controllers\Api\WebChatController::class, 'index']);
