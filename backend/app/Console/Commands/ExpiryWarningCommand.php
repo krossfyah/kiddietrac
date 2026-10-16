@@ -31,7 +31,9 @@ final class ExpiryWarningCommand extends Command
         $rows = DB::table('background_checks')
             ->whereIn('user_id', fn ($q) => \App\Support\Audience::excludeOff($q->from('users as u')->whereNull('u.deleted_at'), 'u')->select('u.id'))
             ->where('expires_at', '<=', $cutoff)
-            ->where('expires_at', '>=', $now->subDays(30))
+            // copy(): subDays() changes the date in place, and $now is used below to count
+            // the days left -- every warning said 30 days more than the truth (2026-10-16).
+            ->where('expires_at', '>=', $now->copy()->subDays(30))
             ->get();
 
         $sent = 0;
