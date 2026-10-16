@@ -1711,7 +1711,7 @@
     if (!user || !Array.isArray(user.roles) || user.roles.indexOf('platform_admin') === -1) return;
     var cur = ''; try { cur = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
     var old = document.getElementById('kt-view-as'); if (old) old.remove();
-    var roles = [['', 'Super admin (default)'], ['agency_admin', '\uD83C\uDFE2 Agency admin'], ['centre_director', '\uD83C\uDFEB Centre director'], ['educator', '\uD83C\uDF93 Educator'], ['guardian', '\uD83D\uDC6A Parent / guardian'], ['home_visitor', '\uD83C\uDFE1 Home visitor'], ['sales_rep', '\uD83D\uDCBC Sales rep'], ['auditor', '\uD83D\uDD0D Auditor']];
+    var roles = [['', 'Super admin'], ['agency_admin', '\uD83C\uDFE2 Agency admin'], ['centre_director', '\uD83C\uDFEB Centre director'], ['educator', '\uD83C\uDF93 Educator'], ['guardian', '\uD83D\uDC6A Parent / guardian'], ['home_visitor', '\uD83C\uDFE1 Home visitor'], ['sales_rep', '\uD83D\uDCBC Sales rep'], ['auditor', '\uD83D\uDD0D Auditor']];
     var wrap = document.createElement('div'); wrap.id = 'kt-view-as';
     // Embedded in the sidebar (not a floating overlay) so it never blocks content.
     /* Quiet when it is doing nothing, LOUD when it is. Sitting in the sidebar foot

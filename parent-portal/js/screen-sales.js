@@ -436,20 +436,20 @@
     var myId = (function () { try { return (JSON.parse(sessionStorage.getItem('kt_user') || '{}').id) || ''; } catch (e) { return ''; } })();
     var inner = el('div', {}, [
       formSection('Primary contact', '👤', [
-        field('Contact name *', f.name = input({ placeholder: 'Jane Doe' })),
-        field('Job title', f.title = input({ placeholder: 'Director / Manager' })),
-        field('Email', f.email = input({ type: 'email', placeholder: 'jane@example.com' })),
+        fieldWide('Contact name *', f.name = input({ placeholder: 'Jane Doe' })),
+        fieldWide('Job title', f.title = input({ placeholder: 'Director / Manager' })),
+        fieldWide('Email', f.email = input({ type: 'email', placeholder: 'jane@example.com' })),
         field('Phone', f.phone = input({ placeholder: '(555) 123-4567' })),
       ]),
       formSection('Business owner / decision maker', '🧑‍💼', [
-        field('Owner name', f.owner_name = input({ placeholder: 'Owner / principal' })),
-        field('Owner title', f.owner_title = input({ placeholder: 'Owner, CEO…' })),
-        field('Owner email', f.owner_email = input({ type: 'email', placeholder: 'owner@example.com' })),
+        fieldWide('Owner name', f.owner_name = input({ placeholder: 'Owner / principal' })),
+        fieldWide('Owner title', f.owner_title = input({ placeholder: 'Owner, CEO…' })),
+        fieldWide('Owner email', f.owner_email = input({ type: 'email', placeholder: 'owner@example.com' })),
         field('Owner phone', f.owner_phone = input({ placeholder: '(555) 987-6543' })),
       ]),
       formSection('Business', '🏢', [
-        field('Company / childcare', f.company = input({ placeholder: 'Sunshine Daycare' })),
-        field('Website', f.website = input({ placeholder: 'sunshinedaycare.com' })),
+        fieldWide('Company / childcare', f.company = input({ placeholder: 'Sunshine Daycare' })),
+        fieldWide('Website', f.website = input({ placeholder: 'sunshinedaycare.com' })),
         fieldWide('Street address', f.address = input({ placeholder: 'Start typing an address…' })),
         field('City', f.city = input({ placeholder: 'Toronto' })),
         field('Province / state', f.province = input({ placeholder: 'ON' })),
@@ -457,7 +457,7 @@
         field('Country', f.country = input({ placeholder: 'Canada' })),
       ]),
       formSection('What they use today', '🧩', [
-        field('Current software / solution', f.current_solution = input({ placeholder: 'e.g. HiMama, spreadsheets, paper' })),
+        fieldWide('Current software / solution', f.current_solution = input({ placeholder: 'e.g. HiMama, spreadsheets, paper' })),
         field('# children', f.num_children = input({ type: 'number', min: '0', placeholder: '0' })),
         field('# locations / centres', f.num_locations = input({ type: 'number', min: '0', placeholder: '1' })),
         field('Lead source', f.source = selectEl(SOURCES, '')),
@@ -753,14 +753,14 @@
       ]),
       el('div', { class: 'kt-lead-sections' }, [
         formSection('Contact', '👤', [
-          field('Contact', e.name = input({ value: lead.name || '' })),
-          field('Job title', e.title = input({ value: lead.title || '' })),
-          field('Email', e.email = input({ value: lead.email || '' })),
+          fieldWide('Contact', e.name = input({ value: lead.name || '' })),
+          fieldWide('Job title', e.title = input({ value: lead.title || '' })),
+          fieldWide('Email', e.email = input({ value: lead.email || '' })),
           field('Phone', e.phone = input({ value: lead.phone || '' })),
         ]),
         formSection('Company', '🏢', [
-          field('Company', e.company = input({ value: lead.company || '' })),
-          field('Website', e.website = input({ value: lead.website || '' })),
+          fieldWide('Company', e.company = input({ value: lead.company || '' })),
+          fieldWide('Website', e.website = input({ value: lead.website || '' })),
           field('Using today', e.current_solution = input({ value: lead.current_solution || '', placeholder: 'HiMama, paper…' })),
           field('# children', e.num_children = input({ type: 'number', min: '0', value: lead.num_children == null ? '' : lead.num_children })),
           field('# locations', e.num_locations = input({ type: 'number', min: '0', value: lead.num_locations == null ? '' : lead.num_locations })),
@@ -773,13 +773,13 @@
           field('Next follow-up', e.follow_up_date = input({ type: 'date', value: lead.follow_up_date || '' })),
         ]),
         formSection('Business owner', '🧑‍💼', [
-          field('Owner name', e.owner_name = input({ value: lead.owner_name || '', placeholder: 'Business owner' })),
-          field('Owner title', e.owner_title = input({ value: lead.owner_title || '' })),
-          field('Owner email', e.owner_email = input({ value: lead.owner_email || '' })),
+          fieldWide('Owner name', e.owner_name = input({ value: lead.owner_name || '', placeholder: 'Business owner' })),
+          fieldWide('Owner title', e.owner_title = input({ value: lead.owner_title || '' })),
+          fieldWide('Owner email', e.owner_email = input({ value: lead.owner_email || '' })),
           field('Owner phone', e.owner_phone = input({ value: lead.owner_phone || '' })),
         ]),
         el('div', { class: 'kt-lead-wide' }, [formSection('Address', '📍', [
-          field('Street address', e.address = input({ value: lead.address || '' })),
+          fieldWide('Street address', e.address = input({ value: lead.address || '' })),
           field('City', e.city = input({ value: lead.city || '' })),
           field('Province / state', e.province = input({ value: lead.province || '' })),
           field('Postal / ZIP', e.postal_code = input({ value: lead.postal_code || '' })),
