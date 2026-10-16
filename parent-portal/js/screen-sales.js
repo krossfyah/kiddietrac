@@ -184,7 +184,18 @@
     ]);
   }
   function input(attrs) { return el('input', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box' }, attrs || {})); }
-  function textarea(attrs) { return el('textarea', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:76px;resize:vertical' }, attrs || {})); }
+  /* A global rule zeroes textarea min-height, so every box here collapsed to one line (2026-10-16:
+     "the notes section in the proposal the box is too small"). Re-assert the intended minimum
+     with !important; a caller's own min-height wins over the 76px default. */
+  function textarea(attrs) {
+    var t = el('textarea', Object.assign({ class: 'input', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;box-sizing:border-box;min-height:76px;resize:vertical' }, attrs || {}));
+    // rows: 1 = a one-line box that grows itself; rows: N = about N lines; otherwise 76px.
+    var rows = attrs && attrs.rows ? Number(attrs.rows) : 0;
+    var mh = t.style.minHeight || (rows === 1 ? '' : rows > 1 ? (rows * 21 + 20) + 'px' : '76px');
+    if (mh) t.style.setProperty('min-height', mh, 'important');
+    if (!t.style.fontFamily) t.style.fontFamily = 'inherit';   // not the browser's monospace default
+    return t;
+  }
   /* A lead's stored source may not be one of SOURCES: the website form writes
      "marketing-site", the chat "website-chat", older leads "manual" or "Cold call". The
      edit dropdown then showed blank and saving any field sent source = null, which the
@@ -1238,7 +1249,7 @@
     condIn.style.setProperty('min-height', '220px', 'important');
     var taxes = ((quote ? quote.taxes : defaults.taxes) || []).map(function (t) { return { label: t.label, rate: t.rate }; });
     var taxHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
-    var notesIn = textarea({ value: quote ? (quote.notes || '') : '' });
+    var notesIn = textarea({ value: quote ? (quote.notes || '') : '', placeholder: 'Anything to add for the customer — shown on the proposal under the prices.', style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:14px;line-height:1.45;box-sizing:border-box;min-height:120px;resize:vertical' });
     var itemsHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px;margin:6px 0' });
     var totalEl = el('div', { style: 'text-align:right;font-weight:800;font-size:18px;color:#047857;margin-top:8px' }, ['$0.00']);
     function unitOf(it) { var p = byId[String(it.product_id)]; return p ? p.unit : null; }
