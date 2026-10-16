@@ -418,91 +418,158 @@
   }
 
   // ============================ Background checks ============================
+  /* REBUILT 2026-10-15. Anthony: "background checks section when adding new record doesnt
+     pull staff and the table is not there with how we have other tables - full sweep also
+     add a notes field to add notes".
+
+     - The Staff dropdown was always empty: it asked /admin/users for three roles in one
+       value and read the wrong key. The list endpoint now returns the staff a check can be
+       recorded for (`staff`), scoped the same way as the rows.
+     - The table is the house pattern (CONVENTIONS.md "Tables"): data-kt-pretty on main, a
+       plain <table> in a .kt-card, labelled row buttons — so it gets the card, sortable
+       headers, filter box, export bar, row count and ⋮ menu like every other list.
+     - Notes on the form, in the table and on the record. Dates are calendar dates (no
+       timezone shift: '2026-10-15' is the 15th everywhere). */
+  const BGC = { main: null, rows: [], staff: [], status: '' };
+  const BGC_TYPES = [{ code: 'vss', label: 'VSS' }, { code: 'criminal', label: 'Criminal' }, { code: 'driver', label: 'Driver' }, { code: 'reference', label: 'Reference' }, { code: 'other', label: 'Other' }];
+  function bgcTypes() { return (window.KT && KT._jurChecks && KT._jurChecks.length) ? KT._jurChecks : BGC_TYPES; }
+  function bgcTypeLabel(code) {
+    const t = bgcTypes().concat(BGC_TYPES).find(x => x.code === code);
+    return t ? t.label : String(code || '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  }
+  function bgcDay(s) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+    if (!m) return '';
+    return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+  const BGC_TONE = { expired: ['#FEE2E2', '#B91C1C', 'Expired'], expiring: ['#FEF3C7', '#B45309', 'Expiring soon'], valid: ['#DCFCE7', '#15803D', 'Valid'] };
+  function bgcChip(bucket) {
+    const t = BGC_TONE[bucket] || BGC_TONE.valid;
+    return `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;background:${t[0]};color:${t[1]};white-space:nowrap;">${t[2]}</span>`;
+  }
+  function bgcWhen(r) {
+    const n = Number(r.days_until_expiry);
+    if (!isFinite(n)) return '';
+    if (r.status_bucket === 'expired') return `${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'} ago`;
+    return n === 0 ? 'today' : `in ${n} day${n === 1 ? '' : 's'}`;
+  }
+  function bgcDocUrl(u) {
+    const host = ((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
+    return u ? (/^https?:\/\//.test(u) ? u : host + u) : '';
+  }
+
   async function renderBackgroundChecks(main) {
-    main.innerHTML = '<div style="padding:20px;">Loading…</div>';
-    const res = await Api.get('/admin/background-checks').catch(() => ({ data: [] }));
+    BGC.main = main;
+    main.setAttribute('data-kt-pretty', '1');
+    main.innerHTML = '<div style="padding:20px;color:#64748B;">Loading background checks…</div>';
+    let res;
+    try { res = await Api.get('/admin/background-checks'); }
+    catch (e) { main.innerHTML = `<div class="kt-card" style="color:#B91C1C;">${escapeHtml((e && e.message) || 'Could not load background checks.')}</div>`; return; }
+    BGC.rows = (res && res.data) || [];
+    BGC.staff = (res && res.staff) || [];
     main.innerHTML = '';
     const root = html(`
-      <div style="padding:24px;max-width:1800px;margin:0 auto;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <h2 style="margin:0;color:#1F6080;">Background checks</h2>
-          <div>
-            <button id="bgc-csv" style="background:#059669;color:#fff;border:0;padding:9px 16px;border-radius:6px;margin-right:8px;cursor:pointer;">⤓ CSV</button>
-            <button id="bgc-add" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:6px;cursor:pointer;">+ Record</button>
-          </div>
+      <div>
+        <div class="kt-hero" style="background:linear-gradient(135deg,#0B2545 0%,#13315C 55%,#1F6FB2 100%);">
+          <div class="kt-hero-greet">🛡️ STAFF COMPLIANCE</div><h1>Background checks</h1>
+          <div class="kt-hero-sub">Police checks and vulnerable-sector screening for every staff member — when each one expires, the document on file, and any notes.</div>
         </div>
-        <div id="bgc-list" style="margin-top:18px;"></div>
+        <div id="bgc-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0 12px;">
+          <select id="bgc-status" style="height:34px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;background:#fff;">
+            <option value="">All statuses</option><option value="expired">Expired</option><option value="expiring">Expiring soon (60 days)</option><option value="valid">Valid</option>
+          </select>
+          <span style="flex:1"></span>
+          <button id="bgc-csv" type="button" class="btn btn-secondary" style="height:34px;">⤓ CSV</button>
+          <button id="bgc-add" type="button" class="btn btn-primary" style="height:34px;">+ Add check</button>
+        </div>
+        <div id="bgc-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px;"></div>
+        <div id="bgc-list"></div>
       </div>`).firstElementChild;
     main.appendChild(root);
-    renderBgcList(root.querySelector('#bgc-list'), res.data || []);
+    const sel = root.querySelector('#bgc-status');
+    sel.value = BGC.status;
+    sel.onchange = () => { BGC.status = sel.value; renderBgcList(root.querySelector('#bgc-list'), BGC.rows); };
     root.querySelector('#bgc-csv').onclick = () => downloadAuthed('/admin/background-checks?format=csv', 'background-checks.csv');
     root.querySelector('#bgc-add').onclick = () => openBgcModal(null);
+    const count = b => BGC.rows.filter(r => r.status_bucket === b).length;
+    const stat = (label, n, col) => `<div class="kt-card" style="margin:0;padding:12px 14px;"><div style="font-size:12px;color:#64748B;font-weight:700;">${label}</div><div style="font-size:22px;font-weight:800;color:${col};">${n}</div></div>`;
+    root.querySelector('#bgc-stats').innerHTML = stat('Checks on file', BGC.rows.length, '#0F172A')
+      + stat('Expired', count('expired'), count('expired') ? '#B91C1C' : '#0F172A')
+      + stat('Expiring in 60 days', count('expiring'), count('expiring') ? '#B45309' : '#0F172A')
+      + stat('Staff with no check', BGC.staff.filter(s => !BGC.rows.some(r => String(r.user_id) === String(s.id))).length, '#0F172A');
+    renderBgcList(root.querySelector('#bgc-list'), BGC.rows);
   }
-  function renderBgcList(host, rows) {
-    if (!rows.length) { host.innerHTML = '<div style="color:#64748B;padding:12px;">No records.</div>'; return; }
-    host.innerHTML = '';
-    const tbl = document.createElement('table');
-    tbl.style.cssText = 'width:100%;border-collapse:collapse;';
-    tbl.innerHTML = '<thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Staff</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Type</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Expires</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Status</th><th></th></tr></thead><tbody></tbody>';
-    const tb = tbl.querySelector('tbody');
-    rows.forEach(r => {
-      const color = r.status_bucket === 'expired' ? '#B91C1C' : r.status_bucket === 'expiring' ? '#D97706' : '#047857';
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-transform:uppercase;">${escapeHtml(r.check_type)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${fmtDate(r.expires_at)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;">${r.status_bucket}</span></td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;"><button data-id="${r.id}" data-view="1" style="background:#EFF6FF;color:#1D4ED8;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;margin-right:6px;">View</button><button data-id="${r.id}" data-edit="1" style="background:#F3F4F6;border:0;padding:6px 12px;border-radius:4px;cursor:pointer;margin-right:6px;">Edit</button><button data-id="${r.id}" data-del="1" class="kt-icon-tip" title="Delete" aria-label="Delete" data-kttip="Delete" style="background:#FEE2E2;color:#B91C1C;border:0;padding:6px 11px;border-radius:4px;cursor:pointer;">🗑️</button></td>`;
-      tb.appendChild(tr);
-    });
-    host.appendChild(tbl);
-    host.querySelectorAll('button[data-view]').forEach(b => b.onclick = () => openBgcDetail(rows.find(r => r.id == b.dataset.id)));
-    host.querySelectorAll('button[data-edit]').forEach(b => b.onclick = () => openBgcModal(rows.find(r => r.id == b.dataset.id)));
-    host.querySelectorAll('button[data-del]').forEach(b => b.onclick = async () => {
-      if (!await KT.confirm('Delete this background check?')) return;
-      await Api.delete(`/admin/background-checks/${b.dataset.id}`);
-      renderBackgroundChecks(document.getElementById('main') || document.querySelector('main'));
+
+  function renderBgcList(host, all) {
+    const rows = BGC.status ? all.filter(r => r.status_bucket === BGC.status) : all;
+    if (!rows.length) {
+      host.innerHTML = `<div class="kt-card" style="color:#475569;font-size:13.5px;">${all.length ? 'No checks with this status.' : 'No background checks recorded yet. Press <b>+ Add check</b> to record the first one.'}</div>`;
+      return;
+    }
+    host.innerHTML = '<div class="kt-card"><table data-kt-no-bulk><thead><tr><th>Staff</th><th>Check</th><th>Reference</th><th>Issued</th><th>Expires</th><th>Status</th><th>Notes</th><th></th></tr></thead><tbody>'
+      + rows.map(r => `<tr>
+          <td style="min-width:160px;"><div style="font-weight:700;">${escapeHtml(r.user_name || '')}</div>${r.staff_ref ? `<div style="font-size:12px;color:#64748B;">${escapeHtml(r.staff_ref)}</div>` : ''}</td>
+          <td>${escapeHtml(bgcTypeLabel(r.check_type))}</td>
+          <td>${escapeHtml(r.reference || '—')}</td>
+          <td style="white-space:nowrap;">${r.issued_at ? bgcDay(r.issued_at) : '—'}</td>
+          <td style="white-space:nowrap;">${bgcDay(r.expires_at)}<div style="font-size:12px;color:#64748B;">${bgcWhen(r)}</div></td>
+          <td>${bgcChip(r.status_bucket)}${r.document_url ? `<div style="margin-top:4px;"><a href="${escapeHtml(bgcDocUrl(r.document_url))}" target="_blank" rel="noopener" style="font-size:12px;color:#1D4ED8;font-weight:600;">📄 Document</a></div>` : ''}</td>
+          <td style="max-width:260px;font-size:13px;color:#334155;">${r.notes ? `<div style="white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${escapeHtml(r.notes)}</div>` : '<span style="color:#94A3B8;">—</span>'}</td>
+          <td style="text-align:right;white-space:nowrap;">
+            <button type="button" class="btn btn-secondary btn-sm" data-view="${r.id}">View</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-edit="${r.id}">✏️ Edit</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-del="${r.id}">🗑 Delete</button>
+          </td></tr>`).join('')
+      + '</tbody></table></div>';
+    const byId = id => all.find(r => String(r.id) === String(id));
+    host.querySelectorAll('[data-view]').forEach(b => b.onclick = () => openBgcDetail(byId(b.dataset.view)));
+    host.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openBgcModal(byId(b.dataset.edit)));
+    host.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+      const r = byId(b.dataset.del);
+      const ok = await KT.confirm({ title: 'Delete this background check?', description: (r ? `${r.user_name} · ${bgcTypeLabel(r.check_type)}` : '') + ' — this cannot be undone.', okLabel: 'Delete' });
+      if (!ok) return;
+      try { await Api.delete(`/admin/background-checks/${b.dataset.del}`); }
+      catch (e) { if (Dom.toast) Dom.toast((e && e.message) || 'Could not delete', 'error'); return; }
+      renderBackgroundChecks(BGC.main);
     });
   }
 
-  // Read-only detail + attach-a-file for a background-check record (dimmed modal).
+  // Read-only record + attach-a-file.
   function openBgcDetail(row) {
     if (!row) return;
-    const host = ((window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1').replace(/\/api\/v1\/?$/, '');
-    const abs = (u) => (u ? (/^https?:\/\//.test(u) ? u : host + u) : '');
-    const docLink = (u) => '<a href="' + abs(u) + '" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>';
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
-    m.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:24px;box-shadow:0 20px 50px -12px rgba(15,23,42,.4);">
-      <h3 style="margin:0 0 12px;color:#0F172A;">🛡️ Background check</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:13.5px;">
-        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Staff</td><td style="padding:5px 0;font-weight:700;">${escapeHtml(row.user_name || '')}</td></tr>
-        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Type</td><td style="padding:5px 0;text-transform:uppercase;">${escapeHtml(row.check_type || '')}</td></tr>
-        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Reference</td><td style="padding:5px 0;">${escapeHtml(row.reference || '—')}</td></tr>
-        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Issued</td><td style="padding:5px 0;">${row.issued_at ? fmtDate(row.issued_at) : '—'}</td></tr>
-        <tr><td style="padding:5px 12px 5px 0;color:#64748B;">Expires</td><td style="padding:5px 0;">${fmtDate(row.expires_at)}</td></tr>
-        <tr><td style="padding:5px 12px 5px 0;color:#64748B;vertical-align:top;">Notes</td><td style="padding:5px 0;white-space:pre-wrap;">${escapeHtml(row.notes || '—')}</td></tr>
+    const M = window.KT && KT.Shell && KT.Shell.Modal;
+    const cell = 'padding:6px 12px 6px 0;color:#64748B;vertical-align:top;white-space:nowrap;';
+    const body = html(`
+      <table data-kt-no-filter data-kt-noexport data-kt-no-bulk style="width:100%;border-collapse:collapse;font-size:13.5px;">
+        <tr><td style="${cell}">Staff</td><td style="padding:6px 0;font-weight:700;">${escapeHtml(row.user_name || '')}${row.staff_ref ? ` <span style="font-weight:600;color:#64748B;">· ${escapeHtml(row.staff_ref)}</span>` : ''}</td></tr>
+        <tr><td style="${cell}">Check</td><td style="padding:6px 0;">${escapeHtml(bgcTypeLabel(row.check_type))}</td></tr>
+        <tr><td style="${cell}">Reference</td><td style="padding:6px 0;">${escapeHtml(row.reference || '—')}</td></tr>
+        <tr><td style="${cell}">Issued</td><td style="padding:6px 0;">${row.issued_at ? bgcDay(row.issued_at) : '—'}</td></tr>
+        <tr><td style="${cell}">Expires</td><td style="padding:6px 0;">${bgcDay(row.expires_at)} · ${bgcWhen(row)} ${bgcChip(row.status_bucket)}</td></tr>
+        <tr><td style="${cell}">Notes</td><td style="padding:6px 0;white-space:pre-wrap;">${escapeHtml(row.notes || '—')}</td></tr>
       </table>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid #F1F5F9;">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:#94A3B8;margin-bottom:8px;">Attached document</div>
-        <div id="bgc-doc-cur">${row.document_url ? docLink(row.document_url) : '<span style="color:#64748B;">No document attached yet.</span>'}</div>
+        <div id="bgc-doc-cur">${row.document_url ? `<a href="${escapeHtml(bgcDocUrl(row.document_url))}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>` : '<span style="color:#64748B;">No document attached yet.</span>'}</div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
-          <input id="bgc-file" type="file" accept=".pdf,image/*,.doc,.docx" style="font-size:13px;">
-          <button id="bgc-upload" style="background:#1F6080;color:#fff;border:0;padding:8px 14px;border-radius:7px;cursor:pointer;font-weight:600;">Upload</button>
+          <input id="bgc-file" type="file" accept=".pdf,image/*,.doc,.docx" style="font-size:13px;max-width:100%;">
+          <button id="bgc-upload" type="button" class="btn btn-primary btn-sm">Upload</button>
         </div>
         <div id="bgc-up-status" style="font-size:12.5px;min-height:16px;margin-top:6px;"></div>
-      </div>
-      <div style="text-align:right;margin-top:16px;"><button id="bgc-close" style="background:#F1F5F9;color:#475569;border:0;border-radius:9px;padding:8px 16px;font-weight:700;cursor:pointer;">Close</button></div>
-    </div>`;
-    const close = () => m.remove();
-    m.addEventListener('click', e => { if (e.target === m) close(); });
-    document.body.appendChild(m);
-    m.querySelector('#bgc-close').onclick = close;
-    m.querySelector('#bgc-upload').onclick = async () => {
-      const fileEl = m.querySelector('#bgc-file');
-      const st = m.querySelector('#bgc-up-status');
+      </div>`).firstElementChild.parentNode;
+    M.open({
+      title: '🛡️ Background check',
+      body,
+      actions: [
+        { label: '✏️ Edit', handler: () => { setTimeout(() => openBgcModal(row), 0); } },
+        { label: 'Close', primary: true },
+      ],
+    });
+    body.querySelector('#bgc-upload').onclick = async () => {
+      const fileEl = body.querySelector('#bgc-file');
+      const st = body.querySelector('#bgc-up-status');
       if (!fileEl.files || !fileEl.files[0]) { st.style.color = '#B91C1C'; st.textContent = 'Choose a file first.'; return; }
-      const btn = m.querySelector('#bgc-upload');
+      const btn = body.querySelector('#bgc-upload');
       const done = (window.KT && KT.busy) ? KT.busy(btn) : function () {};
       btn.disabled = true;
       try {
@@ -510,56 +577,77 @@
         fd.append('file', fileEl.files[0]);
         const res = await Api.postForm('/admin/background-checks/' + row.id + '/document', fd);
         row.document_url = res.document_url;
-        m.querySelector('#bgc-doc-cur').innerHTML = docLink(res.document_url);
+        body.querySelector('#bgc-doc-cur').innerHTML = `<a href="${escapeHtml(bgcDocUrl(res.document_url))}" target="_blank" rel="noopener" style="color:#1D4ED8;font-weight:600;">📄 Open current document</a>`;
         st.style.color = '#047857'; st.textContent = '✓ Uploaded.';
+        if (BGC.main) { const h = BGC.main.querySelector('#bgc-list'); if (h) renderBgcList(h, BGC.rows); }
       } catch (e) {
-        st.style.color = '#B91C1C'; st.textContent = '✗ ' + (e.message || 'Upload failed');
-        btn.disabled = false;
-      } finally { done(); }
+        st.style.color = '#B91C1C'; st.textContent = '✗ ' + ((e && e.message) || 'Upload failed');
+      } finally { btn.disabled = false; done(); }
     };
   }
-  async function openBgcModal(row) {
-    const staffRes = await Api.get('/admin/users?role=educator,centre_director,agency_admin').catch(() => ({ data: [] }));
-    const staff = staffRes.data || [];
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:480px;width:90%;">
-      <h3 style="margin:0 0 12px;">${row ? 'Edit' : 'Add'} background check</h3>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Staff
-        <select id="bgc-user" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;">
-          ${staff.map(s => `<option value="${s.id}" ${row && row.user_id == s.id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`).join('')}
-        </select></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Type
-        <select id="bgc-type" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;">
-          ${((window.KT && KT._jurChecks) || [{code:'vss',label:'VSS'},{code:'criminal',label:'Criminal'},{code:'driver',label:'Driver'},{code:'reference',label:'Reference'},{code:'other',label:'Other'}])
-              .concat(row && row.check_type && !((window.KT && KT._jurChecks) || []).some(c => c.code === row.check_type) && !['vss','criminal','driver','reference','other'].includes(row.check_type) ? [{code: row.check_type, label: row.check_type.replace(/_/g, ' ')}] : [])
-              .map(t => `<option value="${t.code}" ${row && row.check_type === t.code ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
-        </select></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Reference / cert #
-        <input id="bgc-ref" value="${row ? escapeHtml(row.reference || '') : ''}" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Issued
-        <input id="bgc-issued" type="date" value="${row && row.issued_at ? row.issued_at.substring(0, 10) : ''}" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <label style="display:block;margin-top:10px;font-size:13px;font-weight:600;">Expires
-        <input id="bgc-expires" type="date" value="${row ? row.expires_at.substring(0, 10) : ''}" style="width:100%;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
-      <div style="margin-top:18px;text-align:right;">
-        <button id="bgc-cancel" style="background:#F3F4F6;border:0;padding:9px 16px;border-radius:4px;margin-right:8px;cursor:pointer;">Cancel</button>
-        <button id="bgc-save" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:4px;cursor:pointer;">Save</button>
-      </div></div>`;
-    document.body.appendChild(m);
-    m.querySelector('#bgc-cancel').onclick = () => m.remove();
-    m.querySelector('#bgc-save').onclick = async () => {
-      const payload = {
-        id: row ? row.id : null,
-        user_id: parseInt(m.querySelector('#bgc-user').value, 10),
-        check_type: m.querySelector('#bgc-type').value,
-        reference: m.querySelector('#bgc-ref').value,
-        issued_at: m.querySelector('#bgc-issued').value || null,
-        expires_at: m.querySelector('#bgc-expires').value,
-      };
-      await Api.post('/admin/background-checks', payload);
-      m.remove();
-      renderBackgroundChecks(document.getElementById('main') || document.querySelector('main'));
-    };
+
+  function openBgcModal(row) {
+    const M = window.KT && KT.Shell && KT.Shell.Modal;
+    const staff = BGC.staff.slice();
+    // An existing record whose person is no longer on the list still shows who it is.
+    if (row && !staff.some(s => String(s.id) === String(row.user_id))) staff.unshift({ id: row.user_id, name: row.user_name || ('Staff #' + row.user_id), ref: row.staff_ref });
+    const types = bgcTypes().slice();
+    if (row && row.check_type && !types.some(t => t.code === row.check_type)) types.push({ code: row.check_type, label: bgcTypeLabel(row.check_type) });
+    const F = 'display:block;width:100%;box-sizing:border-box;height:38px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;background:#fff;margin-top:4px;';
+    const L = 'display:block;font-size:13px;font-weight:700;color:#334155;';
+    const body = html(`
+      <div style="display:grid;gap:12px;">
+        <label style="${L}">Staff member
+          <select id="bgc-user" style="${F}">
+            <option value="">${staff.length ? '— choose a staff member —' : 'No staff found for this agency'}</option>
+            ${staff.map(s => `<option value="${s.id}" ${row && String(row.user_id) === String(s.id) ? 'selected' : ''}>${escapeHtml(s.name)}${s.ref ? ' · ' + escapeHtml(s.ref) : ''}</option>`).join('')}
+          </select></label>
+        <label style="${L}">Type of check
+          <select id="bgc-type" style="${F}">
+            ${types.map(t => `<option value="${escapeHtml(t.code)}" ${row && row.check_type === t.code ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('')}
+          </select></label>
+        <label style="${L}">Reference / certificate #
+          <input id="bgc-ref" maxlength="120" value="${row ? escapeHtml(row.reference || '') : ''}" style="${F}"></label>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;">
+          <label style="${L}">Issued
+            <input id="bgc-issued" type="date" value="${row && row.issued_at ? String(row.issued_at).substring(0, 10) : ''}" style="${F}"></label>
+          <label style="${L}">Expires
+            <input id="bgc-expires" type="date" value="${row && row.expires_at ? String(row.expires_at).substring(0, 10) : ''}" style="${F}"></label>
+        </div>
+        <label style="${L}">Notes
+          <textarea id="bgc-notes" maxlength="2000" rows="4" placeholder="Anything worth keeping with this check — e.g. offence declaration on file, renewal applied for, follow-up needed." style="${F}height:auto;min-height:90px;padding:8px 10px;font-family:inherit;resize:vertical;">${row ? escapeHtml(row.notes || '') : ''}</textarea></label>
+        <div id="bgc-err" style="color:#B91C1C;font-size:13px;min-height:16px;"></div>
+      </div>`).firstElementChild;
+    M.open({
+      title: row ? 'Edit background check' : 'Add background check',
+      body,
+      actions: [
+        { label: 'Cancel' },
+        { label: row ? 'Save changes' : 'Save check', primary: true, handler: async () => {
+          const err = body.querySelector('#bgc-err');
+          const userId = parseInt(body.querySelector('#bgc-user').value, 10);
+          const expires = body.querySelector('#bgc-expires').value;
+          const issued = body.querySelector('#bgc-issued').value;
+          if (!userId) { err.textContent = 'Choose the staff member.'; return false; }
+          if (!expires) { err.textContent = 'Enter the expiry date.'; return false; }
+          if (issued && issued > expires) { err.textContent = 'The expiry date is before the issue date.'; return false; }
+          err.textContent = '';
+          try {
+            await Api.post('/admin/background-checks', {
+              id: row ? row.id : null,
+              user_id: userId,
+              check_type: body.querySelector('#bgc-type').value,
+              reference: body.querySelector('#bgc-ref').value.trim(),
+              issued_at: issued || null,
+              expires_at: expires,
+              notes: body.querySelector('#bgc-notes').value.trim(),
+            });
+          } catch (e) { err.textContent = (e && e.message) || 'Could not save.'; return false; }
+          if (Dom.toast) Dom.toast(row ? 'Background check updated' : 'Background check added', 'success');
+          renderBackgroundChecks(BGC.main);
+        } },
+      ],
+    });
   }
 
   // ============================ Payroll ============================

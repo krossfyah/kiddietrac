@@ -3217,6 +3217,7 @@
             var left = Dom.el('div', {});
             left.appendChild(Dom.el('div', { style: 'font-weight:700;text-transform:uppercase;' }, r.check_type || ''));
             left.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;' }, 'Expires ' + (r.expires_at || '—') + (r.reference ? ' · ' + r.reference : '')));
+            if (r.notes) left.appendChild(Dom.el('div', { style: 'font-size:12px;color:#334155;white-space:pre-wrap;margin-top:2px;' }, '📝 ' + r.notes));   // 2026-10-15
             line.appendChild(left);
             var right = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
             right.appendChild(Dom.el('span', { style: 'color:' + col + ';font-weight:700;' }, r.status_bucket || ''));

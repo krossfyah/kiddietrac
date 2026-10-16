@@ -1880,15 +1880,19 @@ final class AdminController extends Controller
                list every centre's staff. */
             ->when(! $allMode && ! $wide, fn ($q) => $q->whereIn('centre_id', $centreIds ?: [0]));
 
-        if ($roleFilter) {
-            $userIdsQuery->where('role', $roleFilter);
+        /* A comma-separated list is a list of roles (2026-10-15): the Background checks form
+           asked for `educator,centre_director,agency_admin` and was matched as ONE role name,
+           so its Staff dropdown came back empty. */
+        $roleList = $roleFilter ? array_values(array_filter(array_map('trim', explode(',', (string) $roleFilter)))) : [];
+        if ($roleList) {
+            $userIdsQuery->whereIn('role', $roleList);
         }
 
         $userIds = $userIdsQuery->pluck('user_id')->unique()->all();
 
         // Also include guardians of families at this agency's centres
         // (v22p96: always scoped to the active agency, platform_admin included).
-        if ($roleFilter === null || $roleFilter === 'guardian') {
+        if (! $roleList || in_array('guardian', $roleList, true)) {
             if ($allMode) {
                 $guardianUserIds = DB::table('guardians')->whereNotNull('user_id')->pluck('user_id')->all();
             } else {

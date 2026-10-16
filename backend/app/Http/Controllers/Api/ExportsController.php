@@ -237,12 +237,13 @@ final class ExportsController extends Controller
                 DB::table('role_assignments')->where('active', 1)->whereIn('centre_id', $sc ?: [0])->pluck('user_id')->all() ?: [0]))
             ->orderBy('bgc.expires_at')
             ->select(DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"),
-                'u.email', 'bgc.check_type', 'bgc.reference', 'bgc.issued_at', 'bgc.expires_at')
+                'u.email', 'bgc.check_type', 'bgc.reference', 'bgc.issued_at', 'bgc.expires_at', 'bgc.notes')
             ->get()
             ->map(fn ($r) => [
                 'name' => $r->user_name, 'email' => $r->email, 'type' => $r->check_type,
                 'reference' => $r->reference, 'issued' => $r->issued_at, 'expires' => $r->expires_at,
                 'status' => $r->expires_at && Carbon::parse($r->expires_at)->isPast() ? 'EXPIRED' : 'valid',
+                'notes' => (string) ($r->notes ?? ''),
             ]);
         return $this->xlsx->download($agencyId, 'Background checks', 'background-checks-' . now()->format('Y-m-d') . '.xlsx',
             [
@@ -253,6 +254,7 @@ final class ExportsController extends Controller
                 ['header' => 'Issued', 'key' => 'issued', 'width' => 14, 'format' => 'date'],
                 ['header' => 'Expires', 'key' => 'expires', 'width' => 14, 'format' => 'date'],
                 ['header' => 'Status', 'key' => 'status', 'width' => 12],
+                ['header' => 'Notes', 'key' => 'notes', 'width' => 40],
             ], $rows);
     }
 
