@@ -2282,8 +2282,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Ontario s.68 / s.68.2 (2026-10-13): fire cadence per centre, cadence reminders switch.
         Route::post  ('/drills/cadence',           [\App\Http\Controllers\Api\DrillController::class, 'cadence']);
         Route::post  ('/drills/cadence-reminders', [\App\Http\Controllers\Api\DrillController::class, 'cadenceReminders']);
-        /* HAZARD REGISTER (2026-10-13, Ontario s.24.3): anyone on staff reports; directors/admins
-           manage and notify parents — checked per centre in HazardController. */
+    });
+    /* HAZARD REGISTER (2026-10-13, Ontario s.24.3): anyone on staff reports; directors/admins
+       manage and notify parents — checked per centre in HazardController. Its own group since
+       2026-10-15 so home visitors can report without also getting the drill log. */
+    Route::middleware('role:agency_admin,platform_admin,centre_director,educator,home_visitor')->group(function () {
         Route::get   ('/hazards',                 [\App\Http\Controllers\Api\HazardController::class, 'index']);
         Route::post  ('/hazards',                 [\App\Http\Controllers\Api\HazardController::class, 'store']);
         Route::patch ('/hazards/{id}',            [\App\Http\Controllers\Api\HazardController::class, 'update'])->whereNumber('id');

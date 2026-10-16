@@ -99,6 +99,7 @@
       { hash: 'new-home-visit', icon: '📝', label: 'New visit report', sub: 'Log a home visit' },
       { hash: 'home-visits',    icon: '📋', label: 'My reports',       sub: 'View past visits' },
       { hash: 'my-tasks',       icon: '✅', label: 'My tasks',         sub: 'Assigned to you' },
+      { hash: 'hazards',        icon: '🚧', label: 'Report a hazard',  sub: 'Something unsafe?' },
       { hash: 'inspection-forms', icon: '🗂️', label: 'Inspection forms', sub: 'Monthly & quarterly' },
       { hash: 'my-forms',       icon: '✍️', label: 'Forms to sign',   sub: 'Review & sign' },
       { hash: 'chat',           icon: '💬', label: 'Message Centre',         sub: 'Chat with families & staff' },

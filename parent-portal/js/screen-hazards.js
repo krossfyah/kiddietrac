@@ -205,7 +205,7 @@
     try {
       var r = await Api.post('/hazards/' + x.id + '/notify', { kind: kind });
       toast('📣', kind === 'notice' ? 'Parents notified' : 'Resolution sent', r.families + ' famil' + (r.families === 1 ? 'y' : 'ies') + ': ' + r.in_app + ' in the app, ' + r.emails_sent + ' email' + (r.emails_sent === 1 ? '' : 's')
-        + (r.emails_suppressed ? ' (' + r.emails_suppressed + ' held back by email settings)' : '') + (r.emails_failed ? ', ' + r.emails_failed + ' failed' : ''), r.emails_suppressed || r.emails_failed ? '#B45309' : '#16A34A');
+        + (r.emails_suppressed ? ' (' + r.emails_suppressed + ' held back by email settings)' : '') + (r.emails_failed ? ', ' + r.emails_failed + ' failed' : '') + (r.staff_copies ? '. Copy to ' + r.staff_copies + ' staff.' : ''), r.emails_suppressed || r.emails_failed ? '#B45309' : '#16A34A');
       render(main);
     } catch (e) { toast('⚠️', 'Could not notify parents', errMsg(e), '#DC2626'); }
   }
@@ -221,5 +221,6 @@
     } catch (e) { toast('⚠️', 'Could not resolve', errMsg(e), '#DC2626'); }
   }
 
-  ['agency_admin', 'platform_admin', 'centre_director', 'educator'].forEach(function (r) { KT.Shell.registerScreen(r + ':hazards', render); });
+  // Home visitors report too (2026-10-15) — they are often the first to see a hazard in a provider's home.
+  ['agency_admin', 'platform_admin', 'centre_director', 'educator', 'home_visitor'].forEach(function (r) { KT.Shell.registerScreen(r + ':hazards', render); });
 })(window);

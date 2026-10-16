@@ -632,6 +632,7 @@
           { hash: 'my-policies',   label: 'Policies to review', icon: '📘' },
           { hash: 'household',     label: 'Household residents', icon: '🏠' },
           { hash: 'files',          label: 'Files',          icon: '📎' },
+          { hash: 'hazards',        label: 'Report a hazard', icon: '🚧' },   // 2026-10-15
         ]},
         { label: 'Account', items: [
           { hash: 'notifications', label: 'Notifications', icon: '🔔' },

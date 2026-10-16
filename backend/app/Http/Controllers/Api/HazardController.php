@@ -23,9 +23,15 @@ use Illuminate\Support\Facades\DB;
  * in force 2027-01-01): a licensee tells parents about any NON-ROUTINE hazard at the
  * premises and the steps taken to deal with it.
  *
- * Who: anyone on staff at the centre may REPORT a hazard (educators included — they see it
- * first). Directors (their own centres) and agency/platform admins manage: edit, resolve,
- * and send the parent notice and, later, the resolution notice.
+ * Who: anyone on staff at the centre may REPORT a hazard (educators and, since 2026-10-15,
+ * home visitors — they see it first). Directors (their own centres) and agency/platform
+ * admins manage: edit, resolve, and send the parent notice and, later, the resolution notice.
+ *
+ * Who hears (2026-10-15, Anthony: "is this wired up to send out an email to parents a copy
+ * for educators and admin/directors?"): a REPORT alerts the centre's directors AND the
+ * agency admins (bell + email), not only the directors; every PARENT notice and
+ * resolution notice is copied (bell + email, marked as a copy) to the centre's educators,
+ * home visitors and directors and to the agency admins.
  *
  * Parent notice = bell + email (never SMS) to the guardians of the centre's CURRENT
  * families (Live::families with an enrolled child), each address separately, through
@@ -185,13 +191,9 @@ final class HazardController extends Controller
         ]);
         $this->audit($request, $agencyId, 'hazard.reported', $id, 'Hazard reported at ' . $centres[$cid] . ': ' . trim($d['title']));
 
-        // Tell the people who manage it — the centre's directors, else the agency admins. Not the reporter.
-        if (! $manager) {
-            $q = fn ($roles, $byCentre) => Audience::excludeService(Audience::excludeOff(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
-                ->whereIn('ra.role', $roles)->where('ra.active', true)->whereNull('u.deleted_at')
-                ->where($byCentre ? 'ra.centre_id' : 'ra.agency_id', $byCentre ? $cid : $agencyId)))->get(['u.id', 'u.email'])->unique('id');
-            $to = $q(['centre_director'], true);
-            if ($to->isEmpty()) $to = $q(['agency_admin'], false);
+        // Tell the people who manage it — the centre's directors AND the agency admins. Not the reporter.
+        {
+            $to = self::staffAt($agencyId, $cid, ['centre_director'], true)->where('id', '!=', $uid);
             $who = $this->name($uid);
             $sev = self::SEVERITIES[$d['severity'] ?? 'medium'];
             $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
@@ -296,6 +298,22 @@ final class HazardController extends Controller
         return response()->json(['families' => $a['families'], 'parents' => count($a['people']), 'emails' => $emails]);
     }
 
+    /**
+     * Live staff to tell: the given roles AT this centre, plus (when $withAdmins) the
+     * agency admins. One row per person, service and switched-off accounts excluded.
+     */
+    private static function staffAt(int $agencyId, int $centreId, array $centreRoles, bool $withAdmins)
+    {
+        $q = Audience::excludeService(Audience::excludeOff(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', true)->whereNull('u.deleted_at')
+            ->where(function ($w) use ($agencyId, $centreId, $centreRoles, $withAdmins) {
+                $w->where(fn ($x) => $x->where('ra.centre_id', $centreId)->whereIn('ra.role', $centreRoles));
+                if ($withAdmins) $w->orWhere(fn ($x) => $x->where('ra.agency_id', $agencyId)->where('ra.role', 'agency_admin'));
+            })));
+
+        return $q->get(['u.id', 'u.email'])->unique('id')->values();
+    }
+
     /** POST /hazards/{id}/notify { kind: notice|resolution } — bell + email to the centre's current parents. Never SMS. */
     public function notify(Request $request, int $id): JsonResponse
     {
@@ -367,14 +385,36 @@ final class HazardController extends Controller
             ->whereIn(DB::raw('LOWER(to_email)'), array_keys($addresses))->where('status', 'suppressed')->count() : 0;
         $sent = max(0, $handed - $suppressed);
 
+        /* THE STAFF COPY: the same notice, marked as a copy, to the centre's educators,
+           home visitors and directors and to the agency admins - so the people who will
+           be asked about it at pick-up have read exactly what parents read. Never to a
+           parent address (a staff member who is also a parent here already has it). */
+        $staff = self::staffAt($agencyId, $cid, ['educator', 'home_visitor', 'centre_director'], true);
+        $copyHtml = str_replace(
+            '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155">',
+            '<p style="margin:0 0 14px;padding:10px 12px;border-radius:8px;background:#F1F5F9;font-size:13px;color:#475569">Staff copy: this '
+                . ($kind === 'notice' ? 'safety notice' : 'resolution notice') . ' was sent to ' . (int) $a['families'] . ' famil' . ((int) $a['families'] === 1 ? 'y' : 'ies')
+                . ' at ' . $e($centre->name) . '.</p><p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155">', $html, $count);
+        Notify::write($staff->map(fn ($u) => ['user_id' => (int) $u->id, 'type' => 'hazard', 'title' => 'Copy sent to parents — ' . $centre->name,
+            'body' => mb_substr($bellBody, 0, 1000), 'data' => json_encode(['link' => '#hazards', 'hazard_id' => $id, 'kind' => $kind])])->all());
+        $copied = 0;
+        foreach ($staff as $u) {
+            $em = mb_strtolower(trim((string) $u->email));
+            if (! filter_var($em, FILTER_VALIDATE_EMAIL) || isset($addresses[$em])) continue;
+            try { AgencyMailer::forAgency($agencyId)->html($copyHtml, fn ($m) => $m->to($em)->subject('Copy: ' . $subject)); $copied++; }
+            catch (\Throwable $ex) { report($ex); }
+        }
+
         $set = $kind === 'notice'
             ? ['notified_at' => now(), 'notified_by' => (int) $request->user()->id, 'notified_families' => $a['families'], 'notify_parents' => true]
             : ['resolution_notified_at' => now(), 'resolution_notified_by' => (int) $request->user()->id];
         DB::table('centre_hazards')->where('id', $id)->update($set + ['updated_at' => now()]);
         $this->audit($request, $agencyId, $kind === 'notice' ? 'hazard.parents_notified' : 'hazard.resolution_notified', $id,
             ($kind === 'notice' ? 'Parents notified of hazard: ' : 'Parents told hazard resolved: ') . $row->title . ' — ' . $a['families'] . ' families, '
-            . count($a['people']) . ' in-app, ' . $sent . ' email(s) sent' . ($suppressed ? ', ' . $suppressed . ' held back by email settings' : '') . ($failed ? ', ' . $failed . ' failed' : ''));
+            . count($a['people']) . ' in-app, ' . $sent . ' email(s) sent' . ($suppressed ? ', ' . $suppressed . ' held back by email settings' : '') . ($failed ? ', ' . $failed . ' failed' : '')
+            . '; staff copy to ' . $staff->count() . ' (' . $copied . ' email(s))');
 
-        return response()->json(['ok' => true, 'families' => $a['families'], 'in_app' => count($a['people']), 'emails_sent' => $sent, 'emails_suppressed' => $suppressed, 'emails_failed' => $failed]);
+        return response()->json(['ok' => true, 'families' => $a['families'], 'in_app' => count($a['people']), 'emails_sent' => $sent, 'emails_suppressed' => $suppressed, 'emails_failed' => $failed,
+            'staff_copies' => $staff->count(), 'staff_emails' => $copied]);
     }
 }
