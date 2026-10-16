@@ -822,14 +822,18 @@ TXT;
             . '</td></tr></table></td>';
 
         return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            . '<style>@media (max-width:600px){.kt-col{display:block !important;width:100% !important;padding:0 0 10px !important}.kt-pad{padding-left:20px !important;padding-right:20px !important}}</style></head>'
+            . '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
+            . '<style>@media (prefers-color-scheme: dark){.kt-card{background:#ffffff !important}.kt-band{background:#081C41 !important}.kt-h{color:#1E2A5E !important}}'
+            . '[data-ogsc] .kt-band,[data-ogsb] .kt-band{background:#081C41 !important}[data-ogsc] .kt-card,[data-ogsb] .kt-card{background:#ffffff !important}[data-ogsc] .kt-h{color:#1E2A5E !important}'
+            . '@media (max-width:600px){.kt-col{display:block !important;width:100% !important;padding:0 0 10px !important}.kt-pad{padding-left:20px !important;padding-right:20px !important}}</style></head>'
             . '<body style="margin:0;padding:0;background:#EEF3F6">'
             . '<div style="display:none;max-height:0;overflow:hidden">Thank you for your interest in KiddieTrac. Your proposal is attached.</div>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF3F6"><tr><td align="center" style="padding:24px 10px">'
-            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#0D1B2A">'
+            . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="kt-card" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#0D1B2A">'
 
-            // Logo + brand bar.
-            . '<tr><td class="kt-pad" style="padding:22px 32px 16px"><img src="https://api.kiddietrac.com/email/logo-wordmark.png" width="140" alt="KiddieTrac" style="display:block;border:0;width:140px;height:auto"></td></tr>'
+            // Logo + brand bar. Light-on-navy wordmark on a band that is navy in both schemes
+            // (Outlook dark mode darkened the card under the dark-ink logo and it went speckled).
+            . '<tr><td bgcolor="#081C41" class="kt-band" style="background:#081C41;padding:22px 24px;text-align:center"><img src="https://app.kiddietrac.com/login-wordmark.png" width="220" alt="KiddieTrac" style="display:block;margin:0 auto;border:0;width:220px;max-width:70%;height:auto"></td></tr>'
             . '<tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
             . '<td width="45%" height="5" style="background:#1F6080;font-size:0;line-height:0">&nbsp;</td><td width="35%" height="5" style="background:#2C8AAC;font-size:0;line-height:0">&nbsp;</td><td width="20%" height="5" style="background:#8EC73C;font-size:0;line-height:0">&nbsp;</td>'
             . '</tr></table></td></tr>'
@@ -839,7 +843,7 @@ TXT;
 
             // Thank you + introduction.
             . '<tr><td class="kt-pad" style="padding:28px 40px 6px">'
-            . '<div style="font-size:24px;line-height:1.3;font-weight:bold;color:' . $navy . ';margin:0 0 14px">Thank you for considering KiddieTrac</div>'
+            . '<div class="kt-h" style="font-size:24px;line-height:1.3;font-weight:bold;color:' . $navy . ';margin:0 0 14px">Thank you for considering KiddieTrac</div>'
             . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Hi ' . e($first) . ',</p>'
             . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Thank you for your interest in working with us. Every early-years team we meet shares the same purpose we do: making a real difference for children, and for the parents who trust you with them every day. We are genuinely glad to be talking with ' . e($org) . '.</p>'
             . '<p style="margin:0 0 6px;font-size:15px;line-height:1.65">KiddieTrac is a childcare management platform built around that purpose. It brings the whole day together in one place, so your educators spend less time on paperwork and more time with the children, and families feel close to their child\'s day even when they are apart.</p>'
