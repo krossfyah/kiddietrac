@@ -1100,6 +1100,7 @@
       ]),
     ]);
     ov.appendChild(box); document.body.appendChild(ov);
+    // The preview HTML stacks its own layout on a narrow screen (the PDF keeps the page layout).
     try { var r = await Api.get('/sales/quotes/' + q.id + '/preview'); frame.srcdoc = r.html; }
     catch (e) { frame.srcdoc = '<p style="font-family:sans-serif;color:#B91C1C;padding:20px">Could not load the proposal.</p>'; }
   }
@@ -1130,6 +1131,9 @@
     var validIn = input({ type: 'date', value: quote ? (quote.valid_until || '') : (validDays ? addDaysISO(todayISO(), validDays) : '') });
     var termsIn = textarea({ value: quote ? (quote.terms || '') : String(defaults.terms || '').replace(/\{days\}/g, String(validDays || 90)), style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:13.5px;box-sizing:border-box;min-height:120px;resize:vertical' });
     termsIn.style.setProperty('min-height', '120px', 'important');   // a global rule zeroes textarea min-height
+    // Terms & Conditions: the full standard text, printed on its own page of the proposal.
+    var condIn = textarea({ value: quote ? (quote.conditions || '') : String(defaults.conditions || ''), style: 'width:100%;padding:9px 11px;border:1px solid var(--kt-border,#d9e1ea);border-radius:9px;font-size:12.5px;line-height:1.45;box-sizing:border-box;resize:vertical' });
+    condIn.style.setProperty('min-height', '220px', 'important');
     var taxes = ((quote ? quote.taxes : defaults.taxes) || []).map(function (t) { return { label: t.label, rate: t.rate }; });
     var taxHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
     var notesIn = textarea({ value: quote ? (quote.notes || '') : '' });
@@ -1231,7 +1235,11 @@
       taxHost,
     ]));
     box.appendChild(el('div', { style: 'margin-top:14px' }, [field('Notes', notesIn)]));
-    box.appendChild(el('div', { style: 'margin-top:14px' }, [field('Terms', termsIn)]));
+    box.appendChild(el('div', { style: 'margin-top:14px' }, [field('Proposal terms', termsIn)]));
+    var condWrap = el('div', { style: 'margin-top:8px;display:none' }, [field('Terms & conditions (printed on their own page)', condIn), el('div', { style: 'font-size:12px;color:#64748B;margin-top:4px' }, ['Start a line with ## for a heading, or - for a bullet. Leave empty to leave them out.'])]);
+    var condToggle = el('button', { type: 'button', 'data-kt-inpage': '1', style: 'margin-top:10px;border:0;background:none;color:' + ACCENT + ';font:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:0' }, ['▸ Terms & conditions (' + (condIn.value.trim() ? 'included' : 'none') + ')']);
+    condToggle.addEventListener('click', function () { var open = condWrap.style.display === 'none'; condWrap.style.display = open ? '' : 'none'; condToggle.textContent = (open ? '▾' : '▸') + ' Terms & conditions (' + (condIn.value.trim() ? 'included' : 'none') + ')'; });
+    box.appendChild(condToggle); box.appendChild(condWrap);
     box.appendChild(totalEl);
     recalc();
     var statusSel = quote ? selectEl([{ v: 'draft', l: 'Draft' }, { v: 'sent', l: 'Sent' }, { v: 'accepted', l: 'Accepted' }, { v: 'declined', l: 'Declined' }], quote.status, { style: 'width:auto;padding:7px 10px;border:1px solid #d9e1ea;border-radius:8px;font-size:13px' }) : null;
@@ -1247,7 +1255,7 @@
         var lines = items.filter(function (i) { return (i.description || '').trim(); }).map(function (i) {
           return { description: i.description, qty: i.qty, unit_price: i.unit_price, product_id: i.product_id || null };
         });
-        var body = { title: titleIn.value, currency: curSel.value, billing_period: perSel.value, terms: termsIn.value,
+        var body = { title: titleIn.value, currency: curSel.value, billing_period: perSel.value, terms: termsIn.value, conditions: condIn.value,
           taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }),
           discount: discIn.value || 0, valid_until: validIn.value || null, notes: notesIn.value, items: lines };
         if (quote) body.status = statusSel.value;
@@ -1327,6 +1335,8 @@
       var days = input({ type: 'number', min: '1', max: '730', step: '1', value: dfl.valid_days || 90, style: 'width:110px;' + FLD });
       var terms = textarea({ value: dfl.terms || '', style: 'width:100%;min-height:150px;resize:vertical;' + FLD });
       terms.style.setProperty('min-height', '150px', 'important');
+      var conds = textarea({ value: dfl.conditions || '', style: 'width:100%;resize:vertical;line-height:1.45;' + FLD });
+      conds.style.setProperty('min-height', '320px', 'important');
       var taxes = (dfl.taxes || []).map(function (t) { return { label: t.label, rate: t.rate }; });
       var taxHost = el('div', { style: 'display:flex;flex-direction:column;gap:6px' });
       function drawTaxes() {
@@ -1345,14 +1355,16 @@
         el('div', { style: 'margin:0 0 12px;font-size:13px;color:#64748B' }, ['Every new proposal starts with these. Each proposal can then change its own copy.']),
         card([
           el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px' }, [el('span', { style: 'font-size:13px;font-weight:700;color:#334155' }, ['Proposals are valid for']), days, el('span', { style: 'font-size:13px;font-weight:700;color:#334155' }, ['days'])]),
-          field('Terms', terms),
+          field('Proposal terms (short, under the prices)', terms),
           el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 14px' }, ['{days} is replaced with the number of days above.']),
+          field('Terms & conditions (their own page, before the signatures)', conds),
+          el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 14px' }, ['Start a line with ## for a heading, or - for a bullet. Proposals already made keep the wording they were created with.']),
           el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;max-width:460px' }, [el('div', { style: 'font-size:12px;font-weight:700;color:#5a7080' }, ['Default taxes']), btn('+ Add tax', 'light', function () { if (taxes.length >= 5) return; taxes.push({ label: '', rate: '' }); drawTaxes(); })]),
           taxHost,
           el('div', { style: 'display:flex;justify-content:flex-end;margin-top:14px' }, [btn('Save', 'primary', async function (ev) {
             ev.target.disabled = true;
             try {
-              await Api.put('/sales/proposal-defaults', { valid_days: Number(days.value || 90), terms: terms.value, taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }) });
+              await Api.put('/sales/proposal-defaults', { valid_days: Number(days.value || 90), terms: terms.value, conditions: conds.value, taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }) });
               toast('✅', 'Proposal defaults saved');
             } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); }
             ev.target.disabled = false;
