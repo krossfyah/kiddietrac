@@ -965,7 +965,7 @@
     }
     host.innerHTML = '<div class="kt-card"><table data-kt-no-bulk><thead><tr><th>Route</th><th>Centre</th><th>Driver</th><th>Vehicle</th><th>Riders</th><th>Status</th><th></th></tr></thead><tbody>'
       + rows.map(b => `<tr>
-          <td><strong>${esc(b.route_name)}</strong></td>
+          <td><strong>${esc(b.route_name)}</strong>${b.notes ? `<div style="font-size:12px;color:#64748B;white-space:pre-wrap;max-width:320px;">📝 ${esc(b.notes)}</div>` : ''}</td>
           <td>${esc(b.centre_name || '—')}</td>
           <td>${esc(b.driver_name || '—')}</td>
           <td>${esc(b.vehicle_label || '—')}</td>
@@ -1020,9 +1020,54 @@
         </select></label>
       <label style="${BUS_L}">Vehicle <span style="font-weight:500;color:#64748B;">(optional)</span>
         <input id="bus-vehicle" maxlength="80" placeholder="e.g. Van 2 · ABCD 123" value="${route ? esc(route.vehicle_label || '') : ''}" style="${BUS_F}"></label>
+      <label style="${BUS_L}">Notes <span style="font-weight:500;color:#64748B;">(optional)</span>
+        <textarea id="bus-notes" maxlength="2000" rows="3" placeholder="e.g. Use the side entrance on Maple St · Booster seats in the back row" style="${BUS_F}height:auto;min-height:70px;padding:8px 10px;font-family:inherit;resize:vertical;">${route ? esc(route.notes || '') : ''}</textarea></label>
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="${BUS_L}">Children on this route</span><span id="bus-kcount" style="font-size:12px;color:#64748B;"></span>
+          <span style="flex:1"></span>
+          <button type="button" id="bus-kall" class="btn btn-secondary btn-sm">Select all</button>
+          <button type="button" id="bus-knone" class="btn btn-secondary btn-sm">Clear</button>
+        </div>
+        <input id="bus-ksearch" type="search" placeholder="🔍 Find a child…" style="${BUS_F}height:34px;">
+        <div id="bus-klist" style="margin-top:6px;max-height:240px;overflow:auto;border:1px solid #E2E8F0;border-radius:10px;padding:4px 6px;background:#fff;"></div>
+        <div style="font-size:12px;color:#64748B;margin-top:4px;">Stop order, pick-up address and times are set in the route's 🧒 Children.</div>
+      </div>
       ${route ? `<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;"><input type="checkbox" id="bus-active" ${route.active ? 'checked' : ''}> Active (running)</label>` : ''}
       <div id="bus-err" style="color:#B91C1C;font-size:13px;min-height:16px;"></div>
     </div>`;
+    /* CHOOSE THE CHILDREN HERE (2026-10-16, "bus route should also allow you to choose
+       children"). The list is the chosen centre's current children; ticking is kept across a
+       centre change only for children of the new centre. Saving makes the route's riders
+       exactly the ticked children (the server keeps each existing rider's stop details). */
+    const allKids = d.children || [];
+    const chosen = new Set(((route && route.child_ids) || []).map(String));
+    const centreSel = body.querySelector('#bus-centre');
+    const paintKids = () => {
+      const cid = centreSel.value;
+      const q = body.querySelector('#bus-ksearch').value.trim().toLowerCase();
+      const kids = allKids.filter(k => cid && String(k.centre_id) === cid);
+      const shown = kids.filter(k => !q || (k.name + ' ' + (k.ref || '') + ' ' + (k.school || '')).toLowerCase().includes(q));
+      const listEl = body.querySelector('#bus-klist');
+      listEl.innerHTML = !cid ? '<div style="padding:8px;color:#64748B;font-size:13px;">Choose the centre first.</div>'
+        : !kids.length ? '<div style="padding:8px;color:#64748B;font-size:13px;">No current children at this centre.</div>'
+        : !shown.length ? '<div style="padding:8px;color:#64748B;font-size:13px;">No match.</div>'
+        : shown.map(k => `<label style="display:flex;gap:10px;align-items:center;padding:7px 4px;border-bottom:1px solid #F1F5F9;cursor:pointer;font-size:13.5px;">
+            <input type="checkbox" data-kid="${k.id}" ${chosen.has(String(k.id)) ? 'checked' : ''} style="width:18px;height:18px;flex:0 0 auto;">
+            <span style="flex:1;min-width:0;"><b>${esc(k.name)}</b>${k.ref ? ` <span style="color:#64748B;font-size:12px;">${esc(k.ref)}</span>` : ''}${k.school ? `<div style="color:#64748B;font-size:12px;">🏫 ${esc(k.school)}</div>` : ''}</span></label>`).join('');
+      listEl.querySelectorAll('[data-kid]').forEach(cb => cb.onchange = () => { if (cb.checked) chosen.add(cb.dataset.kid); else chosen.delete(cb.dataset.kid); count(); });
+      count();
+    };
+    const visibleIds = () => allKids.filter(k => String(k.centre_id) === centreSel.value).map(k => String(k.id));
+    const count = () => {
+      const n = visibleIds().filter(id => chosen.has(id)).length;
+      body.querySelector('#bus-kcount').textContent = n ? n + ' chosen' : '';
+    };
+    centreSel.addEventListener('change', paintKids);
+    body.querySelector('#bus-ksearch').addEventListener('input', paintKids);
+    body.querySelector('#bus-kall').onclick = () => { body.querySelectorAll('#bus-klist [data-kid]').forEach(cb => chosen.add(cb.dataset.kid)); paintKids(); };
+    body.querySelector('#bus-knone').onclick = () => { visibleIds().forEach(id => chosen.delete(id)); paintKids(); };
+    paintKids();
     KT.Shell.Modal.open({
       title: route ? 'Edit route' : 'Add a bus route',
       body,
@@ -1035,15 +1080,18 @@
             centre_id: parseInt(body.querySelector('#bus-centre').value, 10) || null,
             driver_id: parseInt(body.querySelector('#bus-driver').value, 10) || null,
             vehicle_label: body.querySelector('#bus-vehicle').value.trim(),
+            notes: body.querySelector('#bus-notes').value.trim(),
           };
           if (!payload.route_name) { err.textContent = 'Give the route a name.'; return false; }
           if (!payload.centre_id) { err.textContent = 'Choose the centre.'; return false; }
           if (route) payload.active = body.querySelector('#bus-active').checked;
+          // Only children of the chosen centre ride (a centre change drops the others).
+          payload.child_ids = allKids.filter(k => String(k.centre_id) === String(payload.centre_id) && chosen.has(String(k.id))).map(k => k.id);
           try {
             if (route) await Api.patch('/operations/bus-routes/' + route.id, payload);
             else await Api.post('/operations/bus-routes', payload);
           } catch (e) { err.textContent = (e && e.message) || 'Could not save.'; return false; }
-          busToast(route ? 'Route updated' : 'Route added — now add its children');
+          busToast(route ? 'Route updated' : 'Route added');
           renderBusRoutes(BUS.main);
         } },
       ],
@@ -1074,13 +1122,14 @@
         : `<select id="bk-child" style="${BUS_F}"><option value="">${cands.length ? '— choose a child —' : 'Every child at this centre is on the route'}</option>${cands.map(c => `<option value="${c.id}">${esc(c.name)}${c.ref ? ' · ' + esc(c.ref) : ''}${c.school ? ' · ' + esc(c.school) : ''}</option>`).join('')}</select>`;
       body.innerHTML = `
         <div style="font-size:13px;color:#64748B;margin-bottom:10px;">${esc(route.centre_name || '')}${route.driver_name ? ' · Driver ' + esc(route.driver_name) : ''}${route.vehicle_label ? ' · ' + esc(route.vehicle_label) : ''}</div>
-        ${rows.length ? '<div class="kt-card" style="padding:0;overflow:auto;"><table data-kt-no-bulk data-kt-no-filter data-kt-noexport><thead><tr><th>Stop</th><th>Child</th><th>Pick-up address</th><th>Pick-up</th><th>Drop-off</th><th></th></tr></thead><tbody>'
+        ${rows.length ? '<div class="kt-card" style="padding:0;overflow:auto;"><table data-kt-no-bulk data-kt-no-filter data-kt-noexport><thead><tr><th>Stop</th><th>Child</th><th>Pick-up address</th><th>Pick-up</th><th>Drop-off</th><th>Notes</th><th></th></tr></thead><tbody>'
           + rows.map(r => `<tr>
               <td>${r.stop_order != null ? esc(r.stop_order) : '—'}</td>
               <td><strong>${esc(r.child_name)}</strong>${r.child_ref ? `<div style="font-size:12px;color:#64748B;">${esc(r.child_ref)}</div>` : ''}${r.school ? `<div style="font-size:12px;color:#64748B;">🏫 ${esc(r.school)}</div>` : ''}</td>
               <td>${esc(r.pickup_address || '—')}</td>
               <td style="white-space:nowrap;">${busT12(r.pickup_time) || '—'}</td>
               <td style="white-space:nowrap;">${busT12(r.dropoff_time) || '—'}</td>
+              <td style="font-size:13px;white-space:pre-wrap;max-width:240px;">${esc(r.notes || '—')}</td>
               <td style="text-align:right;white-space:nowrap;">
                 <button type="button" class="btn btn-secondary btn-sm" data-ed="${r.child_id}">✏️ Edit</button>
                 <button type="button" class="btn btn-secondary btn-sm" data-rm="${r.child_id}">🗑 Remove</button>
@@ -1100,6 +1149,8 @@
           </div>
           <label style="${BUS_L}margin-top:12px;">Pick-up address
             <input id="bk-addr" maxlength="255" placeholder="Filled in from the family's address — change it if the stop is somewhere else" value="${editing ? esc(editing.pickup_address || '') : ''}" style="${BUS_F}"></label>
+          <label style="${BUS_L}margin-top:12px;">Notes
+            <textarea id="bk-notes" maxlength="2000" rows="2" placeholder="e.g. Grandma meets the bus on Tuesdays · Needs a booster seat" style="${BUS_F}height:auto;min-height:56px;padding:8px 10px;font-family:inherit;resize:vertical;">${editing ? esc(editing.notes || '') : ''}</textarea></label>
           <div id="bk-err" style="color:#B91C1C;font-size:13px;min-height:16px;margin-top:6px;"></div>
           <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
             ${editing ? '<button type="button" id="bk-cancel" class="btn btn-secondary">Cancel</button>' : ''}
@@ -1140,6 +1191,7 @@
             pickup_time: pu || null,
             dropoff_time: dof || null,
             pickup_address: body.querySelector('#bk-addr').value.trim(),
+            notes: body.querySelector('#bk-notes').value.trim(),
           });
         } catch (e) { err.textContent = (e && e.message) || 'Could not save.'; btn.disabled = false; return; }
         renderBusRoutes(BUS.main);   // the list's child count, underneath

@@ -581,9 +581,15 @@ final class OperationsV2Controller extends Controller
                 ->whereIn('brc.bus_route_id', $rows->pluck('id')->all())->where('brc.active', 1)
                 ->groupBy('brc.bus_route_id')->select('brc.bus_route_id', DB::raw('count(*) as n'))->pluck('n', 'brc.bus_route_id')
             : collect();
-        $rows->transform(function ($r) use ($counts) {
+        $riders = $rows->count()
+            ? \App\Support\Live::children(DB::table('bus_route_children as brc')->join('children', 'children.id', '=', 'brc.child_id'))
+                ->whereIn('brc.bus_route_id', $rows->pluck('id')->all())->where('brc.active', 1)
+                ->get(['brc.bus_route_id', 'brc.child_id'])->groupBy('bus_route_id')
+            : collect();
+        $rows->transform(function ($r) use ($counts, $riders) {
             $r->active = (bool) $r->active;
             $r->children_count = (int) ($counts[$r->id] ?? 0);
+            $r->child_ids = ($riders[$r->id] ?? collect())->pluck('child_id')->map(fn ($v) => (int) $v)->values()->all();
             return $r;
         });
 
@@ -592,7 +598,19 @@ final class OperationsV2Controller extends Controller
             ->orderBy('first_name')->orderBy('last_name')->get(['id', 'first_name', 'last_name'])
             ->map(fn ($u) => ['id' => (int) $u->id, 'name' => trim($u->first_name . ' ' . $u->last_name)])->values();
 
-        return response()->json(['data' => $rows, 'centres' => $centres, 'drivers' => $drivers]);
+        // The children who can be CHOSEN for a route (2026-10-16): current children of these centres.
+        $kids = \App\Support\Live::children(DB::table('children')->join('families as f', 'f.id', '=', 'children.family_id'))
+            ->whereNull('f.deleted_at')->whereIn('f.centre_id', $centreIds ?: [0])
+            ->orderBy('children.first_name')->orderBy('children.last_name')
+            ->get(['children.id', 'children.first_name', 'children.last_name', 'children.preferred_name', 'children.school', 'f.centre_id']);
+        $kref = $kids->count() ? \App\Support\RefCode::children($kids->pluck('id')->all()) : [];
+        $children = $kids->map(fn ($c) => [
+            'id' => (int) $c->id, 'centre_id' => (int) $c->centre_id,
+            'name' => trim(($c->preferred_name ?: $c->first_name) . ' ' . $c->last_name),
+            'ref' => $kref[(int) $c->id] ?? null, 'school' => $c->school,
+        ])->values();
+
+        return response()->json(['data' => $rows, 'centres' => $centres, 'drivers' => $drivers, 'children' => $children]);
     }
 
     private function busRouteFields(Request $request, int $agencyId, bool $partial): array
@@ -603,7 +621,10 @@ final class OperationsV2Controller extends Controller
             'route_name' => $req . '|string|max:120',
             'driver_id' => 'nullable|integer',
             'vehicle_label' => 'nullable|string|max:80',
+            'notes' => 'nullable|string|max:2000',
             'active' => 'sometimes|boolean',
+            'child_ids' => 'sometimes|array|max:200',
+            'child_ids.*' => 'integer',
         ]);
         $centreIds = $this->busCentres($request, $agencyId);
         if (isset($data['centre_id'])) abort_unless(in_array((int) $data['centre_id'], $centreIds, true), 422, 'Choose one of your centres.');
@@ -616,6 +637,7 @@ final class OperationsV2Controller extends Controller
         }
         if (array_key_exists('vehicle_label', $data)) $data['vehicle_label'] = trim((string) $data['vehicle_label']) ?: null;
         if (array_key_exists('driver_id', $data)) $data['driver_id'] = $data['driver_id'] ? (int) $data['driver_id'] : null;
+        if (array_key_exists('notes', $data)) $data['notes'] = trim((string) $data['notes']) ?: null;
         return $data;
     }
 
@@ -629,10 +651,12 @@ final class OperationsV2Controller extends Controller
             'route_name' => $data['route_name'],
             'driver_id' => $data['driver_id'] ?? null,
             'vehicle_label' => $data['vehicle_label'] ?? null,
+            'notes' => $data['notes'] ?? null,
             'active' => array_key_exists('active', $data) ? (int) (bool) $data['active'] : 1,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        if (array_key_exists('child_ids', $data)) $this->syncRouteChildren($id, (int) $data['centre_id'], $data['child_ids']);
         return response()->json(['id' => $id], 201);
     }
 
@@ -641,8 +665,43 @@ final class OperationsV2Controller extends Controller
         $route = $this->busRoute($request, $id);
         $data = $this->busRouteFields($request, (int) $route->agency_id, true);
         if (array_key_exists('active', $data)) $data['active'] = (int) (bool) $data['active'];
-        if ($data) DB::table('bus_routes')->where('id', $route->id)->update($data + ['updated_at' => now()]);
+        $childIds = $data['child_ids'] ?? null;
+        unset($data['child_ids']);
+        DB::transaction(function () use ($route, $data, $childIds) {
+            if ($data) DB::table('bus_routes')->where('id', $route->id)->update($data + ['updated_at' => now()]);
+            if ($childIds !== null) $this->syncRouteChildren((int) $route->id, (int) ($data['centre_id'] ?? $route->centre_id), $childIds);
+        });
         return response()->json(['status' => 'updated']);
+    }
+
+    /**
+     * The route's riders become exactly these children (the tick list on the route form).
+     * Every one must be a current child of the route's centre (422 otherwise). Children
+     * already riding keep their stop, times, address and notes; new ones join at the end,
+     * their pick-up address started from the family's.
+     */
+    private function syncRouteChildren(int $routeId, int $centreId, array $childIds): void
+    {
+        $ids = array_values(array_unique(array_map('intval', $childIds)));
+        if ($ids) {
+            $ok = \App\Support\Live::children(DB::table('children')->join('families as f', 'f.id', '=', 'children.family_id'))
+                ->whereIn('children.id', $ids)->where('f.centre_id', $centreId)->whereNull('f.deleted_at')->count();
+            abort_unless($ok === count($ids), 422, 'Choose children enrolled at this route\'s centre.');
+        }
+        DB::table('bus_route_children')->where('bus_route_id', $routeId)
+            ->when($ids, fn ($q) => $q->whereNotIn('child_id', $ids))->delete();
+        $have = DB::table('bus_route_children')->where('bus_route_id', $routeId)->pluck('child_id')->map(fn ($v) => (int) $v)->all();
+        $stop = (int) DB::table('bus_route_children')->where('bus_route_id', $routeId)->max('stop_order');
+        $addr = DB::table('children')->join('families as f', 'f.id', '=', 'children.family_id')->whereIn('children.id', $ids ?: [0])
+            ->get(['children.id', 'f.address_line1', 'f.address_line2', 'f.city', 'f.postal_code'])->keyBy('id');
+        foreach ($ids as $cid) {
+            if (in_array($cid, $have, true)) continue;
+            $a = $addr[$cid] ?? null;
+            DB::table('bus_route_children')->insert([
+                'bus_route_id' => $routeId, 'child_id' => $cid, 'stop_order' => ++$stop, 'active' => 1,
+                'pickup_address' => $a ? (trim(implode(', ', array_filter([$a->address_line1, $a->address_line2, $a->city, $a->postal_code]))) ?: null) : null,
+            ]);
+        }
     }
 
     public function deleteBusRoute(Request $request, int $id): JsonResponse
@@ -704,6 +763,7 @@ final class OperationsV2Controller extends Controller
             'pickup_time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
             'dropoff_time' => ['nullable', 'regex:/^\d{2}:\d{2}(:\d{2})?$/'],
             'stop_order' => 'nullable|integer|min:0|max:999',
+            'notes' => 'nullable|string|max:2000',
         ]);
         $ok = \App\Support\Live::children(DB::table('children')->join('families as f', 'f.id', '=', 'children.family_id'))
             ->where('children.id', $data['child_id'])->where('f.centre_id', $route->centre_id)->whereNull('f.deleted_at')->exists();
@@ -719,6 +779,7 @@ final class OperationsV2Controller extends Controller
                 'pickup_time' => $data['pickup_time'] ?? null,
                 'dropoff_time' => $data['dropoff_time'] ?? null,
                 'stop_order' => (int) $stop,
+                'notes' => isset($data['notes']) ? (trim((string) $data['notes']) ?: null) : null,
                 'active' => 1,
             ]
         );
