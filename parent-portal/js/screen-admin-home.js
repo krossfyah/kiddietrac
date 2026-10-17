@@ -241,15 +241,23 @@
         + '.kt-admin-home section.kt-ah-sec .kt-ah-body{margin:10px 0 12px;}'
         + '.kt-admin-home section.kt-ah-sec .kt-ah-count{background:rgba(255,255,255,.75);}'
         + '.kt-qa-tools{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin:-4px 0 10px;}'
-        + '.kt-qa-btn{height:30px;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font:700 12.5px/1 inherit;cursor:pointer;}'
-        + '.kt-qa-btn.p{background:#1F6080;border-color:#1F6080;color:#fff;}'
+        /* PHONE SIZES (2026-10-16). kt-mobile-app.css gives every `#appMain button` a
+           42px min-height under 768px, which drew the 26px ✕ as a 26×42 red oval and the
+           ◀ ▶ as tall slabs ("the x to remove looks stretched"). These controls have their
+           own sizes, so they opt out by name; `button.` + !important beats that rule's
+           #appMain specificity. And `font: … inherit` is not valid shorthand (the family
+           cannot be `inherit` there), so the whole declaration was being dropped. */
+        /* Not scoped to .kt-admin-home: the + Add picker's buttons live in the modal. */
+        + 'button.kt-qa-btn{height:32px;min-height:0 !important;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-family:inherit;font-weight:700;font-size:12.5px;line-height:1;cursor:pointer;flex:0 0 auto;}'
+        + 'button.kt-qa-btn.p{background:#1F6080;border-color:#1F6080;color:#fff;}'
+        + 'button.kt-qa-btn:disabled{opacity:.45;cursor:default;}'
         + '.kt-qa-editing .kt-tile{position:relative;}'
         + '.kt-qa-editing .kt-tile .kt-tile-icon{animation:kt-qa-wiggle .9s ease-in-out infinite;}'
         + '@keyframes kt-qa-wiggle{0%,100%{transform:rotate(-2deg);}50%{transform:rotate(2deg);}}'
         + '@media (prefers-reduced-motion:reduce){.kt-qa-editing .kt-tile .kt-tile-icon{animation:none;}}'
-        + '.kt-qa-x{position:absolute;top:2px;right:2px;width:26px;height:26px;border-radius:50%;border:2px solid #fff;background:#DC2626;color:#fff;font:800 14px/1 inherit;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;box-shadow:0 2px 6px rgba(0,0,0,.25);padding:0;}'
+        + '.kt-admin-home button.kt-qa-x{position:absolute;top:2px;right:2px;width:26px !important;height:26px !important;min-width:0 !important;min-height:0 !important;border-radius:50%;border:2px solid #fff;background:#DC2626;color:#fff;font-family:inherit;font-weight:800;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:2;box-shadow:0 2px 6px rgba(0,0,0,.25);padding:0;}'
         + '.kt-qa-mv{display:flex;gap:4px;justify-content:center;margin-top:4px;}'
-        + '.kt-qa-mv button{width:30px;height:24px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#334155;font:700 12px/1 inherit;cursor:pointer;padding:0;}'
+        + '.kt-admin-home .kt-qa-mv button{width:34px;height:28px;min-width:0 !important;min-height:0 !important;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-family:inherit;font-weight:700;font-size:12px;line-height:1;cursor:pointer;padding:0;}'
         + '.kt-qa-mv button:disabled{opacity:.35;cursor:default;}'
         + '.kt-qa-add .kt-tile-icon{border:2px dashed #94A3B8 !important;background:#F8FAFC !important;color:#1F6080;}'
         + '.kt-qa-pick{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #F1F5F9;}'
@@ -281,6 +289,10 @@
       });
       if (qaEditing) {
         sec.classList.add('kt-qa-editing');
+        /* While someone is arranging tiles, no refresher may rebuild the screen under
+           them (it would come back with Customize off). uiBusy() defers on this marker;
+           Done repaints without it and any held refresh then runs. */
+        sec.setAttribute('data-kt-no-autorefresh', '');
         [].forEach.call(grid.querySelectorAll('.kt-tile'), function (t, i) {
           t.removeAttribute('href');
           t.setAttribute('role', 'group');

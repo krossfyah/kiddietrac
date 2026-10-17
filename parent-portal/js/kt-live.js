@@ -43,7 +43,11 @@
      Carrier settings half a second later, which put it back on the Text messages
      tab and wiped the test message being typed. Reported as "when testing voice
      calls the screen keeps jumping back to text messages". */
-  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track|admin\/voice\/test-call|admin\/sms-settings\/test(-send)?\b|\/me\/markers\b)/i;
+  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track|admin\/voice\/test-call|admin\/sms-settings\/test(-send)?\b|\/me\/markers\b|\/me\/ui-prefs\b)/i;
+  /* /me/ui-prefs (2026-10-16): how a person arranges their own screen (Quick access
+     tiles, the chat popup's size) is interface state, like /me/markers. As a PUT it rang
+     the bus and rebuilt the home screen 3s later, which dropped Quick access out of
+     Customize after every ✕, ◀ ▶ or + Add: "the editor keeps closing on its own". */
 
   /* Screens that keep THEMSELVES fresh, and must never be torn down and rebuilt
      underneath the person using them.
