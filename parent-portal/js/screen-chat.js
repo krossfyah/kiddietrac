@@ -574,6 +574,35 @@
       const visible = () => convs.filter(c => isArchived(c) === state.showArchived);
       const archivedCount = () => convs.filter(isArchived).length;
 
+      /* INBOX | ARCHIVED SUBTABS (2026-10-16). Anthony: "in message centre where is the kebab
+         at the bottom right in the middle for archived chats ... have a button where all the
+         buttons are or a subtab for archive chats". The switch used to be a button in a
+         full-width table row at the foot of the list ("Back to Active" in one at the top).
+         kt-row-actions collapses the buttons in a row's last cell into a ⋮, so each drew as a
+         lone kebab. It is a subtab strip above the list now, on the phone too. */
+      const tabsHtml = () => {
+        const n = archivedCount();
+        const tab = (arch, label, count) => {
+          const on = state.showArchived === arch;
+          return `<button type="button" class="kt-msg-tab" data-arch="${arch ? 1 : 0}" data-kt-iconized="1" data-kt-inpage="1"${on ? ' aria-current="true"' : ''}`
+            + ` style="background:none;border:0;border-bottom:2px solid ${on ? '#1F6080' : 'transparent'};color:${on ? '#1F6080' : '#64748B'};`
+            + `font-weight:${on ? '800' : '600'};font-size:13.5px;padding:8px 12px;cursor:pointer;border-radius:8px 8px 0 0;display:inline-flex;align-items:center;gap:6px;">`
+            + `${label}<span style="font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 7px;background:${on ? '#E0EEF4' : '#F1F5F9'};color:${on ? '#1F6080' : '#64748B'};">${count}</span></button>`;
+        };
+        return tab(false, '💬 Inbox', convs.length - n) + tab(true, '📥 Archived', n);
+      };
+      const paintTabs = (repaintFn) => {
+        const host = $('#kt-msg-tabs', container);
+        if (!host) { return; }
+        host.innerHTML = tabsHtml();
+        host.querySelectorAll('.kt-msg-tab').forEach(b => b.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const want = b.getAttribute('data-arch') === '1';
+          if (state.showArchived === want) { return; }
+          state.showArchived = want; state.page = 1; repaintFn();
+        }));
+      };
+
       // A real photo when there is one, the coloured initial when there is not. The
       // thread view below has always done this; the list never did.
       const avatarFor = (nm, photo, size) => {
@@ -692,6 +721,7 @@
               <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}</div>
             </div>
             <input id="kt-msg-filter" type="search" placeholder="🔍 Search messages…" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D1D5DB;border-radius:12px;font-size:14px;margin-bottom:10px;">
+            <div id="kt-msg-tabs" class="kt-subtabs" style="display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin:0 0 10px;"></div>
             <div id="kt-msg-cards"></div>
           </div>`;
         const cardsWrap = $('#kt-msg-cards', container);
@@ -718,18 +748,10 @@
           if (q) listx = listx.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
           listx.sort((a, b) => sortValM(b) - sortValM(a));
           listx = pageSlice(listx);
-          const n = archivedCount();
-          /* The way OUT, at the top. Appended after the list it is below 44 archived
-             conversations — measured at 1634px past the fold on a phone, which is why
-             it read as missing. data-kt-iconized keeps kt-icon-buttons.js from
-             rewriting the label into a bare ⬅️. */
-          cardsWrap.innerHTML = (state.showArchived ? `<div id="kt-arch-head" style="display:flex;align-items:center;gap:10px;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:12px;padding:8px 10px;margin:0 0 10px;">`
-            + `<button id="kt-arch-back" type="button" data-kt-iconized="1" data-kt-inpage="1" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:8px;padding:0 12px;height:34px;font-size:13px;font-weight:700;color:#1F6080;cursor:pointer;">&larr; Back to Active</button>`
-            + `<div style="min-width:0;font-size:12.5px;font-weight:700;color:#475569;">&#128229; Archived &middot; ${n}</div></div>` : '')
-            + (listx.length ? listx.map(cardHtml).join('')
-            : `<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</div>`)
-            + pagerHtml()
-            + ((n || state.showArchived) ? `<button id="kt-arch-toggle" data-kt-iconized="1" data-kt-inpage="1" style="width:100%;margin-top:4px;background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:10px;">${state.showArchived ? '← Back to Active' : '📥 Archived (' + n + ')'}</button>` : '');
+          paintTabs(paintM);
+          cardsWrap.innerHTML = (listx.length ? listx.map(cardHtml).join('')
+            : `<div style="text-align:center;color:#64748B;padding:30px;font-size:13px;">${state.showArchived ? 'Nothing archived. Archive a conversation from its ⋮ to tidy your inbox.' : 'No matching conversations.'}</div>`)
+            + pagerHtml();
           wirePager(cardsWrap, paintM);
           cardsWrap.querySelectorAll('.kt-msg-card').forEach(row => row.addEventListener('click', () => openThread(row.dataset.cid, container)));
           cardsWrap.querySelectorAll('.kt-conv-kebab').forEach(b => b.addEventListener('click', (e) => {
@@ -737,10 +759,6 @@
             const c = convs.find(x => String(x.id) === String(b.getAttribute('data-cid')));
             if (c) openKebab(b, c);
           }));
-          const at = cardsWrap.querySelector('#kt-arch-toggle');
-          if (at) at.addEventListener('click', () => { state.showArchived = !state.showArchived; state.page = 1; paintM(); });
-          const ab = cardsWrap.querySelector('#kt-arch-back');
-          if (ab) ab.addEventListener('click', () => { state.showArchived = false; state.page = 1; paintM(); });
         };
         repaint = paintM;
         const fiM = $('#kt-msg-filter', container);
@@ -766,6 +784,7 @@
               ${notifBtnHtml}${broadcastBtnHtml}${newChatBtnHtml}
             </div>
           </div>
+          <div id="kt-msg-tabs" class="kt-subtabs" style="display:flex;gap:4px;padding:4px 14px 0;border-bottom:1px solid #E5E7EB;background:#fff;"></div>
           <div style="background:#fff;">
             <table data-kt-filtered="1" data-kt-noexport="1" style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed;">
               <thead>
@@ -817,17 +836,9 @@
         if (q) list = list.filter(c => (nameOf(c) + ' ' + (c.child_name || '') + ' ' + (c.preview || '')).toLowerCase().indexOf(q) !== -1);
         list.sort((a, b) => { const va = sortVal(a), vb = sortVal(b); return (va < vb ? -1 : va > vb ? 1 : 0) * state.dir; });
         list = pageSlice(list);
-        const n = archivedCount();
-        tbody.innerHTML = (state.showArchived
-          ? `<tr><td colspan="5" style="padding:8px 10px;background:#F1F5F9;">`
-            + `<div style="display:flex;align-items:center;gap:10px;">`
-            + `<button id="kt-arch-back" type="button" data-kt-iconized="1" data-kt-inpage="1" style="flex:0 0 auto;background:#fff;border:1px solid #CBD5E1;border-radius:8px;padding:0 12px;height:32px;font-size:13px;font-weight:700;color:#1F6080;cursor:pointer;">&larr; Back to Active</button>`
-            + `<div style="font-size:12.5px;font-weight:700;color:#475569;">&#128229; Archived &middot; ${n}</div>`
-            + `</div></td></tr>`
-          : '')
-          + (list.length ? list.map(rowHtml).join('')
-          : `<tr><td colspan="5" style="padding:26px;text-align:center;color:#64748B;">${state.showArchived ? 'Nothing archived.' : 'No matching conversations.'}</td></tr>`)
-          + ((n || state.showArchived) ? `<tr><td colspan="5" style="padding:10px;text-align:center;"><button id="kt-arch-toggle" data-kt-iconized="1" data-kt-inpage="1" style="background:none;border:none;color:#1F6080;font-size:13px;font-weight:700;cursor:pointer;padding:6px 10px;">${state.showArchived ? '← Back to Active' : '📥 Archived (' + n + ')'}</button></td></tr>` : '');
+        paintTabs(paint);
+        tbody.innerHTML = list.length ? list.map(rowHtml).join('')
+          : `<tr><td colspan="5" style="padding:26px;text-align:center;color:#64748B;">${state.showArchived ? 'Nothing archived. Archive a conversation from its row menu to tidy your inbox.' : 'No matching conversations.'}</td></tr>`;
         let z = 0;
         tbody.querySelectorAll('.kt-msg-row').forEach(row => {
           const base = (z++ % 2) ? '#F7F9FB' : '#FFFFFF';
@@ -848,10 +859,6 @@
         tbody.querySelectorAll('.kt-conv-del').forEach(b => b.addEventListener('click', (e) => {
           e.stopPropagation(); const c = convOf(b); if (c) deleteConv(c);
         }));
-        const at = tbody.querySelector('#kt-arch-toggle');
-        if (at) at.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = !state.showArchived; state.page = 1; paint(); });
-        const ab = tbody.querySelector('#kt-arch-back');
-        if (ab) ab.addEventListener('click', (e) => { e.stopPropagation(); state.showArchived = false; state.page = 1; paint(); });
         // Drawn after the slice, because the slice is what sets state.total.
         const pgBox = $('#kt-msg-pager', container);
         if (pgBox) { pgBox.innerHTML = pagerHtml(); wirePager(pgBox, paint); }
