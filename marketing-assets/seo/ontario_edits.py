@@ -80,7 +80,7 @@ LOG = ('<div class="kt-log-item">'
        '<div class="kt-log-date">October 2026 <span class="kt-log-new">NEW</span>\n</div>'
        '<div class="kt-log-body">'
        '<h3>🍁 Built for Ontario’s rules</h3>'
-       '<p>For Ontario centres and agencies: live ratio checks against O. Reg. 137/15, name-to-face headcounts with an acting supervisor, sleep room checks, missing-child drills and a hazard register for the January 2027 changes, policy sign-offs with a training matrix, OCCMS fee subsidy reporting and ECE workforce funding in payroll. '
+       '<p>For Ontario centres and agencies: live ratio checks against O. Reg. 137/15, sleep room checks, OCCMS fee subsidy reporting and ECE workforce funding in payroll, plus tools for the January 2027 changes: name-to-face headcounts with an acting supervisor, missing-child drills, a hazard register and policy sign-offs with a training matrix. '
        '<a ' + GO + ' style="color:var(--teal);font-weight:800">See what’s built for Ontario</a></p>'
        '</div></div>\n        ')
 

@@ -50,3 +50,11 @@ seo_pages.py refuses to run if a page has no English title.
 - **WebP:** `<image>.jpg.webp` sits beside the original. Browsers that accept WebP are served it (`Vary: Accept`). **If you replace an image, regenerate its .webp** with Pillow at quality 80, or lossless for PNG; otherwise the old picture keeps being served.
 - **Cache times:** images 7 days, fonts 1 year, `/sections/` 1 year (the build stamp in `?v=` busts it).
 - **Redirects:** the bare domain goes to `https://www` in one redirect. `/.well-known/assetlinks.json` still answers on the bare domain.
+
+## Adding blog posts (2026-10-16)
+
+- **Posts live in the page's `var POSTS = [...]`** in `index.built.html`, newest first: `{slug, cat, emoji, date, title, excerpt, minutes, image, body, i18n:{fr,es,hi:{title,excerpt,body}}}`. The generator writes the cards (every language), `/blog/<slug>` pages, `blog/body/*` and sitemap entries from it.
+- **Do it as a module, like `blog_oct2026_edits.py`.** The data goes in a JSON file, and `deploy_blog_oct2026.sh` checks the bases, archives and proves the module reproduces the upload before swapping in.
+- **Links inside a translated body need the language prefix** (`/fr/...`). The generator does not rewrite article bodies.
+- **Images:** `image` is a name in `/images/life/` with `-800.jpg` and `-1600.jpg` (plus `.webp` siblings).
+- **Content rule:** no invented stats or customers; regulatory articles cite their sources and say "general information, not legal advice".

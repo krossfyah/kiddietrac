@@ -404,9 +404,11 @@ def fix_social(doc):
 def lang_base(doc, lang, posts, d):
     """The whole page in one language: blog cards in that language, then every sentence the
     page's translator would translate, translated on the server."""
+    # Cards come from POSTS in every language (2026-10-16: English kept the build's static
+    # cards, so posts added to POSTS alone were missing from the HTML search engines read).
+    a, b = inner_span(doc, 'blogGrid')
+    doc = doc[:a] + ''.join(card(p, lang) for p in posts) + doc[b:]
     if lang != 'en':
-        a, b = inner_span(doc, 'blogGrid')
-        doc = doc[:a] + ''.join(card(p, lang) for p in posts) + doc[b:]
         doc = one(doc, 'id="blogGrid"', 'id="blogGrid" translate="no"')
         doc, st = ssr_i18n.translate_doc(doc, d)
         print('  %s: %d/%d sentences, %d labels, %d attributes, %d options translated' % (
