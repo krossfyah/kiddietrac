@@ -137,6 +137,10 @@
     "referrals": {
       "t": "Programme de recommandation : offrez un mois, recevez 200 $ | KiddieTrac",
       "d": "Recommandez un service de garde à KiddieTrac. Il obtient son premier mois gratuit, et vous recevez 200 $ CA une seule fois par virement électronique après 60 jours comme client payant. Tout le monde peut recommander."
+    },
+    "resellers": {
+      "t": "Programme de revendeurs : devenez partenaire de KiddieTrac | KiddieTrac",
+      "d": "Revendez KiddieTrac aux services de garde que vous servez. Marge de revendeur, votre propre marque, portail partenaire pour gérer vos clients, formation et soutien aux ventes. Contactez les ventes."
     }
   },
   "es": {
@@ -271,6 +275,10 @@
     "referrals": {
       "t": "Programa de referidos: regala un mes, recibe $200 | KiddieTrac",
       "d": "Recomienda un programa de cuidado infantil a KiddieTrac. Recibe su primer mes gratis y tú recibes un pago único de $200 CAD por transferencia electrónica después de 60 días como cliente de pago. Cualquiera puede recomendar."
+    },
+    "resellers": {
+      "t": "Programa de revendedores: asóciese con KiddieTrac | KiddieTrac",
+      "d": "Revenda KiddieTrac a los programas de cuidado infantil que atiende. Margen de revendedor, su propia marca, portal de socios para gestionar clientes, capacitación y apoyo de ventas. Contacte a ventas."
     }
   },
   "hi": {
@@ -405,6 +413,10 @@
     "referrals": {
       "t": "रेफ़रल प्रोग्राम: एक महीना दें, $200 पाएँ | KiddieTrac",
       "d": "किसी चाइल्डकेयर प्रोग्राम को KiddieTrac के लिए रेफ़र करें। उन्हें पहला महीना मुफ़्त मिलता है, और 60 दिन तक भुगतान करने वाला ग्राहक रहने के बाद आपको ई-ट्रांसफ़र से एक बार $200 CAD मिलते हैं। कोई भी रेफ़र कर सकता है।"
+    },
+    "resellers": {
+      "t": "रीसेलर प्रोग्राम: KiddieTrac के पार्टनर बनें | KiddieTrac",
+      "d": "जिन चाइल्डकेयर प्रोग्राम के साथ आप काम करते हैं, उन्हें KiddieTrac बेचें। रीसेलर मार्जिन, आपका अपना ब्रांड, ग्राहकों के लिए पार्टनर पोर्टल, ट्रेनिंग और सेल्स सहायता। सेल्स से संपर्क करें।"
     }
   }
 }
