@@ -519,8 +519,15 @@
       // where the user came from, and a link that guesses does not.
 
       // Header
+      /* A RECORD THAT LOOKS LIKE A PERSON (2026-10-16). Anthony: "when i open children record
+         its too plain can you make this present itself better". The header is a soft branded
+         card (bigger photo, status / room / family chips), and the plain label-value list
+         under the tabs is quick-fact tiles plus a "Health & care" card. Same data, same tabs. */
       var header = Dom.el('div', {
-        style: 'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;',
+        style: 'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:14px;'
+             + 'background:radial-gradient(120% 140% at 0% 0%,rgba(34,193,195,.16) 0%,rgba(34,193,195,0) 55%),'
+             + 'radial-gradient(120% 140% at 100% 0%,rgba(124,58,237,.12) 0%,rgba(124,58,237,0) 55%),linear-gradient(135deg,#F7FBFD 0%,#FAF8FF 100%);'
+             + 'border:1px solid #E3ECF3;border-radius:18px;padding:20px 22px;box-shadow:0 10px 26px -18px rgba(31,96,128,.45);',
       });
       /* HAS THIS CHILD LEFT? is_archived ALONE IS NOT THE ANSWER (2026-09-21).
 
@@ -546,7 +553,7 @@
          (Anthony, 2026-08-25) */
       var _idRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;' });
       _idRow.appendChild(_avatarEl(child.full_name, {
-        size: 60,
+        size: 78,
         photoUrl: child.photo_url ? mediaUrl(child.photo_url) : '',
         sex: child.sex || child.gender || null,
         kind: 'child',
@@ -555,8 +562,25 @@
       _idRow.appendChild(_idText);
       headerLeft.appendChild(_idRow);
       _idText.appendChild(Dom.el('h1', {
-        style: 'font-size:26px;margin:0 0 4px;color:#111827;',
+        style: 'font-size:27px;line-height:1.15;margin:0 0 4px;color:#0D1B2A;font-weight:800;',
       }, child.full_name + (child.preferred_name ? '  (' + child.preferred_name + ')' : '')));
+      // Status, room and family at a glance, as chips under the name.
+      (function () {
+        var chips = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 6px;' });
+        function chip(text, bg, fg, bd) {
+          chips.appendChild(Dom.el('span', { style: 'display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;'
+            + 'padding:3px 10px;border-radius:999px;background:' + bg + ';color:' + fg + ';border:1px solid ' + (bd || bg) + ';' }, text));
+        }
+        var left = !!child.is_archived || !!child.departed_at;
+        if (left) chip('🗄️ Has left', '#FFF7ED', '#9A3412', '#FED7AA');
+        else if (child.is_at_centre) chip('● At the centre now', '#DCFCE7', '#166534', '#BBF7D0');
+        else if (child.enrollment && child.enrollment.end_date) chip('Withdrawn', '#F1F5F9', '#475569', '#E2E8F0');
+        else if (child.enrollment) chip('Enrolled', '#E0F2FE', '#075985', '#BAE6FD');
+        if (child.room && child.room.name) chip('🏫 ' + child.room.name, '#FFFFFF', '#1F6080', '#D6E4EE');
+        if (child.family && child.family.family_name) chip('👪 ' + child.family.family_name, '#FFFFFF', '#6D28D9', '#E4DBFB');
+        if (child.health_flags && child.health_flags.length) chip('⚠️ ' + child.health_flags.length + ' health flag' + (child.health_flags.length === 1 ? '' : 's'), '#FEF3C7', '#92400E', '#FDE68A');
+        if (chips.children.length) _idText.appendChild(chips);
+      })();
       _idText.appendChild(Dom.el('div', {
         style: 'color:#6B7280;font-size:14px;',
       }, (child.age && child.age.human ? child.age.human : '—') + '  ·  born ' + fmtDate(child.date_of_birth)));
@@ -747,20 +771,30 @@
         }, '✏️  Editing — changes on every tab are live. Press Done when you have finished.'));
       }
 
-      // Detail card
-      var card = Dom.el('div', {
-        style: 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:16px;',
-      });
-      card.appendChild(row('Status',
-        '' + ((child.enrollment && !child.is_at_centre) ? (child.enrollment.end_date ? 'WITHDRAWN' : 'ENROLLED') : (child.is_at_centre ? 'AT CENTRE NOW' : '—'))));
-      card.appendChild(row('Gender', child.gender ? child.gender.replace(/_/g, ' ') : '—'));
-      card.appendChild(row('Pronouns', child.pronouns));
-      card.appendChild(row('Family', child.family ? child.family.family_name : '—'));
-      card.appendChild(row('Room', child.room ? child.room.name : '—'));
-      if (child.enrollment) {
-        card.appendChild(row('Enrolled since', fmtDate(child.enrollment.start_date)));
-        card.appendChild(row('Monthly fee', child.enrollment.monthly_fee ? ('$' + child.enrollment.monthly_fee) : '—'));
+      // Quick facts: one tile each, so the essentials read at a glance.
+      var facts = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(min(170px,100%),1fr));gap:10px;margin:0 0 14px;' });
+      function fact(icon, label, value, tint) {
+        var t = Dom.el('div', { style: 'background:' + (tint || '#F8FAFC') + ';border:1px solid #E8EEF3;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;min-width:0;' });
+        t.appendChild(Dom.el('div', { style: 'font-size:20px;line-height:1;flex:0 0 auto;margin-top:2px;' }, icon));
+        var b = Dom.el('div', { style: 'min-width:0;' });
+        b.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin-bottom:3px;' }, label));
+        b.appendChild(Dom.el('div', { style: 'font-size:14.5px;font-weight:700;color:#0D1B2A;overflow-wrap:anywhere;' }, value == null || value === '' ? '—' : String(value)));
+        t.appendChild(b);
+        facts.appendChild(t);
       }
+      fact('🏫', 'Room', child.room ? child.room.name : '—', '#F0F7FB');
+      fact('👪', 'Family', child.family ? child.family.family_name : '—', '#F7F3FF');
+      if (child.enrollment) {
+        fact('📅', 'Enrolled since', fmtDate(child.enrollment.start_date), '#F0FDF4');
+        fact('💳', 'Monthly fee', child.enrollment.monthly_fee ? ('$' + child.enrollment.monthly_fee) : '—', '#FFFBEB');
+      }
+      fact('🧒', 'Gender', child.gender ? child.gender.replace(/_/g, ' ') : '—');
+      fact('💬', 'Pronouns', child.pronouns || '—');
+      wrap.appendChild(facts);
+
+      // Health & care: the doctor and the notes educators need, in one tinted card.
+      var card = Dom.el('div', { style: tcard('care') });
+      card.appendChild(Dom.el('h3', { style: 'margin:0 0 8px;font-size:16px;color:#0E5566;' }, '🩺 Health & care'));
       card.appendChild(row('Doctor', child.doctor_name ? (child.doctor_name + (child.doctor_phone ? ' · ' + child.doctor_phone : '')) : '—'));
       card.appendChild(row('Health card', child.health_card_last4 ? ('xxxx-xxxx-' + child.health_card_last4) : '—'));
       card.appendChild(row('Medical notes', child.medical_notes));
@@ -1180,11 +1214,21 @@
   function renderOverviewTab(c, child) {
     if (child.guardians && child.guardians.length) {
       var g = Dom.el('div', { style: tcard('people') });
-      g.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, 'Guardians'));
+      g.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:16px;' }, '👪 Guardians'));
+      var gg = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:10px;' });
       child.guardians.forEach(function (gu) {
-        var line = (gu.first_name || '') + ' ' + (gu.last_name || '') + (gu.relationship ? ' · ' + gu.relationship : '') + (gu.is_primary ? ' (primary)' : '') + (gu.email ? '  ·  ' + gu.email : '') + (!gu.can_pickup ? '  ·  cannot pick up' : '');
-        g.appendChild(Dom.el('div', { style: 'padding:6px 0;font-size:14px;border-bottom:1px solid #F3F4F6;' }, line));
+        var nm = ((gu.first_name || '') + ' ' + (gu.last_name || '')).trim() || 'Guardian';
+        var p = Dom.el('div', { style: 'display:flex;gap:10px;align-items:center;background:#fff;border:1px solid #EDE9FE;border-radius:12px;padding:10px 12px;min-width:0;' });
+        p.appendChild(_avatarEl(nm, { size: 38, photoUrl: gu.photo_url ? mediaUrl(gu.photo_url) : '', kind: 'adult' }));
+        var t = Dom.el('div', { style: 'min-width:0;' });
+        t.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#0D1B2A;' }, nm + (gu.is_primary ? '  ⭐' : '')));
+        t.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;overflow-wrap:anywhere;' },
+          [gu.relationship, gu.is_primary ? 'primary' : null, gu.email].filter(Boolean).join(' · ') || '—'));
+        if (gu.can_pickup === false) t.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:700;color:#B91C1C;margin-top:2px;' }, '⛔ Cannot pick up'));
+        p.appendChild(t);
+        gg.appendChild(p);
       });
+      g.appendChild(gg);
       c.appendChild(g);
     }
     if (child.health_flags && child.health_flags.length) {
@@ -1193,7 +1237,12 @@
       child.health_flags.forEach(function (hf) { h.appendChild(Dom.el('div', { style: 'padding:4px 0;font-size:14px;color:#92400E;' }, (hf.flag_type || 'flag').toUpperCase() + ': ' + (hf.detail || hf.name || ''))); });
       c.appendChild(h);
     }
-    if (!c.children.length) c.appendChild(emptyBox('No guardians or health flags on file.'));
+    if (!c.children.length) {
+      var none = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(min(240px,100%),1fr));gap:10px;margin-bottom:16px;' });
+      none.appendChild(Dom.el('div', { style: tcard('people') + 'margin-bottom:0;' }, '👪  No guardians linked yet. Add them from the family record.'));
+      none.appendChild(Dom.el('div', { style: tcard('care') + 'margin-bottom:0;' }, '✅  No active health flags.'));
+      c.appendChild(none);
+    }
   }
 
   /**
