@@ -221,13 +221,17 @@ final class MarketingSiteController extends Controller
         // straight back to them. Wrapped in try/catch — a mail hiccup must never
         // fail the public form submission.
         try {
-            Mail::raw(
-                "New enquiry from the KiddieTrac marketing site:\n\n"
-                . "Name:   " . ($name ?: '(not provided)') . "\n"
-                . "Email:  {$email}\n"
-                . "Agency: " . ($agency ?: '(not provided)') . "\n"
-                . "Source: {$source}\n"
-                . "IP:     " . substr((string) $request->ip(), 0, 45) . "\n",
+            Mail::html(
+                \App\Support\SalesMail::render([
+                    'preheader' => 'New website enquiry from ' . ($name ?: $email),
+                    'eyebrow' => 'New website enquiry', 'icon' => '🌐',
+                    'title' => $name ?: $email,
+                    'subtitle' => $agency ?: null,
+                    'intro' => 'Someone signed up on www.kiddietrac.com. They are in Sales → Pipeline; reply to this email to write to them directly.',
+                    'sections' => [['heading' => 'Details', 'rows' => ['Name' => $name ?: '(not provided)', 'Email' => $email,
+                        'Agency' => $agency ?: '(not provided)', 'Source' => $source, 'IP address' => substr((string) $request->ip(), 0, 45)]]],
+                    'button' => ['label' => 'Open the pipeline', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales'],
+                ]),
                 function ($m) use ($email, $name) {
                     $m->to('sales@kiddietrac.com')
                       ->subject('New website enquiry: ' . ($name ?: $email))
@@ -332,24 +336,24 @@ final class MarketingSiteController extends Controller
         }
 
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-        $table = function (string $title, array $rows) use ($e) {
-            $t = '<h3 style="margin:16px 0 6px;font-size:15px;color:#0f172a">' . $e($title) . '</h3><table style="border-collapse:collapse">';
-            foreach ($rows as $k => $v) {
-                $t .= '<tr><td style="padding:4px 14px 4px 0;color:#64748b;font-size:13px">' . $e($k) . '</td><td style="padding:4px 0;font-size:14px;font-weight:600">' . $e($v ?: '—') . '</td></tr>';
-            }
-            return $t . '</table>';
-        };
-        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px">'
-            . '<h2 style="margin:0 0 4px;font-size:19px;color:#0f172a">New referral: ' . $e($program) . '</h2>'
-            . '<p style="margin:0 0 8px;color:#64748b;font-size:13.5px">From the referral program page. Reply to this email to answer the referrer.'
-            . ($leadId ? ' The referred program is in Sales → Pipeline (source: Referral).' : '') . '</p>'
-            . $table('Referred program', ['Program' => $program, 'Contact person' => $cName, 'Email' => $cEmail, 'Phone' => $cPhone,
-                'City / province' => $city, 'Permission to share' => 'Yes, confirmed by the referrer'])
-            . $table('Referrer (gets the reward)', ['Name' => $name, 'Email' => $email, 'Phone' => $phone, 'Relationship' => $rel,
-                'Agreed to program terms' => 'Yes (effective ' . $terms . ')'])
-            . '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-top:14px;font-size:14px;color:#0f172a">' . $e($notes ?: '(no notes)') . '</div>'
-            . '<p style="margin:14px 0 0;color:#64748b;font-size:12.5px">Reward: one-time $200 CAD to the referrer by e-transfer once the program has been a paying customer for 60 days. '
-            . 'The program gets its first month free (first monthly subscription fee, not add-ons). One reward per new program: the first valid referral wins.</p></div>';
+        $html = \App\Support\SalesMail::render([
+            'preheader' => $name . ' referred ' . $program,
+            'eyebrow' => 'New referral', 'icon' => '🎁',
+            'title' => $program,
+            'subtitle' => 'Referred by ' . $name . ($rel ? ' (' . $rel . ')' : ''),
+            'intro' => 'From the referral program page. Reply to this email to answer the referrer.'
+                . ($leadId ? ' The referred program is in Sales → Pipeline (source: Referral).' : ''),
+            'sections' => [
+                ['heading' => 'Referred program', 'rows' => ['Program' => $program, 'Contact person' => $cName, 'Email' => $cEmail, 'Phone' => $cPhone,
+                    'City / province' => $city, 'Permission to share' => 'Yes, confirmed by the referrer']],
+                ['heading' => 'Referrer (gets the reward)', 'rows' => ['Name' => $name, 'Email' => $email, 'Phone' => $phone, 'Relationship' => $rel,
+                    'Agreed to program terms' => 'Yes (effective ' . $terms . ')']],
+            ],
+            'message' => $notes ?: '(no notes)', 'message_label' => 'Notes from the referrer',
+            'button' => $leadId ? ['label' => 'Open the referred program', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $leadId] : null,
+            'note' => 'Reward: one-time $200 CAD to the referrer by e-transfer once the program has been a paying customer for 60 days. '
+                . 'The program gets its first month free (first monthly subscription fee, not add-ons). One reward per new program: the first valid referral wins.',
+        ]);
         $sent = false;
         try {
             Mail::html($html, function ($m) use ($email, $name, $program) {
@@ -431,15 +435,16 @@ final class MarketingSiteController extends Controller
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $rows = ['Name' => $name, 'Email' => $email, 'Phone' => $data['phone'] ?? '', 'Agency' => $agency, 'Interested in' => $interest,
             'Centres' => $centres, 'Licensed capacity' => $capacity, 'Top priorities' => implode(', ', $priorities)];
-        $t = '';
-        foreach ($rows as $k => $v) {
-            $t .= '<tr><td style="padding:5px 14px 5px 0;color:#64748b;font-size:13px">' . $e($k) . '</td><td style="padding:5px 0;font-size:14px;font-weight:600">' . $e($v ?: '—') . '</td></tr>';
-        }
-        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px">'
-            . '<h2 style="margin:0 0 4px;font-size:19px;color:#0f172a">New message from the website contact form</h2>'
-            . '<p style="margin:0 0 14px;color:#64748b;font-size:13.5px">Reply to this email to answer them directly.' . ($leadId ? ' It is in Sales → Pipeline.' : '') . '</p>'
-            . '<table style="border-collapse:collapse;margin-bottom:14px">' . $t . '</table>'
-            . '<div style="white-space:pre-wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;font-size:14px;color:#0f172a">' . $e($message ?: '(no message)') . '</div></div>';
+        $html = \App\Support\SalesMail::render([
+            'preheader' => 'Website contact from ' . $name . ($interest ? ': ' . $interest : ''),
+            'eyebrow' => 'Website contact form', 'icon' => '✉️',
+            'title' => $name,
+            'subtitle' => implode(' · ', array_filter([$agency, $interest])),
+            'intro' => 'Reply to this email to answer them directly.' . ($leadId ? ' It is in Sales → Pipeline.' : ''),
+            'message' => $message ?: '(no message)', 'message_label' => 'Their message',
+            'sections' => [['heading' => 'Details', 'rows' => $rows]],
+            'button' => $leadId ? ['label' => 'Open lead', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $leadId] : null,
+        ]);
         $sent = false;
         try {
             Mail::html($html, function ($m) use ($email, $name, $interest) {
@@ -1051,28 +1056,15 @@ final class MarketingSiteController extends Controller
             $facts['Location'] .= ' — via a VPN or datacentre, so treat it as approximate';
         }
 
-        $factRows = '';
-        foreach ($facts as $k => $v) {
-            $factRows .= '<tr><td style="padding:6px 14px 6px 0;color:#64748b;font-size:13px;'
-                .'white-space:nowrap;vertical-align:top;">'.$e($k).'</td>'
-                .'<td style="padding:6px 0;color:#0f172a;font-size:13px;font-weight:600;">'.$e($v).'</td></tr>';
-        }
 
-        $lines = '';
+        $bubbles = [];
         foreach ($data['transcript'] as $m) {
             $isVisitor = ($m['sender'] ?? '') === 'visitor';
             $who = $isVisitor ? ($name ?: 'Visitor') : [
                 'agent'  => ($m['author'] ?? '') ?: 'KiddieTrac team',
                 'system' => 'Chat',
             ][$m['sender'] ?? ''] ?? 'Maya (assistant)';
-            $lines .= '<div style="margin-bottom:12px;">'
-                .'<div style="font-size:11.5px;font-weight:700;color:'.($isVisitor ? '#0e7490' : '#94a3b8').';'
-                .'margin-bottom:3px;">'.$e($who)
-                .($m['at'] ?? null ? ' <span style="font-weight:400;color:#b6c2ce;">'.$e($m['at']).'</span>' : '')
-                .'</div>'
-                .'<div style="background:'.($isVisitor ? '#ecfeff' : '#f8fafc').';border:1px solid '
-                .($isVisitor ? '#a5f3fc' : '#e2e8f0').';border-radius:9px;padding:10px 12px;font-size:14px;'
-                .'line-height:1.55;color:#1e293b;white-space:pre-wrap;">'.$e($m['message']).'</div></div>';
+            $bubbles[] = ['who' => $who, 'at' => $m['at'] ?? null, 'text' => $m['message'] ?? '', 'mine' => $isVisitor];
         }
 
         $subject = 'Website chat'.($name ? ' — '.$name : '').($where ? ' ('.$where.')' : '');
@@ -1084,15 +1076,17 @@ final class MarketingSiteController extends Controller
             ?: trim((string) ($cfg['contact_email'] ?? ''))
             ?: 'sales@kiddietrac.com';
 
-        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px;">'
-            .'<h2 style="margin:0 0 4px;color:#0f172a;font-size:19px;">Somebody chatted with us on the website</h2>'
-            .'<p style="margin:0 0 18px;color:#64748b;font-size:13.5px;">'
-            .'They have left the page. Everything they told us is below.</p>'
-            .'<table style="border-collapse:collapse;margin-bottom:22px;">'.$factRows.'</table>'
-            .'<h3 style="margin:0 0 10px;color:#0f172a;font-size:15px;">The conversation</h3>'
-            .$lines
-            .'<p style="margin:20px 0 0;color:#94a3b8;font-size:11.5px;">'
-            .'Session '.$e($session).'. Location is approximate, from the IP address.</p></div>';
+        $html = \App\Support\SalesMail::render([
+            'preheader' => 'Website chat with ' . ($name ?: 'a visitor') . ($where ? ' (' . $where . ')' : ''),
+            'eyebrow' => 'Website chat transcript', 'icon' => '💬',
+            'title' => $name ?: 'A website visitor',
+            'subtitle' => implode(' · ', array_filter([$email, $where])),
+            'intro' => 'They have left the page. Everything they told us is below.',
+            'sections' => [['heading' => 'Who they are', 'rows' => $facts]],
+            'html_heading' => 'The conversation', 'html' => \App\Support\SalesMail::bubbles($bubbles),
+            'button' => ['label' => 'Open Website → Chat', 'url' => 'https://app.kiddietrac.com/dashboard.html#marketing-site'],
+            'note' => 'Session ' . $session . '. Location is approximate, from the IP address.',
+        ]);
 
         try {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($subject, $email, $name, $to) {

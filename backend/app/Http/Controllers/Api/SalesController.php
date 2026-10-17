@@ -1757,16 +1757,22 @@ TXT;
             $when = \Illuminate\Support\Carbon::parse($act->created_at)->setTimezone($tz)->format('D j M Y, g:i A T');
             $due = $act->due_date ? \Illuminate\Support\Carbon::parse($act->due_date)->format('D j M Y') : null;
 
-            $html = '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0D1B2A;max-width:560px">'
-                . '<div style="font-size:12px;color:#5a7080;margin:0 0 4px">' . e($when) . ' · ' . e($who) . '</div>'
-                . '<h2 style="margin:0 0 4px;font-size:19px">' . e($label) . ' — ' . e($leadName) . '</h2>'
-                . ($lead->company && $lead->name ? '<p style="color:#5a7080;margin:0 0 12px">' . e($lead->name) . '</p>' : '')
-                . ($act->body ? '<div style="background:#F8FAFC;border-left:3px solid #7C3AED;border-radius:0 8px 8px 0;padding:10px 14px;font-size:14px;line-height:1.5;white-space:normal">'
-                    . nl2br(e(mb_strlen($act->body) > 6000 ? mb_substr($act->body, 0, 6000) . "\n… (continues on the lead)" : $act->body)) . '</div>' : '')
-                . ($due ? '<p style="margin:10px 0 0;font-weight:700;color:#C2410C">Due ' . e($due) . '</p>' : '')
-                . '<p style="margin:18px 0 0"><a href="https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $lead->id . '&tab=activity'
-                . '" style="background:#7C3AED;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">Open lead →</a></p>'
-                . '</div>';
+            // KiddieTrac-branded (2026-10-16): App\Support\SalesMail, the proposal email's frame.
+            [$icon, $word] = array_pad(explode(' ', $label, 2), 2, '');
+            $html = \App\Support\SalesMail::render([
+                'preheader' => $word . ' on ' . $leadName . ' by ' . $who,
+                'eyebrow' => $word ?: $label, 'icon' => $icon,
+                'title' => $leadName,
+                'subtitle' => implode(' · ', array_filter([$lead->company && $lead->name ? $lead->name : null, self::STAGES[$lead->stage] ?? null])),
+                'meta' => $when . ' · ' . $who,
+                'message' => $act->body ? (mb_strlen($act->body) > 6000 ? mb_substr($act->body, 0, 6000) . "\n… (continues on the lead)" : $act->body) : null,
+                'alert' => $due ? '⏰ Due ' . $due : null,
+                'sections' => [['heading' => 'Lead', 'rows' => [
+                    'Contact' => $lead->name, 'Email' => $lead->email, 'Phone' => $lead->phone,
+                    'Est. annual revenue' => $lead->value !== null ? self::money($lead->value, $lead->value_currency ?: 'CAD') . ($lead->value_currency && $lead->value_currency !== 'CAD' ? ' ' . $lead->value_currency : '') : null,
+                ]]],
+                'button' => ['label' => 'Open lead', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $lead->id . '&tab=activity'],
+            ]);
             $subject = $label . ': ' . $leadName . ' — ' . $who;
 
             Mail::html($html, function ($m) use ($to, $cc, $subject) {
@@ -1957,32 +1963,23 @@ TXT;
                 return;
             }
 
-            $rows = '';
-            $fields = [
-                'Contact'    => $lead->name,
-                'Company'    => $lead->company,
-                'Email'      => $lead->email,
-                'Phone'      => $lead->phone,
-                'Source'     => $lead->source,
-                'Stage'      => self::STAGES[$lead->stage] ?? $lead->stage,
-                'Est. value' => $lead->value ? '$' . number_format((float) $lead->value, 2) : null,
-                'Owner'      => $lead->owner ? trim($lead->owner->first_name . ' ' . $lead->owner->last_name) : null,
-                'Notes'      => $lead->notes,
-            ];
-            foreach ($fields as $k => $v) {
-                if ($v === null || $v === '') {
-                    continue;
-                }
-                $rows .= '<tr><td style="padding:4px 14px 4px 0;color:#5a7080;font-weight:600;vertical-align:top">' . e($k)
-                    . '</td><td style="padding:4px 0">' . nl2br(e($v)) . '</td></tr>';
-            }
-            $html = '<div style="font-family:system-ui,Segoe UI,Arial,sans-serif;color:#0D1B2A;max-width:560px">'
-                . '<h2 style="margin:0 0 2px">🎯 New sales lead</h2>'
-                . '<p style="color:#5a7080;margin:0 0 14px">A new lead was added to the KiddieTrac sales pipeline.</p>'
-                . '<table style="border-collapse:collapse;font-size:14px">' . $rows . '</table>'
-                . '<p style="margin:18px 0 0"><a href="https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $lead->id
-                . '" style="background:#7C3AED;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">Open lead →</a></p>'
-                . '</div>';
+            $html = \App\Support\SalesMail::render([
+                'preheader' => 'New lead in the pipeline: ' . ($lead->company ?: $lead->name),
+                'eyebrow' => 'New sales lead', 'icon' => '🎯',
+                'title' => $lead->company ?: ($lead->name ?: 'New lead'),
+                'subtitle' => implode(' · ', array_filter([$lead->company ? $lead->name : null, $lead->source ? 'Source: ' . $lead->source : null])),
+                'intro' => 'A new lead was added to the KiddieTrac sales pipeline. Reply to this email to write to them directly.',
+                'sections' => [
+                    ['heading' => 'Contact', 'rows' => ['Contact' => $lead->name, 'Company' => $lead->company, 'Email' => $lead->email, 'Phone' => $lead->phone]],
+                    ['heading' => 'Pipeline', 'rows' => [
+                        'Stage' => self::STAGES[$lead->stage] ?? $lead->stage,
+                        'Est. annual revenue' => $lead->value ? self::money($lead->value, $lead->value_currency ?: 'CAD') : null,
+                        'Owner' => $lead->owner ? trim($lead->owner->first_name . ' ' . $lead->owner->last_name) : null,
+                    ]],
+                ],
+                'message' => $lead->notes, 'message_label' => 'Notes',
+                'button' => ['label' => 'Open lead', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $lead->id],
+            ]);
 
             Mail::html($html, function ($m) use ($to, $cc, $lead) {
                 \App\Support\MailScope::platform($m);   // sales, not tenant mail

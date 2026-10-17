@@ -374,13 +374,15 @@ class WebChatController extends Controller
         }
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $who = $chat->name ?: 'A visitor';
-        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;color:#0f172a">'
-            .'<h2 style="margin:0 0 4px;font-size:19px">'.($askedForPerson ? '🙋 Somebody asked for a person' : '💬 Somebody is chatting on the website').'</h2>'
-            .'<p style="margin:0 0 16px;color:#64748b;font-size:13.5px">Nobody is marked available for website chat, so Maya (the virtual assistant) is answering for now. Reply from the portal and you take the conversation over.</p>'
-            .'<p style="margin:0 0 6px;font-size:14px"><b>'.$e($who).'</b>'.($chat->email ? ' &lt;'.$e($chat->email).'&gt;' : '').'</p>'
-            .($last !== '' ? '<div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:9px;padding:10px 12px;font-size:14px;line-height:1.55;white-space:pre-wrap">'.$e($last).'</div>' : '')
-            .'<p style="margin:18px 0 0"><a href="https://app.kiddietrac.com/dashboard.html#sales-webchat?id='.(int) $chat->id.'" style="background:#1F6080;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:700">Open the chat →</a></p>'
-            .'</div>';
+        $html = \App\Support\SalesMail::render([
+            'preheader' => ($askedForPerson ? 'A visitor asked for a person: ' : 'A visitor is chatting: ') . $who,
+            'eyebrow' => $askedForPerson ? 'Somebody asked for a person' : 'Website chat waiting', 'icon' => $askedForPerson ? '🙋' : '💬',
+            'title' => $who,
+            'subtitle' => $chat->email ?: null,
+            'intro' => 'Nobody is marked available for website chat, so Maya (the virtual assistant) is answering for now. Reply from the portal and you take the conversation over.',
+            'message' => $last !== '' ? $last : null, 'message_label' => 'Their latest message',
+            'button' => ['label' => 'Open the chat', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales-webchat?id=' . (int) $chat->id],
+        ]);
         try {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $who, $chat) {
                 $m->to($to)->subject('Website chat waiting — '.$who);
