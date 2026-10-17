@@ -3122,6 +3122,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/ai/doc-extract/{id}/auto-link',      [\App\Http\Controllers\Api\AiV2Controller::class, 'autoLinkExtraction']);
         Route::get ('/ai/enrollment-forecast',             [\App\Http\Controllers\Api\AiV2Controller::class, 'enrollmentForecast']);
         Route::get ('/ai/attendance-anomalies',            [\App\Http\Controllers\Api\AiV2Controller::class, 'attendanceAnomalies']);
+        Route::put ('/ai/attendance-anomalies/rules',      [\App\Http\Controllers\Api\AiV2Controller::class, 'attendanceAnomalyRules']);
     });
 
     // QBO bulk push

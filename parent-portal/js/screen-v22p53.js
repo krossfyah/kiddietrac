@@ -1133,26 +1133,115 @@
   }
 
   // ============================ Anomaly detection ============================
-  async function renderAnomalies(main) {
+  /* REBUILT 2026-10-16 (Anthony: "anomalies section why isn't it detecting all other
+     educators with children?" + "can you add ability to set other activity patterns to
+     detect those as well"). The server now runs a set of patterns per agency (attendance
+     from check-ins, daily records, observations, long days, missing check-outs) and returns
+     a per-centre summary, so a provider whose children all go unrecorded shows up as one.
+     "What to detect" switches patterns on/off and sets their numbers (agency admins). */
+  async function renderAnomalies(main, opts) {
+    opts = opts || {};
+    const days = opts.days || 30;
     main.innerHTML = '<div style="padding:24px;">Scanning…</div>';
-    const r = await Api.get('/ai/attendance-anomalies?days=30');
+    let r;
+    try { r = await Api.get('/ai/attendance-anomalies?days=' + days); }
+    catch (e) { main.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not scan: ' + esc((e && e.message) || e) + '</div>'; return; }
+    const rules = r.rules || [];
+    const ruleLabel = {}; rules.forEach(x => { ruleLabel[x.key] = x.label; });
+    const centres = (r.centres || []).slice().sort((a, b) => (b.flagged / Math.max(1, b.children)) - (a.flagged / Math.max(1, a.children)) || String(a.centre_name).localeCompare(String(b.centre_name)));
+    let pick = opts.centre || 0;
+    const data = r.data || [];
+    const on = rules.filter(x => x.enabled);
+    const fill = (txt, p) => String(txt || '').replace(/\{(\w+)\}/g, (_, k) => (p && p[k] != null ? p[k] : k));
+    const TH = 'text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;';
+    const TD = 'padding:10px 8px;border-bottom:1px solid #F3F4F6;';
+
+    const settingsHtml = () => `<div id="an-settings" hidden style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:14px;padding:16px 18px;margin:14px 0 4px;">
+        <div style="font-weight:800;color:#0D1B2A;margin-bottom:2px;">What to detect</div>
+        <div style="font-size:12.5px;color:#64748B;margin-bottom:12px;">Switch patterns on or off and set their numbers. Applies to everyone in this agency.</div>
+        ${rules.map(x => `<div class="an-rule" data-key="${esc(x.key)}" style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid #E5E7EB;flex-wrap:wrap;">
+          <label style="display:flex;gap:8px;align-items:center;min-width:220px;font-weight:700;color:#0D1B2A;cursor:pointer;">
+            <input type="checkbox" class="an-on" ${x.enabled ? 'checked' : ''} ${r.can_edit_rules ? '' : 'disabled'}> ${esc(x.label)}</label>
+          <div style="flex:1;min-width:240px;">
+            <div style="font-size:12.5px;color:#475569;margin-bottom:6px;">${esc(fill(x.help, x.params))}</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">${Object.keys(x.params).map(p => `<label style="font-size:12px;color:#64748B;display:flex;align-items:center;gap:6px;">${esc(paramLabel(p))}
+              <input type="number" min="0" max="1000" step="1" class="an-p" data-p="${esc(p)}" value="${esc(x.params[p])}" ${r.can_edit_rules ? '' : 'disabled'} style="width:76px;height:30px;padding:0 8px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;"></label>`).join('')}</div>
+          </div></div>`).join('')}
+        ${r.can_edit_rules
+          ? '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;"><button type="button" id="an-reset" class="kt-btn kt-btn-secondary kt-btn-sm">Defaults</button><button type="button" id="an-save" class="kt-btn kt-btn-primary kt-btn-sm">Save and rescan</button></div>'
+          : '<div style="font-size:12px;color:#64748B;margin-top:8px;">Only an agency admin can change these.</div>'}
+      </div>`;
+
+    const centreChips = () => centres.length > 1 ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 6px;">
+        <button type="button" class="an-c" data-c="0" style="${chipStyle(!pick)}">All centres · ${data.length}</button>
+        ${centres.map(c => `<button type="button" class="an-c" data-c="${c.centre_id}" title="${c.flagged} of ${c.children} children flagged" style="${chipStyle(pick === c.centre_id, c.flagged && c.flagged === c.children)}">${esc(c.centre_name)} · ${c.flagged}/${c.children}</button>`).join('')}
+      </div>` : '';
+
+    const rowsHtml = () => {
+      const list = pick ? data.filter(a => a.centre_id === pick) : data;
+      if (!list.length) return `<tr><td colspan="5" style="padding:24px;color:#64748B;text-align:center;">${on.length ? 'No anomalies here. Every child matches the patterns being watched.' : 'Every pattern is switched off. Open “What to detect” to turn some on.'}</td></tr>`;
+      return list.map(a => `<tr>
+          <td style="${TD}font-weight:600;">${esc(a.child_name)}</td>
+          <td style="${TD}font-size:13px;color:#475569;">${esc(a.centre_name || '')}</td>
+          <td style="${TD}font-size:13px;">${(a.signals || []).map((s, i) => `<div style="color:#B91C1C;margin:1px 0;"><span style="display:inline-block;font-size:11px;font-weight:700;color:#7C2D12;background:#FFEDD5;border-radius:999px;padding:1px 7px;margin-right:6px;">${esc(ruleLabel[(a.signal_rules || [])[i]] || 'Pattern')}</span>${esc(s)}</div>`).join('')}</td>
+          <td style="${TD}text-align:right;">${a.days_attended ?? '—'}</td>
+          <td style="${TD}text-align:right;">${a.days_with_records ?? '—'} / ${a.obs_window ?? '—'}</td>
+        </tr>`).join('');
+    };
+
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <h2 style="margin:0 0 6px;color:#1F6080;">Attendance anomalies</h2>
-      <p style="color:#6B7280;font-size:14px;">${(r.data || []).length} child(ren) with unusual activity patterns in the last ${r.window_days} days.</p>
-      <table style="width:100%;border-collapse:collapse;margin-top:18px;">
-        <thead><tr>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Child</th>
-          <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Signals</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Obs 30d</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Obs 90d</th>
-        </tr></thead>
-        <tbody>${(r.data || []).map(a => `<tr>
-          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-weight:600;">${esc(a.child_name)}</td>
-          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;color:#B91C1C;">${a.signals.join(' · ')}</td>
-          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${a.obs_30}</td>
-          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${a.obs_90}</td>
-        </tr>`).join('') || '<tr><td colspan="4" style="padding:24px;color:#64748B;text-align:center;">No anomalies — all children showing normal activity.</td></tr>'}</tbody></table>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div><h2 style="margin:0 0 6px;color:#1F6080;">Attendance anomalies</h2>
+          <p style="color:#6B7280;font-size:14px;margin:0;">${data.length} of ${r.children_checked || 0} enrolled children match a pattern in the last ${r.window_days} days. Watching ${on.length} of ${rules.length} patterns.</p></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="an-days" style="height:32px;padding:0 8px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;">${[14, 30, 60, 90].map(d => `<option value="${d}" ${d === days ? 'selected' : ''}>Last ${d} days</option>`).join('')}</select>
+          <button type="button" id="an-cfg" class="kt-btn kt-btn-secondary kt-btn-sm" data-kt-iconized="1">⚙️ What to detect</button>
+        </div>
+      </div>
+      ${settingsHtml()}
+      ${centreChips()}
+      <table style="width:100%;border-collapse:collapse;margin-top:12px;">
+        <thead><tr><th style="${TH}">Child</th><th style="${TH}">Centre / provider</th><th style="${TH}">What we noticed</th>
+          <th style="${TH}text-align:right;">Days attended</th><th style="${TH}text-align:right;" title="Days with daily records / observations in the window">Records / obs</th></tr></thead>
+        <tbody id="an-rows">${rowsHtml()}</tbody></table>
     </div>`;
+
+    const cfg = main.querySelector('#an-settings');
+    main.querySelector('#an-cfg').onclick = () => { cfg.hidden = !cfg.hidden; };
+    main.querySelector('#an-days').onchange = (e) => renderAnomalies(main, { days: Number(e.target.value), centre: pick });
+    main.querySelectorAll('.an-c').forEach(b => b.onclick = () => {
+      pick = Number(b.getAttribute('data-c')) || 0;
+      main.querySelectorAll('.an-c').forEach(x => { const c = centres.find(y => y.centre_id === Number(x.getAttribute('data-c'))); x.style.cssText = chipStyle(Number(x.getAttribute('data-c')) === pick, c && c.flagged && c.flagged === c.children); });
+      main.querySelector('#an-rows').innerHTML = rowsHtml();
+    });
+    const collect = (useDefaults) => {
+      const out = {};
+      main.querySelectorAll('.an-rule').forEach(row => {
+        const k = row.getAttribute('data-key'); const def = rules.find(x => x.key === k) || {};
+        const params = {};
+        row.querySelectorAll('.an-p').forEach(i => { params[i.getAttribute('data-p')] = useDefaults ? (def.defaults || {})[i.getAttribute('data-p')] : Number(i.value); });
+        out[k] = { enabled: useDefaults ? undefined : row.querySelector('.an-on').checked, params };
+        if (useDefaults) delete out[k].enabled;
+      });
+      return out;
+    };
+    const save = async (useDefaults) => {
+      try {
+        await Api.put('/ai/attendance-anomalies/rules', { rules: collect(useDefaults) });
+        if (KT.toast) KT.toast('✅', 'Saved', 'Rescanning with the new patterns.', '#0F766E');
+        renderAnomalies(main, { days, centre: pick });
+      } catch (e) { if (KT.toast) KT.toast('⚠️', 'Not saved', (e && e.message) || '', '#B91C1C'); }
+    };
+    const sv = main.querySelector('#an-save'); if (sv) sv.onclick = () => save(false);
+    const rs = main.querySelector('#an-reset'); if (rs) rs.onclick = () => save(true);
+  }
+  function chipStyle(active, all) {
+    return 'height:30px;padding:0 12px;border-radius:999px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;'
+      + 'border:1px solid ' + (active ? '#1F6080' : (all ? '#FCA5A5' : '#CBD5E1')) + ';'
+      + 'background:' + (active ? '#1F6080' : (all ? '#FEF2F2' : '#fff')) + ';color:' + (active ? '#fff' : (all ? '#B91C1C' : '#334155')) + ';';
+  }
+  function paramLabel(p) {
+    return ({ min_days: 'Min. days', pct: '%', min_obs: 'Min. observations', prior: 'Prior observations', min_prior_days: 'Min. prior days', hours: 'Hours' })[p] || p;
   }
 
   // ============================ Cert expiry calendar ============================
