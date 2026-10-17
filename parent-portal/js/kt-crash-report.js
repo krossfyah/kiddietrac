@@ -21,6 +21,7 @@
       if (isNetworkNoise(e && (e.error || e.message))) return;
       var where = (e && e.filename ? e.filename : '') + ':' + (e && e.lineno ? e.lineno : '') + ':' + (e && e.colno ? e.colno : '');
       var stack = (e && e.error && e.error.stack) ? e.error.stack : ((e && e.message ? e.message : 'error') + ' @ ' + where);
+      if (isForeignStack(stack + ' ' + ((e && e.filename) || ''))) return;
       // "Script error." with no filename and no line is the browser refusing to
       // describe an error raised by a cross-origin script - typically an extension,
       // a content blocker or a password manager injected into the page. There is no
@@ -48,11 +49,29 @@
       return /network error|failed to fetch|load failed|networkerror|the internet connection|err_internet|err_network|err_timed_out|err_connection|err_name_not_resolved|failed to update a serviceworker|error occurred when fetching the script|serviceworker.*script/i.test(m);
     } catch (x) { return false; }
   }
+  /* NOT OUR CODE (ticket #154 / #156, 2026-10-16). "Crash: Error: blocked" was filed twice
+     with a trace that never touched KiddieTrac: a browser extension's content script
+     (chrome-extension://…) rejecting a call from the host's injected traffic script
+     (img1.wsimg.com/…/tccl.min.js). A stack whose every URL frame is another origin or an
+     extension is somebody else's problem, so it is not sent. The server applies the same
+     rule (/diag/crash), for older cached clients. */
+  function isForeignStack(s) {
+    try {
+      var hosts = String(s || '').match(/(?:https?|chrome-extension|moz-extension|safari-web-extension):\/\/[^\/\s:)]+/g);
+      if (!hosts || !hosts.length) return false;
+      var mine = location.host;
+      return !hosts.some(function (h) {
+        var host = h.replace(/^[a-z-]+:\/\//, '');
+        return host === mine || /(^|\.)kiddietrac\.com$/i.test(host);
+      });
+    } catch (x) { return false; }
+  }
   window.addEventListener('unhandledrejection', function (e) {
     try {
       var r = e && e.reason;
       if (isNetworkNoise(r)) return;
       var s = (r && r.stack) ? r.stack : String(r);
+      if (isForeignStack(s)) return;
       var _t = nowIso() + '  UNHANDLED PROMISE  ' + String(s).slice(0, 4000);
       set('kt_js_error', _t);
       autoSend(_t);

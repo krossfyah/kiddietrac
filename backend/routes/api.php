@@ -281,6 +281,19 @@ Route::prefix('v1')->group(function () {
             ]);
         }
 
+        /* NOT OUR CODE (tickets #154 and #156, 2026-10-16): "Error: blocked" with a trace made
+           only of a browser extension (chrome-extension://…) and the host's injected traffic
+           script (img1.wsimg.com). When every URL in the trace is another origin, there is
+           nothing in KiddieTrac to fix. Logged above like the opaque case, not filed. */
+        if (preg_match_all('#(?:https?|chrome-extension|moz-extension|safari-web-extension)://([^/\s:)]+)#i', (string) $data['trace'], $hostM)
+            && ! array_filter($hostM[1], fn ($h) => (bool) preg_match('/(^|\.)kiddietrac\.com$/i', $h))) {
+            return response()->json([
+                'ok' => true,
+                'ticket_id' => null,
+                'note' => 'Logged. No ticket filed: the error came from a third-party script or browser extension, not KiddieTrac.',
+            ]);
+        }
+
         /* A REPORT THAT SAYS NOTHING IS NOT A CRASH (ticket #86, 2026-09-21).
 
            #86 read, in full: "Crash: Unknown error. Who: unknown. Screen: ? URL: ?
