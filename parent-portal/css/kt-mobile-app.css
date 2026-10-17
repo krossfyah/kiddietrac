@@ -3348,3 +3348,17 @@ html.kt-ios-inset-fallback #appMain {
   /* A body that sized itself for the old dialog (child record: min(76vh, 860px)) fills it. */
   .modal.modal-large .modal-body > div[style*="vh"] { height: 100% !important; }
 }
+
+/* ── ICON BUTTONS KEEP THEIR OWN SIZE (2026-10-16) ──
+   Anthony, phone: "the x to remove looks stretched". The 42px min-height above is for
+   real buttons; a square icon button that declares its own size came out 32×42 (the
+   canonical row action .kt-act-icon: view / edit / delete in every list) — a tall slab
+   instead of a square. Same family as the chat reactions above. Anything else with its
+   own size can opt out with data-kt-keep-size. */
+@media (max-width: 768px) {
+  #appMain .kt-act-icon, .kt-modal .kt-act-icon, .modal .kt-act-icon,
+  #appMain .centre-card-v17 .manage-btn,   /* the ⚙ beside the centre card's ⋮, both 32×28 */
+  #appMain [data-kt-keep-size], .kt-modal [data-kt-keep-size], .modal [data-kt-keep-size] {
+    min-height: 0 !important;
+  }
+}
