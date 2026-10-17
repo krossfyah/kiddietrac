@@ -401,6 +401,20 @@ def fix_social(doc):
     return re.sub(r'<script type="application/ld\+json">(.*?)</script>', org, doc, flags=re.S)
 
 
+def fill_related(doc, lang, posts):
+    """<div class="kt-related" data-slugs="a,b,c"></div> (related_edits.py) -> those posts'
+    cards in this language under "Keep reading". Unknown slugs are skipped."""
+    by = dict((p['slug'], p) for p in posts)
+
+    def rep(m):
+        cards = ''.join(card(by[s], lang) for s in m.group(1).split(',') if s in by)
+        if not cards:
+            return ''
+        return ('<div class="kt-related" data-slugs="%s" translate="no"><h2>%s</h2>'
+                '<div class="cards-grid cards-3">%s</div></div>' % (m.group(1), UI[lang]['Keep reading'], cards))
+    return re.sub(r'<div class="kt-related" data-slugs="([a-z0-9,-]+)"></div>', rep, doc)
+
+
 def lang_base(doc, lang, posts, d):
     """The whole page in one language: blog cards in that language, then every sentence the
     page's translator would translate, translated on the server."""
@@ -408,6 +422,7 @@ def lang_base(doc, lang, posts, d):
     # cards, so posts added to POSTS alone were missing from the HTML search engines read).
     a, b = inner_span(doc, 'blogGrid')
     doc = doc[:a] + ''.join(card(p, lang) for p in posts) + doc[b:]
+    doc = fill_related(doc, lang, posts)
     if lang != 'en':
         doc = one(doc, 'id="blogGrid"', 'id="blogGrid" translate="no"')
         doc, st = ssr_i18n.translate_doc(doc, d)
