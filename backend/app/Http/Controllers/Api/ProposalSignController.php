@@ -122,6 +122,7 @@ class ProposalSignController extends Controller
         }
         $q = $this->byToken($token);
         $human = $this->human($q->client_signed_at);
+        $this->sales()->syncLeadValueForQuote($q);   // the signed proposal is now the estimate
 
         $mail = $this->mailThanks($q, $human);
         try {
@@ -153,6 +154,7 @@ class ProposalSignController extends Controller
         $q->declined_at = now();
         $q->decline_reason = trim((string) ($d['reason'] ?? '')) ?: null;
         $q->save();
+        $this->sales()->syncLeadValueForQuote($q);   // a declined proposal no longer sets the estimate
         try {
             $this->sales()->logOnProposalLead($q, 'note', "Proposal {$q->number} declined online" . ($q->decline_reason ? ': “' . $q->decline_reason . '”' : ' (no reason given)'));
         } catch (\Throwable $e) {}

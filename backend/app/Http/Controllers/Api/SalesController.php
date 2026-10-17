@@ -30,6 +30,23 @@ class SalesController extends Controller
         'lost'        => 'Lost',
     ];
 
+    /* ESTIMATED REVENUE FROM PROPOSALS + A WEIGHTED PIPELINE (2026-10-16). Anthony: "based on
+       the proposal sent add this to our estimated revenue for that prospect and auto calculates
+       based on pipeline". He chose:
+         - the lead's estimate is the proposal's ANNUAL value, before tax: recurring lines less
+           the proposal discount, x12 for a monthly proposal, plus one-time fees;
+         - the proposal that counts is the latest one sent, accepted or signed (not a draft,
+           not a declined one); syncLeadValue() runs whenever one is saved, sent, signed,
+           countersigned, declined or deleted, and notes the change in the lead's history;
+         - typing a value by hand still works (value_quote_id is cleared), until the next
+           proposal goes out;
+         - the forecast weights each open lead by its stage's chance of closing. These are the
+           defaults; the numbers are editable in Proposal defaults (stored as stage_odds). */
+    public const STAGE_ODDS = [
+        'new' => 10, 'contacted' => 20, 'qualified' => 40, 'proposal' => 60,
+        'negotiation' => 80, 'won' => 100, 'lost' => 0,
+    ];
+
     // ---------------------------------------------------------------- Leads
 
     public function index(Request $r)
@@ -117,6 +134,10 @@ class SalesController extends Controller
 
         // Salesforce-style field history — capture what changed before we overwrite.
         $edits = $this->diffLeadChanges($l, $data);
+        if (array_key_exists('value', $data) && round((float) $data['value'], 2) !== round((float) $l->value, 2)) {
+            $data['value_quote_id'] = null;   // typed by hand: an estimate until the next proposal is sent
+            $data['value_currency'] = null;
+        }
 
         $l->fill($data);
         $l->last_activity_at = now();
@@ -470,6 +491,7 @@ class SalesController extends Controller
                 $this->logActivity($lead, 'edit', "Proposal {$q->number} updated\n" . implode("\n", $qLines), null);
             }
         }
+        $this->syncLeadValueForQuote($q);
 
         return response()->json($q->fresh('items'));
     }
@@ -563,6 +585,7 @@ class SalesController extends Controller
             }
             $lead->last_activity_at = now();
             $lead->save();
+            $this->syncLeadValue($lead);
             if ($lead->email) {
                 $mailed = $this->mailFullySigned($q, $lead, $bytes);
             }
@@ -639,6 +662,7 @@ class SalesController extends Controller
         $q->delete();   // soft delete
         if ($lead = SalesLead::find($q->lead_id)) {
             $this->logActivity($lead, 'note', "Proposal {$q->number} deleted", null);
+            $this->syncLeadValue($lead);
         }
         return response()->json(['ok' => true]);
     }
@@ -760,7 +784,92 @@ TXT;
     public function proposalDefaults()
     {
         // prepared_by: what a NEW proposal by this rep starts with.
-        return response()->json(self::proposalDefaultValues() + ['prepared_by' => self::defaultPreparedBy(auth()->user())]);
+        return response()->json(['stage_odds' => self::stageOdds()] + self::proposalDefaultValues() + ['prepared_by' => self::defaultPreparedBy(auth()->user())]);
+    }
+
+    /** Chance of closing per stage, 0-100, the saved numbers over the defaults. */
+    private static ?array $oddsMemo = null;   // read once per request: the lead list asks per row
+
+    public static function stageOdds(): array
+    {
+        if (self::$oddsMemo !== null) {
+            return self::$oddsMemo;
+        }
+        $saved = self::proposalDefaultValues()['stage_odds'] ?? [];
+        $out = [];
+        foreach (self::STAGE_ODDS as $k => $d) {
+            $v = is_array($saved) && isset($saved[$k]) && is_numeric($saved[$k]) ? (int) round((float) $saved[$k]) : $d;
+            $out[$k] = max(0, min(100, $v));
+        }
+        return self::$oddsMemo = $out;
+    }
+
+    /** A proposal's annual value before tax: recurring x12 (monthly) or x1, plus one-time fees. */
+    public static function annualValueOf(SalesQuote $q): float
+    {
+        $q->loadMissing('items');
+        $ids = $q->items->pluck('product_id')->filter()->unique()->values()->all();
+        $prods = $ids ? SalesProduct::whereIn('id', $ids)->get()->keyBy('id') : collect();
+        $rec = 0.0;
+        $once = 0.0;
+        foreach ($q->items as $it) {
+            $pr = $it->product_id ? $prods->get($it->product_id) : null;
+            $isOnce = $pr && ($pr->unit === 'one-time' || (($pr->kind ?? '') === 'discount' && ($pr->applies_to ?? '') === 'one-time'));
+            if ($isOnce) {
+                $once += (float) $it->line_total;
+            } else {
+                $rec += (float) $it->line_total;
+            }
+        }
+        $rec -= (float) $q->discount;          // the proposal's own discount comes off the subscription
+        if ($rec < 0) {
+            $once += $rec;
+            $rec = 0.0;
+        }
+        $periods = $q->billing_period === 'month' ? 12 : 1;
+        return round(max(0.0, $rec) * $periods + max(0.0, $once), 2);
+    }
+
+    /** Set a lead's estimate from its current proposal (latest sent / accepted / signed). */
+    public function syncLeadValue(?SalesLead $lead): void
+    {
+        if (! $lead) {
+            return;
+        }
+        $q = SalesQuote::with('items')->where('lead_id', $lead->id)->whereIn('status', ['sent', 'accepted', 'signed'])
+            ->orderByRaw('COALESCE(sent_at, updated_at) DESC')->orderByDesc('id')->first();
+        if (! $q) {
+            // Its proposal was deleted or declined: the figure stays, as an estimate now held by hand.
+            if ($lead->value_quote_id) {
+                $lead->value_quote_id = null;
+                $lead->save();
+            }
+            return;
+        }
+        $v = self::annualValueOf($q);
+        $cur = $q->currency ?: 'CAD';
+        if ((int) $lead->value_quote_id === (int) $q->id && $lead->value !== null
+            && round((float) $lead->value, 2) === $v && $lead->value_currency === $cur) {
+            return;
+        }
+        $old = $lead->value;
+        $oldCur = $lead->value_currency ?: $cur;
+        $lead->value = $v;
+        $lead->value_quote_id = $q->id;
+        $lead->value_currency = $cur;
+        $lead->save();
+        $this->logActivity($lead, 'edit', 'Est. annual revenue: ' . ($old === null ? '—' : self::money($old, $oldCur))
+            . ' → ' . self::money($v, $cur) . " (from proposal {$q->number})", null);
+    }
+
+    /** For the signing page (ProposalSignController) and the quote endpoints; never throws. */
+    public function syncLeadValueForQuote(SalesQuote $q): void
+    {
+        try {
+            $this->syncLeadValue(SalesLead::find($q->lead_id));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('sales: lead value sync failed', ['quote' => $q->id, 'error' => $e->getMessage()]);
+        }
     }
 
     public function proposalDefaultsSave(Request $r)
@@ -775,13 +884,23 @@ TXT;
             'sales_title'  => 'nullable|string|max:150',
             'sales_email'  => 'nullable|email|max:190',
             'sales_phone'  => 'nullable|string|max:60',
+            'stage_odds'   => 'nullable|array',
+            'stage_odds.*' => 'nullable|numeric|min:0|max:100',
         ]);
         $v = ['valid_days' => (int) $data['valid_days'], 'terms' => (string) ($data['terms'] ?? ''), 'conditions' => (string) ($data['conditions'] ?? ''), 'taxes' => $this->cleanTaxes($data['taxes'] ?? [])];
         foreach (['sales_title', 'sales_email', 'sales_phone'] as $k) {
             $v[$k] = $r->has($k) ? trim((string) ($data[$k] ?? '')) : (self::proposalDefaultValues()[$k] ?? '');
         }
+        $odds = self::stageOdds();
+        foreach ((array) ($data['stage_odds'] ?? []) as $k => $pct) {
+            if (isset(self::STAGE_ODDS[$k]) && is_numeric($pct)) {
+                $odds[$k] = max(0, min(100, (int) round((float) $pct)));
+            }
+        }
+        $v['stage_odds'] = $odds;
+        self::$oddsMemo = null;
         DB::table('platform_settings')->updateOrInsert(['key' => 'sales.proposal_defaults'], ['value' => json_encode($v), 'updated_at' => now(), 'created_at' => now()]);
-        return response()->json($v);
+        return response()->json(['stage_odds' => self::stageOdds()] + $v);
     }
 
     private function cleanTaxes(?array $taxes): array
@@ -1036,6 +1155,17 @@ TXT;
             $q->sent_at = now();
             $q->save();
         }
+        /* Emailing it is sending it: the lead moves to Proposal Sent, the same as marking a
+           proposal sent in the editor (quoteUpdate). Without this a lead whose proposal went out
+           by email stayed at Contacted, and its forecast was weighted at that stage's odds. */
+        if (in_array($lead->stage, ['new', 'contacted', 'qualified'], true)) {
+            $from = self::STAGES[$lead->stage] ?? $lead->stage;
+            $lead->stage = 'proposal';
+            $lead->last_activity_at = now();
+            $lead->save();
+            $this->logActivity($lead, 'stage', "Stage moved: {$from} → Proposal Sent (proposal {$q->number} emailed)", null);
+        }
+        $this->syncLeadValueForQuote($q);
         $this->logActivity($lead, 'email', 'Proposal ' . ($q->number ?: '') . ' emailed to ' . $lead->email
             . ($cc ? ' · CC ' . implode(', ', $cc) : '') . ($bcc ? ' · BCC ' . implode(', ', $bcc) : ''), null);
 
@@ -1649,6 +1779,10 @@ TXT;
             'owner_id'         => $l->owner_id,
             'owner_name'       => $l->owner ? trim($l->owner->first_name . ' ' . $l->owner->last_name) : null,
             'value'            => $l->value,
+            'value_currency'   => $l->value_currency,
+            'value_quote_id'   => $l->value_quote_id,
+            'odds'             => self::stageOdds()[$l->stage] ?? 0,
+            'weighted_value'   => $l->value === null ? null : round((float) $l->value * (self::stageOdds()[$l->stage] ?? 0) / 100, 2),
             'expected_close'   => optional($l->expected_close)->toDateString(),
             'follow_up_date'   => optional($l->follow_up_date)->toDateString(),
             'last_activity_at' => optional($l->last_activity_at)->toDateTimeString(),
@@ -1675,6 +1809,7 @@ TXT;
             'num_locations'    => $l->num_locations,
             'notes'       => $l->notes,
             'lost_reason' => $l->lost_reason,
+            'value_quote_number' => $l->value_quote_id ? optional($l->quotes->firstWhere('id', $l->value_quote_id))->number : null,
             'activities'  => (function () use ($l) {
                 $files = \App\Http\Controllers\Api\SalesActivityFileController::forActivities($l->activities->pluck('id')->all());
                 return $l->activities->map(fn ($a) => [
@@ -1712,12 +1847,16 @@ TXT;
     private function stageSummary(): array
     {
         $rows = SalesLead::selectRaw('stage, COUNT(*) c, COALESCE(SUM(value),0) v')->groupBy('stage')->get()->keyBy('stage');
+        $odds = self::stageOdds();
         $out = [];
         foreach (self::STAGES as $key => $label) {
+            $val = (float) optional($rows->get($key))->v;
             $out[] = [
                 'key' => $key, 'label' => $label,
                 'count' => (int) optional($rows->get($key))->c,
-                'value' => (float) optional($rows->get($key))->v,
+                'value' => $val,
+                'odds' => $odds[$key] ?? 0,
+                'weighted' => round($val * ($odds[$key] ?? 0) / 100, 2),
             ];
         }
 
@@ -1733,6 +1872,15 @@ TXT;
             'lost'           => SalesLead::where('status', 'lost')->count(),
             'my_open'        => SalesLead::where('status', 'open')->where('owner_id', auth()->id())->count(),
             'pipeline_value' => (float) SalesLead::where('status', 'open')->sum('value'),
+            // Open leads weighted by their stage's chance of closing.
+            'weighted_pipeline' => (function () {
+                $odds = self::stageOdds();
+                $sum = 0.0;
+                foreach (SalesLead::where('status', 'open')->whereNotNull('value')->selectRaw('stage, SUM(value) v')->groupBy('stage')->get() as $row) {
+                    $sum += (float) $row->v * ($odds[$row->stage] ?? 0) / 100;
+                }
+                return round($sum, 2);
+            })(),
             'won_value'      => (float) SalesLead::where('status', 'won')->sum('value'),
             'win_rate'       => (function () {
                 $won  = SalesLead::where('status', 'won')->count();

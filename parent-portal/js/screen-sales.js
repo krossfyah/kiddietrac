@@ -82,6 +82,13 @@
      proposal (and yearly ones /12 on a monthly one), and switching it re-prices those lines. */
   var CURRENCIES = [['CAD', 'Canadian dollar'], ['USD', 'US dollar'], ['GBP', 'British pound'], ['EUR', 'Euro'], ['AUD', 'Australian dollar'], ['NZD', 'New Zealand dollar'], ['JMD', 'Jamaican dollar'], ['TTD', 'Trinidad and Tobago dollar'], ['BBD', 'Barbados dollar'], ['XCD', 'East Caribbean dollar'], ['INR', 'Indian rupee'], ['PHP', 'Philippine peso'], ['ZAR', 'South African rand'], ['MXN', 'Mexican peso']];
   var CUR_SYM = { GBP: '£', EUR: '€', INR: '₹', PHP: '₱', ZAR: 'R' };
+  /* Est. annual revenue (2026-10-16): filled from the latest sent proposal (annual value, before
+     tax), or typed by hand. Shown per year, with the currency when it is not CAD. */
+  function perYear(l) {
+    if (!l || l.value == null || l.value === '') return '—';
+    var cur = l.value_currency || 'CAD';
+    return (cur === 'CAD' ? money(l.value) : moneyIn(l.value, cur) + ' ' + cur) + '/yr';
+  }
   function moneyIn(v, cur) { if (v == null || v === '') return '—'; var n = Number(v); return (n < 0 ? '−' : '') + (CUR_SYM[cur || 'CAD'] || '$') + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function periodShort(p) { return p === 'year' ? '/yr' : (p === 'month' ? '/mo' : ''); }
   /* An instant from the server (UTC, "YYYY-MM-DD HH:MM:SS") shown with its time in the
@@ -308,7 +315,8 @@
     var st = data.stats || {};
     var statRow = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:12px' }, [
       statCard('🎯', 'Open leads', st.open || 0, '#EEF2FF', '#4338CA'),
-      statCard('💰', 'Pipeline value', money(st.pipeline_value || 0), '#ECFDF5', '#047857'),
+      statCard('💰', 'Pipeline value / yr', money(st.pipeline_value || 0), '#ECFDF5', '#047857'),
+      statCard('⚖️', 'Weighted forecast / yr', money(st.weighted_pipeline || 0), '#F0F9FF', '#0369A1'),
       statCard('🏆', 'Won', st.won || 0, '#F0FDF4', '#15803D'),
       statCard('⏰', 'Follow-ups due', st.followups_due || 0, '#FFF7ED', '#C2410C'),
       statCard('🙋', 'My open', st.my_open || 0, '#FDF2F8', '#BE185D'),
@@ -329,13 +337,19 @@
     var board = el('div', { class: 'kt-sales-board' });
     var byStage = {}; STAGES.forEach(function (s) { byStage[s.key] = []; });
     (data.leads || []).forEach(function (l) { (byStage[l.stage] || (byStage[l.stage] = [])).push(l); });
+    var stageSum = {}; (data.stages || []).forEach(function (x) { stageSum[x.key] = x; });
     STAGES.forEach(function (s) {
       var leads = byStage[s.key] || [];
+      var sum = stageSum[s.key] || {};
       var col = el('div', { class: 'kt-sales-col' }, [
         el('div', { class: 'kt-sales-col-head' }, [
           el('span', { class: 't', style: 'color:' + s.color }, [s.label]),
           el('span', { style: 'font-size:12px;font-weight:700;color:#64748B;flex:0 0 auto' }, [String(leads.length)]),
         ]),
+        sum.value ? el('div', { style: 'font-size:11.5px;line-height:1.35;color:#64748B;margin:-2px 2px 8px', title: 'Total estimated annual revenue in this stage, and what it counts for at ' + (sum.odds || 0) + '% chance of closing' }, [
+          el('div', { style: 'font-weight:800;color:#047857;white-space:nowrap' }, [money(sum.value) + '/yr']),
+          el('div', { style: 'white-space:nowrap' }, [(sum.odds || 0) + '% → ', el('b', { style: 'color:#0369A1' }, [money(sum.weighted || 0)])]),
+        ]) : null,
       ]);
       if (!leads.length) col.appendChild(el('div', { style: 'padding:14px;text-align:center;color:#94A3B8;font-size:12px' }, ['—']));
       leads.forEach(function (l) { col.appendChild(leadCard(l)); });
@@ -369,7 +383,7 @@
       el('div', { style: 'font-weight:800;font-size:13.5px;color:var(--kt-ink,#0D1B2A)' }, [l.company || l.name || 'Lead #' + l.id]),
       l.company && l.name ? el('div', { style: 'font-size:12px;color:#64748B' }, [l.name]) : null,
       el('div', { style: 'display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap' }, [
-        l.value != null ? el('span', { style: 'font-size:12px;font-weight:700;color:#047857' }, [money(l.value)]) : null,
+        l.value != null ? el('span', { style: 'font-size:12px;font-weight:700;color:#047857', title: l.value_quote_id ? 'From the latest proposal' : 'Entered by hand' }, [perYear(l)]) : null,
         l.owner_name ? el('span', { style: 'font-size:11px;color:#64748B' }, ['· ' + l.owner_name]) : null,
         due ? el('span', { style: 'font-size:11px;font-weight:700;color:#C2410C;background:#FFF7ED;border-radius:999px;padding:1px 7px' }, ['⏰ ' + fmtDate(l.follow_up_date)]) : null,
       ]),
@@ -402,13 +416,13 @@
          screen. The server search is the better answer, so the global one goes. Same
          fix as Announcements, which had the identical clash. */
       var tbl = el('table', { 'data-kt-filtered': '1', style: 'width:100%;border-collapse:collapse;background:#fff;border:1px solid #e6ebf1;border-radius:12px;overflow:hidden' });
-      tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#f4f6f9;text-align:left' }, ['Company / contact', 'Stage', 'Value', 'Owner', 'Follow-up', ''].map(function (h) { return el('th', { style: 'padding:10px 12px;font-size:12px;color:#5a7080' }, [h]); }))]));
+      tbl.appendChild(el('thead', {}, [el('tr', { style: 'background:#f4f6f9;text-align:left' }, ['Company / contact', 'Stage', 'Est. revenue / yr', 'Owner', 'Follow-up', ''].map(function (h) { return el('th', { style: 'padding:10px 12px;font-size:12px;color:#5a7080' }, [h]); }))]));
       var tb = el('tbody');
       data.leads.forEach(function (l) {
         tb.appendChild(el('tr', { style: 'border-top:1px solid #eef1f5;cursor:pointer', onclick: function () { go('sales-lead?id=' + l.id); } }, [
           el('td', { style: 'padding:10px 12px' }, [el('div', { style: 'font-weight:700' }, [l.company || l.name || '—']), l.company && l.name ? el('div', { style: 'font-size:12px;color:#64748B' }, [l.name]) : null]),
           el('td', { style: 'padding:10px 12px' }, [stageChip(l.stage)]),
-          el('td', { style: 'padding:10px 12px;font-weight:700;color:#047857' }, [money(l.value)]),
+          el('td', { style: 'padding:10px 12px;font-weight:700;color:#047857;white-space:nowrap' }, [perYear(l)]),
           el('td', { style: 'padding:10px 12px;font-size:13px' }, [l.owner_name || '—']),
           el('td', { style: 'padding:10px 12px;font-size:13px;color:' + (l.follow_up_date && l.follow_up_date <= todayISO() ? '#C2410C' : '#64748B') }, [l.follow_up_date ? fmtDate(l.follow_up_date) : '—']),
           /* ROW ACTIONS (Anthony, 2026-10-06: "leads section add kebab to view, edit,
@@ -476,7 +490,7 @@
       formSection('Pipeline', '📊', [
         field('Stage', f.stage = selectEl(STAGES.map(function (s) { return { v: s.key, l: s.label }; }), 'new')),
         field('Owner (rep)', f.owner_id = selectEl(ownerOpts(), myId)),
-        field('Est. value ($)', f.value = input({ type: 'number', step: '0.01', min: '0', placeholder: '0.00' })),
+        field('Est. annual revenue ($)', f.value = input({ type: 'number', step: '0.01', min: '0', placeholder: 'Filled in when a proposal is sent' })),
         field('Expected close', f.expected_close = input({ type: 'date' })),
         field('Next follow-up', f.follow_up_date = input({ type: 'date' })),
       ]),
@@ -745,7 +759,14 @@
       el('div', { style: 'display:flex;gap:14px;align-items:center;flex-wrap:wrap' }, [
         el('div', {}, [el('div', { style: 'font-size:11px;color:#5a7080;font-weight:700;margin-bottom:3px' }, ['STAGE']), stageSel]),
         el('div', { style: 'flex:1' }),
-        el('div', { style: 'text-align:right' }, [el('div', { style: 'font-size:11px;color:#5a7080;font-weight:700' }, ['EST. VALUE']), el('div', { style: 'font-size:20px;font-weight:800;color:#047857' }, [money(lead.value)])]),
+        el('div', { style: 'text-align:right' }, [
+          el('div', { style: 'font-size:11px;color:#5a7080;font-weight:700' }, ['EST. ANNUAL REVENUE']),
+          el('div', { style: 'font-size:20px;font-weight:800;color:#047857' }, [perYear(lead)]),
+          lead.value != null ? el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:2px' }, [
+            (lead.value_quote_id ? 'From proposal ' + (lead.value_quote_number || '') : 'Entered by hand') + ' · ' + (lead.odds || 0) + '% at this stage → ',
+            el('b', { style: 'color:#0369A1' }, [money(lead.weighted_value || 0)]),
+          ]) : el('div', { style: 'font-size:11.5px;color:#94A3B8;margin-top:2px' }, ['Fills in when a proposal is sent']),
+        ]),
       ]),
     ], 'margin-bottom:14px'));
 
@@ -779,7 +800,7 @@
         formSection('Deal', '💼', [
           field('Lead source', e.source = selectEl(sourceOptions(lead.source), sourceValue(lead.source))),
           field('Owner', e.owner_id = selectEl(ownerOpts(), lead.owner_id || '')),
-          field('Est. value ($)', e.value = input({ type: 'number', step: '0.01', value: lead.value == null ? '' : lead.value })),
+          field('Est. annual revenue ($)' + (lead.value_quote_id ? ' · from proposal ' + (lead.value_quote_number || '') : ''), e.value = input({ type: 'number', step: '0.01', value: lead.value == null ? '' : lead.value, title: 'Changing it by hand keeps your figure until the next proposal is sent' })),
           field('Expected close', e.expected_close = input({ type: 'date', value: lead.expected_close || '' })),
           field('Next follow-up', e.follow_up_date = input({ type: 'date', value: lead.follow_up_date || '' })),
         ]),
@@ -1493,6 +1514,15 @@
         if (!taxes.length) taxHost.appendChild(el('div', { style: 'font-size:12.5px;color:#94A3B8' }, ['None — add one if most proposals carry the same tax.']));
       }
       drawTaxes();
+      // Chance of closing per stage: the weighted forecast on the Pipeline uses these.
+      var odds = dfl.stage_odds || {};
+      var oddsIn = {};
+      var oddsGrid = el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:14px' },
+        STAGES.map(function (st) {
+          oddsIn[st.key] = input({ type: 'number', min: '0', max: '100', step: '1', value: odds[st.key] == null ? '' : odds[st.key], style: 'width:84px;flex:0 0 84px;' + FLD });
+          return el('label', { style: 'display:flex;align-items:center;gap:6px;font-size:13px;color:#334155' }, [
+            el('span', { style: 'flex:1;min-width:0;font-weight:700;color:' + (st.color || '#334155') }, [st.label]), oddsIn[st.key], '%']);
+        }));
       return el('div', {}, [
         el('div', { style: 'margin:26px 0 4px;font-size:16px;font-weight:800;color:#0D1B2A' }, ['📄 Proposal terms & defaults']),
         el('div', { style: 'margin:0 0 12px;font-size:13px;color:#64748B' }, ['Every new proposal starts with these. Each proposal can then change its own copy.']),
@@ -1506,10 +1536,13 @@
           el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 14px' }, ['Start a line with ## for a heading, or - for a bullet. Proposals already made keep the wording they were created with.']),
           el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;max-width:460px' }, [el('div', { style: 'font-size:12px;font-weight:700;color:#5a7080' }, ['Default taxes']), btn('+ Add tax', 'light', function () { if (taxes.length >= 5) return; taxes.push({ label: '', rate: '' }); drawTaxes(); })]),
           taxHost,
+          el('div', { style: 'font-size:12px;font-weight:700;color:#5a7080;margin:16px 0 4px' }, ['Chance of closing by stage']),
+          el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:8px' }, ['The Pipeline\'s weighted forecast multiplies each lead\'s estimated annual revenue by its stage\'s chance.']),
+          oddsGrid,
           el('div', { style: 'display:flex;justify-content:flex-end;margin-top:14px' }, [btn('Save', 'primary', async function (ev) {
             ev.target.disabled = true;
             try {
-              await Api.put('/sales/proposal-defaults', { valid_days: Number(days.value || 90), terms: terms.value, conditions: conds.value, sales_title: sTitle.value.trim(), sales_email: sEmail.value.trim(), sales_phone: sPhone.value.trim(), taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }) });
+              await Api.put('/sales/proposal-defaults', { valid_days: Number(days.value || 90), terms: terms.value, conditions: conds.value, sales_title: sTitle.value.trim(), sales_email: sEmail.value.trim(), sales_phone: sPhone.value.trim(), stage_odds: (function () { var o = {}; STAGES.forEach(function (st) { var v = oddsIn[st.key].value; if (v !== '') o[st.key] = Number(v); }); return o; })(), taxes: taxes.filter(function (t) { return String(t.label || '').trim(); }).map(function (t) { return { label: String(t.label).trim(), rate: Number(t.rate || 0) }; }) });
               toast('✅', 'Proposal defaults saved');
             } catch (er) { toast('⚠️', 'Failed', er.message || '', '#DC2626'); }
             ev.target.disabled = false;
@@ -1713,7 +1746,8 @@
   function statCardsRow(st) {
     return el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px' }, [
       statCard('🎯', 'Open leads', st.open || 0, '#EEF2FF', '#4338CA'),
-      statCard('💰', 'Pipeline value', money(st.pipeline_value || 0), '#ECFDF5', '#047857'),
+      statCard('💰', 'Pipeline value / yr', money(st.pipeline_value || 0), '#ECFDF5', '#047857'),
+      statCard('⚖️', 'Weighted forecast / yr', money(st.weighted_pipeline || 0), '#F0F9FF', '#0369A1'),
       statCard('🏆', 'Won', st.won || 0, '#F0FDF4', '#15803D'),
       statCard('📈', 'Won revenue', money(st.won_value || 0), '#ECFEFF', '#0E7490'),
       statCard('⏰', 'Follow-ups due', st.followups_due || 0, '#FFF7ED', '#C2410C'),
