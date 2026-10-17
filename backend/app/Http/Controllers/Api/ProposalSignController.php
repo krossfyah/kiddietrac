@@ -67,6 +67,8 @@ class ProposalSignController extends Controller
             $q->sign_viewed_at = now();
             $q->save();
             try { $this->sales()->logOnProposalLead($q, 'note', "👁 Proposal {$q->number} opened from the signing link"); } catch (\Throwable $e) {}
+            // Opened by the customer: it has gone out, however the link reached them.
+            $this->sales()->proposalWentOut($q, 'opened by the customer');
         }
         $pf = SalesController::preparedForOf($q);
         $pb = SalesController::preparedByOf($q);
@@ -122,7 +124,7 @@ class ProposalSignController extends Controller
         }
         $q = $this->byToken($token);
         $human = $this->human($q->client_signed_at);
-        $this->sales()->syncLeadValueForQuote($q);   // the signed proposal is now the estimate
+        $this->sales()->proposalWentOut($q, 'signed by the customer');   // stage + the signed proposal is now the estimate
 
         $mail = $this->mailThanks($q, $human);
         try {

@@ -469,6 +469,9 @@ class SalesController extends Controller
             }
         }
         $q->save();
+        if (in_array($q->status, ['sent', 'accepted'], true)) {
+            $this->proposalWentOut($q, $q->status === 'accepted' ? 'accepted' : 'marked sent');
+        }
         if ($r->has('items')) {
             $this->syncItems($q, $data['items'] ?? []);
         } else {
@@ -862,6 +865,39 @@ TXT;
             . ' → ' . self::money($v, $cur) . " (from proposal {$q->number})", null);
     }
 
+    /* A PROPOSAL THAT HAS REACHED THE CUSTOMER (2026-10-16, Anthony: "for the web binders lead
+       since we sent proposal why is the lead still under contacted - full sweep"). Only
+       "marked sent" in the editor moved the lead before. Emailing it, the customer opening
+       the signing link, signing it, or marking it accepted left the lead at New / Contacted /
+       Qualified, and a link copied and sent by hand left the proposal a "draft". Every one of
+       those now comes through here: a draft becomes sent, an early-stage lead moves to
+       Proposal Sent (noted in its history), and the estimate is refreshed. Never moves a lead
+       backwards, and never past Proposal Sent (countersigning is what makes it Won). */
+    public function proposalWentOut(SalesQuote $q, string $how): void
+    {
+        try {
+            if ($q->status === 'draft') {
+                $q->status = 'sent';
+                $q->sent_at = $q->sent_at ?: now();
+                $q->save();
+            }
+            $lead = SalesLead::find($q->lead_id);
+            if ($lead && in_array($lead->stage, ['new', 'contacted', 'qualified'], true)) {
+                $from = self::STAGES[$lead->stage] ?? $lead->stage;
+                $lead->stage = 'proposal';
+                if ($lead->status !== 'open') {
+                    $lead->status = 'open';
+                }
+                $lead->last_activity_at = now();
+                $lead->save();
+                $this->logActivity($lead, 'stage', "Stage moved: {$from} → Proposal Sent (proposal {$q->number} {$how})", null);
+            }
+            $this->syncLeadValue($lead);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('sales: proposalWentOut failed', ['quote' => $q->id, 'error' => $e->getMessage()]);
+        }
+    }
+
     /** For the signing page (ProposalSignController) and the quote endpoints; never throws. */
     public function syncLeadValueForQuote(SalesQuote $q): void
     {
@@ -1155,17 +1191,7 @@ TXT;
             $q->sent_at = now();
             $q->save();
         }
-        /* Emailing it is sending it: the lead moves to Proposal Sent, the same as marking a
-           proposal sent in the editor (quoteUpdate). Without this a lead whose proposal went out
-           by email stayed at Contacted, and its forecast was weighted at that stage's odds. */
-        if (in_array($lead->stage, ['new', 'contacted', 'qualified'], true)) {
-            $from = self::STAGES[$lead->stage] ?? $lead->stage;
-            $lead->stage = 'proposal';
-            $lead->last_activity_at = now();
-            $lead->save();
-            $this->logActivity($lead, 'stage', "Stage moved: {$from} → Proposal Sent (proposal {$q->number} emailed)", null);
-        }
-        $this->syncLeadValueForQuote($q);
+        $this->proposalWentOut($q, 'emailed');
         $this->logActivity($lead, 'email', 'Proposal ' . ($q->number ?: '') . ' emailed to ' . $lead->email
             . ($cc ? ' · CC ' . implode(', ', $cc) : '') . ($bcc ? ' · BCC ' . implode(', ', $bcc) : ''), null);
 
