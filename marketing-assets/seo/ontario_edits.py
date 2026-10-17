@@ -21,7 +21,7 @@ GO = 'href="/daycare-software-ontario" onclick="showPage(\'daycare-software-onta
 
 CARDS = [
     ('👩‍🏫', 'Ontario ratio rules',
-     'Each room at a licensed centre is checked against Schedule 1: ratios, maximum group sizes and qualified staff, mixed-age groups, the reduced ratios allowed at arrival, departure and rest times, family age groups and an RECE in every group. Directors and educators see the same live result.',
+     'Each room at a licensed centre is checked against Schedule 1: ratios, maximum group sizes, mixed-age groups, the reduced ratios allowed at arrival, departure and rest times, family age groups, and the share of RECEs each group needs. Directors and educators see the same live result.',
      'O. Reg. 137/15 ss.8, 8.1, 54 and Schedules 1 and 4'),
     ('👀', 'Headcounts and the acting supervisor',
      'Educators count children name-to-face from their phone, in the room or on a walk. If a child is not seen, directors, admins and the acting supervisor get an urgent alert, and the serious occurrence report is pre-filled. Each centre names who acts for the supervisor when they are away.',

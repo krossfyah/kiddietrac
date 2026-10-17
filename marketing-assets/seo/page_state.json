@@ -13,39 +13,39 @@
  },
  "/blog": {
   "d": "2026-10-16",
-  "h": "1dc013e52ccf0bf201bcc85523c0ccfc68b20f51"
+  "h": "64fb5f20811cf5bead252c06b76e98f2ec5834b9"
  },
  "/blog/allergy-and-medication-safety": {
   "d": "2026-09-28",
-  "h": "337f87b720fb6aff2d9c70e7ae7b3921645414bd"
+  "h": "3a26f39fc512dcde2b93c9004cc0db6764978df9"
  },
  "/blog/best-parent-communication-apps-for-childcare": {
   "d": "2026-09-29",
-  "h": "165038b2208c58f6c48ed6ffdf5fa99ab8fae012"
+  "h": "692cb4f2f1aa9528251b7450f38b1394ca59a8d9"
  },
  "/blog/billing-cad-and-usd": {
   "d": "2025-02-07",
-  "h": "5b0f8a70b3f631eba1c10f897a4d2db4362ab9c3"
+  "h": "4f48c76a41374abb3d30b8fb2379e2e6fd2cd029"
  },
  "/blog/childcare-revenue-leaks": {
   "d": "2025-03-18",
-  "h": "70006ef04a798d883cc1a09fe828edef77e5d777"
+  "h": "23f9ccee840bc1cbc23857aa14719acf131c2f77"
  },
  "/blog/cwelcc-2026-fees-22-dollar-cap-ontario": {
   "d": "2026-10-16",
-  "h": "00a9ff8b21f889e05a32e088db24bb78853edd9c"
+  "h": "df339a24563c7f1ec208b4c4adc40ba9f1acd9ca"
  },
  "/blog/cwelcc-explained-ontario": {
   "d": "2025-04-02",
-  "h": "250277c24c6fd5d5e4515a02ae9798f2f25beb25"
+  "h": "41f5fa17364b6b964c9ef5abab6742532f1fc265"
  },
  "/blog/daily-reports-families-read": {
   "d": "2026-09-28",
-  "h": "0d0158caf5e2a97dc6b6275de44549243953e805"
+  "h": "cc727196fd889ebfc477dd077bdec6e689b06680"
  },
  "/blog/documenting-observations-efficiently": {
   "d": "2026-09-28",
-  "h": "4a2c4d1ec10b7371c13848cecd684bdd364fc6c6"
+  "h": "a201821d45516dee3b7bb5d2ec332a72f9178d18"
  },
  "/blog/emergency-preparedness-checklist": {
   "d": "2026-09-28",
@@ -53,15 +53,15 @@
  },
  "/blog/home-daycare-to-licensed-agency": {
   "d": "2025-01-22",
-  "h": "96f0662516f793ee94dce422b33d103c0f87540e"
+  "h": "9ca4d64c1f9cc284307016ffd80e1762eddae2b7"
  },
  "/blog/how-to-choose-childcare-management-software": {
   "d": "2026-09-28",
-  "h": "b74c93dcf61690953dad3a34faaec9a48eb2c102"
+  "h": "527e6e607036cac28bad5badeeeb0b6d672fe147"
  },
  "/blog/keeping-immunization-records-up-to-date": {
   "d": "2026-09-28",
-  "h": "41cc4eaf16e3adb4fbc6828ed92b84ab19ac86d5"
+  "h": "534055122c211251dc4cc29123b3dedf3c9239ed"
  },
  "/blog/managing-your-waitlist-fairly": {
   "d": "2026-09-28",
@@ -69,15 +69,19 @@
  },
  "/blog/ontario-2027-child-care-regulation-changes": {
   "d": "2026-10-16",
-  "h": "4fa65bd61b2d167920727409413e0f70709387c7"
+  "h": "81ff41f001a632fa0b889a3b8d0b2ad79be3deaf"
+ },
+ "/blog/ontario-child-care-ratios": {
+  "d": "2026-10-16",
+  "h": "c2d4afe49ef42d283c1daf6287708a7c7a04b9e2"
  },
  "/blog/parent-communication-that-builds-trust": {
   "d": "2026-09-28",
-  "h": "af743d9df6ddc73e8ad69e869467e29dc98cfdab"
+  "h": "bd534b29c1a8cb5d24d43bc0a9ea7cfb1e9f0fe4"
  },
  "/blog/play-based-learning-day-to-day": {
   "d": "2026-09-28",
-  "h": "1fbe90b5d3dcff9a942cb9bd1d84389898ea5392"
+  "h": "dcb1b3d19474a6b629214ef6b5f3677305bf0204"
  },
  "/blog/qr-check-in-vs-paper-sign-in": {
   "d": "2025-03-05",
@@ -93,11 +97,11 @@
  },
  "/blog/starting-a-home-daycare-in-canada": {
   "d": "2026-09-28",
-  "h": "449428917dbcd0317635d8544aa897fd1dc487b6"
+  "h": "88577f9aa9d76bc8324fc6056de3b2a9aab378bc"
  },
  "/blog/white-label-parent-apps": {
   "d": "2025-02-20",
-  "h": "4e7d7760b80c25a732a6563c2af01d8d0161a23b"
+  "h": "3eb174c093bc0136760270bc155bdb782f3bdf16"
  },
  "/careers": {
   "d": "2026-10-13",
@@ -133,7 +137,7 @@
  },
  "/daycare-software-ontario": {
   "d": "2026-10-16",
-  "h": "09e110b44f6992c5955b8a13c52f0c59bd7e4553"
+  "h": "dec1733098d76e78c0e4be3aa36289f9ee863aa6"
  },
  "/dei-policy": {
   "d": "2026-10-13",

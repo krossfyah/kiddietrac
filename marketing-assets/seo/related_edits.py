@@ -20,7 +20,7 @@ CTA = '<div style="text-align:center;margin-top:44px"><button class="btn btn-sec
 SA_FINAL = '<section class="sa-band sa-final">'
 
 RELATED = [
-    ('daycare-software-ontario', CTA, 'ontario-2027-child-care-regulation-changes,safe-arrival-child-care-absence-follow-up,cwelcc-2026-fees-22-dollar-cap-ontario'),
+    ('daycare-software-ontario', CTA, 'ontario-child-care-ratios,ontario-2027-child-care-regulation-changes,safe-arrival-child-care-absence-follow-up'),
     ('cwelcc-calculator', CTA, 'cwelcc-2026-fees-22-dollar-cap-ontario,cwelcc-explained-ontario,childcare-revenue-leaks'),
     ('cwelcc-billing-software', CTA, 'cwelcc-2026-fees-22-dollar-cap-ontario,cwelcc-explained-ontario,billing-cad-and-usd'),
     ('safe-arrival', SA_FINAL, 'safe-arrival-child-care-absence-follow-up,ontario-2027-child-care-regulation-changes,qr-check-in-vs-paper-sign-in'),
