@@ -211,7 +211,24 @@
     strip('kt-navfill', 'bottom');
   }
 
+  /* "IT'S STILL WHITE" (2026-10-16, same evening). Where Chrome does NOT draw under the
+     system bar, the strip above is 0px and Chrome paints that bar itself, in the colour of
+     the page's background: the root (<html>) background, which styles.css sets to the light
+     --kt-bg along with body. The sign-in page is navy on both, which is why it looked right
+     there. So in the app on Android the ROOT is navy and the body keeps its light colour:
+     nothing visible changes (the body fills the screen), and the bar Chrome paints is navy. */
+  function navyRootOnAndroid() {
+    if (!isAndroid() || !/\/dashboard(\.src)?\.html$/.test(w.location.pathname || '')) { return; }
+    var r = d.documentElement, b = d.body;
+    r.style.setProperty('background-color', '#081C41', 'important');
+    if (b) {
+      b.style.setProperty('background-color', 'var(--kt-bg, #F7F9FC)');
+      b.style.setProperty('min-height', '100vh');
+    }
+  }
+
   function boot() {
+    try { navyRootOnAndroid(); } catch (e) {}
     try { apply(); } catch (e) { /* never let chrome-fixing break the app */ }
     /* After apply(), so the strips read the variables it has just written. */
     try { paintSystemBarFills(); } catch (e) {}
