@@ -181,10 +181,21 @@
     return !isIOS();
   }
 
+  /* ANDROID CHROME TABS DRAW EDGE-TO-EDGE NOW (2026-10-16). Anthony: "when logging into
+     mobile through app.kiddietrac.com the bottom bar from android with back home etc is in
+     white and not navy". ownsTheSystemBars() said a browser tab never owns the bottom, but
+     current Chrome on Android draws the page UNDER the back/home/recents bar when the page
+     asks for viewport-fit=cover (ours does), so that bar showed our white bottom nav through
+     it. On Android the bottom strip is now drawn in a tab too. Where Chrome does not draw
+     edge-to-edge, env(safe-area-inset-bottom) is 0 and the strip is 0px tall: no change. */
+  function isAndroid() { return /Android/i.test(navigator.userAgent || ''); }
+
   function paintSystemBarFills() {
     var strip = function (id, edge) {
       var el = d.getElementById(id);
-      var want = ownsTheSystemBars() && (edge === 'top' || wantsBottomFill());
+      var want = edge === 'top'
+        ? ownsTheSystemBars()
+        : (wantsBottomFill() && (ownsTheSystemBars() || isAndroid()));
       if (!want) { if (el) { el.remove(); } return; }
       if (!el) {
         el = d.createElement('div');
