@@ -1161,7 +1161,7 @@ final class MarketingSiteController extends Controller
             'at'      => now()->toIso8601String(),
         ];
         try {
-            Storage::disk('local')->append('marketing-chats.jsonl', json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            self::appendChatLine(json_encode($row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         } catch (\Throwable $e) {
         }
         // And into the live-chat tables, so the team can see it and answer it.
@@ -1194,8 +1194,207 @@ final class MarketingSiteController extends Controller
             }
         } catch (\Throwable $e) {
         }
+        /* Staff replies (Sales → Website chat) live only in web_chat_messages, so without
+           them a conversation here, and its downloaded transcript, was one-sided. */
+        try {
+            if ($sessions) {
+                $bySession = DB::table('web_chats')->whereIn('session', array_keys($sessions))->pluck('session', 'id')->all();
+                if ($bySession) {
+                    $rows = DB::table('web_chat_messages')->whereIn('web_chat_id', array_keys($bySession))
+                        ->whereIn('sender', ['agent', 'system'])->orderBy('id')->limit(5000)
+                        ->get(['web_chat_id', 'sender', 'author', 'body', 'created_at']);
+                    $touched = [];
+                    foreach ($rows as $m) {
+                        $sid = $bySession[$m->web_chat_id] ?? null;
+                        if ($sid === null || ! isset($sessions[$sid])) {
+                            continue;
+                        }
+                        $at = \Carbon\Carbon::parse($m->created_at, config('app.timezone'))->toIso8601String();
+                        $sessions[$sid]['messages'][] = ['sender' => (string) $m->sender, 'author' => (string) $m->author, 'message' => (string) $m->body, 'at' => $at];
+                        $sessions[$sid]['count']++;
+                        if (strtotime($at) > strtotime((string) $sessions[$sid]['last'])) {
+                            $sessions[$sid]['last'] = $at;
+                        }
+                        $touched[$sid] = true;
+                    }
+                    foreach (array_keys($touched) as $sid) {
+                        $msgs = $sessions[$sid]['messages'];
+                        $order = array_keys($msgs);
+                        usort($order, function ($a, $b) use ($msgs) {
+                            $d = strtotime((string) $msgs[$a]['at']) <=> strtotime((string) $msgs[$b]['at']);
+                            return $d !== 0 ? $d : $a <=> $b;   // same second: keep the order they were written
+                        });
+                        $sessions[$sid]['messages'] = array_map(function ($i) use ($msgs) { return $msgs[$i]; }, $order);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        $archived = self::chatState()['archived'];
+        foreach ($sessions as $sid => $row) {
+            $sessions[$sid]['archived'] = isset($archived[$sid]);
+        }
         $out = array_values($sessions);
         usort($out, function ($a, $b) { return strcmp((string) ($b['last'] ?? ''), (string) ($a['last'] ?? '')); });
         return response()->json(['count' => count($out), 'sessions' => array_slice($out, 0, 200)]);
+    }
+
+    /* ── Website chat: archive and delete (2026-10-16) ──────────────────────────
+       Anthony: "website section and under chat add kebab to download transcript and
+       delete and archive". The transcript download is built in the browser from what
+       chats() already returns. Archive is a flag kept beside the log; delete removes
+       the conversation for good — its lines in marketing-chats.jsonl and its copy in
+       the live-chat inbox (web_chats + web_chat_messages).
+
+       ONE LOCK FOR THE LOG. Storage::append() reads the whole file and writes it back,
+       with no lock, so a delete rewriting the file at the same moment as a visitor's
+       message could drop that message. Both now go through flock(). */
+    private const CHAT_LOG = 'marketing-chats.jsonl';
+    private const CHAT_STATE = 'marketing-chats-state.json';
+
+    private static function appendChatLine(string $line): void
+    {
+        $path = Storage::disk('local')->path(self::CHAT_LOG);
+        $fh = fopen($path, 'c+');
+        if (! $fh) {
+            return;
+        }
+        try {
+            if (flock($fh, LOCK_EX)) {
+                fseek($fh, 0, SEEK_END);
+                $size = ftell($fh);
+                $lead = '';
+                if ($size > 0) {   // older lines were joined by "\n" with no newline after the last
+                    fseek($fh, -1, SEEK_END);
+                    $lead = fread($fh, 1) === "\n" ? '' : "\n";
+                    fseek($fh, 0, SEEK_END);
+                }
+                fwrite($fh, $lead . $line . "\n");
+                fflush($fh);
+                flock($fh, LOCK_UN);
+            }
+        } finally {
+            fclose($fh);
+        }
+    }
+
+    private static function chatState(): array
+    {
+        try {
+            $disk = Storage::disk('local');
+            $j = $disk->exists(self::CHAT_STATE) ? json_decode((string) $disk->get(self::CHAT_STATE), true) : null;
+            if (is_array($j) && isset($j['archived']) && is_array($j['archived'])) {
+                return $j;
+            }
+        } catch (\Throwable $e) {
+        }
+        return ['archived' => []];
+    }
+
+    private static function chatSessionFrom(Request $request): string
+    {
+        $data = $request->validate(['session' => 'required|string|max:60']);
+        return (string) preg_replace('/[^a-zA-Z0-9_-]/', '', $data['session']);
+    }
+
+    private static function chatAudit(Request $request, string $action, array $payload): void
+    {
+        try {
+            $uid = (int) optional($request->user())->id;
+            \App\Support\Audit::write([
+                'user_id' => $uid ?: null,
+                'agency_id' => $uid ? \App\Support\AuditScope::resolve($uid) : null,
+                'action' => $action,
+                'entity_type' => 'website_chat',
+                'entity_id' => null,
+                'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /** platform_admin — POST /platform/marketing-site/chats/archive {session, archived: true|false} */
+    public function chatArchive(Request $request): JsonResponse
+    {
+        $sid = self::chatSessionFrom($request);
+        if ($sid === '') {
+            return response()->json(['ok' => false, 'error' => 'Unknown conversation.'], 422);
+        }
+        $on = $request->boolean('archived', true);
+        $state = self::chatState();
+        if ($on) {
+            $state['archived'][$sid] = now()->toIso8601String();
+        } else {
+            unset($state['archived'][$sid]);
+        }
+        Storage::disk('local')->put(self::CHAT_STATE, json_encode($state, JSON_UNESCAPED_SLASHES));
+        self::chatAudit($request, $on ? 'website_chat.archived' : 'website_chat.unarchived', ['session' => $sid]);
+        return response()->json(['ok' => true, 'archived' => $on]);
+    }
+
+    /** platform_admin — POST /platform/marketing-site/chats/delete {session}. Permanent. */
+    public function chatDelete(Request $request): JsonResponse
+    {
+        $sid = self::chatSessionFrom($request);
+        if ($sid === '') {
+            return response()->json(['ok' => false, 'error' => 'Unknown conversation.'], 422);
+        }
+        $removed = 0;
+        $who = ['name' => '', 'email' => ''];
+        $path = Storage::disk('local')->path(self::CHAT_LOG);
+        if (is_file($path)) {
+            $fh = fopen($path, 'c+');
+            if ($fh) {
+                try {
+                    if (flock($fh, LOCK_EX)) {
+                        $keep = [];
+                        while (($ln = fgets($fh)) !== false) {
+                            $t = rtrim($ln, "\r\n");
+                            if ($t === '') {
+                                continue;
+                            }
+                            $r = json_decode($t, true);
+                            if (is_array($r) && (string) ($r['session'] ?? '') === $sid) {
+                                $removed++;
+                                if (! empty($r['name'])) { $who['name'] = (string) $r['name']; }
+                                if (! empty($r['email'])) { $who['email'] = (string) $r['email']; }
+                                continue;
+                            }
+                            $keep[] = $t;
+                        }
+                        if ($removed > 0) {
+                            ftruncate($fh, 0);
+                            rewind($fh);
+                            fwrite($fh, $keep ? implode("\n", $keep) . "\n" : '');
+                            fflush($fh);
+                        }
+                        flock($fh, LOCK_UN);
+                    }
+                } finally {
+                    fclose($fh);
+                }
+            }
+        }
+        // The same conversation in the live-chat inbox (Sales → Website chat).
+        $live = 0;
+        try {
+            $ids = DB::table('web_chats')->where('session', $sid)->pluck('id')->all();
+            if ($ids) {
+                DB::table('web_chat_messages')->whereIn('web_chat_id', $ids)->delete();
+                $live = DB::table('web_chats')->whereIn('id', $ids)->delete();
+            }
+        } catch (\Throwable $e) {
+        }
+        $state = self::chatState();
+        if (isset($state['archived'][$sid])) {
+            unset($state['archived'][$sid]);
+            Storage::disk('local')->put(self::CHAT_STATE, json_encode($state, JSON_UNESCAPED_SLASHES));
+        }
+        if ($removed === 0 && $live === 0) {
+            return response()->json(['ok' => false, 'error' => 'That conversation was not found. It may already have been deleted.'], 404);
+        }
+        self::chatAudit($request, 'website_chat.deleted', ['session' => $sid, 'messages' => $removed] + $who);
+        return response()->json(['ok' => true, 'removed' => $removed]);
     }
 }

@@ -729,6 +729,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/marketing-site/leads', [\App\Http\Controllers\Api\MarketingSiteController::class, 'addLead']);
             Route::get('/marketing-site/analytics', [\App\Http\Controllers\Api\MarketingSiteController::class, 'analytics']);
             Route::get('/marketing-site/chats', [\App\Http\Controllers\Api\MarketingSiteController::class, 'chats']);
+            Route::post('/marketing-site/chats/archive', [\App\Http\Controllers\Api\MarketingSiteController::class, 'chatArchive']);
+            Route::post('/marketing-site/chats/delete', [\App\Http\Controllers\Api\MarketingSiteController::class, 'chatDelete']);
             Route::get('/marketing-site/translations', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'index']);
             Route::put('/marketing-site/translations/{id}', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'update'])->where('id','[0-9]+');
             Route::delete('/marketing-site/translations/{id}', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'destroy'])->where('id','[0-9]+');

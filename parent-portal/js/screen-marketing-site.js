@@ -187,22 +187,58 @@
         + '<div style="margin-top:12px"><a href="https://analytics.google.com/" target="_blank" rel="noopener" style="font-size:13px;color:' + TEAL + ';font-weight:700;text-decoration:none">Open Google Analytics ↗</a></div>');
   }
 
-  function tabChats(chats) {
-    if (!chats || !chats.length) return card('', '<div style="padding:24px;text-align:center;color:#64748B;font-size:14px">No chats yet. Conversations from the website chat widget appear here with the visitor\'s name &amp; email.</div>');
-    return card('', '<div style="font-size:13px;color:#6b7280;font-weight:700;margin-bottom:14px">' + chats.length + ' conversation' + (chats.length === 1 ? '' : 's') + '</div>'
-      + chats.map(function (s, i) {
-        var when = (s.last || '').replace('T', ' ').slice(0, 16);
-        var who = (s.name || 'Anonymous') + (s.email ? ' · ' + s.email : '');
-        var msgs = (s.messages || []).map(function (m) {
-          var mine = m.sender === 'visitor';
-          return '<div style="display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin:4px 0"><div style="max-width:78%;padding:7px 11px;border-radius:10px;font-size:13px;line-height:1.45;white-space:pre-wrap;background:' + (mine ? TEAL : '#F1F5F9') + ';color:' + (mine ? '#fff' : '#0a1e2c') + '">' + esc(m.message) + '</div></div>';
-        }).join('');
-        return '<div style="border:1px solid #E5E7EB;border-radius:12px;margin-bottom:10px;overflow:hidden">'
-          + '<button class="chatToggle" data-i="' + i + '" style="width:100%;text-align:left;background:#F9FAFB;border:none;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px">'
-          + '<span style="font-size:13.5px;font-weight:700;color:#0a1e2c">💬 ' + esc(who) + '</span>'
-          + '<span style="font-size:12px;color:#64748B;white-space:nowrap">' + s.count + ' msgs · ' + esc(when) + '</span></button>'
-          + '<div class="chatBody" data-i="' + i + '" style="display:none;padding:12px 16px;background:#fff">' + msgs + '</div></div>';
-      }).join(''));
+  /* WEBSITE CHAT (2026-10-16). Anthony: "website section and under chat add kebab to
+     download transcript and delete and archive". Each conversation has a ⋮ with Download
+     transcript, Archive / Unarchive and Delete; archived ones move to their own view.
+     This list is cards, not a table, so kt-row-actions cannot build the ⋮: the button is
+     ours (kt-ka-kebab) and the menu is KT.openActionMenu, per CONVENTIONS.md. Staff
+     replies from the live inbox are merged in by the server, so a transcript is the whole
+     conversation. Times are shown in Toronto time, KiddieTrac's own. */
+  var CHAT_TZ = 'America/Toronto';
+  function chatWhen(iso) {
+    var d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d.getTime())) return String(iso || '').replace('T', ' ').slice(0, 16);
+    try {
+      return d.toLocaleString('en-CA', { timeZone: CHAT_TZ, year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return String(iso).replace('T', ' ').slice(0, 16); }
+  }
+  function chatWho(s, m) {
+    if (m.sender === 'visitor') return s.name || 'Visitor';
+    if (m.sender === 'agent') return (m.author || 'KiddieTrac team') + ' (KiddieTrac)';
+    if (m.sender === 'system') return 'KiddieTrac';
+    return 'Maya (KiddieTrac assistant)';
+  }
+  function tabChats(chats, showArchived) {
+    chats = chats || [];
+    if (!chats.length) return card('', '<div style="padding:24px;text-align:center;color:#64748B;font-size:14px">No chats yet. Conversations from the website chat widget appear here with the visitor\'s name &amp; email.</div>');
+    var nArch = chats.filter(function (c) { return c.archived; }).length;
+    var list = chats.filter(function (c) { return !!c.archived === !!showArchived; });
+    function seg(on, label, n, v) {
+      return '<button type="button" class="wsChatView" data-kt-keep-size data-arch="' + v + '"' + (on ? ' aria-current="true"' : '') + ' style="height:32px;padding:0 14px;border-radius:999px;font-family:inherit;font-weight:700;font-size:13px;line-height:1;cursor:pointer;border:1px solid ' + (on ? TEAL : '#CBD5E1') + ';background:' + (on ? TEAL : '#fff') + ';color:' + (on ? '#fff' : '#334155') + '">' + label + ' · ' + n + '</button>';
+    }
+    var head = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
+      + seg(!showArchived, 'Active', chats.length - nArch, '0') + seg(!!showArchived, 'Archived', nArch, '1') + '</div>';
+    if (!list.length) {
+      return card('', head + '<div style="padding:18px;text-align:center;color:#64748B;font-size:14px">'
+        + (showArchived ? 'No archived conversations.' : 'No active conversations. Archived ones are under Archived.') + '</div>');
+    }
+    return card('', head + list.map(function (s) {
+      var sid = esc(s.session);
+      var who = (s.name || 'Anonymous') + (s.email ? ' · ' + s.email : '');
+      var msgs = (s.messages || []).map(function (m) {
+        var mine = m.sender === 'visitor';
+        var by = m.sender === 'agent' ? '<div style="font-size:11px;color:#64748B;margin:0 0 2px 2px">' + esc(m.author || 'KiddieTrac team') + '</div>' : '';
+        return '<div style="display:flex;justify-content:' + (mine ? 'flex-end' : 'flex-start') + ';margin:4px 0"><div style="max-width:78%">' + by + '<div style="padding:7px 11px;border-radius:10px;font-size:13px;line-height:1.45;white-space:pre-wrap;background:' + (mine ? TEAL : (m.sender === 'system' ? '#FFF7ED' : '#F1F5F9')) + ';color:' + (mine ? '#fff' : '#0a1e2c') + '">' + esc(m.message) + '</div></div></div>';
+      }).join('');
+      return '<div class="wsChat" data-s="' + sid + '" style="border:1px solid #E5E7EB;border-radius:12px;margin-bottom:10px;overflow:hidden">'
+        + '<div style="display:flex;align-items:center;gap:6px;background:#F9FAFB;padding-right:8px">'
+        + '<button type="button" class="chatToggle" data-s="' + sid + '" style="flex:1;min-width:0;text-align:left;background:none;border:none;padding:12px 16px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">'
+        + '<span style="font-size:13.5px;font-weight:700;color:#0a1e2c;min-width:0;overflow-wrap:anywhere">💬 ' + esc(who) + '</span>'
+        + '<span style="font-size:12px;color:#64748B;white-space:nowrap">' + s.count + ' msgs · ' + esc(chatWhen(s.last)) + '</span></button>'
+        + '<button type="button" class="kt-ka-kebab wsChatMenu" data-s="' + sid + '" aria-label="Actions for this conversation" title="More actions" aria-haspopup="menu">⋮</button>'
+        + '</div>'
+        + '<div class="chatBody" data-s="' + sid + '" style="display:none;padding:12px 16px;background:#fff">' + msgs + '</div></div>';
+    }).join(''));
   }
 
   var TABS = [
@@ -220,7 +256,7 @@
     var panels = '<div class="wsPanel" data-panel="overview">' + tabOverview(c, a) + '</div>'
       + '<div class="wsPanel" data-panel="subscribers" style="display:none"><div id="ws-subs">Loading…</div></div>'
       + '<div class="wsPanel" data-panel="unsubscribed" style="display:none"><div id="ws-unsub">Loading…</div></div>'
-      + '<div class="wsPanel" data-panel="chat" style="display:none">' + tabChats(chats) + '</div>'
+      + '<div class="wsPanel" data-panel="chat" style="display:none">' + tabChats(chats, false) + '</div>'
       + '<div class="wsPanel" data-panel="content" style="display:none">' + tabContent(c) + '</div>'
       + '<div class="wsPanel" data-panel="seo" style="display:none">' + tabSeo(c) + '</div>'
       + '<div class="wsPanel" data-panel="announce" style="display:none">' + tabAnnounce(c) + '</div>'
@@ -376,11 +412,72 @@
       });
     });
 
-    container.querySelectorAll('.chatToggle').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        var body = container.querySelector('.chatBody[data-i="' + btn.getAttribute('data-i') + '"]');
-        if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+    /* Website chat: views, open/close, and the ⋮ (Download transcript / Archive / Delete). */
+    var chatPanel = container.querySelector('.wsPanel[data-panel="chat"]');
+    function chatOf(sid) { return (container.__chats || []).filter(function (c) { return c.session === sid; })[0]; }
+    function paintChats() { if (chatPanel) chatPanel.innerHTML = tabChats(container.__chats, container.__chatArch); }
+    function chatSay(msg, ok) {
+      if (KT.toast) { KT.toast(msg, ok ? 'success' : 'error'); return; }
+      if (!ok && KT.alert) KT.alert(msg);
+    }
+    function downloadTranscript(s) {
+      var lines = ['KiddieTrac website chat',
+        'Visitor: ' + (s.name || 'Anonymous') + (s.email ? ' <' + s.email + '>' : ''),
+        'Started: ' + chatWhen(s.started), 'Last message: ' + chatWhen(s.last),
+        'Messages: ' + s.count, 'Times are Toronto time.', ''];
+      (s.messages || []).forEach(function (m) {
+        lines.push('[' + chatWhen(m.at) + '] ' + chatWho(s, m) + ':');
+        lines.push(String(m.message || ''));
+        lines.push('');
       });
+      var slug = String(s.name || s.email || 'visitor').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'visitor';
+      var day = String(s.started || '').slice(0, 10) || 'chat';
+      var blob = new Blob([lines.join('\r\n')], { type: 'text/plain;charset=utf-8' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'kiddietrac-chat-' + slug + '-' + day + '.txt';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    }
+    function archiveChat(s, on) {
+      Api.post('/platform/marketing-site/chats/archive', { session: s.session, archived: on }).then(function () {
+        s.archived = on; paintChats();
+        chatSay(on ? 'Conversation archived.' : 'Conversation moved back to Active.', true);
+      }).catch(function (e) { chatSay((e && e.message) || 'Could not update the conversation.'); });
+    }
+    async function deleteChat(s) {
+      if (KT.confirm && !(await KT.confirm({ title: 'Delete this conversation?',
+        description: 'The conversation with ' + (s.name || s.email || 'this visitor') + ' (' + s.count + ' messages) is removed for good, here and in the Website chat inbox. Download the transcript first if you need a copy.',
+        okLabel: 'Delete' }))) { return; }
+      Api.post('/platform/marketing-site/chats/delete', { session: s.session }).then(function () {
+        container.__chats = (container.__chats || []).filter(function (c) { return c !== s; });
+        paintChats(); chatSay('Conversation deleted.', true);
+      }).catch(function (e) { chatSay((e && e.message) || 'Could not delete the conversation.'); });
+    }
+    if (chatPanel) chatPanel.addEventListener('click', function (e) {
+      var v = e.target.closest('.wsChatView');
+      if (v) { container.__chatArch = v.getAttribute('data-arch') === '1'; paintChats(); return; }
+      var k = e.target.closest('.wsChatMenu');
+      if (k) {
+        e.preventDefault(); e.stopPropagation();
+        var s = chatOf(k.getAttribute('data-s'));
+        if (!s || !KT.openActionMenu) return;
+        function item(label, fn) {
+          var b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+          b.addEventListener('click', fn); return b;
+        }
+        KT.openActionMenu(k, [
+          item('⬇️ Download transcript', function () { downloadTranscript(s); }),
+          item(s.archived ? '↩️ Move back to Active' : '🗄️ Archive', function () { archiveChat(s, !s.archived); }),
+          item('🗑️ Delete', function () { deleteChat(s); })
+        ]);
+        return;
+      }
+      var t = e.target.closest('.chatToggle');
+      if (t) {
+        var body = chatPanel.querySelector('.chatBody[data-s="' + t.getAttribute('data-s') + '"]');
+        if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+      }
     });
     function val(id) { var el = container.querySelector('#' + id); return el ? el.value.trim() : ''; }
     function fullBody() {
@@ -635,6 +732,7 @@
       Api.get('/platform/marketing-site/chats').catch(function () { return { sessions: [] }; })
     ]).then(function (res) {
       var cfg = res[0] || {}, a = res[1], leads = (res[2] || {}).leads || [], chats = (res[3] || {}).sessions || [];
+      container.__chats = chats; container.__chatArch = false;
       container.innerHTML = view(cfg, a, leads, chats);
       wire(container, leads);
     }).catch(function (e) {
