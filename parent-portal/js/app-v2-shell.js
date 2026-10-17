@@ -1750,7 +1750,86 @@
     if (_sb && window.KT && KT.sidebarFoot && KT.sidebarFoot(20, wrap)) { /* placed */ }
     else if (_sb) { _sb.appendChild(wrap); }
     else { wrap.style.position = 'fixed'; wrap.style.left = '14px'; wrap.style.bottom = '14px'; wrap.style.zIndex = '9000'; document.body.appendChild(wrap); }
+    try { _injectAdminCtlToggle(cur); } catch (e) {}
   }
+
+  /* COLLAPSIBLE SUPER-ADMIN CONTROLS (2026-10-16). Anthony: "add ability to collapse top bar
+     where it shows view as and change agency type for super admin in mobile view and
+     desktop". On a phone the View-as picker and the agency switcher take a whole row of the
+     header; on desktop two boxes of the sidebar foot. Collapsed, they fold into one chip
+     that says what is selected ("👁 Super admin · 🏢 Test Agency ▸"), purple while a role is
+     being previewed so that is never hidden. Remembered per device (localStorage), and the
+     same class drives the desktop sidebar and the phone header. */
+  var ADMINCTL_KEY = 'kt_adminctl_collapsed';
+  function _injectAdminCtlToggle(viewingAs) {
+    var old = document.getElementById('kt-adminctl'); if (old) old.remove();
+    var collapsed = false; try { collapsed = localStorage.getItem(ADMINCTL_KEY) === '1'; } catch (e) {}
+    if (!document.getElementById('kt-adminctl-style')) {
+      var st = document.createElement('style'); st.id = 'kt-adminctl-style';
+      st.textContent = 'body.kt-adminctl-collapsed #kt-view-as,body.kt-adminctl-collapsed #kt-agency-switcher,'
+        + 'body.kt-adminctl-collapsed .kt-tb-selectors{display:none !important;}'
+        + '#kt-adminctl{display:flex;align-items:center;gap:6px;font-family:inherit;}'
+        + '#kt-adminctl .kt-ac-chip{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;'
+        + 'border-radius:8px;border:1px solid rgba(31,96,128,.18);background:rgba(31,96,128,.06);color:#1F6080;font-weight:700;font-size:12px;line-height:1;'
+        + 'font-family:inherit;cursor:pointer;min-height:0 !important;text-align:left;}'
+        + '#kt-adminctl .kt-ac-chip.on{background:#7C3AED;border-color:#7C3AED;color:#fff;}'
+        + '#kt-adminctl .kt-ac-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}'
+        + '#kt-adminctl .kt-ac-hide{margin-left:auto;background:none;border:0;color:#64748B;font-weight:700;font-size:11px;line-height:1;font-family:inherit;'
+        + 'cursor:pointer;padding:4px 2px;min-height:0 !important;}'
+        + 'body.kt-sidebar-collapsed #kt-adminctl{display:none !important;}'
+        + '@media (max-width:768px){#appSidebar #kt-adminctl{order:3 !important;flex:1 1 100% !important;}'
+        + '#appSidebar #kt-view-as{order:4 !important;}#appSidebar #kt-agency-switcher{order:5 !important;}'
+        + '#kt-sidebar-foot > #kt-adminctl{flex:1 1 100% !important;width:auto !important;}}';
+      document.head.appendChild(st);
+    }
+    var box = document.createElement('div'); box.id = 'kt-adminctl';
+    function agencyName() {
+      var b = document.querySelector('#kt-agency-switcher button');
+      return b ? b.textContent.replace(/\u{1F3E2}|▾|PLAT/gu, '').replace(/\s+/g, ' ').trim() : '';
+    }
+    function roleName() {
+      var s = document.querySelector('#kt-view-as select');
+      return s && s.selectedIndex >= 0 ? s.options[s.selectedIndex].text.replace(/^\W+\s*/u, '') : 'Super admin';
+    }
+    function paint() {
+      document.body.classList.toggle('kt-adminctl-collapsed', collapsed);
+      box.innerHTML = '';
+      if (collapsed) {
+        var chip = document.createElement('button');
+        chip.type = 'button'; chip.className = 'kt-ac-chip' + (viewingAs ? ' on' : '');
+        chip.setAttribute('data-kt-iconized', '1'); chip.setAttribute('aria-expanded', 'false');
+        chip.title = 'Show View as and the agency switcher';
+        var a = agencyName();
+        chip.innerHTML = '<span>👁 ' + (viewingAs ? 'Viewing as ' : '') + _escAC(roleName()) + (a ? ' · 🏢 ' + _escAC(a) : '') + '</span><b style="margin-left:auto;">▸</b>';
+        chip.addEventListener('click', function () { collapsed = false; save(); paint(); });
+        box.appendChild(chip);
+      } else {
+        var hide = document.createElement('button');
+        hide.type = 'button'; hide.className = 'kt-ac-hide'; hide.setAttribute('data-kt-iconized', '1');
+        hide.setAttribute('aria-expanded', 'true'); hide.textContent = '▾ Hide admin controls';
+        hide.addEventListener('click', function () { collapsed = true; save(); paint(); });
+        box.appendChild(hide);
+      }
+    }
+    function save() { try { localStorage.setItem(ADMINCTL_KEY, collapsed ? '1' : '0'); } catch (e) {} }
+    // Slot 5: above the agency switcher (10) and View as (20).
+    if (window.KT && KT.sidebarFoot && KT.sidebarFoot(5, box)) { /* placed */ }
+    else { var sb = document.getElementById('appSidebar'); if (sb) sb.appendChild(box); else return; }
+    paint();
+    /* The agency switcher arrives after its own fetch; keep the chip's summary current. */
+    var foot = box.parentNode;
+    if (foot && window.MutationObserver && !foot.__ktAcObs) {
+      foot.__ktAcObs = new MutationObserver(function () {
+        if (!collapsed) return;
+        var c = box.querySelector('.kt-ac-chip span'); if (!c) return;
+        var a = agencyName(), r = roleName();
+        var want = '👁 ' + (viewingAs ? 'Viewing as ' : '') + r + (a ? ' · 🏢 ' + a : '');
+        if (c.textContent !== want) c.textContent = want;
+      });
+      foot.__ktAcObs.observe(foot, { childList: true, subtree: true, characterData: true });
+    }
+  }
+  function _escAC(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
   /* ── Holding the reader's place across a same-screen re-render ─────────────
      A re-render of the screen you are already on (a live update after a write, the
