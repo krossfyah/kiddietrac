@@ -128,7 +128,6 @@
                   ${selecting ? '' : `<button class="kt-ann-x" data-id="${a.id}" aria-label="Delete" style="background:none;border:none;color:#CBD5E1;font-size:15px;cursor:pointer;padding:4px;flex-shrink:0;">🗑</button>`}
                 </div>`;
             }).join('')}
-        <div id="kt-mount"></div>
       `;
 
       $('#kt-ann-new', container).addEventListener('click', () => openComposer(container));
@@ -500,12 +499,23 @@
        KT.uiBusy() cannot help here -- it answers "is a dialog open?", and during the
        await there is no dialog yet. So re-resolve against the LIVE document, and if the
        screen has moved on since the click, give up quietly rather than throw. */
-    const mount = document.getElementById('kt-mount') || $('#kt-mount', container);
-    if (! mount) { return; }
+    if (! document.getElementById('kt-ann-new') && ! document.getElementById('kt-new-ann')) { return; }
+
+    /* Drawn on <body>, not inside the screen (2026-10-20). Inside #appMain on a phone the
+       slide-in animation left a transform on the mount, which made it the containing block
+       for this position:fixed overlay: "+ New alert" opened at the foot of the list, cut off.
+       kt-mobile-app.css also strips max-height + scrolling from inline scrollers in #appMain.
+       Every lookup below is scoped to `mount`, so it works outside the screen (CONVENTIONS.md). */
+    let mount = document.getElementById('kt-ann-composer');
+    if (! mount) {
+      mount = document.createElement('div');
+      mount.id = 'kt-ann-composer';
+      document.body.appendChild(mount);
+    }
 
     mount.innerHTML = `
-      <div class="kt-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;">
-        <div style="background:white;border-radius:14px;max-width:560px;width:100%;padding:24px;max-height:90vh;overflow-y:auto;">
+      <div class="kt-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));box-sizing:border-box;">
+        <div data-kt-scroll style="background:white;border-radius:14px;max-width:560px;width:100%;padding:24px;box-sizing:border-box;max-height:90vh;max-height:calc(100dvh - 32px);overflow-y:auto;-webkit-overflow-scrolling:touch;">
           <h2 style="font-size:20px;margin:0 0 4px;">New Announcement</h2>
           <p style="color:#6B7280;font-size:13px;margin:0 0 18px;">Choose where it goes and who receives it.</p>
           <form id="kt-ann-form" onsubmit="return false;" style="display:grid;gap:12px;">
@@ -588,7 +598,8 @@
       </div>
     `;
     const overlay = $('.kt-modal-overlay', mount);
-    const close = () => mount.innerHTML = '';
+    const close = () => { window.removeEventListener('hashchange', close); mount.remove(); };
+    window.addEventListener('hashchange', close);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('#kt-cancel', mount).addEventListener('click', close);
 
@@ -750,7 +761,7 @@
         statusEl.style.color = '#16A34A';
         statusEl.textContent = res.scheduled ? '✓ Scheduled' : '✓ Sent to ' + (res.delivered_to || 0) + ' recipient(s)'
           + (res.voice ? ' · 📞 calling ' + res.voice.calling + ', skipped ' + res.voice.skipped : '');
-        setTimeout(() => { close(); renderProvider(container); }, 1200);
+        setTimeout(() => { close(); renderProvider(container.isConnected ? container : (document.getElementById('appMain') || container)); }, 1200);
       } catch (err) {
         if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = orig; }
         statusEl.style.color = '#DC2626';

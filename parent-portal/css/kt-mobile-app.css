@@ -236,7 +236,10 @@
   /* !important + the id/class specificity beats kt-consistency-polish.css's
      `#appMain > * { animation: kt-fade-in … !important }` so real navigations get
      the horizontal swipe; in-place re-renders (no .kt-screen-in) keep the quick fade. */
-  #appMain > .kt-screen-in { animation: kt-screen-in .3s cubic-bezier(.33, 1, .68, 1) both !important; }
+  /* `backwards`, not `both` (2026-10-20): a forwards fill holds the end frame, and even
+     `transform:none` interpolates to translateX(0) there, a transform that makes every
+     slid-in node the containing block for position:fixed popups drawn inside it. */
+  #appMain > .kt-screen-in { animation: kt-screen-in .3s cubic-bezier(.33, 1, .68, 1) backwards !important; }
 
   /* ── EMAIL client: on phones, drop the fixed-height 3-pane box (it overflowed
         far under the nav) and let the active pane flow as a normal scrolling
@@ -248,7 +251,7 @@
 
 @keyframes kt-screen-in {
   from { opacity: 0; transform: translateX(34px); }
-  to   { opacity: 1; transform: translateX(0); }
+  to   { opacity: 1; transform: none; }   /* no fill-forward: see #appMain > .kt-screen-in */
 }
 /* Respect users who ask the OS to minimise motion. */
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
@@ -1687,7 +1690,10 @@ html.kt-ios-inset-fallback #appMain {
   /* !important + the id/class specificity beats kt-consistency-polish.css's
      `#appMain > * { animation: kt-fade-in … !important }` so real navigations get
      the horizontal swipe; in-place re-renders (no .kt-screen-in) keep the quick fade. */
-  #appMain > .kt-screen-in { animation: kt-screen-in .3s cubic-bezier(.33, 1, .68, 1) both !important; }
+  /* `backwards`, not `both` (2026-10-20): a forwards fill holds the end frame, and even
+     `transform:none` interpolates to translateX(0) there, a transform that makes every
+     slid-in node the containing block for position:fixed popups drawn inside it. */
+  #appMain > .kt-screen-in { animation: kt-screen-in .3s cubic-bezier(.33, 1, .68, 1) backwards !important; }
 
   /* ── EMAIL client: on phones, drop the fixed-height 3-pane box (it overflowed
         far under the nav) and let the active pane flow as a normal scrolling
@@ -1699,7 +1705,7 @@ html.kt-ios-inset-fallback #appMain {
 
 @keyframes kt-screen-in {
   from { opacity: 0; transform: translateX(34px); }
-  to   { opacity: 1; transform: translateX(0); }
+  to   { opacity: 1; transform: none; }   /* no fill-forward: see #appMain > .kt-screen-in */
 }
 /* Respect users who ask the OS to minimise motion. */
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
@@ -3265,12 +3271,14 @@ html.kt-ios-inset-fallback #appMain {
      A full-screen thread MUST keep its own scroller: the composer is pinned to the bottom
      of the panel, so the messages have to scroll independently of the page. Same for the
      dock and the emoji panels. (Anthony, 2026-09-09) */
-  #appMain [style*="overflow:auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow: auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow-y:auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow-y: auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow:scroll"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow-y:scroll"]:not([data-kt-scroll]):not(.kt-thread-body) {
+  /* ...except inside a position:fixed popup: its panel must keep max-height + its own
+     scroller, or a tall form runs off the bottom of the phone (2026-10-20). */
+  #appMain [style*="overflow:auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *),
+  #appMain [style*="overflow: auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *),
+  #appMain [style*="overflow-y:auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *),
+  #appMain [style*="overflow-y: auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *),
+  #appMain [style*="overflow:scroll"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *),
+  #appMain [style*="overflow-y:scroll"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *) {
     max-height: none !important;
     overflow: visible !important;
     /* Belt and braces: if anything here keeps a scroll region for a reason of its own,
