@@ -128,6 +128,7 @@
                   ${selecting ? '' : `<button class="kt-ann-x" data-id="${a.id}" aria-label="Delete" style="background:none;border:none;color:#CBD5E1;font-size:15px;cursor:pointer;padding:4px;flex-shrink:0;">🗑</button>`}
                 </div>`;
             }).join('')}
+        <div id="kt-mount"></div>
       `;
 
       $('#kt-ann-new', container).addEventListener('click', () => openComposer(container));
