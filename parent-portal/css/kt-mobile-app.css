@@ -3378,7 +3378,27 @@ html.kt-kb-open #kt-role-back { display: none !important; }
 
 /* Copy-ID buttons beside reference IDs: the phone tap height (42px) in 29px rows made each
    button's tap area overlap the next ID's, so a tap could copy the wrong one. */
-#appMain .kt-ref button { min-height: 0 !important; height: 24px !important; width: 24px !important; }
+@media (max-width: 768px) {
+  #appMain .kt-ref button { min-height: 0 !important; height: 24px !important; width: 24px !important; }
+}
+
+/* Fields never wider than their box on a phone (full sweep, 2026-10-20). A <select> will not
+   shrink below its longest option (min-width:auto) and date/time inputs carried 150px+
+   minimums, so in a flex row or a narrow label they ran off the screen: Drills' frequency,
+   Today's centre picker, Payroll's period dates overlapping "Run", Maintenance's schedule. */
+@media (max-width: 768px) {
+  #appMain select,
+  #appMain textarea,
+  #appMain input[type="date"], #appMain input[type="datetime-local"],
+  #appMain input[type="time"], #appMain input[type="month"] {
+    min-width: 0 !important; max-width: 100% !important;
+  }
+}
+/* ...and the box holding a select, when that box is a flex item sized to its content
+   (Lesson plans' room picker, 443px in a 351px row). Ignored where :has() is unsupported. */
+@media (max-width: 768px) {
+  #appMain :is(div, label, span):has(> select) { max-width: 100% !important; }
+}
 
 /* Issue 2: the filter / sort / count bar ran off the screen ("ort…" at the left edge, the
    count jammed against the right). The sort group was max-content and right-aligned, so

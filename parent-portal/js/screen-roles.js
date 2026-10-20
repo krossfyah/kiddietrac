@@ -197,7 +197,9 @@
       }, canEditBuiltin
         ? 'Built-in roles show what each role can reach today. Changes to a built-in role apply to this agency. Custom roles cover one centre unless they are based on Agency admin. The permission check is watch-only for now: it compares this list with what really happens and blocks nothing.'
         : 'Built-in roles show what each role can do today and are managed by KiddieTrac. For a different set, create a custom role (it covers one centre unless it is based on Agency admin).'));
-      var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start;' });
+      // One column on a phone (2026-10-20): beside a 300px list the editor was ~100px wide.
+      var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:'
+        + (window.innerWidth <= 768 ? 'minmax(0,1fr)' : '300px 1fr') + ';gap:20px;align-items:start;' });
 
       /* SUBTABS (2026-10-09: "roles and permissions and permissions check should be a
          subtab"). The role editor and the watch-only permission check each get the page
