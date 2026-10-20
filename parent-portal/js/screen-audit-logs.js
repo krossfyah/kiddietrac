@@ -437,9 +437,12 @@
     // for was indistinguishable from a message that was never sent.
     var tX = mkTab('⚠️ Email errors');
     var tC = mkTab('💬 Chat conversations');
+    // Text messages: everyone who can open this screen (directors see their own centres' people).
+    var tS = mkTab('📱 Text messages');
     var activate = function (which) {
+      tS.style.borderBottomColor = which === 'sms' ? '#0F766E' : 'transparent'; tS.style.color = which === 'sms' ? '#0F766E' : '#64748B';
       tC.style.borderBottomColor = which === 'chats' ? '#7C3AED' : 'transparent'; tC.style.color = which === 'chats' ? '#7C3AED' : '#64748B';
-      var openTab = { audit: tA, payments: tP, email: tE, errors: tX, chats: tC }[which];
+      var openTab = { audit: tA, payments: tP, email: tE, errors: tX, chats: tC, sms: tS }[which];
       setTimeout(function () { tabScroll.show(openTab); }, 0);
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
       tP.style.borderBottomColor = which === 'payments' ? '#12805F' : 'transparent'; tP.style.color = which === 'payments' ? '#12805F' : '#64748B';
@@ -480,6 +483,7 @@
       }
       else if (which === 'payments') { renderAudit(pane, { channel: 'payments' }); }
       else if (which === 'chats') { renderChats(pane); }
+      else if (which === 'sms') { renderSms(pane); }
       else { renderAudit(pane); }
 
       // Re-run the banner normaliser by hand. It observes #appMain with
@@ -503,9 +507,11 @@
     tE.addEventListener('click', function () { pick('email'); });
     tX.addEventListener('click', function () { pick('errors'); });
     tC.addEventListener('click', function () { pick('chats'); });
+    tS.addEventListener('click', function () { pick('sms'); });
     tabsRow.appendChild(tA);
     tabsRow.appendChild(tP);
     if (hasChats) { tabsRow.appendChild(tC); }
+    tabsRow.appendChild(tS);
     // The email tabs read /platform/* and would 403 for anybody else, so they are
     // only built for the people who can actually load them.
     if (hasEmail) { tabsRow.appendChild(tE); tabsRow.appendChild(tX); }
@@ -531,7 +537,7 @@
     // this user cannot see, must fall back rather than render nothing.
     if (! hasEmail && /^(email|errors)$/.test(remembered)) { remembered = ''; }
     if (! hasChats && remembered === 'chats') { remembered = ''; }
-    activate(/^(audit|payments|email|errors|chats)$/.test(remembered) ? remembered : 'audit');
+    activate(/^(audit|payments|email|errors|chats|sms)$/.test(remembered) ? remembered : 'audit');
   }
 
   /* CHAT CONVERSATIONS (2026-10-09, Anthony: "add to audit log a subtab for chat
@@ -698,6 +704,213 @@
       Dom.clear(body);
       body.appendChild(Dom.el('div', { style: 'color:#B91C1C;font-size:13px;padding:12px;' }, (e && e.message) || 'Could not load the transcript.'));
     });
+  }
+
+  /* TEXT MESSAGES (2026-10-19, Anthony: "add the SMS logs to the audit log section as a
+     subtab to show what was sent and received and any errors"). Every text in the active
+     agency, both directions, newest first: who, the message, what kind of text it was,
+     what happened to it, and — for anything that did not go — why, in plain words beside
+     the carrier's own. The cards are counts for the current filters and double as quick
+     filters. Directors see their own centres' people only (the server decides). */
+  var smsState = { direction: '', status: '', category: '', q: '', since: '', until: '', offset: 0, limit: 50 };
+  var SMS_KIND = {
+    checkin: 'Check-in / out', checkin_reminder: 'Check-in reminder', broadcast: 'Announcement',
+    consent_confirm: 'Consent confirmation', chat_reply: 'Chat reply', inbound: 'Reply', inbound_stop: 'STOP reply',
+    test: 'Test', test_send: 'Test', diagnostic: 'Test', emergency: 'Emergency', reset_code: 'Password reset code',
+  };
+  function smsKind(c) { return SMS_KIND[c] || (c ? String(c).replace(/_/g, ' ').replace(/^./, function (m) { return m.toUpperCase(); }) : '—'); }
+  function smsStatus(r) {
+    if (r.direction === 'in') return ['Received', '#EFF6FF', '#1D4ED8'];
+    var s = r.status;
+    if (s === 'delivered') return ['Delivered', '#ECFDF5', '#047857'];
+    if (s === 'sent' || s === 'queued' || s === 'sending') return ['Sent', '#F0F9FF', '#0369A1'];
+    if (s === 'skipped') return ['Not sent', '#FFFBEB', '#B45309'];
+    if (s === 'failed' || s === 'undelivered') return ['Failed', '#FEF2F2', '#B91C1C'];
+    return [s || '—', '#F1F5F9', '#475569'];
+  }
+  function smsPill(r) { var t = smsStatus(r); return '<span class="kt-pill" data-kt-no-tone style="background:' + t[1] + ';color:' + t[2] + ';font-weight:700;white-space:nowrap;">' + esc(t[0]) + '</span>'; }
+
+  function renderSms(container) {
+    Dom.clear(container);
+    var wrap = Dom.el('div', { class: 'kt-al-wrap', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    container.appendChild(wrap);
+    var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#052E2B 0%,#0F766E 60%,#14B8A6 100%);' });
+    hero.innerHTML = '<div class="kt-hero-greet">📱 ADMIN</div><h1>Text messages</h1>'
+      + '<div class="kt-hero-sub">Every text sent to families and staff, and every reply that came back — with what happened '
+      + 'to each one and, when a text did not go, why. Times are in your agency timezone (' + auditTz() + ').</div>';
+    wrap.appendChild(hero);
+
+    var cards = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin:16px 0 0;' });
+    wrap.appendChild(cards);
+
+    var toolbar = Dom.el('div', { class: 'kt-al-toolbar', style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:14px 0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
+    var fToggle = filterToggle(toolbar, function () {
+      return ['direction', 'status', 'category', 'q', 'since', 'until'].filter(function (k) { return smsState[k]; }).length;
+    });
+    wrap.appendChild(fToggle);
+    wrap.appendChild(toolbar);
+    var listWrap = Dom.el('div', { class: 'kt-al-list', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+    wrap.appendChild(listWrap);
+    var pager = Dom.el('div', { class: 'kt-al-pager', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
+    wrap.appendChild(pager);
+
+    function select(label, key, options) {
+      var w = Dom.el('div');
+      w.appendChild(Dom.el('label', { style: lblStyle() }, label));
+      var s = Dom.el('select', { style: inputStyle() });
+      options.forEach(function (o) { var op = Dom.el('option', { value: o[0] }, o[1]); if (o[0] === smsState[key]) op.selected = true; s.appendChild(op); });
+      s.addEventListener('change', function () { smsState[key] = s.value; smsState.offset = 0; load(); });
+      w.appendChild(s);
+      toolbar.appendChild(w);
+      return s;
+    }
+    var dirSel = select('Direction', 'direction', [['', 'Sent and received'], ['out', 'Sent'], ['in', 'Received']]);
+    var stSel = select('Status', 'status', [['', 'Any status'], ['problems', '⚠️ Not sent or failed'], ['delivered', 'Delivered'], ['sent', 'Sent'], ['skipped', 'Not sent'], ['failed', 'Failed'], ['received', 'Received']]);
+    var catSel = select('Kind', 'category', [['', 'Any kind']]);
+    var srch = filterInput('Search', smsState.q, 'text', function (v) { smsState.q = v; smsState.offset = 0; load(); });
+    srch.classList.add('kt-al-full');
+    toolbar.appendChild(srch);
+    toolbar.appendChild(filterInput('From', smsState.since, 'date', function (v) { smsState.since = v; smsState.offset = 0; load(); }));
+    toolbar.appendChild(filterInput('To', smsState.until, 'date', function (v) { smsState.until = v; smsState.offset = 0; load(); }));
+    var exportWrap = Dom.el('div');
+    var exportBtn = Dom.el('button', { type: 'button', class: 'kt-btn', 'data-kt-iconized': '1', style: 'width:100%;white-space:nowrap;' }, '⬇️ Export CSV');
+    exportWrap.appendChild(exportBtn);
+    toolbar.appendChild(exportWrap);
+
+    function qs(extra) {
+      var p = new URLSearchParams();
+      ['direction', 'status', 'category', 'q', 'since', 'until'].forEach(function (k) { if (smsState[k]) p.set(k, smsState[k]); });
+      Object.keys(extra || {}).forEach(function (k) { p.set(k, extra[k]); });
+      return p.toString();
+    }
+
+    function drawCards(c) {
+      c = c || {};
+      var defs = [
+        ['', '', 'All texts', (c.sent || 0) + (c.delivered || 0) + (c.failed || 0) + (c.skipped || 0) + (c.received || 0), '#0F172A', '#F1F5F9'],
+        ['out', 'delivered', 'Delivered', c.delivered || 0, '#047857', '#ECFDF5'],
+        ['out', 'sent', 'Sent (awaiting receipt)', c.sent || 0, '#0369A1', '#F0F9FF'],
+        ['out', 'skipped', 'Not sent', c.skipped || 0, '#B45309', '#FFFBEB'],
+        ['out', 'failed', 'Failed', c.failed || 0, '#B91C1C', '#FEF2F2'],
+        ['in', 'received', 'Replies received', c.received || 0, '#1D4ED8', '#EFF6FF'],
+      ];
+      Dom.clear(cards);
+      defs.forEach(function (d) {
+        var on = smsState.status === d[1] && (d[1] ? true : !smsState.direction);
+        var b = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: 'text-align:left;border:1.5px solid ' + (on ? d[4] : 'transparent') + ';background:' + d[5]
+          + ';border-radius:12px;padding:10px 12px;cursor:pointer;min-width:0;font:inherit;' });
+        b.innerHTML = '<div style="font-size:22px;font-weight:800;color:' + d[4] + ';line-height:1.1;">' + d[3] + '</div>'
+          + '<div style="font-size:12px;font-weight:700;color:#475569;margin-top:2px;">' + esc(d[2]) + '</div>';
+        b.addEventListener('click', function () {
+          smsState.status = d[1]; smsState.direction = d[1] === 'received' ? '' : (d[1] ? '' : ''); smsState.offset = 0;
+          stSel.value = smsState.status; dirSel.value = smsState.direction; load();
+        });
+        cards.appendChild(b);
+      });
+    }
+
+    function load() {
+      if (fToggle.ktPaint) fToggle.ktPaint();
+      var h = listWrap.offsetHeight; if (h) listWrap.style.minHeight = h + 'px';
+      Dom.clear(listWrap);
+      listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#94A3B8;font-size:13px;' }, 'Loading…'));
+      Api.get('/admin/sms/log?' + qs({ limit: smsState.limit, offset: smsState.offset })).then(function (d) {
+        listWrap.style.minHeight = '';
+        drawCards(d.counts);
+        if (catSel.options.length <= 1) {
+          (d.categories || []).forEach(function (c) { var op = Dom.el('option', { value: c }, smsKind(c)); if (c === smsState.category) op.selected = true; catSel.appendChild(op); });
+        }
+        drawList(d.data || [], d.total || 0);
+      }).catch(function (e) {
+        listWrap.style.minHeight = '';
+        Dom.clear(listWrap);
+        listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#B91C1C;font-size:13px;' }, (e && e.message) || 'Could not load the text messages.'));
+      });
+    }
+
+    function drawList(rows, total) {
+      Dom.clear(listWrap); Dom.clear(pager);
+      if (!rows.length) {
+        listWrap.appendChild(Dom.el('div', { style: 'padding:28px;text-align:center;color:#94A3B8;font-size:13px;' }, 'No text messages match.'));
+        return;
+      }
+      var html = '<div style="overflow-x:auto;"><table data-kt-bulk="off" data-kt-filtered="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
+        + '<thead><tr style="background:#F8FAFC;text-align:left;color:#475569;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;">'
+        + '<th style="padding:10px 12px;">When</th><th style="padding:10px 12px;"></th><th style="padding:10px 12px;">Person</th>'
+        + '<th style="padding:10px 12px;">Message</th><th style="padding:10px 12px;">Kind</th><th style="padding:10px 12px;">Status</th></tr></thead><tbody>';
+      rows.forEach(function (r, i) {
+        var inbound = r.direction === 'in';
+        var reason = r.error_plain || r.error || '';
+        html += '<tr data-i="' + i + '" style="border-top:1px solid #EEF2F6;cursor:pointer;">'
+          + '<td style="padding:9px 12px;white-space:nowrap;color:#475569;">' + esc(fmtTime(r.created_at).replace(/\.\d{3}/, '')) + '</td>'
+          + '<td style="padding:9px 12px;white-space:nowrap;font-weight:700;color:' + (inbound ? '#1D4ED8' : '#0F766E') + ';">' + (inbound ? '↙ In' : '↗ Out') + '</td>'
+          + '<td style="padding:9px 12px;"><div style="font-weight:700;color:#0F172A;">' + esc(r.person || 'Unknown') + '</div><div style="color:#64748B;font-size:12px;white-space:nowrap;">' + esc(r.to_phone || '') + '</div></td>'
+          + '<td style="padding:9px 12px;color:#334155;max-width:440px;"><div style="overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + esc(r.body) + '</div>'
+          +   (reason && !inbound && r.status !== 'delivered' && r.status !== 'sent' ? '<div style="color:' + (r.status === 'failed' ? '#B91C1C' : '#B45309') + ';font-size:12px;margin-top:3px;">' + esc(reason) + '</div>' : '') + '</td>'
+          + '<td style="padding:9px 12px;white-space:nowrap;color:#475569;">' + esc(smsKind(r.category)) + '</td>'
+          + '<td style="padding:9px 12px;">' + smsPill(r) + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+      listWrap.innerHTML = html;
+      listWrap.querySelectorAll('tr[data-i]').forEach(function (tr) {
+        tr.addEventListener('click', function () { openSms(rows[+tr.getAttribute('data-i')]); });
+      });
+      var from = smsState.offset + 1, to = smsState.offset + rows.length;
+      pager.appendChild(Dom.el('div', {}, 'Showing ' + from + '–' + to + ' of ' + total));
+      var nav = Dom.el('div', { style: 'display:flex;gap:6px;' });
+      var prev = Dom.el('button', { type: 'button', class: 'kt-btn' }, '‹ Previous');
+      var next = Dom.el('button', { type: 'button', class: 'kt-btn' }, 'Next ›');
+      prev.disabled = smsState.offset === 0; next.disabled = to >= total;
+      prev.addEventListener('click', function () { smsState.offset = Math.max(0, smsState.offset - smsState.limit); load(); });
+      next.addEventListener('click', function () { smsState.offset += smsState.limit; load(); });
+      nav.appendChild(prev); nav.appendChild(next); pager.appendChild(nav);
+    }
+
+    exportBtn.addEventListener('click', async function () {
+      exportBtn.disabled = true; exportBtn.textContent = 'Preparing…';
+      try {
+        var all = [], off = 0;
+        for (var guard = 0; guard < 25; guard++) {
+          var d = await Api.get('/admin/sms/log?' + qs({ limit: 200, offset: off }));
+          all = all.concat(d.data || []); off += 200;
+          if (!d.data || d.data.length < 200) break;
+        }
+        var cell = function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+        var lines = [['When (' + auditTz() + ')', 'Direction', 'Person', 'Phone', 'Kind', 'Status', 'Message', 'Reason', 'Carrier detail'].join(',')];
+        all.forEach(function (r) {
+          lines.push([fmtTime(r.created_at).replace(/\.\d{3}/, ''), r.direction === 'in' ? 'Received' : 'Sent', r.person, r.to_phone, smsKind(r.category),
+            smsStatus(r)[0], r.body, r.error_plain || '', r.error || ''].map(cell).join(','));
+        });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+        a.download = 'text-messages-' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      } catch (e) {
+        if (KT.toast) KT.toast('⚠️', 'Could not export', (e && e.message) || '', '#DC2626');
+      }
+      exportBtn.disabled = false; exportBtn.textContent = '⬇️ Export CSV';
+    });
+
+    load();
+  }
+
+  function openSms(r) {
+    var M = window.KT && KT.Shell && KT.Shell.Modal; if (!M) return;
+    var inbound = r.direction === 'in';
+    var row = function (k, v) { return v ? '<div style="display:grid;grid-template-columns:120px 1fr;gap:10px;padding:7px 0;border-top:1px solid #F1F5F9;font-size:13.5px;"><div style="color:#64748B;font-weight:700;">' + esc(k) + '</div><div style="color:#0F172A;overflow-wrap:anywhere;">' + v + '</div></div>' : ''; };
+    var body = Dom.el('div');
+    body.innerHTML = '<div style="background:' + (inbound ? '#EFF6FF' : '#F0FDFA') + ';border:1px solid ' + (inbound ? '#BFDBFE' : '#99F6E4')
+      + ';border-radius:12px;padding:12px 14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;color:#0F172A;margin-bottom:10px;">' + esc(r.body) + '</div>'
+      + row(inbound ? 'From' : 'To', esc((r.person || 'Unknown') + (r.to_phone ? ' · ' + r.to_phone : '')))
+      + row('Kind', esc(smsKind(r.category)))
+      + row('Status', smsPill(r))
+      + row('Created', esc(fmtTime(r.created_at).replace(/\.\d{3}/, '')))
+      + row('Sent', r.sent_at ? esc(fmtTime(r.sent_at).replace(/\.\d{3}/, '')) : '')
+      + row('Why', r.error_plain ? '<span style="color:#B45309;font-weight:600;">' + esc(r.error_plain) + '</span>' : '')
+      + row('Carrier detail', r.error ? '<code style="font-size:12.5px;color:#7F1D1D;">' + esc(r.error) + '</code>' : '')
+      + row('Provider', esc(r.provider ? r.provider.charAt(0).toUpperCase() + r.provider.slice(1) : ''));
+    M.open({ title: (inbound ? '↙ Text received' : '↗ Text sent'), body: body, actions: [{ label: 'Close', primary: true }] });
   }
 
   /* One renderer, two views. The payments channel is the same table with a different

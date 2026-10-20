@@ -162,9 +162,13 @@ final class SmsController extends Controller
            deleted still shows its number and its outcome rather than vanishing. Measured
            before shipping: all 118 rows resolve to a user, so in practice it is populated
            everywhere. */
+        // A centre director: their own centres' people only (2026-10-19; this listed the
+        // whole agency's texts to every director).
+        $people = $this->scopedPeople($request, $agencyId);
         $rows = DB::table('sms_messages as m')
             ->leftJoin('users as u', 'u.id', '=', 'm.to_user_id')
             ->where('m.agency_id', $agencyId)
+            ->when($people !== null, fn ($q) => $q->whereIn('m.to_user_id', $people ?: [0]))
             ->orderByDesc('m.created_at')
             ->limit(200)
             ->select(
@@ -176,6 +180,119 @@ final class SmsController extends Controller
             ->get();
 
         return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * GET /admin/sms/log -- the SMS subtab of the audit log (2026-10-19).
+     *
+     * Anthony: "add the SMS logs to the audit log section as a subtab to show what was sent
+     * and received and any errors". Every text in the active agency, both directions, with
+     * filters (direction, status or "problems", category, search, date range), paging, the
+     * counts behind the summary cards, and each error in plain words beside the raw one.
+     *
+     * A centre director sees only texts to or from people at their own centres (staff with
+     * a role there, and guardians of families there) -- CentreScope, failing closed.
+     */
+    public function logIndex(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $people = $this->scopedPeople($request, $agencyId);
+        $tz = \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
+
+        $base = DB::table('sms_messages as m')->where('m.agency_id', $agencyId)
+            ->when($people !== null, fn ($q) => $q->whereIn('m.to_user_id', $people ?: [0]));
+
+        // The counts ignore the status filter, so the cards always add up to the whole.
+        $countQ = clone $base;
+        $this->applySmsFilters($countQ, $request, $tz, false);
+        $counts = ['received' => 0, 'sent' => 0, 'delivered' => 0, 'failed' => 0, 'skipped' => 0];
+        foreach ((clone $countQ)->select('m.direction', 'm.status', DB::raw('COUNT(*) n'))->groupBy('m.direction', 'm.status')->get() as $c) {
+            $k = $c->direction === 'in' ? 'received' : (string) $c->status;
+            if ($k === 'queued' || $k === 'sending') $k = 'sent';
+            if ($k === 'undelivered') $k = 'failed';
+            $counts[$k] = ($counts[$k] ?? 0) + (int) $c->n;
+        }
+
+        $q = clone $base;
+        $this->applySmsFilters($q, $request, $tz, true);
+        $total = (clone $q)->count();
+        $limit = max(10, min(200, (int) $request->query('limit', 50)));
+        $offset = max(0, (int) $request->query('offset', 0));
+        $rows = $q->leftJoin('users as u', 'u.id', '=', 'm.to_user_id')
+            ->orderByDesc('m.created_at')->orderByDesc('m.id')->offset($offset)->limit($limit)
+            ->get(['m.id', 'm.direction', 'm.to_user_id', 'm.to_phone', 'm.body', 'm.category', 'm.provider',
+                'm.status', 'm.error', 'm.sent_at', 'm.created_at',
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as person")])
+            ->map(function ($r) {
+                $r->error_plain = self::plainSmsError($r->status, $r->error);
+
+                return $r;
+            });
+
+        $categories = (clone $base)->whereNotNull('m.category')->distinct()->orderBy('m.category')->pluck('m.category');
+
+        return response()->json(['data' => $rows, 'total' => $total, 'counts' => $counts, 'categories' => $categories]);
+    }
+
+    private function applySmsFilters($q, Request $request, string $tz, bool $withStatus): void
+    {
+        $dir = (string) $request->query('direction', '');
+        if ($dir === 'in' || $dir === 'out') $q->where('m.direction', $dir);
+        if ($withStatus) {
+            $st = (string) $request->query('status', '');
+            if ($st === 'problems') $q->where('m.direction', 'out')->whereIn('m.status', ['failed', 'skipped', 'undelivered']);
+            elseif ($st === 'received') $q->where('m.direction', 'in');
+            elseif ($st !== '') $q->where('m.direction', 'out')->where('m.status', $st);
+        }
+        if ($cat = (string) $request->query('category', '')) $q->where('m.category', $cat);
+        if ($s = trim((string) $request->query('q', ''))) {
+            $like = '%' . addcslashes($s, '\\%_') . '%';
+            $digits = preg_replace('/\D+/', '', $s);
+            $q->where(function ($w) use ($like, $digits) {
+                $w->where('m.body', 'like', $like)->orWhere('m.error', 'like', $like)
+                  ->orWhereIn('m.to_user_id', DB::table('users')->where(DB::raw("CONCAT_WS(' ', first_name, last_name)"), 'like', $like)->select('id'));
+                if (strlen($digits) >= 3) $w->orWhere('m.to_phone', 'like', '%' . $digits . '%');
+            });
+        }
+        // Dates are the agency's days, turned into the UTC range the rows are stored in.
+        if ($since = (string) $request->query('since', '')) {
+            try { $q->where('m.created_at', '>=', \Illuminate\Support\Carbon::parse($since, $tz)->startOfDay()->utc()); } catch (\Throwable $e) {}
+        }
+        if ($until = (string) $request->query('until', '')) {
+            try { $q->where('m.created_at', '<=', \Illuminate\Support\Carbon::parse($until, $tz)->endOfDay()->utc()); } catch (\Throwable $e) {}
+        }
+    }
+
+    /** The reasons a text did not go, said the way a director would say them. */
+    public static function plainSmsError(?string $status, ?string $error): ?string
+    {
+        $e = strtolower((string) $error);
+        if ($e === '') return $status === 'failed' ? 'The carrier refused it without giving a reason.' : null;
+        if (str_contains($e, 'no sms consent')) return 'Not sent: this person has not agreed to receive texts.';
+        if (str_contains($e, 'sms disabled')) return 'Not sent: texting is switched off for this agency.';
+        if (str_contains($e, 'do-not-contact')) return 'Not sent: the person or agency is on do-not-contact.';
+        if (str_contains($e, 'not configured')) return 'Not sent: no texting provider was set up at the time.';
+        if (str_contains($e, 'not verified')) return 'Failed: the sending number was not yet verified with the carriers.';
+        if (str_contains($e, 'invalid') && str_contains($e, 'number')) return 'Failed: the phone number is not valid.';
+        if (str_contains($e, 'blocked') || str_contains($e, 'spam')) return 'Failed: the carrier blocked the message.';
+        if (str_contains($e, 'opted out') || str_contains($e, 'stop')) return 'Not sent: this person replied STOP.';
+
+        return null;   // the raw reason is shown as it is
+    }
+
+    /**
+     * null = everyone in the agency (admins). For a centre director, the user ids of the
+     * people at their centres -- staff with a role there and guardians of its families.
+     */
+    private function scopedPeople(Request $request, int $agencyId): ?array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) return null;
+        $staff = DB::table('role_assignments')->whereIn('centre_id', $scope ?: [0])->where('active', true)->pluck('user_id');
+        $parents = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+            ->whereIn('f.centre_id', $scope ?: [0])->pluck('g.user_id');
+
+        return $staff->merge($parents)->map(fn ($i) => (int) $i)->unique()->values()->all();
     }
 
     /**

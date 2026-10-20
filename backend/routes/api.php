@@ -2635,6 +2635,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::post('/admin/sms/broadcast', [\App\Http\Controllers\Api\SmsController::class, 'broadcast']);
         Route::get ('/admin/sms/messages',  [\App\Http\Controllers\Api\SmsController::class, 'listMessages']);
+        // The audit log's SMS subtab: both directions, filters, errors in plain words (2026-10-19).
+        Route::get ('/admin/sms/log',       [\App\Http\Controllers\Api\SmsController::class, 'logIndex']);
         /* Who a broadcast would reach, before anyone presses send. Read-only. */
         /* LETTING SOMEBODY BACK IN (2026-09-21).
 
