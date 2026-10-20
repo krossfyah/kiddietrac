@@ -56,6 +56,7 @@
 
     const overlay = document.createElement('div');
     overlay.id = 'kt-onboard-overlay';
+    overlay.setAttribute('data-no-modal-guard', '1');   // Skip is its close; no second X on top of it
     overlay.style.cssText = `
       position: fixed; inset: 0; background: rgba(15, 30, 45, 0.72);
       z-index: 12000; display: flex; align-items: center; justify-content: center;

@@ -384,8 +384,11 @@ input.kt-switchified {
      ::after knob stayed 22px and bulged out top and bottom. Measured in the live
      page: 48x16 track, 22px knob. One property fixes every such caller at once,
      which is why this is here and not in ~30 call sites. (2026-08-25) */
-  width: 48px; height: 28px; min-width: 48px;
-  min-height: 28px; /* see note above */ border-radius: 999px; background: #CBD5E1;
+  /* !important (2026-10-20, Closed Testing Report issue 4): a phone sweep writes
+     min-width:0;max-width:100% inline on form fields, which beat the plain min-width
+     and left an inline `width:18px` track under the 22px knob, the knob over the label. */
+  width: 48px !important; height: 28px !important; min-width: 48px !important; max-width: none !important;
+  min-height: 28px !important; /* see note above */ border-radius: 999px; background: #CBD5E1;
   position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0;
   margin: 0; border: none; display: inline-block; transition: background .16s ease;
 }

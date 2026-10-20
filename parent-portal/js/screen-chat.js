@@ -116,8 +116,19 @@
     }
     const res = await fetch(apiBase() + path, opts);
     if (!res.ok) {
+      /* Never show the reply body (2026-10-20, Closed Testing Report issue 5): it read
+         `API 403: {"password_change_required":true,…}`. Keep the server's own sentence when
+         there is one; the status and body still go to the console for support. */
       const errText = await res.text();
-      throw new Error('API ' + res.status + ': ' + errText.substring(0, 200));
+      let j = null;
+      try { j = JSON.parse(errText); } catch (_) {}
+      try { console.warn('[chat] API ' + res.status + ' ' + path, errText.substring(0, 300)); } catch (_) {}
+      const err = new Error((j && j.message) || (res.status === 403
+        ? 'You do not have access to this right now.'
+        : 'Something went wrong. Please try again.'));
+      err.status = res.status;
+      err.passwordChange = !!(j && j.password_change_required);
+      throw err;
     }
     return res.json();
   }
@@ -882,7 +893,17 @@
       if (newBtn) newBtn.addEventListener('click', function () { openNewChatModal(container); });
       wireNotifBtn(container);
     } catch (e) {
-      container.innerHTML = '<div style="padding:24px;color:#DC2626;">Could not load conversations: ' + escapeHtml(e.message) + '</div>';
+      container.innerHTML = '<div style="padding:22px 18px;text-align:center;">'
+        + '<div style="font-size:30px;">' + (e && e.passwordChange ? '\u{1F511}' : '\u{1F4AC}') + '</div>'
+        + '<div style="font-weight:800;color:#0F172A;margin-top:6px;">'
+        + (e && e.passwordChange ? 'Choose a new password' : 'Could not load your conversations') + '</div>'
+        + '<div style="font-size:13.5px;color:#475569;margin:6px auto 14px;max-width:340px;line-height:1.45;">' + escapeHtml(e && e.message || '') + '</div>'
+        + (e && e.passwordChange
+          ? '<a href="#settings?tab=security" style="display:inline-block;background:#1F6080;color:#fff;font-weight:700;padding:10px 18px;border-radius:10px;text-decoration:none;">Change password</a>'
+          : '<button type="button" id="kt-chat-retry" style="background:#1F6080;color:#fff;font-weight:700;padding:10px 18px;border:0;border-radius:10px;cursor:pointer;">Try again</button>')
+        + '</div>';
+      var _rt = container.querySelector('#kt-chat-retry');
+      if (_rt) _rt.addEventListener('click', function () { renderList(container); });
     }
   }
 

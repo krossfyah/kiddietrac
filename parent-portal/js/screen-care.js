@@ -553,7 +553,10 @@
           // Directors/educators with no rooms of their own → agency-wide list.
           return loadAgencyWide();
         })
-        .catch(function () { childSel.innerHTML = '<option value="">No children loaded</option>'; });
+        .catch(function () {
+          // Usually an educator with no room yet: the agency-wide list is not theirs to see.
+          childSel.innerHTML = '<option value="">No children in your room yet. Ask your director to assign you a room.</option>';
+        });
     }
     childSel.addEventListener('change', loadRecent);
 

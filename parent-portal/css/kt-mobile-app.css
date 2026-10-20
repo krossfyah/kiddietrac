@@ -3370,3 +3370,29 @@ html.kt-ios-inset-fallback #appMain {
     min-height: 0 !important;
   }
 }
+
+/* ── Closed Testing Report fixes (2026-10-20) ────────────────────────────────────────── */
+/* Issue 3: with the keyboard up the bottom bar sat on top of it, over the form. */
+html.kt-kb-open #kt-mobilenav,
+html.kt-kb-open #kt-role-back { display: none !important; }
+
+/* Copy-ID buttons beside reference IDs: the phone tap height (42px) in 29px rows made each
+   button's tap area overlap the next ID's, so a tap could copy the wrong one. */
+#appMain .kt-ref button { min-height: 0 !important; height: 24px !important; width: 24px !important; }
+
+/* Issue 2: the filter / sort / count bar ran off the screen ("ort…" at the left edge, the
+   count jammed against the right). The sort group was max-content and right-aligned, so
+   when a phone rule widened the dropdown it overflowed to the LEFT. On phones: filter on
+   its own row, sort + count on the next, both the full width of the card. */
+@media (max-width: 768px) {
+  .kt-list-controls { gap: 8px !important; margin: 10px 0 !important; }
+  .kt-list-controls > .kt-lc-filter { flex: 1 1 100% !important; min-width: 0 !important; max-width: none !important; }
+  .kt-list-controls > .kt-lc-right {
+    flex: 1 1 100% !important; width: auto !important; min-width: 0 !important;
+    justify-content: space-between !important;
+  }
+  .kt-list-controls .kt-lc-sort {
+    flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; max-width: 100% !important;
+  }
+  .kt-list-controls .kt-list-count { flex: 0 0 auto !important; }
+}

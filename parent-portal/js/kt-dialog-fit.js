@@ -203,11 +203,17 @@
         if (c.getBoundingClientRect().height > 60) { card = c; break; }
       }
       if (!card) { return; }
-      var r = card.getBoundingClientRect();
-      if (r.bottom <= vh + 1 && r.top >= -1) { return; }            // fits: leave it
-      if (overlay.scrollHeight - overlay.clientHeight > SLACK) { return; }  // already scrolls
       var ocs = window.getComputedStyle(overlay);
       if (ocs.position !== 'fixed') { return; }
+      /* LAYOUT, NOT PAINT (2026-10-20, Closed Testing Report issue 6). A dialog that is still
+         sliding in has a transform, and getBoundingClientRect includes it: the select sheet's
+         panel, mid translateY(14px), measured 14px past the bottom, so it was re-anchored to
+         the TOP and its title + close button sat under the status bar. offsetTop/offsetHeight
+         are against the fixed overlay and ignore transforms. */
+      var top = card.offsetParent === overlay ? card.offsetTop : card.getBoundingClientRect().top;
+      var bottom = top + (card.offsetHeight || card.getBoundingClientRect().height);
+      if (bottom <= Math.max(vh, overlay.clientHeight) + 1 && top >= -1) { return; }   // fits: leave it
+      if (overlay.scrollHeight - overlay.clientHeight > SLACK) { return; }  // already scrolls
       /* Centring is what makes the overflow unreachable: half of it goes off the TOP,
          where no scroll can follow. Anchored to the start, all of it is below. */
       overlay.style.alignItems = 'flex-start';

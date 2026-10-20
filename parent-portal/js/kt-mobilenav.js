@@ -718,9 +718,36 @@
     } catch (e) { return 0; }
   }
 
+  /* KEYBOARD UP = NO BAR (2026-10-20, Closed Testing Report issue 3).
+
+     Pinning to the visible bottom meant that with the keyboard open the bar sat on top of
+     it, mid-screen, over half of the New award form. While a text field has focus AND the
+     visible height is well below the tallest seen without typing (the keyboard; adjustResize
+     in the APK shrinks innerHeight too, so innerHeight alone cannot tell), html gets
+     .kt-kb-open and kt-mobile-app.css hides the bar and the back button. */
+  var kbBase = 0, kbOrient = null;
+  function typingTarget() {
+    var ae = document.activeElement;
+    if (!ae) return false;
+    if (ae.isContentEditable || ae.tagName === 'TEXTAREA') return true;
+    return ae.tagName === 'INPUT'
+      && !/^(checkbox|radio|button|submit|reset|file|range|color|image|hidden)$/i.test(ae.type || '');
+  }
+  function trackKeyboard(vv) {
+    var h = vv ? vv.height : window.innerHeight;
+    var o = (screen.orientation && screen.orientation.type) || (window.innerWidth > window.innerHeight ? 'l' : 'p');
+    if (o !== kbOrient) { kbOrient = o; kbBase = 0; }
+    var typing = typingTarget();
+    if (!typing && h > kbBase) kbBase = h;
+    if (!kbBase) kbBase = Math.max(h, window.innerHeight);
+    var open = typing && (kbBase - h) > 120;
+    document.documentElement.classList.toggle('kt-kb-open', open);
+  }
+
   function pinToVisualViewport() {
     var nav = document.getElementById('kt-mobilenav'); if (!nav) return;
     var vv = window.visualViewport;
+    try { trackKeyboard(vv); } catch (e) {}
     if (vv) {
       var offset = window.innerHeight - (vv.offsetTop + vv.height);
       if (!(offset > 1)) { offset = 0; }
@@ -792,6 +819,9 @@
   }
   window.addEventListener('resize', pinToVisualViewport);
   window.addEventListener('orientationchange', pinToVisualViewport);
+  // Focus changes before the keyboard finishes animating; look again once it has.
+  document.addEventListener('focusin', function () { setTimeout(pinToVisualViewport, 350); }, true);
+  document.addEventListener('focusout', function () { setTimeout(pinToVisualViewport, 120); }, true);
   setInterval(function () { pinToVisualViewport(); padGearClearance(); placeGear(); }, 700);   // catch SPA navigations / URL-bar changes
 
   // ── Screen-transition animation (phones only) ───────────────────────

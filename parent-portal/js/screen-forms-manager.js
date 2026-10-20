@@ -53,7 +53,7 @@
     container.innerHTML =
       (FM_RO ? '<div style="max-width:1080px;margin:12px auto 0;padding:0 24px;"><div style="display:inline-flex;align-items:center;gap:6px;background:#F1F5F9;border:1px solid #E2E8F0;color:#334155;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;">🔒 Read-only (auditor) — you can view and download, not change</div></div>' : '')
       + '<div style="padding:0 24px 24px;max-width:1080px;margin:0 auto;color:#0F172A;">'
-      + '<div style="display:flex;gap:8px;margin:16px 0 16px;">'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 16px;">'
       + '<button class="fm-tab" data-t="library" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📚 Library</button>'
       + '<button class="fm-tab" data-t="package" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📦 Multiple forms</button>'
       + '<button class="fm-tab" data-t="files" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📥 Request files</button>'

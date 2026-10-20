@@ -87,6 +87,11 @@
     var t = e.target, d = downTarget;
     downTarget = null;                       // one click per press, whatever happens next
     if (!t || !looksLikeOverlay(t)) { return; }   // not a backdrop; none of our business
+    /* A PICKER IS NOT A FORM (2026-10-20, Closed Testing Report issue 6). The rule below
+       keeps a stray tap from discarding half-typed work; a dropdown list holds nothing to
+       lose, and a tester read a list that ignored taps outside it as "no way to close".
+       Overlays that say so dismiss on a backdrop tap as before. */
+    if (t.hasAttribute && t.hasAttribute('data-kt-tap-outside')) { return; }
 
     /* CLICKING OUTSIDE NO LONGER DISMISSES A DIALOG.
 

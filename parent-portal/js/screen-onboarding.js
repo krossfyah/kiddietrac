@@ -210,7 +210,11 @@
     overlay.id = 'kt-onboarding-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(8,15,30,0.74);'
       + '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);overflow-y:auto;overflow-x:hidden;'
-      + 'display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;';
+      + 'display:flex;align-items:flex-start;justify-content:center;'
+      /* Clear the status bar and the system nav bar (2026-10-20, Closed Testing Report issue 7):
+         the APK draws under both, so a flat 24px put the header under the clock and the last
+         fields under the back/home bar. */
+      + 'padding:calc(24px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 14px calc(32px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));';
     document.body.appendChild(overlay);
     container = overlay;
 
@@ -549,7 +553,8 @@
     var smsBox = document.createElement('input');
     smsBox.type = 'checkbox';
     smsBox.setAttribute('data-sms-consent', '1');
-    smsBox.style.cssText = 'width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;cursor:pointer;';
+    smsBox.setAttribute('data-kt-switch', '1');
+    smsBox.style.cssText = 'margin:0;flex:0 0 auto;cursor:pointer;';   // a switch: kt-consistency-polish.css sizes it
     smsBox.checked = state.data.sms_opt_in === true;
     smsLab.appendChild(smsBox);
     var smsTxt = document.createElement('span');
@@ -1614,7 +1619,11 @@
     ov.setAttribute('aria-modal', 'true');
     ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(8,15,30,0.74);'
       + '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);overflow-y:auto;overflow-x:hidden;'
-      + 'display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;';
+      + 'display:flex;align-items:flex-start;justify-content:center;'
+      /* Clear the status bar and the system nav bar (2026-10-20, Closed Testing Report issue 7):
+         the APK draws under both, so a flat 24px put the header under the clock and the last
+         fields under the back/home bar. */
+      + 'padding:calc(24px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 14px calc(32px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));';
     ov.innerHTML =
       '<div style="background:#fff;border-radius:18px;width:100%;max-width:620px;margin:auto 0;'
       + 'box-shadow:0 30px 80px -20px rgba(8,20,40,.6);overflow:hidden;">'

@@ -104,6 +104,7 @@
     var wrap = d.createElement('div');
     wrap.className = 'kt-select-sheet';
     wrap.setAttribute('data-no-modal-guard', '1');
+    wrap.setAttribute('data-kt-tap-outside', '1');   // a tap outside the list closes it (kt-modal-safety)
     wrap.style.cssText = 'position:fixed;inset:0;z-index:' + Z + ';background:rgba(15,23,42,.5);'
       + 'display:flex;align-items:flex-end;justify-content:center;opacity:0;'
       + 'transition:opacity .17s ease;-webkit-tap-highlight-color:transparent;';

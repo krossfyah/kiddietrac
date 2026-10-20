@@ -72,6 +72,8 @@
     for (var i = 0; i < els.length; i++) {
       var t = (els[i].textContent || '').trim();
       if (t === '×' || t === '✕' || t === '✖' || t === '⨯' || t === '✗') return true;
+      // A worded way out counts too: an X added beside "Skip" sat on top of it (2026-10-20).
+      if (els[i].tagName === 'BUTTON' && /^(skip|close|cancel|not now|dismiss|no thanks)$/i.test(t)) return true;
     }
     return false;
   }

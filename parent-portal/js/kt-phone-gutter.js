@@ -47,6 +47,12 @@
   }
   function skip(el) {
     if (!el || el.nodeType !== 1) return true;
+    /* Controls are never page padding (2026-10-20). A see-through tab or link button has no
+       background or border, so it passed clear() and lost its side padding: Settings' tabs
+       read "ProfileNotificationsDocuments…" on phones (Closed Testing Report, issue 1). */
+    if (/^(BUTTON|A|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY)$/.test(el.tagName)) return true;
+    var role = el.getAttribute('role');
+    if (role === 'tab' || role === 'button' || role === 'tablist') return true;
     if (el.id === 'kt-topbar' || el.id === 'kt-day-brief') return true;
     if (el.hasAttribute('data-kt-keep-gutter')) return true;
     var c = typeof el.className === 'string' ? el.className : '';
