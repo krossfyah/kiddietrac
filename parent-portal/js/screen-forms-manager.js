@@ -1320,10 +1320,14 @@
       if (!userIds.length && !emails.length) { say('Choose people, or type an email address.', true); return; }
 
       btn.disabled = true; say('Sending…', false);
+      var choice = btn.getAttribute('data-aud') || null;
+      btn.removeAttribute('data-aud');
+      var oldAsk = ov.querySelector('#pk-narrow'); if (oldAsk) oldAsk.remove();
       Api.post('/admin/managed-forms/bulk-assign', {
         form_ids: formIds, user_ids: userIds, emails: emails,
         notify: !notifyBox || notifyBox.checked,
-        note: (ov.querySelector('#pk-note').value || '').trim() || null
+        note: (ov.querySelector('#pk-note').value || '').trim() || null,
+        audience_choice: choice
       }).then(function (r) {
         btn.disabled = false;
         var un = (r && r.unmatched) || [];
@@ -1339,6 +1343,36 @@
         if (hostBody) loadPackageHistory(hostBody.querySelector('#pk-history'));
       }).catch(function (e) {
         btn.disabled = false;
+        /* ASK BEFORE NARROWING (2026-10-20). Naming people on a form that is open to a
+           role makes it theirs alone - that took the daily sleep chart away from every
+           provider. The server stops and lists those forms; the admin picks. */
+        if (e && e.status === 409 && e.data && e.data.code === 'would_narrow') {
+          say('', false);
+          var roleWord = function (r) { return ({ educator: 'educators', guardian: 'parents', centre_director: 'directors', agency_admin: 'admins' })[r] || (String(r).replace(/_/g, ' ') + 's'); };
+          var rows = (e.data.forms || []).map(function (f) {
+            var who = (f.audiences || []).map(roleWord).join(' & ');
+            return '<li style="margin:2px 0;"><b>' + esc(f.title) + '</b> - open to all ' + esc(who) + (f.people != null ? ' (' + f.people + ' people)' : '') + '</li>';
+          }).join('');
+          var ask = document.createElement('div');
+          ask.id = 'pk-narrow';
+          ask.setAttribute('role', 'alert');
+          ask.style.cssText = 'margin:10px 0;padding:12px 14px;border:1.5px solid #F59E0B;background:#FFFBEB;border-radius:12px;color:#78350F;font-size:13px;line-height:1.45;';
+          ask.innerHTML = '<div style="font-weight:800;margin-bottom:4px;">⚠️ These forms are open to everyone in a role</div>'
+            + '<ul style="margin:4px 0 8px 18px;padding:0;">' + rows + '</ul>'
+            + '<div style="margin-bottom:10px;">Sending them to the people you picked can make them <b>only</b> theirs, and everyone else loses access.</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:8px;">'
+            + '<button type="button" data-c="keep" style="border:0;border-radius:9px;padding:8px 12px;font-weight:800;cursor:pointer;background:#0F766E;color:#fff;">Keep everyone + add these people</button>'
+            + '<button type="button" data-c="narrow" style="border:1.5px solid #B45309;border-radius:9px;padding:8px 12px;font-weight:800;cursor:pointer;background:#fff;color:#92400E;">Only the people I picked</button>'
+            + '</div>';
+          btn.parentNode.insertBefore(ask, btn);
+          [].forEach.call(ask.querySelectorAll('button[data-c]'), function (b) {
+            b.addEventListener('click', function () {
+              btn.setAttribute('data-aud', b.getAttribute('data-c'));
+              btn.click();
+            });
+          });
+          return;
+        }
         /* The server's message already NAMES the addresses it could not place, so
            appending the list again read as "ghost@nowhere.test ... (ghost@nowhere.test)".
            Only add it when the message did not say it. */

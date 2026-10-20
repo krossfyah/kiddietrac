@@ -380,6 +380,8 @@ class ManagedFormController extends Controller
             'emails.*'   => ['string', 'max:190'],
             'notify'     => ['sometimes', 'boolean'],
             'note'       => ['nullable', 'string', 'max:600'],
+            // keep = the role audience keeps the form AND these people get it; narrow = only them.
+            'audience_choice' => ['sometimes', 'nullable', 'in:keep,narrow'],
         ]);
 
         $agencyId = $this->agencyId($request);
@@ -392,9 +394,45 @@ class ManagedFormController extends Controller
             ->where('active', 1)
             // `fillable` travels with them: the email says "Fill & sign" or "Read & sign"
             // so nobody opens a link expecting to type and finds they cannot.
-            ->get(['id', 'title', 'description', 'fillable']);
+            ->get(['id', 'title', 'description', 'fillable', 'audiences', 'named_extends_audience']);
         if ($forms->isEmpty()) {
             return response()->json(['message' => 'None of those forms are available.'], 422);
+        }
+
+        /* ASK BEFORE NARROWING (2026-10-20). A form that is open to a role and names nobody
+           becomes the named people's ALONE the moment anyone is named (FormAudience rule 1).
+           Sending a parent their paperwork took Daily Sleep Chart and Daily Supervision Check
+           away from every provider that way, mid-shift. So when this send would do that,
+           nothing is written and the admin is asked: keep the role AND add these people,
+           or make the forms only theirs. Checked before any placeholder account is made. */
+        $namedNow = \App\Support\FormAudience::namedMap($forms->pluck('id')->all());
+        $wouldNarrow = $forms->filter(fn ($f) => \App\Support\FormAudience::audiencesOf($f)
+            && empty($namedNow[(int) $f->id])
+            && ! \App\Support\FormAudience::extendsAudience($f))->values();
+        $choice = $data['audience_choice'] ?? null;
+        if ($wouldNarrow->isNotEmpty() && ! $choice) {
+            return response()->json([
+                'code'    => 'would_narrow',
+                'message' => 'Some of these forms are open to everyone in a role. Choose whether they keep that.',
+                'forms'   => $wouldNarrow->map(function ($f) use ($agencyId) {
+                    $aud = \App\Support\FormAudience::audiencesOf($f);
+                    $people = null;
+                    try {
+                        $q = DB::table('role_assignments')->whereIn('role', $aud)->where('active', 1);
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('role_assignments', 'agency_id')) {
+                            $q->where('agency_id', $agencyId);
+                        }
+                        $people = $q->distinct()->count('user_id');
+                    } catch (\Throwable $e) {
+                    }
+
+                    return ['id' => (int) $f->id, 'title' => $f->title, 'audiences' => $aud, 'people' => $people];
+                })->all(),
+            ], 409);
+        }
+        if ($choice === 'keep' && $wouldNarrow->isNotEmpty()) {
+            DB::table('managed_forms')->whereIn('id', $wouldNarrow->pluck('id')->all())
+                ->update(['named_extends_audience' => 1, 'updated_at' => now()]);
         }
 
         /* Picked people AND typed addresses resolve to the same thing: a user who can
@@ -1988,7 +2026,7 @@ class ManagedFormController extends Controller
            educators, done for today (it is due again tomorrow); for anyone else, done once
            signed. It is still offered, but in `again`, not in the pending list or the
            count: "already signed — fill again only if you need to". */
-        $reusable = DB::table('managed_forms')->where('reusable', 1)->get(['id', 'audiences'])->keyBy('id');
+        $reusable = DB::table('managed_forms')->where('reusable', 1)->get(['id', 'audiences', 'named_extends_audience'])->keyBy('id');
         $tz = \App\Support\AgencyTime::tz((int) $agencyId) ?: 'America/Toronto';
         $todayStart = \Illuminate\Support\Carbon::now($tz)->startOfDay()->utc()->toDateTimeString();
         $signedAt = [];

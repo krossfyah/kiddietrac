@@ -428,7 +428,7 @@ class EducatorSelfController extends Controller
             ->where('agency_id', $targetAgencyId)
             ->where('active', 1)
             ->orderBy('title')
-            ->get(['id', 'title', 'audiences', 'fillable']);
+            ->get(['id', 'title', 'audiences', 'fillable', 'named_extends_audience']);
         $forms = \App\Support\FormAudience::filter($allForms, $targetId, $roleNames);
 
         $expected = [];
@@ -612,7 +612,7 @@ class EducatorSelfController extends Controller
 
         $forms = DB::table('managed_forms')
             ->where('agency_id', $agencyId)->where('active', 1)
-            ->orderBy('title')->get(['id', 'title', 'audiences']);
+            ->orderBy('title')->get(['id', 'title', 'audiences', 'named_extends_audience']);
 
         /* Only the forms an educator is actually asked for.
 
@@ -623,7 +623,8 @@ class EducatorSelfController extends Controller
            per-person view above — see App\Support\FormAudience. */
         $namedAnywhere = \App\Support\FormAudience::namedMap($forms->pluck('id')->all());
         $forEducators = $forms->filter(function ($f) use ($namedAnywhere) {
-            if (! empty($namedAnywhere[(int) $f->id])) {
+            // Named people narrow it - unless the form keeps its audience as well.
+            if (! empty($namedAnywhere[(int) $f->id]) && ! \App\Support\FormAudience::extendsAudience($f)) {
                 return false;
             }
 

@@ -115,7 +115,7 @@ final class FormSubmissionNotice
            "still outstanding" section of an email that the reader could not open. */
         $forms = collect(\App\Support\FormAudience::filter(
             DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
-                ->get(['id', 'title', 'audiences']),
+                ->get(['id', 'title', 'audiences', 'named_extends_audience']),
             $userId,
             $roles
         ));
