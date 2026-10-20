@@ -532,6 +532,49 @@
     }).join('');
     var staffCard = (d.staff && d.staff.length) ? staff : '<div style="color:#94A3B8;font-size:12.5px;padding:8px 0;">No staff clock-ins recorded.</div>';
 
+    /* LAST HEADCOUNT, PER EDUCATOR (2026-10-20). When, how many children of how many, and
+       whether everyone was accounted for; on-shift educators with none are flagged. */
+    var isToday = state.date === todayISO();
+    function ago(iso) {
+      if (!isToday || !iso) { return ''; }
+      var m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+      if (!(m >= 0)) { return ''; }
+      if (m < 1) { return 'just now'; }
+      if (m < 60) { return m + ' min ago'; }
+      var h = Math.floor(m / 60), r = m % 60;
+      return h + ' h' + (r ? ' ' + r + ' min' : '') + ' ago';
+    }
+    var hcRows = (d.headcounts || []).map(function (h) {
+      var left = '<div style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;">'
+        + avatar(h.name, h.photo_url, h.sex, 30, false)
+        + '<div style="min-width:0;"><div style="font-weight:700;font-size:13px;">' + esc(h.name) + '</div>';
+      if (h.none) {
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #F1F5F9;">'
+          + left + '<div style="font-size:12px;color:#94A3B8;">On shift</div></div></div>'
+          + '<span style="font-size:12px;font-weight:700;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:999px;padding:3px 9px;white-space:nowrap;">'
+          + (isToday ? 'No headcount yet today' : 'No headcount that day') + '</span></div>';
+      }
+      var a = ago(h.at);
+      // A home provider's room is usually named after them: do not say the name twice.
+      var sub = [h.context, (h.room && h.room !== h.name) ? h.room : null, h.count_today + (h.count_today === 1 ? ' headcount' : ' headcounts') + (isToday ? ' today' : '')]
+        .filter(Boolean).map(esc).join(' · ');
+      var status = h.all_accounted
+        ? '<span style="font-size:12px;font-weight:700;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:999px;padding:3px 9px;white-space:nowrap;">✓ All accounted for</span>'
+        : '<span style="font-size:12px;font-weight:700;color:#B91C1C;background:#FEF2F2;border:1px solid #FECACA;border-radius:999px;padding:3px 9px;white-space:nowrap;" title="'
+          + esc((h.missing || []).join(', ')) + '">⚠ ' + (h.missing_count || 0) + ' not accounted for' + (h.resolved ? ' · resolved' : '') + '</span>';
+      return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 0;border-top:1px solid #F1F5F9;">'
+        + left + '<div style="font-size:12px;color:#64748B;">' + sub + '</div></div></div>'
+        + '<div style="text-align:right;">'
+        +   '<div style="font-size:13px;font-weight:800;color:#0F172A;font-variant-numeric:tabular-nums;">' + esc(h.time || '—')
+        +     ' · ' + (h.counted || 0) + ' of ' + (h.expected || 0) + ' children</div>'
+        +   '<div style="margin-top:3px;display:flex;gap:6px;justify-content:flex-end;align-items:center;flex-wrap:wrap;">'
+        +     (a ? '<span style="font-size:11.5px;color:#94A3B8;">' + esc(a) + '</span>' : '') + status
+        +     (!h.all_accounted && h.missing && h.missing.length ? '<span style="font-size:11.5px;color:#B91C1C;">' + esc(h.missing.join(', ')) + '</span>' : '')
+        +   '</div>'
+        + '</div></div>';
+    }).join('');
+    var hcCard = hcRows || '<div style="color:#94A3B8;font-size:12.5px;padding:8px 0;">No headcounts recorded ' + (isToday ? 'yet today.' : 'that day.') + '</div>';
+
     // Weekly menu
     var DAYMAP = { '1': 'Mon', '2': 'Tue', '3': 'Wed', '4': 'Thu', '5': 'Fri', '6': 'Sat', '7': 'Sun', monday: 'Mon', tuesday: 'Tue', wednesday: 'Wed', thursday: 'Thu', friday: 'Fri', saturday: 'Sat', sunday: 'Sun', mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri' };
     var ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -710,6 +753,7 @@
       +   card('Children — clock in / out &amp; care', rosterTable)
       +   card('Staff on the floor — clock in / out', staffCard)
       + '</div>'
+      + '<div style="margin-bottom:16px;">' + card('🧮 Last headcount — by educator', hcCard) + '</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">'
       +   card('📸 Photos &amp; videos captured', photosHtml)
       +   card('💬 Educator ↔ parent chat', chatHtml)

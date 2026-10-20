@@ -567,6 +567,60 @@ final class DayBriefController extends Controller
         foreach ($staff as &$__s) { $__s['presence'] = $__s['out'] ? null : ($__pres[$__s['user_id']] ?? 'idle'); }
         unset($__s);
 
+        /* ── Last headcount, per educator, on the date (2026-10-20) ──
+           Anthony: "on the daily overview for each educator add a new section that shows the
+           last head count with time stamp and number of kids". One line per person who took
+           a headcount here that day (their latest: when, how many of how many, anyone
+           missing), plus anyone on shift who has not taken one - the gap a director is
+           looking for. */
+        $headcounts = [];
+        try {
+            $byUser = [];
+            foreach (DB::table('headcounts as h')->leftJoin('users as u', 'u.id', '=', 'h.taken_by')
+                ->leftJoin('rooms as r', 'r.id', '=', 'h.room_id')
+                ->where('h.centre_id', $centreId)->whereBetween('h.taken_at', [$dayStart, $dayEnd])
+                ->orderBy('h.taken_at')
+                ->get(['h.taken_by', 'h.taken_at', 'h.context', 'h.expected_count', 'h.counted_count', 'h.all_accounted',
+                    'h.missing_child_ids', 'h.resolved_at', 'r.name as room_name', 'u.first_name', 'u.last_name', 'u.photo_url', 'u.sex']) as $h) {
+                $k = (int) $h->taken_by;
+                $byUser[$k] = ['n' => ($byUser[$k]['n'] ?? 0) + 1, 'last' => $h];
+            }
+            $contexts = \App\Http\Controllers\Api\HeadcountController::CONTEXTS;
+            foreach ($byUser as $uid => $b) {
+                $h = $b['last'];
+                $missingIds = array_map('intval', json_decode((string) $h->missing_child_ids, true) ?: []);
+                $missingNames = $missingIds ? DB::table('children')->whereIn('id', array_slice($missingIds, 0, 8))
+                    ->get(['first_name', 'preferred_name', 'last_name'])
+                    ->map(fn ($c) => trim(($c->preferred_name ?: $c->first_name) . ' ' . mb_substr((string) $c->last_name, 0, 1)))->all() : [];
+                $headcounts[] = [
+                    'user_id' => $uid,
+                    'name' => trim(($h->first_name ?? '') . ' ' . ($h->last_name ?? '')) ?: 'Staff',
+                    'photo_url' => $h->photo_url, 'sex' => $h->sex,
+                    'time' => AgencyTime::fmt($h->taken_at, $tz),
+                    'at' => Carbon::parse($h->taken_at, 'UTC')->toIso8601String(),
+                    'counted' => (int) $h->counted_count,
+                    'expected' => (int) $h->expected_count,
+                    'all_accounted' => (bool) $h->all_accounted,
+                    'missing' => $missingNames,
+                    'missing_count' => count($missingIds),
+                    'resolved' => ! empty($h->resolved_at),
+                    'context' => $contexts[$h->context] ?? ucfirst(str_replace('_', ' ', (string) $h->context)),
+                    'room' => $h->room_name,
+                    'count_today' => $b['n'],
+                ];
+            }
+            usort($headcounts, fn ($a, $b) => strcmp($b['at'], $a['at']));
+            // On shift now (no clock-out) but no headcount on this day.
+            $seenStaff = [];
+            foreach ($staff as $st) {
+                if ($st['out'] || isset($byUser[$st['user_id']]) || isset($seenStaff[$st['user_id']])) { continue; }
+                $seenStaff[$st['user_id']] = true;
+                $headcounts[] = ['user_id' => $st['user_id'], 'name' => $st['name'], 'photo_url' => $st['photo_url'], 'sex' => $st['sex'], 'none' => true];
+            }
+        } catch (\Throwable $e) {
+            $headcounts = [];
+        }
+
         // ── Weekly meal plan (menu) for the week containing the date ────
         $monday = Carbon::parse($date, $tz)->startOfWeek(Carbon::MONDAY)->toDateString();
         $menu = [];
@@ -764,6 +818,7 @@ final class DayBriefController extends Controller
                 }
             })(),
             'staff' => $staff,
+            'headcounts' => $headcounts,
             'menu' => $menu,
             'photos' => $photos,
             'chat' => $chat,
