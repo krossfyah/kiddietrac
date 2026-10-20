@@ -108,6 +108,18 @@
     var useTop = Math.max(top, fallbackTop);
     var useBottom = Math.max(bottom, fallbackBottom);
 
+    /* NOT IN A SAFARI TAB (2026-10-20). The floor above is for the app's own web view,
+       which runs under the status bar and reports 0. Safari does not: it keeps the page
+       clear of the status bar and of its own toolbar, and what env() reports there is
+       true. Forcing 59/34 anyway padded the space Safari had already reserved, twice:
+       Anthony's iPhone in Safari showed a band the height of the status bar again above
+       the header, and a gap under the bottom bar. Android tabs already trust env(); an
+       iPhone tab now does the same. The app and a Home Screen install keep the floor. */
+    if (inBrowserTab()) {
+      useTop = top;
+      useBottom = bottom;
+    }
+
     el.style.setProperty('--kt-safe-top', useTop + 'px');
     el.style.setProperty('--kt-safe-bottom', useBottom + 'px');
 
@@ -125,7 +137,7 @@
        the DOM. */
     try {
       el.setAttribute('data-kt-insets',
-        'reported ' + top + '/' + bottom + ' → used ' + useTop + '/' + useBottom
+        (inBrowserTab() ? 'tab, ' : 'app, ') + 'reported ' + top + '/' + bottom + ' → used ' + useTop + '/' + useBottom
         + ' (screen ' + maxDim + 'pt, dpr ' + (w.devicePixelRatio || 1) + ')');
     } catch (e) {}
   }
@@ -147,6 +159,12 @@
          || w.matchMedia('(display-mode: fullscreen)').matches
          || w.matchMedia('(display-mode: minimal-ui)').matches));
     } catch (e) { return false; }
+  }
+
+  /* A real browser tab: Safari (or Chrome/Firefox on iOS, which carry the same token) and
+     not installed. The app's web view has no "Safari/" in its user agent. */
+  function inBrowserTab() {
+    return /Safari\//.test(navigator.userAgent || '') && !ownsTheSystemBars();
   }
 
   /* NAVY STRIPS OVER THE SYSTEM-BAR INSETS, matching the APK.
