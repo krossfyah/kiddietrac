@@ -213,7 +213,10 @@ class KtLeakSweep extends Command
     /** JSON keys that are explicitly about the past inside an otherwise current response
      *  (the dashboard's archived_centres, the calendar's departures overlay). Dropped
      *  before scanning, so the rest of the response is still checked. */
-    public const HISTORICAL_KEYS = '/^(archived(_[a-z_]+)?|departures?|departed(_[a-z_]+)?|history|leaving(_[a-z_]+)?)$/i';
+    /* + deactivations (2026-10-20, support ticket #158): integration/pull/users lists staff who
+       have LEFT under "deactivations" so iLearn can close them; a home provider is named like
+       her closed centre, so the departure notice read as a leak. The current part is still checked. */
+    public const HISTORICAL_KEYS = '/^(archived(_[a-z_]+)?|departures?|departed(_[a-z_]+)?|deactivations?|history|leaving(_[a-z_]+)?)$/i';
 
     public static function withoutHistoricalFields(string $body): string
     {

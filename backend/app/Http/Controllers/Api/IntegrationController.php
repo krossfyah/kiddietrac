@@ -1703,6 +1703,13 @@ class IntegrationController extends Controller
         $centres = DB::table('centres')->where('agency_id', $agencyId)
             ->get(['id', 'name', 'external_id', 'external_source', 'deleted_at'])->keyBy('id');
         $centreIds = $centres->keys()->all() ?: [0];
+        /* OPEN CENTRES DECIDE WHAT IS CURRENT (2026-10-20). kt:leak-sweep (support ticket #158)
+           found this feed naming closed centres #13 and #20: a provider whose centre had closed
+           still held an "active" role there, so the feed told iLearn she was current staff at
+           a closed centre. A role at a closed centre is not a current assignment, and a
+           family at a closed centre is not attached here (pull/new already reports it). */
+        $live = array_flip(\App\Support\Live::centreIds($agencyId));
+        $liveIds = array_keys($live) ?: [0];
         $staffRoles = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
         $me = (int) $request->user()->id;
 
@@ -1720,7 +1727,7 @@ class IntegrationController extends Controller
 
         // The families each guardian belongs to, inside this agency only.
         $guardianRows = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
-            ->whereIn('g.user_id', $userIds ?: [0])->whereIn('f.centre_id', $centreIds)->whereNull('f.deleted_at')
+            ->whereIn('g.user_id', $userIds ?: [0])->whereIn('f.centre_id', $liveIds)->whereNull('f.deleted_at')
             ->get(['g.user_id', 'g.is_primary', 'g.relationship', 'f.id as family_id', 'f.family_name',
                    'f.external_id', 'f.external_source', 'f.centre_id'])
             ->groupBy('user_id');
@@ -1732,7 +1739,9 @@ class IntegrationController extends Controller
                 continue;
             }
             $rows = $roleRows->where('user_id', $u->id);
-            $active = $rows->filter(fn ($r) => (bool) $r->active);
+            $activeAnywhere = $rows->filter(fn ($r) => (bool) $r->active);
+            // Current = active AND agency-wide (no centre) or at a centre that is still open.
+            $active = $activeAnywhere->filter(fn ($r) => ! $r->centre_id || isset($live[(int) $r->centre_id]));
             $label = trim(($u->first_name ?? '').' '.($u->last_name ?? ''));
 
             if ($u->deleted_at || $active->isEmpty()) {
@@ -1740,7 +1749,8 @@ class IntegrationController extends Controller
                 // which pull/new already states.
                 if ($rows->whereIn('role', $staffRoles)->isNotEmpty()) {
                     $gone[] = ['kt_user_id' => (int) $u->id, 'name' => $label, 'email' => $u->email,
-                        'reason' => $u->deleted_at ? 'deleted' : 'roles_ended', 'at' => $u->updated_at];
+                        'reason' => $u->deleted_at ? 'deleted' : ($activeAnywhere->isNotEmpty() ? 'centre_closed' : 'roles_ended'),
+                        'at' => $u->updated_at];
                 }
                 continue;
             }
