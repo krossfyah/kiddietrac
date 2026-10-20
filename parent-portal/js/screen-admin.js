@@ -6875,7 +6875,8 @@
       }
     }
 
-    Shell.Modal.open({ title: 'New family', body: root, large: true, actions: [] });
+    Shell.Modal.open({ title: '✏️ New family', body: root, large: true, actions: [] });
+    markRecordModal(true);
     render();
   }
 
@@ -6973,7 +6974,8 @@
     }
 
     var root = Dom.el('div', {});
-    var tabBar = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:14px;' });
+    // Same tab strip as the user record (2026-10-20): tinted band, current section filled.
+    var tabBar = Dom.el('div', { role: 'tablist', class: 'kt-rtabbar', style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;padding:5px;background:#EEF3F8;border:1px solid #E2E8F0;border-radius:14px;' });
     var pane = Dom.el('div', {});
     var msg = Dom.el('div', { style: 'min-height:18px;font-size:13px;margin-top:10px;' });
     // Same steady height as the user dialog, so switching tabs never resizes the popup.
@@ -6985,11 +6987,20 @@
     var TABS = ['Family', 'Guardians', 'Children', 'Emergency'];
     var active = 'Family', DATA = null, tabBtns = {};
     TABS.forEach(function (t) {
-      var b = Dom.el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;margin-bottom:-1px;font-size:13.5px;font-weight:700;color:#64748B;cursor:pointer;' }, t);
+      var b = Dom.el('button', { type: 'button', role: 'tab', class: 'kt-rtab', 'data-kt-iconized': '1', style: 'appearance:none;display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:10px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;' }, t);
       b.addEventListener('click', function () { active = t; paintTabs(); renderTab(); });
       tabBtns[t] = b; tabBar.appendChild(b);
     });
-    function paintTabs() { TABS.forEach(function (t) { var on = t === active; tabBtns[t].style.color = on ? '#1F6080' : '#64748B'; tabBtns[t].style.borderBottomColor = on ? '#1F6080' : 'transparent'; }); }
+    function paintTabs() {
+      TABS.forEach(function (t) {
+        var on = t === active, b = tabBtns[t];
+        b.style.background = on ? 'linear-gradient(135deg,#1B3A63 0%,#2A5580 55%,#4A7FA6 100%)' : 'transparent';
+        b.style.color = on ? '#fff' : '#475569';
+        b.style.boxShadow = on ? '0 4px 12px -4px rgba(27,58,99,.55)' : 'none';
+        b.style.fontWeight = on ? '800' : '700';
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+    }
 
     function renderFamily() {
       pane.innerHTML = ''; var f = DATA.family;
@@ -7253,7 +7264,8 @@
       else renderEmergency();
     }
 
-    Shell.Modal.open({ title: 'Edit family — ' + family.family_name, body: root, large: true });
+    Shell.Modal.open({ title: '✏️ Editing · ' + family.family_name, body: root, large: true });
+    markRecordModal(true);
     paintTabs();
     pane.appendChild(loading('Loading family…'));
     Api.get('/admin/families/' + family.id).then(function (data) { DATA = data; renderTab(); }).catch(function (e) { pane.innerHTML = ''; setMsg('Could not load: ' + (e.message || 'error')); });
@@ -8418,7 +8430,8 @@
       body.appendChild(_notesHost);
       renderFamilyNotes(_notesHost, familyId);
 
-      Shell.Modal.open({ title: 'Family — ' + (data.family.family_name || ''), body: body, large: true });
+      Shell.Modal.open({ title: 'At a glance', body: body, large: true });
+      markRecordModal(false);
     } catch (e) {
       Shell.Modal.open({ title: 'Error', body: Dom.el('div', {}, e.message || 'Could not load family') });
     }

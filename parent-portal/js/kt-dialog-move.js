@@ -264,12 +264,146 @@
     void rect0;
   }
 
+
+  /* ── THE SAME LOOK ON EVERY POPUP (2026-10-20) ──────────────────────────────────────
+     Anthony: "apply the same to the families section with the popup and all other popups
+     with the gradient, resizing and moving and edge to edge". The record popups (child,
+     user, family) already had it by hand. Everything else gets it here, on every device:
+       - Shell.Modal: the soft navy bar; a title starting Edit / Manage / New / ✏️ gets the
+         navy-to-teal "editing" bar; the body padding is one even 16px 18px.
+       - A tab strip at the top of a popup becomes a full-width tinted band (measured, so it
+         bleeds exactly to the edges whatever padding the popup uses).
+       - A hand-rolled popup whose first row is its title gets that row as the same bar,
+         edge to edge. A red (warning) title gets a red bar so the warning still reads as
+         one. A row that already has its own colour is left exactly as it is.
+     Opt out with data-kt-nochrome. */
+  var CHROME_ID = 'kt-dialog-chrome-css';
+  function ensureChromeCss() {
+    if (document.getElementById(CHROME_ID)) { return; }
+    var st = document.createElement('style');
+    st.id = CHROME_ID;
+    st.textContent = ''
+      + '.modal{overflow:hidden;border:1px solid #1B3A63;}'
+      + '.modal>.modal-header{background:linear-gradient(135deg,#1B3A63 0%,#2A5580 55%,#4A7FA6 100%);border-bottom:0;padding:13px 18px;}'
+      + '.modal>.modal-header h2{color:#FFFFFF;font-size:16px;font-weight:800;letter-spacing:.2px;}'
+      + '.modal>.modal-header .modal-close{color:#FFFFFF;background:rgba(255,255,255,.14);border-radius:8px;opacity:1;}'
+      + '.modal>.modal-header .modal-close:hover{background:rgba(255,255,255,.26);}'
+      + '.modal.kt-editing>.modal-header{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);box-shadow:inset 0 -3px 0 #7FD3CC;}'
+      + '.modal>.modal-body{padding:16px 18px;}'
+      + '.kt-band{background:#EEF3F8 !important;border:0 !important;border-bottom:1px solid #E2E8F0 !important;border-radius:0 !important;}'
+      + '.kt-dlg-head{background:linear-gradient(135deg,#1B3A63 0%,#2A5580 55%,#4A7FA6 100%) !important;color:#FFFFFF !important;}'
+      + '.kt-dlg-head.kt-dlg-edit{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%) !important;box-shadow:inset 0 -3px 0 #7FD3CC;}'
+      + '.kt-dlg-head.kt-dlg-warn{background:linear-gradient(135deg,#7F1D1D 0%,#B91C1C 60%,#DC2626 100%) !important;}'
+      + '.kt-dlg-head,.kt-dlg-head h1,.kt-dlg-head h2,.kt-dlg-head h3,.kt-dlg-head h4,.kt-dlg-head p,.kt-dlg-head span,.kt-dlg-head div{color:#FFFFFF !important;}'
+      + '.kt-dlg-head button{color:#FFFFFF !important;background:rgba(255,255,255,.14) !important;border-color:transparent !important;}';
+    document.head.appendChild(st);
+  }
+
+  var EDIT_RX = /^\s*(✏️\s*)?(edit|editing|manage|new|add)\b/i;
+
+  function transparentBg(el) {
+    var cs = getComputedStyle(el);
+    return (!cs.backgroundImage || cs.backgroundImage === 'none')
+      && (/rgba\([^)]*,\s*0\)$/.test(cs.backgroundColor) || cs.backgroundColor === 'transparent');
+  }
+  function reddish(el) {
+    var m = (getComputedStyle(el).color || '').match(/(\d+),\s*(\d+),\s*(\d+)/);
+    return !!m && +m[1] > 170 && +m[2] < 90 && +m[3] < 90;
+  }
+  function isTabStrip(n) {
+    if (!n || n.nodeType !== 1) { return false; }
+    if (n.getAttribute('data-kt-tabbar') || n.getAttribute('role') === 'tablist') { return true; }
+    var kids = n.children;
+    if (kids.length < 3) { return false; }
+    for (var i = 0; i < kids.length; i++) {
+      if (kids[i].tagName !== 'BUTTON' && kids[i].tagName !== 'A') { return false; }
+      if ((kids[i].textContent || '').trim().length > 28) { return false; }
+    }
+    return true;
+  }
+
+  // Pull a band out to the edges of `frame` (left, right and - if it is the first thing - top).
+  function bleed(band, frame, top) {
+    if (band.__ktBled) { return; }
+    var fr = frame.getBoundingClientRect(), br = band.getBoundingClientRect();
+    var fcs = getComputedStyle(frame);
+    var l = br.left - fr.left - (parseFloat(fcs.borderLeftWidth) || 0);
+    var r = fr.right - br.right - (parseFloat(fcs.borderRightWidth) || 0);
+    var t = top ? (br.top - fr.top - (parseFloat(fcs.borderTopWidth) || 0) + (frame.scrollTop || 0)) : 0;
+    if (l < 0 || r < 0 || l > 60 || r > 60 || t < 0 || t > 60) { return; }
+    var bcs = getComputedStyle(band);
+    band.style.marginLeft = ((parseFloat(bcs.marginLeft) || 0) - l) + 'px';
+    band.style.marginRight = ((parseFloat(bcs.marginRight) || 0) - r) + 'px';
+    if (top) { band.style.marginTop = ((parseFloat(bcs.marginTop) || 0) - t) + 'px'; }
+    band.__ktBled = { l: l, r: r, t: t };
+  }
+
+  function firstVisible(el) {
+    var c = el && el.firstElementChild;
+    while (c && (getComputedStyle(c).display === 'none' || /^(STYLE|SCRIPT)$/.test(c.tagName))) { c = c.nextElementSibling; }
+    return c;
+  }
+
+  function decorate(panel) {
+    if (!panel || panel.hasAttribute('data-kt-chromed') || (panel.closest && panel.closest('[data-kt-nochrome]'))) { return; }
+    panel.setAttribute('data-kt-chromed', '1');
+    ensureChromeCss();
+
+    if (panel.classList.contains('modal')) {
+      var title = panel.querySelector(':scope > .modal-header h2');
+      if (title && EDIT_RX.test(title.textContent || '') && !panel.classList.contains('kt-child-modal')) {
+        panel.classList.add('kt-editing');
+      }
+      // The record popups lay out their own bands; everything else: a tab strip at the top
+      // of the body becomes a full-width band.
+      if (panel.classList.contains('kt-child-modal') || panel.classList.contains('kt-record-modal')) { return; }
+      var body = panel.querySelector(':scope > .modal-body');
+      var first = firstVisible(body);
+      if (first && !isTabStrip(first)) { var inner = firstVisible(first); if (isTabStrip(inner) && getComputedStyle(first).paddingTop === '0px') { first = inner; } else { first = null; } }
+      if (first && isTabStrip(first)) {
+        first.classList.add('kt-band');
+        bleed(first, body, true);
+      }
+      return;
+    }
+
+    // A hand-rolled popup: its first row, if that row is its title, becomes the bar.
+    var head = firstVisible(panel);
+    if (!head) { return; }
+    var isHeading = /^H[1-4]$/.test(head.tagName);
+    if (!isHeading) {
+      var hr = head.getBoundingClientRect();
+      var h = head.querySelector('h1,h2,h3,h4');
+      if (!h || hr.height > 90 || head.querySelector('input,select,textarea,img,table')) { return; }
+      var hText = (h.textContent || '').trim(), allText = (head.textContent || '').replace(/[×✕✖]/g, '').trim();
+      if (allText.length > hText.length + 24) { return; }   // more than a title (+ a close button)
+    }
+    if (!transparentBg(head)) { return; }                     // it already has its own look
+    var titleEl = isHeading ? head : head.querySelector('h1,h2,h3,h4');
+    var warn = titleEl && reddish(titleEl);
+    var pcs = getComputedStyle(panel);
+    var pt = parseFloat(pcs.paddingTop) || 0, pl = parseFloat(pcs.paddingLeft) || 0, pr = parseFloat(pcs.paddingRight) || 0;
+    var rad = pcs.borderTopLeftRadius || '0px';
+    head.classList.add('kt-dlg-head');
+    if (warn) { head.classList.add('kt-dlg-warn'); }
+    else if (titleEl && EDIT_RX.test(titleEl.textContent || '')) { head.classList.add('kt-dlg-edit'); }
+    var hcs = getComputedStyle(head);
+    head.style.margin = (-pt) + 'px ' + (-pr) + 'px ' + Math.max(14, parseFloat(hcs.marginBottom) || 0) + 'px ' + (-pl) + 'px';
+    head.style.padding = '13px ' + Math.max(pr, 18) + 'px 13px ' + Math.max(pl, 18) + 'px';
+    head.style.borderRadius = rad + ' ' + rad + ' 0 0';
+    if (isHeading) { head.style.fontSize = '16px'; head.style.fontWeight = '800'; }
+  }
+
   var t = null;
   function scan() {
     t = null;
-    if (!enabled()) { return; }
+    var move = enabled();
     overlays().forEach(function (ov) {
-      try { upgrade(panelOf(ov)); } catch (e) {}
+      var panel = null;
+      try { panel = panelOf(ov); } catch (e) {}
+      if (!panel) { return; }
+      try { decorate(panel); } catch (e) {}
+      if (move) { try { upgrade(panel); } catch (e) {} }
     });
   }
   function schedule() { if (!t) { t = setTimeout(scan, 120); } }
