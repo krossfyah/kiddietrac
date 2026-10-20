@@ -439,10 +439,12 @@
     var tC = mkTab('💬 Chat conversations');
     // Text messages: everyone who can open this screen (directors see their own centres' people).
     var tS = mkTab('📱 Text messages');
+    var tV = mkTab('📞 Voice calls');
     var activate = function (which) {
+      tV.style.borderBottomColor = which === 'calls' ? '#3730A3' : 'transparent'; tV.style.color = which === 'calls' ? '#3730A3' : '#64748B';
       tS.style.borderBottomColor = which === 'sms' ? '#0F766E' : 'transparent'; tS.style.color = which === 'sms' ? '#0F766E' : '#64748B';
       tC.style.borderBottomColor = which === 'chats' ? '#7C3AED' : 'transparent'; tC.style.color = which === 'chats' ? '#7C3AED' : '#64748B';
-      var openTab = { audit: tA, payments: tP, email: tE, errors: tX, chats: tC, sms: tS }[which];
+      var openTab = { audit: tA, payments: tP, email: tE, errors: tX, chats: tC, sms: tS, calls: tV }[which];
       setTimeout(function () { tabScroll.show(openTab); }, 0);
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
       tP.style.borderBottomColor = which === 'payments' ? '#12805F' : 'transparent'; tP.style.color = which === 'payments' ? '#12805F' : '#64748B';
@@ -484,6 +486,7 @@
       else if (which === 'payments') { renderAudit(pane, { channel: 'payments' }); }
       else if (which === 'chats') { renderChats(pane); }
       else if (which === 'sms') { renderSms(pane); }
+      else if (which === 'calls') { renderCalls(pane); }
       else { renderAudit(pane); }
 
       // Re-run the banner normaliser by hand. It observes #appMain with
@@ -508,10 +511,12 @@
     tX.addEventListener('click', function () { pick('errors'); });
     tC.addEventListener('click', function () { pick('chats'); });
     tS.addEventListener('click', function () { pick('sms'); });
+    tV.addEventListener('click', function () { pick('calls'); });
     tabsRow.appendChild(tA);
     tabsRow.appendChild(tP);
     if (hasChats) { tabsRow.appendChild(tC); }
     tabsRow.appendChild(tS);
+    tabsRow.appendChild(tV);
     // The email tabs read /platform/* and would 403 for anybody else, so they are
     // only built for the people who can actually load them.
     if (hasEmail) { tabsRow.appendChild(tE); tabsRow.appendChild(tX); }
@@ -537,7 +542,7 @@
     // this user cannot see, must fall back rather than render nothing.
     if (! hasEmail && /^(email|errors)$/.test(remembered)) { remembered = ''; }
     if (! hasChats && remembered === 'chats') { remembered = ''; }
-    activate(/^(audit|payments|email|errors|chats|sms)$/.test(remembered) ? remembered : 'audit');
+    activate(/^(audit|payments|email|errors|chats|sms|calls)$/.test(remembered) ? remembered : 'audit');
   }
 
   /* CHAT CONVERSATIONS (2026-10-09, Anthony: "add to audit log a subtab for chat
@@ -911,6 +916,204 @@
       + row('Carrier detail', r.error ? '<code style="font-size:12.5px;color:#7F1D1D;">' + esc(r.error) + '</code>' : '')
       + row('Provider', esc(r.provider ? r.provider.charAt(0).toUpperCase() + r.provider.slice(1) : ''));
     M.open({ title: (inbound ? '↙ Text received' : '↗ Text sent'), body: body, actions: [{ label: 'Close', primary: true }] });
+  }
+
+  /* VOICE CALLS (2026-10-19, Anthony: "add to the audit log voice calls as well as a new
+     subtab"). Every automated call the agency placed — announcements, safe-arrival checks,
+     closure notices, tests — with who was called, what was said, how it ended, the key they
+     pressed, how long it lasted and, when it did not connect, why. Same shape as Text
+     messages; directors see their own centres' people only (the server decides). */
+  var callState = { outcome: '', category: '', q: '', since: '', until: '', offset: 0, limit: 50 };
+  var CALL_KIND = {
+    announcement: 'Announcement', broadcast: 'Announcement', safe_arrival: 'Safe-arrival check', closure: 'Closure notice',
+    emergency: 'Emergency', test: 'Test', absence: 'Absence check', reminder: 'Reminder',
+  };
+  function callKind(c) { return CALL_KIND[c] || (c ? String(c).replace(/_/g, ' ').replace(/^./, function (m) { return m.toUpperCase(); }) : '—'); }
+  var CALL_TONE = {
+    answered: ['Answered', '#ECFDF5', '#047857'], no_answer: ['No answer', '#FFFBEB', '#B45309'],
+    failed: ['Failed', '#FEF2F2', '#B91C1C'], skipped: ['Not placed', '#F1F5F9', '#475569'], in_progress: ['Calling…', '#F0F9FF', '#0369A1'],
+  };
+  function callPill(r) {
+    var t = CALL_TONE[r.outcome] || CALL_TONE.in_progress;
+    var label = r.status === 'busy' ? 'Busy' : t[0];
+    return '<span class="kt-pill" data-kt-no-tone style="background:' + t[1] + ';color:' + t[2] + ';font-weight:700;white-space:nowrap;">' + esc(label) + '</span>';
+  }
+  function callLen(s) { s = +s || 0; if (!s) return ''; return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; }
+
+  function renderCalls(container) {
+    Dom.clear(container);
+    var wrap = Dom.el('div', { class: 'kt-al-wrap', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    container.appendChild(wrap);
+    var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1E1B4B 0%,#3730A3 60%,#6366F1 100%);' });
+    hero.innerHTML = '<div class="kt-hero-greet">📞 ADMIN</div><h1>Voice calls</h1>'
+      + '<div class="kt-hero-sub">Every automated call to families and staff — announcements, safe-arrival checks, closures and tests — '
+      + 'with how each one ended, any key pressed, and why a call did not connect. Times are in your agency timezone (' + auditTz() + ').</div>';
+    wrap.appendChild(hero);
+
+    var cards = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin:16px 0 0;' });
+    wrap.appendChild(cards);
+    var toolbar = Dom.el('div', { class: 'kt-al-toolbar', style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:14px 0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
+    var fToggle = filterToggle(toolbar, function () {
+      return ['outcome', 'category', 'q', 'since', 'until'].filter(function (k) { return callState[k]; }).length;
+    });
+    wrap.appendChild(fToggle);
+    wrap.appendChild(toolbar);
+    var listWrap = Dom.el('div', { class: 'kt-al-list', style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow:hidden;' });
+    wrap.appendChild(listWrap);
+    var pager = Dom.el('div', { class: 'kt-al-pager', style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:#6B7280;' });
+    wrap.appendChild(pager);
+
+    function select(label, key, options) {
+      var w = Dom.el('div');
+      w.appendChild(Dom.el('label', { style: lblStyle() }, label));
+      var s = Dom.el('select', { style: inputStyle() });
+      options.forEach(function (o) { var op = Dom.el('option', { value: o[0] }, o[1]); if (o[0] === callState[key]) op.selected = true; s.appendChild(op); });
+      s.addEventListener('change', function () { callState[key] = s.value; callState.offset = 0; load(); });
+      w.appendChild(s);
+      toolbar.appendChild(w);
+      return s;
+    }
+    var outSel = select('Outcome', 'outcome', [['', 'Any outcome'], ['problems', '⚠️ Did not connect'], ['answered', 'Answered'], ['no_answer', 'No answer / busy'], ['failed', 'Failed'], ['skipped', 'Not placed'], ['in_progress', 'In progress']]);
+    var catSel = select('Kind', 'category', [['', 'Any kind']]);
+    var srch = filterInput('Search', callState.q, 'text', function (v) { callState.q = v; callState.offset = 0; load(); });
+    srch.classList.add('kt-al-full');
+    toolbar.appendChild(srch);
+    toolbar.appendChild(filterInput('From', callState.since, 'date', function (v) { callState.since = v; callState.offset = 0; load(); }));
+    toolbar.appendChild(filterInput('To', callState.until, 'date', function (v) { callState.until = v; callState.offset = 0; load(); }));
+    var exportWrap = Dom.el('div');
+    var exportBtn = Dom.el('button', { type: 'button', class: 'kt-btn', 'data-kt-iconized': '1', style: 'width:100%;white-space:nowrap;' }, '⬇️ Export CSV');
+    exportWrap.appendChild(exportBtn);
+    toolbar.appendChild(exportWrap);
+
+    function qs(extra) {
+      var p = new URLSearchParams();
+      ['outcome', 'category', 'q', 'since', 'until'].forEach(function (k) { if (callState[k]) p.set(k, callState[k]); });
+      Object.keys(extra || {}).forEach(function (k) { p.set(k, extra[k]); });
+      return p.toString();
+    }
+
+    function drawCards(c) {
+      c = c || {};
+      var all = (c.answered || 0) + (c.no_answer || 0) + (c.failed || 0) + (c.skipped || 0) + (c.in_progress || 0);
+      var defs = [['', 'All calls', all, '#0F172A', '#F1F5F9'], ['answered', 'Answered', c.answered || 0, '#047857', '#ECFDF5'],
+        ['no_answer', 'No answer / busy', c.no_answer || 0, '#B45309', '#FFFBEB'], ['failed', 'Failed', c.failed || 0, '#B91C1C', '#FEF2F2'],
+        ['skipped', 'Not placed', c.skipped || 0, '#475569', '#F1F5F9']];
+      Dom.clear(cards);
+      defs.forEach(function (d) {
+        var on = callState.outcome === d[0];
+        var b = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: 'text-align:left;border:1.5px solid ' + (on ? d[3] : 'transparent') + ';background:' + d[4]
+          + ';border-radius:12px;padding:10px 12px;cursor:pointer;min-width:0;font:inherit;' });
+        b.innerHTML = '<div style="font-size:22px;font-weight:800;color:' + d[3] + ';line-height:1.1;">' + d[2] + '</div>'
+          + '<div style="font-size:12px;font-weight:700;color:#475569;margin-top:2px;">' + esc(d[1]) + '</div>';
+        b.addEventListener('click', function () { callState.outcome = d[0]; callState.offset = 0; outSel.value = d[0]; load(); });
+        cards.appendChild(b);
+      });
+    }
+
+    function load() {
+      if (fToggle.ktPaint) fToggle.ktPaint();
+      var h = listWrap.offsetHeight; if (h) listWrap.style.minHeight = h + 'px';
+      Dom.clear(listWrap);
+      listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#94A3B8;font-size:13px;' }, 'Loading…'));
+      Api.get('/admin/voice/log?' + qs({ limit: callState.limit, offset: callState.offset })).then(function (d) {
+        listWrap.style.minHeight = '';
+        drawCards(d.counts);
+        if (catSel.options.length <= 1) {
+          (d.categories || []).forEach(function (c) { var op = Dom.el('option', { value: c }, callKind(c)); if (c === callState.category) op.selected = true; catSel.appendChild(op); });
+        }
+        drawList(d.data || [], d.total || 0);
+      }).catch(function (e) {
+        listWrap.style.minHeight = '';
+        Dom.clear(listWrap);
+        listWrap.appendChild(Dom.el('div', { style: 'padding:24px;color:#B91C1C;font-size:13px;' }, (e && e.message) || 'Could not load the calls.'));
+      });
+    }
+
+    function drawList(rows, total) {
+      Dom.clear(listWrap); Dom.clear(pager);
+      if (!rows.length) {
+        listWrap.appendChild(Dom.el('div', { style: 'padding:28px;text-align:center;color:#94A3B8;font-size:13px;' }, 'No calls match.'));
+        return;
+      }
+      var html = '<div style="overflow-x:auto;"><table data-kt-bulk="off" data-kt-filtered="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
+        + '<thead><tr style="background:#F8FAFC;text-align:left;color:#475569;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;">'
+        + '<th style="padding:10px 12px;">When</th><th style="padding:10px 12px;">Person</th><th style="padding:10px 12px;">Message</th>'
+        + '<th style="padding:10px 12px;">Kind</th><th style="padding:10px 12px;">Outcome</th><th style="padding:10px 12px;">Length</th></tr></thead><tbody>';
+      rows.forEach(function (r, i) {
+        var reason = r.error_plain || r.error || '';
+        html += '<tr data-i="' + i + '" style="border-top:1px solid #EEF2F6;cursor:pointer;">'
+          + '<td style="padding:9px 12px;white-space:nowrap;color:#475569;">' + esc(fmtTime(r.created_at).replace(/\.\d{3}/, '')) + '</td>'
+          + '<td style="padding:9px 12px;"><div style="font-weight:700;color:#0F172A;">' + esc(r.person || 'Unknown') + '</div><div style="color:#64748B;font-size:12px;white-space:nowrap;">' + esc(r.to_phone || '') + '</div></td>'
+          + '<td style="padding:9px 12px;color:#334155;max-width:440px;"><div style="overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + esc(r.body) + '</div>'
+          +   (r.dtmf ? '<div style="color:#3730A3;font-size:12px;margin-top:3px;font-weight:600;">Pressed ' + esc(r.dtmf) + '</div>' : '')
+          +   (reason && r.outcome !== 'answered' ? '<div style="color:' + (r.outcome === 'failed' ? '#B91C1C' : '#B45309') + ';font-size:12px;margin-top:3px;">' + esc(reason) + '</div>' : '') + '</td>'
+          + '<td style="padding:9px 12px;white-space:nowrap;color:#475569;">' + esc(callKind(r.category)) + '</td>'
+          + '<td style="padding:9px 12px;">' + callPill(r) + '</td>'
+          + '<td style="padding:9px 12px;white-space:nowrap;color:#475569;">' + esc(callLen(r.duration_secs) || '—') + '</td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+      listWrap.innerHTML = html;
+      listWrap.querySelectorAll('tr[data-i]').forEach(function (tr) {
+        tr.addEventListener('click', function () { openCall(rows[+tr.getAttribute('data-i')]); });
+      });
+      var from = callState.offset + 1, to = callState.offset + rows.length;
+      pager.appendChild(Dom.el('div', {}, 'Showing ' + from + '–' + to + ' of ' + total));
+      var nav = Dom.el('div', { style: 'display:flex;gap:6px;' });
+      var prev = Dom.el('button', { type: 'button', class: 'kt-btn' }, '‹ Previous');
+      var next = Dom.el('button', { type: 'button', class: 'kt-btn' }, 'Next ›');
+      prev.disabled = callState.offset === 0; next.disabled = to >= total;
+      prev.addEventListener('click', function () { callState.offset = Math.max(0, callState.offset - callState.limit); load(); });
+      next.addEventListener('click', function () { callState.offset += callState.limit; load(); });
+      nav.appendChild(prev); nav.appendChild(next); pager.appendChild(nav);
+    }
+
+    exportBtn.addEventListener('click', async function () {
+      exportBtn.disabled = true; exportBtn.textContent = 'Preparing…';
+      try {
+        var all = [], off = 0;
+        for (var guard = 0; guard < 25; guard++) {
+          var d = await Api.get('/admin/voice/log?' + qs({ limit: 200, offset: off }));
+          all = all.concat(d.data || []); off += 200;
+          if (!d.data || d.data.length < 200) break;
+        }
+        var cell = function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+        var lines = [['When (' + auditTz() + ')', 'Person', 'Phone', 'Kind', 'Outcome', 'Key pressed', 'Length (s)', 'Started by', 'Message', 'Reason', 'Carrier detail'].join(',')];
+        all.forEach(function (r) {
+          lines.push([fmtTime(r.created_at).replace(/\.\d{3}/, ''), r.person, r.to_phone, callKind(r.category), (CALL_TONE[r.outcome] || CALL_TONE.in_progress)[0],
+            r.dtmf || '', r.duration_secs || '', r.started_by || '', r.body, r.error_plain || '', r.error || ''].map(cell).join(','));
+        });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
+        a.download = 'voice-calls-' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      } catch (e) {
+        if (KT.toast) KT.toast('⚠️', 'Could not export', (e && e.message) || '', '#DC2626');
+      }
+      exportBtn.disabled = false; exportBtn.textContent = '⬇️ Export CSV';
+    });
+
+    load();
+  }
+
+  function openCall(r) {
+    var M = window.KT && KT.Shell && KT.Shell.Modal; if (!M) return;
+    var row = function (k, v) { return v ? '<div style="display:grid;grid-template-columns:120px 1fr;gap:10px;padding:7px 0;border-top:1px solid #F1F5F9;font-size:13.5px;"><div style="color:#64748B;font-weight:700;">' + esc(k) + '</div><div style="color:#0F172A;overflow-wrap:anywhere;">' + v + '</div></div>' : ''; };
+    var t = function (x) { return x ? esc(fmtTime(x).replace(/\.\d{3}/, '')) : ''; };
+    var body = Dom.el('div');
+    body.innerHTML = '<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:12px;padding:12px 14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14.5px;color:#0F172A;margin-bottom:10px;">🔊 ' + esc(r.body) + '</div>'
+      + row('Called', esc((r.person || 'Unknown') + (r.to_phone ? ' · ' + r.to_phone : '')))
+      + row('Kind', esc(callKind(r.category)))
+      + row('Outcome', callPill(r))
+      + row('Key pressed', r.dtmf ? esc(r.dtmf) : '')
+      + row('Placed', t(r.created_at))
+      + row('Answered', t(r.answered_at))
+      + row('Ended', t(r.ended_at))
+      + row('Length', esc(callLen(r.duration_secs)))
+      + row('Started by', esc(r.started_by || ''))
+      + row('Why', r.error_plain ? '<span style="color:#B45309;font-weight:600;">' + esc(r.error_plain) + '</span>' : '')
+      + row('Carrier detail', r.error ? '<code style="font-size:12.5px;color:#7F1D1D;">' + esc(r.error) + '</code>' : '');
+    M.open({ title: '📞 Voice call', body: body, actions: [{ label: 'Close', primary: true }] });
   }
 
   /* One renderer, two views. The payments channel is the same table with a different

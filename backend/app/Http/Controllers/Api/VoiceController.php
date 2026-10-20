@@ -629,10 +629,13 @@ final class VoiceController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $this->assertAgencyAccess($request, $agencyId);
 
+        // A centre director: calls to their own centres' people only (2026-10-19).
+        $people = $this->scopedPeople($request, $agencyId);
         $rows = DB::table('voice_calls as v')
             ->leftJoin('users as u', 'u.id', '=', 'v.to_user_id')
             ->leftJoin('users as sb', 'sb.id', '=', 'v.started_by_id')
             ->where('v.agency_id', $agencyId)
+            ->when($people !== null, fn ($q) => $q->whereIn('v.to_user_id', $people ?: [0]))
             ->orderByDesc('v.created_at')
             ->limit(200)
             ->select(
@@ -645,6 +648,119 @@ final class VoiceController extends Controller
             ->get();
 
         return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * GET /admin/voice/log -- the Voice calls subtab of the audit log (2026-10-19).
+     *
+     * Anthony: "add to the audit log voice calls as well as a new subtab". Every automated
+     * call in the active agency: who, what was said, what kind of call, how it ended
+     * (answered, no answer, busy, failed, not placed), the key they pressed, how long it
+     * lasted and, when it did not go, why in plain words. Filters, paging, and the counts
+     * behind the summary cards. A centre director sees only calls to their own centres'
+     * people (CentreScope, failing closed).
+     */
+    public function logIndex(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $people = $this->scopedPeople($request, $agencyId);
+        $tz = \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
+
+        $base = DB::table('voice_calls as v')->where('v.agency_id', $agencyId)
+            ->when($people !== null, fn ($q) => $q->whereIn('v.to_user_id', $people ?: [0]));
+
+        $countQ = clone $base;
+        $this->applyCallFilters($countQ, $request, $tz, false);
+        $counts = ['answered' => 0, 'no_answer' => 0, 'failed' => 0, 'skipped' => 0, 'in_progress' => 0];
+        foreach ((clone $countQ)->select('v.status', DB::raw('COUNT(*) n'))->groupBy('v.status')->get() as $c) {
+            $counts[self::callBucket((string) $c->status)] += (int) $c->n;
+        }
+
+        $q = clone $base;
+        $this->applyCallFilters($q, $request, $tz, true);
+        $total = (clone $q)->count();
+        $limit = max(10, min(200, (int) $request->query('limit', 50)));
+        $offset = max(0, (int) $request->query('offset', 0));
+        $rows = $q->leftJoin('users as u', 'u.id', '=', 'v.to_user_id')
+            ->leftJoin('users as sb', 'sb.id', '=', 'v.started_by_id')
+            ->orderByDesc('v.created_at')->orderByDesc('v.id')->offset($offset)->limit($limit)
+            ->get(['v.id', 'v.to_phone', 'v.body', 'v.category', 'v.status', 'v.error', 'v.dtmf', 'v.provider',
+                'v.answered_at', 'v.ended_at', 'v.duration_secs', 'v.created_at',
+                DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as person"),
+                DB::raw("TRIM(CONCAT(COALESCE(sb.first_name,''),' ',COALESCE(sb.last_name,''))) as started_by")])
+            ->map(function ($r) {
+                $r->outcome = self::callBucket((string) $r->status);
+                $r->error_plain = self::plainCallError((string) $r->status, $r->error);
+
+                return $r;
+            });
+        $categories = (clone $base)->whereNotNull('v.category')->distinct()->orderBy('v.category')->pluck('v.category');
+
+        return response()->json(['data' => $rows, 'total' => $total, 'counts' => $counts, 'categories' => $categories]);
+    }
+
+    /** Status -> the five outcomes the screen shows. */
+    public static function callBucket(string $status): string
+    {
+        return match ($status) {
+            'answered', 'spoken', 'completed' => 'answered',
+            'no_answer', 'busy' => 'no_answer',
+            'failed' => 'failed',
+            'skipped' => 'skipped',
+            default => 'in_progress',     // queued / ringing
+        };
+    }
+
+    private function applyCallFilters($q, Request $request, string $tz, bool $withOutcome): void
+    {
+        if ($withOutcome && ($o = (string) $request->query('outcome', '')) !== '') {
+            $map = ['answered' => ['answered', 'spoken', 'completed'], 'no_answer' => ['no_answer', 'busy'], 'failed' => ['failed'],
+                'skipped' => ['skipped'], 'in_progress' => ['queued', 'ringing'], 'problems' => ['no_answer', 'busy', 'failed', 'skipped']];
+            if (isset($map[$o])) $q->whereIn('v.status', $map[$o]);
+        }
+        if ($cat = (string) $request->query('category', '')) $q->where('v.category', $cat);
+        if ($s = trim((string) $request->query('q', ''))) {
+            $like = '%' . addcslashes($s, '\\%_') . '%';
+            $digits = preg_replace('/\D+/', '', $s);
+            $q->where(function ($w) use ($like, $digits) {
+                $w->where('v.body', 'like', $like)->orWhere('v.error', 'like', $like)
+                  ->orWhereIn('v.to_user_id', DB::table('users')->where(DB::raw("CONCAT_WS(' ', first_name, last_name)"), 'like', $like)->select('id'));
+                if (strlen($digits) >= 3) $w->orWhere('v.to_phone', 'like', '%' . $digits . '%');
+            });
+        }
+        if ($since = (string) $request->query('since', '')) {
+            try { $q->where('v.created_at', '>=', \Illuminate\Support\Carbon::parse($since, $tz)->startOfDay()->utc()); } catch (\Throwable $e) {}
+        }
+        if ($until = (string) $request->query('until', '')) {
+            try { $q->where('v.created_at', '<=', \Illuminate\Support\Carbon::parse($until, $tz)->endOfDay()->utc()); } catch (\Throwable $e) {}
+        }
+    }
+
+    public static function plainCallError(string $status, ?string $error): ?string
+    {
+        $e = strtolower((string) $error);
+        if ($status === 'no_answer') return 'Nobody answered.';
+        if ($status === 'busy') return 'The line was busy.';
+        if ($e === '') return $status === 'failed' ? 'The call could not be placed and no reason was given.' : null;
+        if (str_contains($e, 'disabled')) return 'Not placed: voice calls are switched off for this agency.';
+        if (str_contains($e, 'consent') || str_contains($e, 'opt')) return 'Not placed: this person has opted out of calls.';
+        if (str_contains($e, 'do-not-contact')) return 'Not placed: the person or agency is on do-not-contact.';
+        if (str_contains($e, 'not configured')) return 'Not placed: no calling provider was set up at the time.';
+        if (str_contains($e, 'speak')) return 'Answered, but the message could not be played.';
+        if (str_contains($e, 'invalid') && str_contains($e, 'number')) return 'Failed: the phone number is not valid.';
+
+        return null;
+    }
+
+    /** null = everyone (admins); a director: the people at their own centres (staff + guardians). */
+    private function scopedPeople(Request $request, int $agencyId): ?array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) return null;
+
+        return DB::table('role_assignments')->whereIn('centre_id', $scope ?: [0])->where('active', true)->pluck('user_id')
+            ->merge(DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')->whereIn('f.centre_id', $scope ?: [0])->pluck('g.user_id'))
+            ->map(fn ($i) => (int) $i)->unique()->values()->all();
     }
 
     // -- the webhook --------------------------------------------------------
