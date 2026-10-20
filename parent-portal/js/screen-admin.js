@@ -7399,12 +7399,18 @@
   }
 
   /** A section heading with an optional action on the right. */
+  /* A LIGHT BAND, NOT GREY CAPS (2026-10-20). Anthony: "the section headers such as emergency
+     contacts, incidents etc is hard to read as its not lightly gradient like how you have it
+     for guardians and children". Every section of the family record now opens with the same
+     soft band (navy edge, navy text), whatever sits under it. */
   function famSectionHead(label, actionLabel, onAction) {
     var h = Dom.el('div', {
-      style: 'display:flex;align-items:center;gap:10px;margin:18px 0 8px;',
+      'data-kt-nosechead': '1',
+      style: 'display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:7px 8px 7px 12px;'
+           + 'background:linear-gradient(90deg,#E8F1FB 0%,#F5F9FD 100%);border-left:3px solid #4A7FA6;border-radius:8px;',
     });
     h.appendChild(Dom.el('h4', {
-      style: 'flex:1;font-size:14px;font-weight:700;margin:0;letter-spacing:0.5px;color:var(--ink-700);',
+      style: 'flex:1;font-size:13px;font-weight:800;margin:0;letter-spacing:0.6px;color:#12305A;',
     }, label));
     if (actionLabel && onAction) {
       var b = Dom.el('button', {

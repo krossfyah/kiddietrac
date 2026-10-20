@@ -157,8 +157,57 @@
     }
   }
 
+
+  /* ── SECTION HEADINGS AS THE SAME LIGHT BAND (2026-10-20) ─────────────────────────────
+     The portal titles its sections with small grey capitals ("INCIDENTS", "DOCUMENTS",
+     "HEALTH & CARE") that read as faint text when nothing tinted sits under them. A heading
+     that is clearly a SECTION title gets the light band: bold, small, all capitals, no
+     background of its own, spanning most of a container at least 360px wide (so a stat
+     tile's caption is never one), not a field label (nothing to fill directly under it), and
+     not inside a table, button, label, nav, tab strip or title bar. data-kt-nosechead opts out. */
+  var SEC_SKIP = 'table, thead, th, td, label, button, a, nav, select, .kt-tabband, [role="tablist"], .modal-header, .kt-dlg-head, '
+    + '#appSidebar, #kt-topbar, #kt-mobilenav, [data-kt-nosechead], .kt-sechead';
+  function secCss() {
+    if (document.getElementById('kt-sechead-css')) { return; }
+    var st = document.createElement('style');
+    st.id = 'kt-sechead-css';
+    // A touch softer than a record's own section bands, so a sub-section reads as nested.
+    st.textContent = '.kt-sechead{background:linear-gradient(90deg,#EEF4FB 0%,#F8FBFE 100%) !important;border-left:3px solid #8DB4D8 !important;'
+      + 'border-radius:8px !important;padding:6px 12px !important;color:#12305A !important;}';
+    document.head.appendChild(st);
+  }
+  function caps(t) { return /[A-Z]{3}/.test(t) && t === t.toUpperCase(); }
+  function isSectionHead(el) {
+    if (el.__ktSh) { return false; }
+    el.__ktSh = true;
+    if (el.childElementCount > 1) { return false; }
+    var t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (t.length < 3 || t.length > 48) { return false; }
+    var cs = getComputedStyle(el);
+    if (!(cs.textTransform === 'uppercase' || caps(t))) { return false; }
+    if ((parseInt(cs.fontWeight, 10) || 400) < 700 || parseFloat(cs.fontSize) > 15) { return false; }
+    if ((cs.backgroundImage && cs.backgroundImage !== 'none') || !/rgba\([^)]*,\s*0\)$|transparent/.test(cs.backgroundColor)) { return false; }
+    if ((parseFloat(cs.borderLeftWidth) || 0) > 0) { return false; }
+    if (el.closest(SEC_SKIP)) { return false; }
+    var nx = el.nextElementSibling;
+    if (!nx || /^(INPUT|SELECT|TEXTAREA)$/.test(nx.tagName) || (nx.matches && nx.matches('label'))) { return false; }
+    var par = el.parentElement;
+    if (!par) { return false; }
+    var pw = par.getBoundingClientRect().width, w = el.getBoundingClientRect().width;
+    if (pw < 360 || w < pw * 0.6) { return false; }
+    return true;
+  }
+  function secScan() {
+    var list = document.querySelectorAll('#appMain h3, #appMain h4, #appMain h5, #appMain h6, #appMain div, .modal h3, .modal h4, .modal h5, .modal div');
+    for (var i = 0; i < list.length; i++) {
+      var el = list[i];
+      if (el.__ktSh || el.offsetParent === null) { continue; }
+      try { if (isSectionHead(el)) { secCss(); el.classList.add('kt-sechead'); } } catch (e) {}
+    }
+  }
+
   var tm = null;
-  function schedule() { if (!tm) { tm = setTimeout(function () { tm = null; scan(); }, 150); } }
+  function schedule() { if (!tm) { tm = setTimeout(function () { tm = null; scan(); try { secScan(); } catch (e) {} }, 150); } }
   function boot() {
     try { new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
     schedule();
