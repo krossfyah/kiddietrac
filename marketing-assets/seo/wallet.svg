@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 460" role="img" aria-labelledby="wlt-t wlt-d" style="width:100%;height:auto;display:block;max-width:520px;margin:0 auto">
+  <title id="wlt-t">Paying by card from the wallet in the parent app</title>
+  <desc id="wlt-d">A phone showing a wallet with Visa, Mastercard and Interac Debit cards, a payment-approved notice and a security shield.</desc>
+  <defs>
+    <radialGradient id="wlt-glow1" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#E91E8C" stop-opacity=".45"/><stop offset="1" stop-color="#E91E8C" stop-opacity="0"/></radialGradient>
+    <radialGradient id="wlt-glow2" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#22D3EE" stop-opacity=".40"/><stop offset="1" stop-color="#22D3EE" stop-opacity="0"/></radialGradient>
+    <linearGradient id="wlt-phone" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1E293B"/><stop offset="1" stop-color="#0F172A"/></linearGradient>
+    <linearGradient id="wlt-screen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F8FAFF"/><stop offset="1" stop-color="#EEF2FF"/></linearGradient>
+    <linearGradient id="wlt-c1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4F46E5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient>
+    <linearGradient id="wlt-c2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F97316"/><stop offset="1" stop-color="#E11D48"/></linearGradient>
+    <linearGradient id="wlt-c3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FACC15"/><stop offset="1" stop-color="#F59E0B"/></linearGradient>
+    <linearGradient id="wlt-pay" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#10B981"/><stop offset="1" stop-color="#059669"/></linearGradient>
+    <linearGradient id="wlt-shield" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22D3EE"/><stop offset="1" stop-color="#0E7490"/></linearGradient>
+    <filter id="wlt-sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0F172A" flood-opacity=".28"/></filter>
+    <style>
+      .wlt-float{animation:wltFloat 5s ease-in-out infinite}
+      .wlt-float2{animation:wltFloat 6s ease-in-out -2s infinite}
+      .wlt-tw{animation:wltTw 2.4s ease-in-out infinite}
+      .wlt-tw2{animation:wltTw 2.4s ease-in-out -1.2s infinite}
+      @keyframes wltFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+      @keyframes wltTw{0%,100%{opacity:.25}50%{opacity:1}}
+      @media (prefers-reduced-motion:reduce){.wlt-float,.wlt-float2,.wlt-tw,.wlt-tw2{animation:none}}
+      .wlt-t{font-family:Poppins,Nunito,system-ui,sans-serif}
+    </style>
+  </defs>
+
+  <circle cx="120" cy="120" r="130" fill="url(#wlt-glow1)"/>
+  <circle cx="450" cy="340" r="150" fill="url(#wlt-glow2)"/>
+
+  <!-- phone -->
+  <g filter="url(#wlt-sh)">
+    <rect x="170" y="28" width="220" height="410" rx="34" fill="url(#wlt-phone)"/>
+    <rect x="182" y="40" width="196" height="386" rx="24" fill="url(#wlt-screen)"/>
+    <rect x="250" y="48" width="60" height="8" rx="4" fill="#CBD5E1"/>
+  </g>
+  <text x="198" y="86" class="wlt-t" font-size="17" font-weight="800" fill="#0F172A">Wallet</text>
+  <text x="198" y="104" class="wlt-t" font-size="10.5" font-weight="600" fill="#64748B">Your saved cards</text>
+
+  <!-- cards stack -->
+  <g>
+    <rect x="198" y="118" width="164" height="96" rx="14" fill="url(#wlt-c3)"/>
+    <text x="212" y="140" class="wlt-t" font-size="11" font-weight="800" fill="#1F2937">Interac Debit</text>
+    <rect x="198" y="146" width="164" height="96" rx="14" fill="url(#wlt-c2)"/>
+    <text x="212" y="168" class="wlt-t" font-size="11" font-weight="800" fill="#fff">Mastercard</text>
+    <rect x="198" y="174" width="164" height="100" rx="14" fill="url(#wlt-c1)"/>
+    <rect x="212" y="190" width="26" height="19" rx="4" fill="#FDE68A" opacity=".9"/>
+    <path d="M214 197h22M214 202h22M225 190v19" stroke="#B45309" stroke-width="1" opacity=".6"/>
+    <text x="348" y="204" class="wlt-t" font-size="15" font-weight="900" fill="#fff" text-anchor="end" font-style="italic">VISA</text>
+    <text x="212" y="236" class="wlt-t" font-size="13" font-weight="700" fill="#fff" letter-spacing="1.5">•••• •••• •••• 4242</text>
+    <text x="212" y="258" class="wlt-t" font-size="9.5" font-weight="600" fill="#E0E7FF">DEFAULT CARD</text>
+  </g>
+
+  <!-- invoice row -->
+  <rect x="198" y="290" width="164" height="50" rx="12" fill="#fff" stroke="#E2E8F0"/>
+  <text x="210" y="310" class="wlt-t" font-size="10" font-weight="700" fill="#64748B">Monthly tuition</text>
+  <text x="210" y="329" class="wlt-t" font-size="12.5" font-weight="800" fill="#0F172A">Invoice due</text>
+  <circle cx="342" cy="315" r="9" fill="#EEF2FF"/>
+  <path d="M338 315h8M343 311l4 4-4 4" stroke="#4F46E5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- pay button -->
+  <rect x="198" y="354" width="164" height="44" rx="22" fill="url(#wlt-pay)"/>
+  <text x="280" y="381" class="wlt-t" font-size="14" font-weight="900" fill="#fff" text-anchor="middle">Pay now</text>
+
+  <!-- approved toast -->
+  <g class="wlt-float">
+    <g filter="url(#wlt-sh)">
+      <rect x="352" y="96" width="186" height="58" rx="18" fill="#fff"/>
+    </g>
+    <circle cx="380" cy="125" r="15" fill="#10B981"/>
+    <path d="M373 125l5 5 9-10" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="404" y="121" class="wlt-t" font-size="12.5" font-weight="800" fill="#0F172A">Payment approved</text>
+    <text x="404" y="138" class="wlt-t" font-size="10" font-weight="600" fill="#64748B">Paid from your Wallet</text>
+  </g>
+
+  <!-- security shield -->
+  <g class="wlt-float2">
+    <g filter="url(#wlt-sh)">
+      <path d="M92 250l52-20 52 20v40c0 34-24 58-52 70-28-12-52-36-52-70z" fill="url(#wlt-shield)"/>
+    </g>
+    <rect x="128" y="282" width="32" height="26" rx="5" fill="#fff"/>
+    <path d="M134 282v-8a10 10 0 0 1 20 0v8" stroke="#fff" stroke-width="4" fill="none"/>
+    <circle cx="144" cy="294" r="3.5" fill="#0E7490"/>
+    <text x="144" y="334" class="wlt-t" font-size="11" font-weight="900" fill="#fff" text-anchor="middle">PCI DSS</text>
+  </g>
+
+  <!-- sparkles -->
+  <g fill="#FBBF24">
+    <path class="wlt-tw" d="M470 220l5 12 12 5-12 5-5 12-5-12-12-5 12-5z"/>
+    <path class="wlt-tw2" d="M80 110l4 9 9 4-9 4-4 9-4-9-9-4 9-4z"/>
+    <path class="wlt-tw" d="M420 400l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill="#E91E8C"/>
+    <path class="wlt-tw2" d="M120 400l3 7 7 3-7 3-3 7-3-7-7-3 7-3z" fill="#22D3EE"/>
+  </g>
+</svg>
