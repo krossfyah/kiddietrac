@@ -984,6 +984,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            family that splits its week across providers. */
         Route::get ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'show']);
         Route::put ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'update']);
+        Route::post('/admin/children/{child}/schedule-change', [\App\Http\Controllers\Api\CareScheduleController::class, 'notice']);
         /* PASSKEYS — signed-in half: enrol, list, remove. Beside the biometric routes
            on purpose; the two are neighbours in the UI and in what they are for. */
         Route::get   ('/passkeys',                  [\App\Http\Controllers\Api\PasskeyController::class, 'index']);

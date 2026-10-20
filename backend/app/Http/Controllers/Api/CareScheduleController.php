@@ -107,6 +107,9 @@ class CareScheduleController extends Controller
             return response()->json(['message' => 'Child not found'], 404);
         }
 
+        // The week as it stood, for the family/staff notice that follows this edit.
+        \App\Support\ScheduleChangeNotice::remember($childId, $userId);
+
         $agencyId = (int) DB::table('children as c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
@@ -273,6 +276,70 @@ class CareScheduleController extends Controller
             'summary' => CareSchedule::summary($childId),
             'over_capacity' => $overCapacity,
             'message' => 'Care schedule saved — '.CareSchedule::summary($childId),
+        ]);
+    }
+
+    /**
+     * POST /admin/children/{child}/schedule-change
+     *
+     * Called by the schedule editor after BOTH saves (providers, then attendance days).
+     * Compares the week remembered by the first save with the week now and, if a day
+     * really changed, tells the family and the staff (App\Support\ScheduleChangeNotice).
+     * Body: { note?, change_type: permanent|temporary, until?: date, notify?: bool }
+     */
+    public function notice(Request $request, int $childId): JsonResponse
+    {
+        $userId = (int) $request->user()->id;
+        $this->assertChild($userId, $childId);
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:1000'],
+            'change_type' => ['nullable', 'in:permanent,temporary'],
+            'until' => ['nullable', 'date'],
+            'notify' => ['sometimes', 'boolean'],
+        ]);
+        $before = \App\Support\ScheduleChangeNotice::takeBefore($childId, $userId);
+        if (! $before) {
+            return response()->json(['ok' => true, 'changed' => 0, 'message' => 'Nothing to compare: save the schedule first.']);
+        }
+        $after = \App\Support\ScheduleChangeNotice::snapshot($childId);
+        $changed = \App\Support\ScheduleChangeNotice::changedDays($before, $after);
+        if (! $changed) {
+            return response()->json(['ok' => true, 'changed' => 0, 'message' => 'No days changed, so nobody was emailed.']);
+        }
+        $notify = ! array_key_exists('notify', $data) || (bool) $data['notify'];
+        $meta = ['note' => $data['note'] ?? null, 'change_type' => $data['change_type'] ?? 'permanent', 'until' => $data['until'] ?? null];
+        $sent = $notify ? \App\Support\ScheduleChangeNotice::send($childId, $userId, $before, $after, $meta)
+                        : ['parents' => 0, 'staff' => 0, 'changed' => count($changed)];
+
+        try {
+            $agencyId = (int) DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+                ->join('centres as ce', 'ce.id', '=', 'f.centre_id')->where('c.id', $childId)->value('ce.agency_id');
+            $fmt = fn ($c) => $c['room_id'] || $c['rot'] ? trim(($c['rot'] ?: 'attending') . ' ' . ($c['provider'] ? '@ ' . $c['provider'] : '')) : 'off';
+            $diff = [];
+            foreach (array_keys($changed) as $d) {
+                $diff[$d] = $fmt($before[$d]) . ' -> ' . $fmt($after[$d]);
+            }
+            \App\Support\Audit::write([
+                'user_id' => $userId, 'agency_id' => $agencyId,
+                'action' => 'child.schedule_change_notice', 'entity_type' => 'child', 'entity_id' => $childId,
+                'payload' => json_encode([
+                    'summary' => 'Weekly schedule changed (' . $meta['change_type'] . ($meta['until'] ? ' until ' . $meta['until'] : '') . '): '
+                        . implode('; ', array_map(fn ($d, $t) => ucfirst($d) . ' ' . $t, array_keys($diff), $diff))
+                        . ($notify ? '. Emailed ' . $sent['parents'] . ' parent(s) and ' . $sent['staff'] . ' staff.' : '. Not emailed (switched off).'),
+                    'changes' => $diff, 'note' => $meta['note'], 'change_type' => $meta['change_type'], 'until' => $meta['until'],
+                    'notified' => $notify, 'parents' => $sent['parents'], 'staff' => $sent['staff'],
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Schedule change audit failed: '.$e->getMessage());
+        }
+
+        return response()->json([
+            'ok' => true, 'changed' => count($changed), 'parents' => $sent['parents'], 'staff' => $sent['staff'],
+            'message' => $notify
+                ? 'Emailed ' . $sent['parents'] . ' parent' . ($sent['parents'] === 1 ? '' : 's') . ' and ' . $sent['staff'] . ' staff about the change.'
+                : 'Saved. Nobody was emailed.',
         ]);
     }
 }

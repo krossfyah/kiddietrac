@@ -269,7 +269,7 @@ final class ProviderWelcomeMailer
      * colleague's face under the provider's name, which is worse than the avatar —
      * a parent would be introduced to the wrong person entirely.
      */
-    private static function providerPhoto(object $centre, int $centreId): ?string
+    public static function providerPhoto(object $centre, int $centreId): ?string
     {
         // An explicitly set centre logo wins: a real multi-room centre is a place,
         // not a person, and somebody chose that image on purpose.

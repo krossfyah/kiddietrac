@@ -1354,7 +1354,21 @@
       + (weekReadOnly
           ? '<div style="margin-top:10px;font-size:12.5px;color:#64748B;">'
             + 'Press <strong>Edit</strong> above to change who has this child on each day.</div>'
-          : '<div style="display:flex;align-items:center;gap:10px;margin-top:12px;">'
+          /* TELL THE FAMILY AND STAFF (2026-10-20). Anthony: a changed week is emailed to the
+             parents and to admin/director staff, with a note from whoever made it, and the
+             provider introduced; it may be temporary or permanent. Sent only if a day really
+             changes (the server compares the week before and after both saves). */
+          : '<div id="wk-notice" style="margin-top:12px;padding:12px;border:1px solid #E2E8F0;border-radius:12px;background:#F8FAFC;">'
+            + '<div style="font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Tell the family &amp; staff</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:13px;color:#0F172A;">'
+              + '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="wk-type" value="permanent" checked> Permanent</label>'
+              + '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="wk-type" value="temporary"> Temporary</label>'
+              + '<label id="wk-until-wrap" style="display:none;align-items:center;gap:6px;">until <input type="date" id="wk-until" style="padding:5px 8px;font-size:13px;"></label>'
+            + '</div>'
+            + '<textarea id="wk-note" maxlength="1000" rows="3" placeholder="A note for the family and staff (optional): why it is changing, anything they should know" style="width:100%;margin-top:8px;padding:8px 10px;font-size:13px;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:8px;resize:vertical;"></textarea>'
+            + '<label style="display:flex;gap:6px;align-items:flex-start;margin-top:6px;font-size:12.5px;color:#334155;cursor:pointer;"><input type="checkbox" id="wk-notify" checked style="margin-top:2px;"> <span>Email the parents, admins, directors and the providers involved, with an introduction to any new provider. Only sent if a day actually changes.</span></label>'
+          + '</div>'
+          + '<div style="display:flex;align-items:center;gap:10px;margin-top:12px;">'
             + '<button id="wk-save" class="kt-btn kt-btn-primary kt-btn-sm">Save schedule</button>'
             + '<span id="wk-msg" style="font-size:12.5px;color:#64748B;"></span>'
           + '</div>');
@@ -1380,6 +1394,12 @@
     });
 
     var msg = host.querySelector('#wk-msg');
+    host.querySelectorAll('input[name="wk-type"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        var temp = (host.querySelector('input[name="wk-type"]:checked') || {}).value === 'temporary';
+        host.querySelector('#wk-until-wrap').style.display = temp ? 'flex' : 'none';
+      });
+    });
     host.querySelector('#wk-save').addEventListener('click', async function () {
       var btn = this;
       var weekPayload = {}, patPayload = { effective_from: (new Date()).toISOString().slice(0, 10) };
@@ -1405,9 +1425,24 @@
           renderWeekTable(host, childId);
           return;
         }
+        /* Both saved: now tell the family and staff. A failure here is reported, never
+           allowed to read as if the schedule itself had not saved. */
+        var told = '';
+        try {
+          var tp = (host.querySelector('input[name="wk-type"]:checked') || {}).value || 'permanent';
+          var nr = await Api.post('/admin/children/' + childId + '/schedule-change', {
+            note: (host.querySelector('#wk-note').value || '').trim() || null,
+            change_type: tp,
+            until: tp === 'temporary' ? (host.querySelector('#wk-until').value || null) : null,
+            notify: !!host.querySelector('#wk-notify').checked
+          });
+          told = (nr && nr.message) ? ' ' + nr.message : '';
+        } catch (e3) {
+          told = ' Saved, but the family and staff could not be emailed: ' + ((e3 && e3.message) || 'error') + '.';
+        }
         msg.style.color = '#166534';
-        msg.textContent = r.summary || 'Saved';
-        if (Dom.toast) { Dom.toast(r.message || 'Weekly schedule saved', 'success'); }
+        msg.textContent = (r.summary || 'Saved') + told;
+        if (Dom.toast) { Dom.toast((r.message || 'Weekly schedule saved') + told, 'success'); }
         if (r.over_capacity && r.over_capacity.length && Dom.toast) {
           Dom.toast('Over capacity — ' + r.over_capacity.join('; '), 'warning');
         }
