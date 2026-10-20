@@ -599,7 +599,7 @@
       '<div style="margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
           '<div><div style="font-size:14px;font-weight:700;">🎨 White-label branding</div>' +
-            '<div style="font-size:11px;color:#6B7280;line-height:1.5;">The white-label licence (chargeable — include it in the monthly amount on Plan; suggest +$50/mo). When enabled, the agency’s logo replaces KiddieTrac in the portal top bar for every role, the app’s loading and unlock screens, the sign-in page of their branded app, and on emails, invoices and forms; the "Powered by Kiddietrac" footer is hidden. The rest of their branding (invoices, email delivery, payslips) is under Reseller › Branding while switched into the agency.</div>' +
+            '<div style="font-size:11px;color:#6B7280;line-height:1.5;">The white-label licence (chargeable — include it in the monthly amount on Plan; suggest +$50/mo). When enabled, the agency’s logo replaces KiddieTrac in the portal top bar for every role, the app’s loading and unlock screens, the sign-in page of their branded app, and on emails, invoices and forms; the "Powered by Kiddietrac" footer is hidden; and marketing campaigns can be sent from the agency’s own mailbox (a Gmail / Google Workspace sender account). The rest of their branding (invoices, email delivery, payslips) is under Reseller › Branding while switched into the agency.</div>' +
           '</div>' +
           '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">' +
             '<input id="ag-wl" type="checkbox" ' + (whiteLabelChecked ? 'checked' : '') + '> Enable' +

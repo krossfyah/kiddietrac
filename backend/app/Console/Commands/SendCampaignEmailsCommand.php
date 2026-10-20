@@ -61,6 +61,8 @@ final class SendCampaignEmailsCommand extends Command
             if (!$agency) { $this->warn("Campaign #{$c->id}: agency {$c->agency_id} missing, skipping"); continue; }
 
             $recipients = $this->resolveAudience($c);
+            // A stable order, so a paced send resumes at the right person (email_progress).
+            usort($recipients, function ($x, $y) { return ((int) $x->id) <=> ((int) $y->id); });
             if (empty($recipients)) {
                 $this->line("Campaign #{$c->id}: no recipients matched audience '{$c->audience}', marking emailed-with-zero");
                 if (!$dry) {
@@ -91,31 +93,57 @@ final class SendCampaignEmailsCommand extends Command
                 continue;
             }
 
-            $mailer = AgencyMailer::forAgency((int) $agency->id);
-            $delivered = 0; $failed = 0;
-            foreach ($recipients as $r) {
+            /* SEND FROM (white-label, 2026-10-20). A campaign may name one of the agency's
+               sender accounts; CampaignSender::forCampaign() honours it only for a white-label
+               agency with the account still connected, else the agency default is used.
+               A Gmail account is PACED: PER_RUN recipients a run, GAP_SECONDS apart, resuming
+               from email_progress on the next run, so a personal mailbox never bursts. */
+            $sender = \App\Support\CampaignSender::forCampaign($c, $agency);
+            $paced = $sender && \App\Support\RsvpSender::isGmail($sender);
+            $mailer = $sender ? null : AgencyMailer::forAgency((int) $agency->id);
+            $fromUsed = $sender ? \App\Support\CampaignSender::address($sender) : $mailer->fromAddress();
+            $start = (int) ($c->email_progress ?? 0);
+            $batch = $paced ? array_slice($recipients, $start, \App\Support\CampaignSender::PER_RUN) : array_slice($recipients, $start);
+            $delivered = 0; $failed = 0; $i = 0;
+            foreach ($batch as $r) {
+                if ($paced && $i++ > 0) { sleep(\App\Support\CampaignSender::GAP_SECONDS); }
                 try {
-                    $mailer->html($bodyHtml, function ($m) use ($subject, $r) {
+                    $build = function ($m) use ($subject, $r) {
                         $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
                         $m->to($r->email, $name ?: $r->email)->subject($subject);
-                    });
+                    };
+                    if ($sender) {
+                        \App\Support\RsvpSender::html($sender, (int) $agency->id, $bodyHtml, $build);
+                    } else {
+                        $mailer->html($bodyHtml, $build);
+                    }
                     $delivered++;
                 } catch (\Throwable $e) {
                     $failed++;
                     $this->warn('  send failed to ' . $r->email . ': ' . $e->getMessage());
                 }
             }
+            $done = $start + count($batch) >= count($recipients);
+            $totDelivered = (int) ($c->email_delivery_count ?? 0) + $delivered;
+            $totFailed = (int) ($c->email_failure_count ?? 0) + $failed;
 
             DB::table('marketing_campaigns')->where('id', $c->id)->update([
-                'email_sent_at' => $now,
-                'email_delivery_count' => $delivered,
-                'email_failure_count' => $failed,
+                'email_sent_at' => $done ? $now : null,
+                'email_progress' => $start + count($batch),
+                'email_from' => $fromUsed ?: null,
+                'email_delivery_count' => $totDelivered,
+                'email_failure_count' => $totFailed,
                 'status' => 'sent',
                 'sent_at' => $c->sent_at ?: $now,
                 'recipient_count' => $c->recipient_count ?: count($recipients),
                 'delivery_count' => ($c->delivery_count ?? 0) + $delivered,
                 'updated_at' => $now,
             ]);
+            if (! $done) {
+                $this->info("Campaign #{$c->id}: paced via {$fromUsed}, " . ($start + count($batch)) . ' / ' . count($recipients) . ' so far');
+                continue;
+            }
+            $delivered = $totDelivered; $failed = $totFailed;
 
             \App\Support\Audit::write([
                 'user_id' => null,
@@ -125,7 +153,7 @@ final class SendCampaignEmailsCommand extends Command
                 'action' => 'campaign.email_sent',
                 'entity_type' => 'marketing_campaign',
                 'entity_id' => (int) $c->id,
-                'payload' => json_encode(['delivered' => $delivered, 'failed' => $failed, 'audience' => $c->audience]),
+                'payload' => json_encode(['delivered' => $delivered, 'failed' => $failed, 'audience' => $c->audience, 'from' => $fromUsed]),
                 'created_at' => $now,
             ]);
 

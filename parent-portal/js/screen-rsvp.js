@@ -325,6 +325,7 @@
   async function render(main) {
     Api = KT.Api;
     gmailReturn();
+    try { var _t = /[?&]tab=(events|templates|senders|reports)\b/.exec(location.hash || ''); if (_t) { state.tab = _t[1]; state.eventId = null; } } catch (e) {}
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = CSS + '<div class="rv-root" data-kt-self-live style="padding:14px 24px;max-width:1300px;">'
       + '<div class="kt-page-hero"><h2>🎟️ Event RSVPs</h2><p>Invite people to an event, collect their RSVPs, and see who was sent, who signed up and who opted out.</p></div>'

@@ -109,7 +109,7 @@
             </div>` : `
             <div style="padding:12px;background:${isWL ? '#ECFDF5' : '#F9FAFB'};border-radius:8px;margin-bottom:16px;font-size:13px;color:#374151;">
               ${isWL
-                ? '<strong>White-label licence: on.</strong> Your logo replaces KiddieTrac throughout.'
+                ? '<strong>White-label licence: on.</strong> Your logo replaces KiddieTrac throughout, and marketing campaigns can be sent from your own mailbox (Marketing \u203A Send from).'
                 : '<strong>White-label licence: off.</strong> Your logo appears on invoices and emails; the portal and app keep the KiddieTrac brand. Ask KiddieTrac about the white-label licence to show your own brand throughout.'}
             </div>`}
 

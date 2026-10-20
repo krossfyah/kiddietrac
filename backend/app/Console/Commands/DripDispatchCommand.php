@@ -34,6 +34,9 @@ final class DripDispatchCommand extends Command
 
         $totalSent = 0;
         foreach ($campaigns as $c) {
+            // Send from (white-label): the campaign's chosen sender account, else the agency default.
+            $dripAgency = DB::table('agencies')->where('id', $c->agency_id)->first(['id', 'powered_by_visible']);
+            $dripSender = \App\Support\CampaignSender::forCampaign($c, $dripAgency);
             $delay = (int) $c->trigger_delay_days;
             $sources = $this->triggerSources($c, $delay);
             foreach ($sources as $s) {
@@ -61,9 +64,14 @@ final class DripDispatchCommand extends Command
                     $bodyHtml = EmailTemplate::wrap((int) $c->agency_id, $c->body_html, [
                         'eyebrow' => 'A NOTE FROM US', 'title' => $c->subject,
                     ]);
-                    AgencyMailer::forAgency((int) $c->agency_id)->html($bodyHtml, function ($m) use ($s, $c) {
-                            $m->to($s['email'])->subject($c->subject);
-                        });
+                    $dripBuild = function ($m) use ($s, $c) {
+                        $m->to($s['email'])->subject($c->subject);
+                    };
+                    if ($dripSender) {
+                        \App\Support\RsvpSender::html($dripSender, (int) $c->agency_id, $bodyHtml, $dripBuild);
+                    } else {
+                        AgencyMailer::forAgency((int) $c->agency_id)->html($bodyHtml, $dripBuild);
+                    }
                     DB::table('drip_sends')->where('id', $sendId)->update([
                         'status' => 'sent', 'sent_at' => now(),
                     ]);

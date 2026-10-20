@@ -110,7 +110,10 @@ final class MarketingController extends Controller
             'centre_id' => ['nullable', 'integer'],
             'scheduled_for' => ['nullable', 'date'],
             'status' => ['nullable', 'in:draft,scheduled'],
+            'sender_id' => ['nullable', 'integer'],
         ]);
+        [$okSender, $senderMsg] = \App\Support\CampaignSender::validateChoice($agencyId, $data['sender_id'] ?? null);
+        if (! $okSender) return response()->json(['message' => $senderMsg], 422);
 
         $status = $data['status'] ?? ($data['scheduled_for'] ?? null ? 'scheduled' : 'draft');
 
@@ -134,6 +137,7 @@ final class MarketingController extends Controller
             'hero_image_url' => $data['hero_image_url'] ?? null,
             'audience' => $data['audience'],
             'channel' => $data['channel'],
+            'sender_id' => ! empty($data['sender_id']) ? (int) $data['sender_id'] : null,
             'status' => $status,
             'scheduled_for' => $data['scheduled_for'] ?? null,
             'created_at' => now(),
@@ -161,7 +165,13 @@ final class MarketingController extends Controller
             'channel' => ['sometimes', 'in:email,in_portal,both'],
             'scheduled_for' => ['sometimes', 'nullable', 'date'],
             'status' => ['sometimes', 'in:draft,scheduled,archived'],
+            'sender_id' => ['sometimes', 'nullable', 'integer'],
         ]);
+        if (array_key_exists('sender_id', $data)) {
+            [$okSender, $senderMsg] = \App\Support\CampaignSender::validateChoice($agencyId, $data['sender_id']);
+            if (! $okSender) return response()->json(['message' => $senderMsg], 422);
+            $data['sender_id'] = ! empty($data['sender_id']) ? (int) $data['sender_id'] : null;
+        }
         if (isset($data['body_html'])) $data['body_html'] = $this->sanitiseHtml($data['body_html']);
         $data['updated_at'] = now();
         DB::table('marketing_campaigns')->where('id', $id)->update($data);
@@ -210,18 +220,45 @@ final class MarketingController extends Controller
             ]);
         }
 
+        /* Only the in-portal copy has been delivered at this point. The email goes out from
+           kiddietrac:campaigns-mail within ~5 minutes (paced for a Gmail sender), which fills
+           in email_delivery_count / email_failure_count. This used to report every recipient
+           as delivered before a single email had left (2026-10-20). */
+        $portal = in_array($row->channel, ['in_portal', 'both'], true);
         DB::table('marketing_campaigns')->where('id', $id)->update([
             'status' => 'sent',
             'sent_at' => now(),
             'recipient_count' => count($recipients),
-            'delivery_count' => count($recipients),
+            'delivery_count' => $portal ? count($recipients) : 0,
             'updated_at' => now(),
         ]);
 
+        $emailing = in_array($row->channel, ['email', 'both'], true);
         return response()->json([
-            'message' => 'Campaign sent',
+            'message' => $emailing ? 'Campaign queued: the email goes out within a few minutes' : 'Campaign sent',
             'recipients' => count($recipients),
             'channel' => $row->channel,
+            'email_pending' => $emailing,
+        ]);
+    }
+
+    // ── Send from (white-label) ───────────────────────────────────────────
+
+    /**
+     * GET /marketing/senders — what the campaign editor's "Send from" offers. A non
+     * white-label agency gets white_label:false and no accounts, so the editor can say
+     * the option is part of the licence instead of offering something the server refuses.
+     */
+    public function senders(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
+        $wl = \App\Support\CampaignSender::whiteLabelAgency($agencyId);
+
+        return response()->json([
+            'white_label' => $wl,
+            'default' => \App\Support\CampaignSender::defaultFrom($agencyId),
+            'senders' => $wl ? \App\Support\CampaignSender::options($agencyId) : [],
         ]);
     }
 

@@ -100,6 +100,13 @@
     var meta = (c.channel || 'in_portal').replace('_', ' ') + ' · ' + (c.audience || '').replace('_', ' ');
     if (c.scheduled_for) meta += ' · scheduled for ' + fmtDate(c.scheduled_for);
     else if (c.sent_at) meta += ' · sent ' + fmtDate(c.sent_at) + (c.recipient_count != null ? ' · ' + c.recipient_count + ' recipients' : '');
+    /* The email goes out after "Send now", from the scheduler (paced for a Gmail sender), so
+       say where it actually is rather than implying it already arrived (2026-10-20). */
+    if (c.sent_at && (c.channel === 'email' || c.channel === 'both')) {
+      if (c.email_sent_at) meta += ' · emailed ' + (c.email_delivery_count || 0) + (c.email_failure_count ? ' (' + c.email_failure_count + ' failed)' : '');
+      else meta += ' · email sending' + (c.email_progress ? ' (' + c.email_progress + ' / ' + (c.recipient_count || '?') + ')' : '');
+      if (c.email_from) meta += ' · from ' + c.email_from;
+    }
     body.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;' }, meta));
     row.appendChild(body);
 
@@ -212,6 +219,58 @@
     chWrap.appendChild(chSel);
     row2.appendChild(chWrap);
     body.appendChild(row2);
+
+    /* SEND FROM (white-label licence, 2026-10-20). Which mailbox the email leaves from: the
+       agency's normal delivery, or one of its sender accounts (Event RSVPs > Sender
+       accounts: a Gmail / Google Workspace mailbox connected by signing in). Offered to a
+       white-label agency; anyone else sees the default and that it is part of the licence.
+       The server checks the same thing (CampaignSender::validateChoice). */
+    var fromWrap = Dom.el('div', { style: 'margin-bottom:14px;' });
+    fromWrap.appendChild(labelEl('Send from'));
+    var fromSel = Dom.el('select', { style: inputStyle() + 'margin-bottom:4px;', disabled: 'disabled' });
+    fromSel.appendChild(Dom.el('option', { value: '' }, 'Loading…'));
+    var fromHint = Dom.el('div', { style: 'font-size:12px;color:#64748B;line-height:1.45;' });
+    fromWrap.appendChild(fromSel);
+    fromWrap.appendChild(fromHint);
+    body.appendChild(fromWrap);
+    var fromWL = false;
+    function syncFromVisible() { fromWrap.style.display = (chSel.value === 'in_portal') ? 'none' : ''; }
+    chSel.addEventListener('change', syncFromVisible);
+    syncFromVisible();
+    Api.get('/marketing/senders').then(function (r) {
+      fromWL = !!(r && r.white_label);
+      var def = (r && r.default) || {};
+      fromSel.innerHTML = '';
+      fromSel.appendChild(Dom.el('option', { value: '' }, 'Agency default' + (def.address ? ' (' + def.address + ')' : '')));
+      if (!fromWL) {
+        fromHint.textContent = 'Sending a campaign from another mailbox, such as your own Google Workspace account, is part of the white-label licence. Ask KiddieTrac about it.';
+        return;
+      }
+      var list = (r && r.senders) || [];
+      list.forEach(function (s) {
+        var o = Dom.el('option', { value: String(s.id) }, s.label + (s.address ? ' (' + s.address + ')' : '') + (s.ready ? '' : ' (not connected)'));
+        if (!s.ready) o.disabled = true;
+        if (existing && Number(existing.sender_id) === s.id) o.selected = true;
+        fromSel.appendChild(o);
+      });
+      fromSel.disabled = false;
+      var chosen = existing && existing.sender_id ? list.filter(function (s) { return s.id === Number(existing.sender_id); })[0] : null;
+      fromHint.innerHTML = '';
+      if (chosen && !chosen.ready) {
+        fromHint.appendChild(document.createTextNode('\u26A0\uFE0F ' + chosen.label + ' is not connected, so this would go from the agency default. Reconnect it, or pick another. '));
+      } else {
+        fromHint.appendChild(document.createTextNode(list.length
+          ? 'A Gmail account sends about 60 emails every 5 minutes, so a large list takes a little longer. '
+          : 'No sender accounts yet. '));
+      }
+      var link = Dom.el('a', { href: '#rsvp?tab=senders', style: 'color:#1F6080;font-weight:600;' }, list.length ? 'Manage sender accounts' : 'Add one under Event RSVPs \u203A Sender accounts');
+      link.addEventListener('click', function () { try { overlay.remove(); } catch (e) {} });
+      fromHint.appendChild(link);
+    }).catch(function () {
+      fromSel.innerHTML = '';
+      fromSel.appendChild(Dom.el('option', { value: '' }, 'Agency default'));
+      fromHint.textContent = 'Could not load your sender accounts; the agency default will be used.';
+    });
 
     /* Declared before the first picker, not after.
 
@@ -542,7 +601,7 @@
 
     function collect() {
       var editor = modal.querySelector('.kt-rt-editor');
-      return {
+      var out = {
         title: titleIn.value.trim(),
         subject: subjectIn.value.trim() || null,
         body_html: editor ? editor.innerHTML : '',
@@ -553,6 +612,9 @@
         channel: chSel.value,
         scheduled_for: schedIn.value ? schedIn.value.replace('T', ' ') + ':00' : null,
       };
+      // Only a white-label agency sends a choice; the server refuses one from anyone else.
+      if (fromWL) out.sender_id = fromSel.value ? Number(fromSel.value) : null;
+      return out;
     }
 
     saveBtn.addEventListener('click', function () {
@@ -578,7 +640,13 @@
         : Api.post('/marketing/campaigns', payload).then(function (r) { return r.id; });
       ensure
         .then(function (id) { return Api.post('/marketing/campaigns/' + id + '/send', {}); })
-        .then(function (r) { alert('Sent to ' + r.recipients + ' recipients via ' + r.channel + '.'); overlay.remove(); render(container); })
+        .then(function (r) {
+          alert(r.email_pending
+            ? (r.channel === 'both' ? 'Posted in the portal for ' + r.recipients + ' recipients. ' : '')
+              + 'The email to ' + r.recipients + ' recipients goes out within a few minutes; the list shows its progress.'
+            : 'Sent to ' + r.recipients + ' recipients in the portal.');
+          overlay.remove(); render(container);
+        })
         .catch(function (e) { alert('Send failed: ' + e.message); sendBtn.disabled = false; sendBtn.textContent = 'Send now'; });
     });
 

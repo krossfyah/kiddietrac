@@ -1142,6 +1142,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::patch ('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'update']);
             Route::delete('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'destroy']);
             Route::post  ('/marketing/campaigns/{id}/send', [\App\Http\Controllers\Api\MarketingController::class, 'sendNow']);
+            Route::get   ('/marketing/senders',             [\App\Http\Controllers\Api\MarketingController::class, 'senders']);
             Route::post  ('/marketing/images',              [\App\Http\Controllers\Api\MarketingController::class, 'uploadImage']);
             // Agency-wide accounting view of externally-synced (iLearn) invoices —
             // admins + directors (+ platform_admin in tenant context). Parents use
