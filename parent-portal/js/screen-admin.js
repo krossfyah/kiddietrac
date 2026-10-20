@@ -2176,7 +2176,7 @@
     });
 
     Shell.Modal.open({
-      title: 'User details',
+      title: 'At a glance',
       body: body,
       actions: (isDirectorView() && !u.can_manage) ? [
         { label: 'Close', primary: true, onClick: function () { Shell.Modal.close(); } },
@@ -2185,6 +2185,7 @@
         { label: 'Close', onClick: function () { Shell.Modal.close(); } },
       ],
     });
+    markRecordModal(false);
   }
 
   function _toast(icon, title, body, color) {
@@ -2415,6 +2416,42 @@
     } catch (e) { _toast('⚠️', 'Reset failed', e && e.message ? e.message : 'error', '#DC2626'); }
   }
 
+  /* RECORD POPUPS MATCH THE CHILD RECORD (2026-10-20). Anthony: "for the user management and
+     editing the user details - change the top heading to At a glance with the gradient as
+     well including when editing the top bar should be gradient and the tabs at the top ...
+     should look better with highlighting the section that you are in". Same soft navy bar
+     as the child record (screen-child-detail.js ensureChildModalStyles), navy-to-teal while
+     editing. Scoped by .kt-record-modal; other popups are unchanged. */
+  function ensureRecordModalStyles() {
+    if (document.getElementById('kt-record-modal-css')) { return; }
+    var css = ''
+      + '.modal.kt-record-modal{overflow:hidden;border:1px solid #1B3A63;}'
+      + '.modal.kt-record-modal .modal-header{background:linear-gradient(135deg,#1B3A63 0%,#2A5580 55%,#4A7FA6 100%) !important;border-bottom:0 !important;padding:13px 18px !important;}'
+      + '.modal.kt-record-modal .modal-header h2{color:#FFFFFF !important;font-size:16px !important;font-weight:800 !important;letter-spacing:.2px;}'
+      + '.modal.kt-record-modal .modal-close{color:#FFFFFF !important;background:rgba(255,255,255,.14) !important;border-radius:8px;opacity:1 !important;}'
+      + '.modal.kt-record-modal .modal-close:hover{background:rgba(255,255,255,.26) !important;}'
+      + '.modal.kt-record-modal.kt-editing .modal-header{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%) !important;box-shadow:inset 0 -3px 0 #7FD3CC;}'
+      /* Edge to edge, like the child record: no white gutter; the tab strip is a band
+         flush under the bar; the content keeps a 16px margin. */
+      + '.modal.kt-record-modal .modal-body{padding:0 0 16px !important;}'
+      + '.modal.kt-record-modal .modal-body>div{padding:12px 16px 0;}'
+      + '.modal.kt-record-modal .kt-rtabbar{margin:0 -16px 16px !important;border-radius:0 !important;border-width:0 0 1px 0 !important;padding:8px 12px !important;}'
+      + '.kt-rtab{transition:background .15s,color .15s,box-shadow .15s;}'
+      + '.kt-rtab:not([aria-selected="true"]):hover{background:#FFFFFF !important;color:#1B3A63 !important;}'
+      + '.kt-rtab:focus-visible{outline:2px solid #4A7FA6;outline-offset:2px;}';
+    var st = document.createElement('style');
+    st.id = 'kt-record-modal-css';
+    st.textContent = css;
+    document.head.appendChild(st);
+  }
+  function markRecordModal(editing) {
+    ensureRecordModalStyles();
+    try {
+      var m = document.querySelector('#modalRoot .modal');
+      if (m) { m.classList.add('kt-record-modal'); m.classList.toggle('kt-editing', !!editing); }
+    } catch (e) {}
+  }
+
   function showUserModal(user, content) {
     const root = Dom.el('div', {});
     // v23: two-tab layout so the record isn't one long scroll. "Details" holds
@@ -2425,7 +2462,8 @@
        three lines under its emoji. Now each tab is a compact one-line pill; they wrap
        onto a second row when there is no room instead of squashing, and the one you
        are on is filled. */
-    const tabBar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
+    // A tinted strip; the section you are in is filled (paintTab) - 2026-10-20.
+    const tabBar = Dom.el('div', { role: 'tablist', class: 'kt-rtabbar', style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;padding:5px;background:#EEF3F8;border:1px solid #E2E8F0;border-radius:14px;' });
     /* On a phone the pills wrapped to five rows, a fifth of the screen. There they are
        one row you swipe sideways instead, and the chosen tab scrolls into view. */
     const _tabsSwipe = !!(window.matchMedia && window.matchMedia('(max-width: 600px)').matches);
@@ -2439,14 +2477,16 @@
     const paneFiles = Dom.el('div', { style: 'display:none;' });
     const _tabs = [];
     function paintTab(b, on) {
-      b.style.background = on ? '#1F6080' : '#fff';
+      b.style.background = on ? 'linear-gradient(135deg,#1B3A63 0%,#2A5580 55%,#4A7FA6 100%)' : 'transparent';
       b.style.color = on ? '#fff' : '#475569';
-      b.style.borderColor = on ? '#1F6080' : '#E2E8F0';
+      b.style.borderColor = 'transparent';
+      b.style.boxShadow = on ? '0 4px 12px -4px rgba(27,58,99,.55)' : 'none';
+      b.style.fontWeight = on ? '800' : '700';
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     }
     function mkTab(label, pane) {
-      const b = Dom.el('button', { type: 'button', role: 'tab', style: 'appearance:none;display:inline-flex;align-items:center;gap:6px;'
-        + 'height:30px;padding:0 10px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#475569;'
+      const b = Dom.el('button', { type: 'button', role: 'tab', class: 'kt-rtab', style: 'appearance:none;display:inline-flex;align-items:center;gap:6px;'
+        + 'height:32px;padding:0 12px;border-radius:10px;border:1px solid transparent;background:transparent;color:#475569;'
         + 'font-size:12px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;flex:0 0 auto;' }, label);
       // A tab, not an action: the icon-button pass must not shrink it to a bare glyph.
       b.setAttribute('data-kt-iconized', '1');
@@ -3972,7 +4012,7 @@
     if (!_dirMode) body.appendChild(danger);   // reset, resend, off-board, delete: agency admin
 
     Shell.Modal.open({
-      title: 'Manage ' + user.name,
+      title: '✏️ Editing · ' + user.name,
       body: root,
       // A director has no status to save; each card on Details has its own Save.
       actions: _dirMode ? [{ label: 'Close', primary: true, onClick: function () { Shell.Modal.close(); } }] : [{
@@ -3996,6 +4036,7 @@
         },
       }],
     });
+    markRecordModal(true);
   }
 
   // ════════════════════════════════════════════════════════════════
