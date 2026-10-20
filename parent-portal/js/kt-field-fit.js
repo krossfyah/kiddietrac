@@ -28,6 +28,8 @@
   if (window.__ktFieldFit) { return; }
   window.__ktFieldFit = true;
 
+  /* Every size is set with 'important': kt-fullwidth.css forces fields in #appMain to
+     max-width:480px !important, which a plain inline style cannot beat. */
   var ARROW = 38, SLACK = 70, MIN_SELECT = 120;
 
   function active() { try { return window.innerWidth > 600; } catch (e) { return false; } }
@@ -55,6 +57,15 @@
     if (/\bpin\b|last4|last 4|cvc|cvv/.test(key)) { return 140; }
     if (/amount|price|fee|rate|\$|cost|wage|salary/.test(key) && type !== 'email') { return 200; }
     if (/\bsin\b|sin number|health card/.test(key)) { return 220; }
+    /* Text, by what it holds (2026-10-20: "fields like family name, street address are
+       presented so long"). Wide enough for real values, not the whole popup. */
+    if (type === 'email' || /e-?mail/.test(key)) { return 380; }
+    if (type === 'url' || /website|\burl\b|link/.test(key)) { return 460; }
+    if (/street|address|addr_?line|line ?1|line ?2/.test(key)) { return 520; }
+    if (/\bcity\b|town|municipality/.test(key)) { return 280; }
+    if (/country/.test(key)) { return 260; }
+    if (/(first|last|middle|preferred|family|given|sur)_?name|nickname|\bname\b|full name|relationship|room|centre|center|school|employer|occupation|doctor/.test(key)) { return 380; }
+    if (type === 'password') { return 340; }
     return 0;
   }
 
@@ -77,11 +88,11 @@
     var need = Math.ceil(Math.max(MIN_SELECT, widest + pad + ARROW));
     var now = sel.getBoundingClientRect().width;
     if (sel.__ktFitCapped) {
-      sel.style.maxWidth = need + 'px';            // options changed: follow them
+      sel.style.setProperty('max-width', need + 'px', 'important');            // options changed: follow them
       return;
     }
     if (now > need + SLACK) {
-      sel.style.maxWidth = need + 'px';
+      sel.style.setProperty('max-width', need + 'px', 'important');
       sel.__ktFitCapped = true;
     }
   }
@@ -91,11 +102,77 @@
     var cap = capFor(inp);
     inp.__ktFitDone = true;
     if (!cap) { return; }
-    if (inp.getBoundingClientRect().width > cap + 24) { inp.style.maxWidth = cap + 'px'; }
+    if (inp.getBoundingClientRect().width > cap + 24) { inp.style.setProperty('max-width', cap + 'px', 'important'); }
+  }
+
+  /* PULL STACKED FIELDS TOGETHER (2026-10-20). A form that lists label + field blocks one per
+     row, each the full width, is laid out as a responsive grid instead - two or three across,
+     as the space allows. Measured, not assumed:
+       - a FIELD BLOCK holds exactly one control and a short label (no buttons, tables, lists);
+       - the container needs 3+ field blocks stacked vertically, is at least 600px wide and
+         is not already a grid or a row;
+       - anything else in it (help text, headings, nested rows, buttons) keeps a full row, and
+         so does a block holding a textarea.
+     Desktop/tablet only; data-kt-nogrid on the container (or an ancestor) opts out. */
+  var CONTROL = 'input:not([type=hidden]),select,textarea';
+  function isFieldBlock(el) {
+    if (!el || el.nodeType !== 1 || /^(INPUT|SELECT|TEXTAREA|BUTTON|TABLE|UL|OL|H1|H2|H3|H4|H5|H6|HR|FORM)$/.test(el.tagName)) { return false; }
+    var ctl = el.querySelectorAll(CONTROL);
+    if (ctl.length !== 1) { return false; }
+    var c = ctl[0];
+    if (c.type === 'checkbox' || c.type === 'radio' || c.type === 'file') { return false; }
+    if (el.querySelector('button,table,ul,ol,img,canvas,iframe,[role=tablist]')) { return false; }
+    var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (c.tagName === 'SELECT') { text = text.replace((c.textContent || '').replace(/\s+/g, ' ').trim(), ''); }
+    if (text.length > 140) { return false; }
+    return el.querySelectorAll('*').length <= 12;
+  }
+  function gridify(container) {
+    if (!container || container.__ktGridTried || (container.closest && container.closest('[data-kt-nogrid]'))) { return; }
+    var kids = [].filter.call(container.children, function (k) { return getComputedStyle(k).display !== 'none' && !/^(SCRIPT|STYLE)$/.test(k.tagName); });
+    if (kids.length < 3) { return; }
+    var fields = kids.filter(isFieldBlock);
+    if (fields.length < 3) { return; }
+    var cs = getComputedStyle(container);
+    if (/grid|flex/.test(cs.display) && !(cs.display === 'flex' && cs.flexDirection === 'column')) { container.__ktGridTried = true; return; }
+    var cw = container.getBoundingClientRect().width;
+    if (cw < 600) { return; }                       // may widen later: try again then
+    // Stacked = each field block is (nearly) the full width of the container.
+    var stacked = fields.filter(function (f) { return f.getBoundingClientRect().width >= cw * 0.9; });
+    if (stacked.length < 3) { container.__ktGridTried = true; return; }
+    container.__ktGridTried = true;
+    container.setAttribute('data-kt-autogrid', '1');
+    container.style.setProperty('display', 'grid', 'important');
+    container.style.setProperty('grid-template-columns', 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', 'important');
+    container.style.setProperty('column-gap', '16px', 'important');
+    container.style.setProperty('align-items', 'start', 'important');
+    kids.forEach(function (k) {
+      var wide = fields.indexOf(k) === -1 || !!k.querySelector('textarea');
+      if (wide) { k.style.setProperty('grid-column', '1 / -1', 'important'); }
+      else { var c = k.querySelector(CONTROL); if (c) { c.__ktFitDone = false; } }
+    });
+  }
+  function tighten(root) {
+    var seen = [];
+    var ctls = (root || document).querySelectorAll(CONTROL);
+    for (var i = 0; i < ctls.length; i++) {
+      var c = ctls[i];
+      if (c.__ktGridSeen || c.offsetParent === null) { continue; }
+      c.__ktGridSeen = true;
+      // The block is the control's ancestor that is a direct child of a candidate container.
+      for (var b = c.parentElement, depth = 0; b && b !== document.body && depth < 4; b = b.parentElement, depth++) {
+        if (isFieldBlock(b) && b.parentElement && seen.indexOf(b.parentElement) === -1) {
+          seen.push(b.parentElement);
+          break;
+        }
+      }
+    }
+    seen.forEach(function (ct) { try { gridify(ct); } catch (e) {} });
   }
 
   function sweep(root) {
     if (!active()) { return; }
+    if (window.innerWidth > 768) { try { tighten(root); } catch (e) {} }
     var list = (root || document).querySelectorAll('select, input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=file]):not([type=submit]):not([type=button]):not([type=range]):not([type=search])');
     for (var i = 0; i < list.length; i++) {
       var el = list[i];
