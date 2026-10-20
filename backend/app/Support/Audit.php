@@ -105,6 +105,15 @@ final class Audit
      * address (a webhook naming its sender, an impersonation recording the real
      * admin) keeps whatever it passed.
      */
+    /**
+     * Set when this request wrote a NAMED entry for what it did ("child.check_in"), as
+     * opposed to a side effect (an email, a slow-request note). AuditActivity reads it so
+     * the raw request line is not written as a second, duplicate row for the same action.
+     */
+    public static bool $namedThisRequest = false;
+
+    private const SIDE_EFFECTS = ['email.', 'perf.', 'sms.', 'push.', 'notification', 'voice.', 'fcm.'];
+
     public static function write(array $row): void
     {
         if ($row === []) {
@@ -117,6 +126,16 @@ final class Audit
         foreach ($rows as $i => $r) {
             if (! is_array($r)) {
                 continue;
+            }
+            $act = (string) ($r['action'] ?? '');
+            if ($act !== '' && ! str_contains($act, ':')) {
+                $side = false;
+                foreach (self::SIDE_EFFECTS as $p) {
+                    if (str_starts_with($act, $p)) { $side = true; break; }
+                }
+                if (! $side) {
+                    self::$namedThisRequest = true;
+                }
             }
             if (trim((string) ($r['ip_address'] ?? '')) === '') {
                 $rows[$i]['ip_address'] = $ip ??= self::ip();

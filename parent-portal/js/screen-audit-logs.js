@@ -123,6 +123,11 @@
    * rows an older API build didn't enrich.
    */
   function rowActionLabel(l) {
+    /* A hand-written label for a NAMED event ("staff.clock_in" -> "Clocked IN") is better
+       than the server's generic "Staff clock in"; for everything else the server's
+       sentence wins (it covers every API route - App\Support\AuditLabels). */
+    var a = String((l && l.action) || '').replace(/ \[fail\]$/i, '').trim();
+    if (a && ACTION_LABELS[a]) return actionLabel(l.action);
     if (l && typeof l.action_label === 'string' && l.action_label.trim() !== '') return l.action_label;
     return actionLabel(l && l.action);
   }
@@ -181,6 +186,9 @@
     // thing — printing them gave rows like "test 8  Id". Say nothing instead.
     var raw = String(t).trim().toLowerCase();
     if (raw === 'id' || raw === 'ids' || /^\d+$/.test(raw)) return '';
+    // Older rows kept the route parameter name: "childId", "family_id", "u".
+    t = String(t).replace(/([a-z])Id$/, '$1').replace(/_id$/i, '');
+    if (String(t).toLowerCase() === 'u') t = 'user';
     var MAP = {
       user: 'User', users: 'User', child: 'Child', children: 'Child',
       family: 'Family', families: 'Family', centre: 'Centre', centres: 'Centre',

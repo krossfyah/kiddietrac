@@ -836,8 +836,18 @@ final class AdminController extends Controller
      *   offset      — pagination offset
      */
     /** "post:api/v1/admin/centres" → "Created · admin › centres"; "user.deleted" → "User deleted". */
-    private function humanizeAuditAction(?string $action): string
+    private function humanizeAuditAction(?string $action, ?string $payload = null): string
     {
+        /* THE CATALOGUE FIRST (2026-10-20): a sentence per API route, so no row reads as a
+           URL. Anything it does not cover (named events) falls through to the rules below. */
+        try {
+            $decoded = $payload ? json_decode($payload, true) : null;
+            $label = \App\Support\AuditLabels::label((string) $action, is_array($decoded) ? $decoded : null);
+            if ($label !== null) {
+                return $label;
+            }
+        } catch (\Throwable $e) {
+        }
         $action = (string) $action;
         $failed = str_contains($action, '[fail]');
         $action = trim(str_replace('[fail]', '', $action));
@@ -1006,6 +1016,13 @@ final class AdminController extends Controller
         $fields = [];
         foreach ($input as $k => $v) {
             if (in_array($k, $skip, true) || $v === '' || $v === null || $v === []) continue;
+            /* Bookkeeping, not detail (2026-10-20): row ids, the actor's own id (the "Who"
+               column already names them), a child's name repeated next to the child, and
+               flags that are only interesting when true. */
+            if (in_array($k, ['event_id', 'by_user_id', 'actor_kind', 'pattern_id', 'enrolment_id', 'signoff_id', 'conversation_id', 'message_id'], true)) continue;
+            if ($k === 'on_behalf' && ! $v) continue;
+            if ($k === 'child_name' && (isset($input['child_id']) || isset($input['child']))) continue;
+            if ($k === 'by_name') { $fields[] = 'by: ' . (string) $v; if (count($fields) >= 6) break; continue; }
 
             // Resolve id references to the actual record's NAME so an auditor reads
             // "child: Aria Hosein" instead of "child_id: 6" — singly or as a list.
@@ -1032,6 +1049,8 @@ final class AdminController extends Controller
             if ($ts !== null) { $fields[] = $label . ': ' . $ts; if (count($fields) >= 6) break; continue; }
 
             $val = is_bool($v) ? ($v ? 'yes' : 'no') : (string) $v;
+            // check_in -> check in: a code value read as words.
+            if (preg_match('/^[a-z]+(_[a-z]+)+$/', $val)) $val = str_replace('_', ' ', $val);
             if (mb_strlen($val) > 60) $val = mb_substr($val, 0, 60) . '…';
             $fields[] = $label . ': ' . $val;
             if (count($fields) >= 6) break;
@@ -1429,7 +1448,8 @@ final class AdminController extends Controller
         } else {
             \App\Support\PaymentAuditActions::except($base, 'al.action');
         }
-        if ($entityType) $base->where('al.entity_type', $entityType);
+        // Older rows stored the route parameter name ("childId") - include every spelling.
+        if ($entityType) $base->whereIn('al.entity_type', \App\Support\AuditLabels::entityVariants((string) $entityType));
         if ($action)     $base->where('al.action', $action);
         if ($userId)     $base->where('al.user_id', $userId);
         if ($since)      $base->where('al.created_at', '>=', $since);
@@ -1474,7 +1494,10 @@ final class AdminController extends Controller
         $this->auditRefCache = [];
 
         $rows = $rows->map(function ($r) use ($auditTz) {
-            $r->action_label = $this->humanizeAuditAction($r->action);
+            // Plain words for every row, raw request lines included (App\Support\AuditLabels).
+            $r->action_label = $this->humanizeAuditAction($r->action, $r->payload);
+            // "childId" / "u" (route parameter names) -> the record kind, so names resolve.
+            $r->entity_type  = \App\Support\AuditLabels::entityType($r->entity_type);
             $r->entity_name  = $this->describeAuditEntity($r->entity_type, $r->entity_id ? (int) $r->entity_id : null, $r->payload);
             $r->summary      = $this->summarizeAuditPayload($r->payload, $auditTz);
             // An IP address tells an auditor nothing. Where it came from does.

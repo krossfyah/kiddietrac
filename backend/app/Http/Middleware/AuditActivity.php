@@ -109,6 +109,7 @@ class AuditActivity
         // Taken BEFORE anything runs, so the window covers every row this request
         // goes on to write.
         $startedAt = now()->toDateTimeString();
+        \App\Support\Audit::$namedThisRequest = false;
 
         $response = $next($request);
         try {
@@ -184,6 +185,14 @@ class AuditActivity
         $status = $response->getStatusCode();
         $ok = $status >= 200 && $status < 300;
 
+        /* ONE ROW PER ACTION (2026-10-20). When the controller already wrote a named entry
+           for this request ("child.care_schedule_updated", "staff.clock_in"), the raw
+           request line was a second row saying the same thing in URL form. A FAILED request
+           is still written: the named entry is usually only written on success. */
+        if ($ok && \App\Support\Audit::$namedThisRequest) {
+            return;
+        }
+
         /* action = "post:admin/centres" (route name if present), capped at 80 chars.
 
            getName() returns null for an unnamed route only while the route cache is cold.
@@ -245,7 +254,7 @@ class AuditActivity
             'user_id'     => $user->id ?? null,
             'agency_id'   => $agencyId,
             'action'      => $action,
-            'entity_type' => $entityType,
+            'entity_type' => \App\Support\AuditLabels::entityType($entityType),
             'entity_id'   => $entityId,
             'payload'     => json_encode($payload),
             'ip_address'  => substr((string) $request->ip(), 0, 45),

@@ -1,0 +1,868 @@
+# KiddieTrac audit log labels (2026-10-20) — one line per API write route:
+#   <method> <uri as in routes/api.php, without api/v1/> | <what the person did, in plain words>
+# Read by App\Support\AuditLabels. `php artisan kt:audit-labels` lists any write route that is
+# missing here; a missing route still gets a readable generated label, never the raw URL.
+post api/kiosk/{token}/check-event | Signed a child in or out at the kiosk
+post api/kiosk/{token}/signature | Signed at the kiosk
+post api/stripe/parent-webhook | Card payment update received from Stripe
+post admin/account-ledgers/{user}/email | Emailed an account statement
+post admin/agencies | Created an agency
+patch admin/agencies/{agency} | Updated agency details
+delete admin/agencies/{agency} | Deleted an agency
+patch admin/agencies/{id}/features | Changed an agency's features
+put admin/agency-mail | Changed the agency's email sending settings
+post admin/agency-mail/test | Sent a test email from the agency's mail settings
+post admin/auto-signoff | Changed automatic sign-off settings
+patch admin/auto-signoff | Changed automatic sign-off settings
+post admin/background-checks | Saved a background check
+delete admin/background-checks/{id} | Deleted a background check
+post admin/background-checks/{id}/document | Uploaded a background check document
+post admin/backups/run | Started a backup
+post admin/backups/settings | Changed backup settings
+patch admin/billing-config | Changed billing settings
+post admin/billing-reminders | Changed billing reminder settings
+post admin/billing-settings | Changed billing settings
+patch admin/billing-settings | Changed billing settings
+patch admin/billing-setup | Changed billing setup
+post admin/billing/cancel | Cancelled the KiddieTrac subscription
+post admin/billing/connect | Started connecting Stripe
+post admin/billing/subscribe | Subscribed to a KiddieTrac plan
+post admin/bio-reminders | Changed provider bio reminder settings
+post admin/bio-reminders/preview | Previewed the provider bio reminder
+post admin/bio-reminders/test | Sent a test provider bio reminder
+patch admin/birthday-settings | Changed birthday message settings
+post admin/birthday-settings | Changed birthday message settings
+put admin/branding | Changed the agency's branding
+post admin/branding/logo | Uploaded the agency logo
+post admin/calendar-settings | Changed calendar settings
+patch admin/calendar-settings | Changed calendar settings
+post admin/centre-term | Changed what centres are called
+post admin/centres | Created a centre
+patch admin/centres/{centre} | Updated centre details
+delete admin/centres/{centre} | Archived a centre
+post admin/centres/{centre}/coords | Set a centre's map location
+post admin/centres/{centre}/logo | Uploaded a centre logo
+post admin/centres/{centre}/offboard | Off-boarded a centre
+delete admin/centres/{centre}/permanent | Permanently deleted a centre
+post admin/centres/{centre}/restore | Restored an archived centre
+post admin/child-photo | Uploaded a child's photo
+put admin/children/{child}/care-schedule | Changed which provider has a child each day
+post admin/children/{child}/schedule-change | Sent the weekly schedule change notice
+post admin/clock-reminders | Changed clock-in reminder settings
+post admin/compliance-settings | Changed data retention settings
+post admin/countersign-reminders | Changed counter-signature reminder settings
+post admin/countersign-reminders/preview | Previewed the counter-signature reminder
+post admin/countersign-reminders/test | Sent a test counter-signature reminder
+patch admin/country | Changed the agency's country
+patch admin/currency | Changed the agency's currency
+post admin/donation-receipts/{id}/email | Emailed a donation receipt
+post admin/donation-receipts/{id}/void | Voided a donation receipt
+post admin/donations | Recorded a donation
+post admin/donations/campaigns | Created a donation campaign
+post admin/donations/campaigns/{id} | Updated a donation campaign
+post admin/donations/settings | Changed donation settings
+post admin/donations/{id} | Updated a donation
+post admin/donations/{id}/receipt | Issued a donation receipt
+patch admin/email-delivery/centre/{centre} | Turned a centre's emails on or off
+patch admin/email-delivery/room/{room} | Turned a room's emails on or off
+post admin/email-header-seasons | Added a seasonal email header
+post admin/email-header-seasons/preview | Previewed a seasonal email header
+post admin/email-header-seasons/{id} | Updated a seasonal email header
+delete admin/email-header-seasons/{id} | Deleted a seasonal email header
+put admin/email-library/{key} | Edited an email template
+post admin/email-library/{key}/preview | Previewed an email template
+post admin/email-library/{key}/test | Sent a test of an email template
+patch admin/email-settings | Changed email settings
+post admin/email-settings/test | Sent a test email
+put admin/email-template/provider-welcome | Edited the provider welcome email
+post admin/email-template/provider-welcome/preview | Previewed the provider welcome email
+post admin/email-template/provider-welcome/test | Sent a test provider welcome email
+put admin/email-template/{key} | Edited an email template
+post admin/email-template/{key}/preview | Previewed an email template
+post admin/email-template/{key}/test | Sent a test of an email template
+patch admin/emergency-contacts/{id} | Updated an emergency contact
+delete admin/emergency-contacts/{id} | Removed an emergency contact
+post admin/expense-invoices | Added a bill
+patch admin/expense-invoices/{bill} | Updated a bill
+delete admin/expense-invoices/{bill} | Deleted a bill
+post admin/expense-invoices/{bill}/approve | Approved a bill
+post admin/expense-invoices/{bill}/payments | Recorded a payment on a bill
+post admin/expense-invoices/{bill}/void | Voided a bill
+post admin/families | Created a family
+patch admin/families/{family} | Updated family details
+delete admin/families/{family} | Deleted a family
+post admin/families/{family}/emergency-contacts | Added an emergency contact
+delete admin/families/{family}/guardians/{guardian} | Removed a parent from a family
+post admin/families/{family}/notes | Added a note to a family
+delete admin/families/{family}/notes/{note} | Deleted a family note
+post admin/families/{family}/notes/{note}/pin | Pinned a family note
+post admin/families/{family}/provider-welcome | Re-sent the provider welcome email
+post admin/families/{family}/reactivate | Reactivated a family
+post admin/families/{family}/restore | Restored a family
+post admin/families/{family}/suspend | Suspended a family
+post admin/families/{family}/transfer | Transferred a family to another provider
+put admin/families/{id}/billing-split | Changed how a family's bill is split
+post admin/fee-plans | Created a fee plan
+patch admin/fee-plans/{id} | Updated a fee plan
+delete admin/fee-plans/{id} | Deleted a fee plan
+post admin/fee-plans/{id}/generate-invoices | Generated invoices from a fee plan
+post admin/file-requests | Requested files from a family
+delete admin/file-requests/{id} | Cancelled a file request
+post admin/file-requests/{id}/remind | Sent a file request reminder
+post admin/forms | Created a form
+patch admin/forms/{form} | Updated a form
+delete admin/forms/{form} | Deleted a form
+post admin/forms/{form}/email | Emailed a form to parents
+post admin/grants | Added a grant
+post admin/grants/{id} | Updated a grant
+post admin/grants/{id}/transactions | Recorded a grant transaction
+delete admin/grants/{id}/transactions/{txnId} | Deleted a grant transaction
+patch admin/guardians/{guardian} | Updated a parent's details
+post admin/immunization-reminders | Changed immunization reminder settings
+post admin/invoices/email-batch | Emailed a batch of invoices
+post admin/invoices/generate-batch | Generated invoices for a centre
+post admin/invoices/{kind}/{id}/email | Emailed an invoice
+patch admin/jurisdiction | Changed the agency's province or state
+post admin/learning-framework | Changed the learning framework
+post admin/managed-forms | Uploaded a form to the library
+post admin/managed-forms/bulk-assign | Sent forms to people
+delete admin/managed-forms/packages/{id} | Deleted a form package
+post admin/managed-forms/packages/{id}/redeliver | Re-delivered a form package
+post admin/managed-forms/packages/{id}/resend | Re-sent a form package
+post admin/managed-forms/packages/{id}/resend-one | Re-sent a form package to one person
+post admin/managed-forms/signoffs/sync-documents | Filed signed forms into Documents
+delete admin/managed-forms/signoffs/{id} | Deleted a signed form
+post admin/managed-forms/signoffs/{id}/countersign | Counter-signed a form
+post admin/managed-forms/signoffs/{id}/email | Emailed a signed form
+post admin/managed-forms/signoffs/{id}/return | Returned a form to be corrected
+patch admin/managed-forms/{id} | Updated a library form
+delete admin/managed-forms/{id} | Deleted a library form
+post admin/messaging-rules | Changed messaging rules
+post admin/payment-providers/helcim/test | Tested the Helcim connection
+post admin/payment-providers/{provider} | Changed payment provider settings
+post admin/payment-runs | Ran a payment run
+patch admin/payroll-settings | Changed payroll settings
+post admin/payroll-settings | Changed payroll settings
+post admin/payroll/manual | Committed a manual payroll
+post admin/permission-shadow/mode | Changed permission testing mode
+post admin/prospect-ndas | Sent an NDA to a prospect
+delete admin/prospect-ndas/{id} | Cancelled a prospect NDA
+post admin/prospect-ndas/{id}/resend | Re-sent a prospect NDA
+post admin/purchase-orders | Created a purchase order
+patch admin/purchase-orders/{po} | Updated a purchase order
+delete admin/purchase-orders/{po} | Deleted a purchase order
+post admin/purchase-orders/{po}/convert-to-bill | Turned a purchase order into a bill
+post admin/purchase-orders/{po}/status | Changed a purchase order's status
+patch admin/qbo-config | Changed QuickBooks settings
+delete admin/qbo-config | Removed the QuickBooks settings
+post admin/quick-notify | Sent a quick notification
+post admin/record-reminders | Changed daily records reminder settings
+put admin/ref-prefix | Changed the reference number prefix
+post admin/report-schedules | Scheduled a report
+patch admin/report-schedules/{id} | Updated a scheduled report
+delete admin/report-schedules/{id} | Deleted a scheduled report
+post admin/report-schedules/{id}/run | Ran a scheduled report now
+post admin/roles | Created a role
+patch admin/roles/{role} | Updated a role
+delete admin/roles/{role} | Deleted a role
+post admin/rsvp/events | Created an event
+post admin/rsvp/events/{id} | Updated an event
+delete admin/rsvp/events/{id} | Deleted an event
+post admin/rsvp/events/{id}/duplicate | Duplicated an event
+post admin/rsvp/events/{id}/invites | Added people to an event's invite list
+post admin/rsvp/events/{id}/reminders | Added an event reminder
+post admin/rsvp/events/{id}/reminders-preview | Previewed an event reminder
+post admin/rsvp/events/{id}/reminders-send | Sent an event reminder now
+post admin/rsvp/events/{id}/reminders-test | Sent a test event reminder
+post admin/rsvp/events/{id}/reminders/{rid} | Updated an event reminder
+post admin/rsvp/events/{id}/reminders/{rid}/cancel | Cancelled an event reminder
+post admin/rsvp/events/{id}/save-template | Saved an event as a template
+post admin/rsvp/events/{id}/send | Sent event invitations
+post admin/rsvp/events/{id}/status | Changed an event's status
+post admin/rsvp/events/{id}/test | Sent a test event invitation
+post admin/rsvp/events/{id}/test-confirmation | Sent a test RSVP confirmation
+post admin/rsvp/image | Uploaded an event image
+delete admin/rsvp/invites/{id} | Removed someone from an event's invite list
+delete admin/rsvp/optouts/{id} | Removed an event opt-out
+post admin/rsvp/presets/{key}/copy | Created an event from a preset
+post admin/rsvp/preview | Previewed an event invitation
+post admin/rsvp/senders | Added an event sender mailbox
+post admin/rsvp/senders/{id} | Updated an event sender mailbox
+delete admin/rsvp/senders/{id} | Removed an event sender mailbox
+post admin/rsvp/senders/{id}/check | Checked an event sender mailbox
+post admin/rsvp/senders/{id}/test | Sent a test from an event sender mailbox
+post admin/rsvp/templates | Created an event template
+post admin/rsvp/templates/{id} | Updated an event template
+delete admin/rsvp/templates/{id} | Deleted an event template
+post admin/rsvp/templates/{id}/copy | Copied an event template
+patch admin/sage-config | Changed Sage settings
+delete admin/sage-config | Removed the Sage settings
+patch admin/sibling-discounts | Changed sibling discounts
+patch admin/sms-settings | Changed text message settings
+post admin/sms-settings/test | Tested the text message connection
+post admin/sms-settings/test-send | Sent a test text message
+post admin/sms/broadcast | Sent a text message broadcast
+post admin/sms/consent-invites | Sent text message consent invitations
+post admin/sms/consent/{user} | Recorded someone's text message consent
+patch admin/staff-compliance/{user}/hr | Updated a staff member's HR details
+post admin/suppliers | Added a supplier
+patch admin/suppliers/{supplier} | Updated a supplier
+delete admin/suppliers/{supplier} | Deleted a supplier
+post admin/temp-guardians/settings | Changed temporary pick-up settings
+delete admin/temp-guardians/{user} | Removed a temporary pick-up person
+patch admin/time-off/{id} | Decided a time-off request
+post admin/time-off/{id}/close | Closed the schedule for a time-off request
+post admin/timeoff-reminders | Changed time-off reminder settings
+post admin/timeoff-reminders/preview | Previewed the time-off reminder
+post admin/timeoff-reminders/test | Sent a test time-off reminder
+patch admin/tours/{id} | Updated a tour booking
+post admin/users | Created a user
+delete admin/users/{user} | Deleted a user
+patch admin/users/{user} | Updated a user
+post admin/users/{user}/avatar | Uploaded a user's photo
+post admin/users/{user}/documents | Uploaded a document to a user's record
+delete admin/users/{user}/documents/{doc} | Deleted a document from a user's record
+post admin/users/{user}/notes | Added a note to a user's record
+post admin/users/{user}/offboard | Off-boarded a staff member
+patch admin/users/{user}/pay | Changed a staff member's pay
+put admin/users/{user}/profile | Updated a user's profile
+post admin/users/{user}/punches | Added a staff shift by hand
+patch admin/users/{user}/punches/{punch} | Corrected a staff shift
+delete admin/users/{user}/punches/{punch} | Removed a staff shift
+post admin/users/{user}/reactivate | Reactivated a user
+post admin/users/{user}/reopen-onboarding | Re-opened a user's onboarding
+post admin/users/{user}/resend-welcome | Re-sent a welcome email
+post admin/users/{user}/reset-password | Reset a user's password
+post admin/users/{user}/role | Changed a user's role
+put admin/users/{user}/rooms | Changed which rooms a staff member works in
+post admin/users/{user}/unlock-login | Unlocked a user's sign-in
+post admin/voice/announce | Sent a voice call announcement
+post admin/voice/test-call | Made a test voice call
+patch admin/xero-config | Changed Xero settings
+delete admin/xero-config | Removed the Xero settings
+patch agency/external-invoices/{id} | Updated an external invoice
+post agency/external-invoices/{id}/payments | Recorded a payment on an external invoice
+post agency/external-invoices/{id}/void | Voided an external invoice
+post agency/payslip-settings | Changed payslip settings
+post agency/waitlist | Added someone to the waitlist
+patch agency/waitlist/{id} | Updated a waitlist entry
+delete agency/waitlist/{id} | Removed a waitlist entry
+post agency/waitlist/{id}/enroll | Enrolled a child from the waitlist
+post agency/waitlist/{id}/reach-out | Contacted a waitlist family
+patch agency/waitlist/{id}/status | Changed a waitlist entry's status
+put ai/attendance-anomalies/rules | Changed attendance alert rules
+post ai/doc-extract | Read a document with AI
+post ai/doc-extract/{id}/auto-link | Linked an AI-read document to its records
+post ai/tag-observation | Tagged an observation with AI
+post ai/translate-message | Translated a message with AI
+post attendance/pattern/{childId} | Changed a child's attendance days
+post auth/active-agency | Switched agency
+post auth/agreement/decline | DECLINED the Terms & NDA
+post auth/agreement/sign | Signed the Terms & NDA
+post auth/change-password | Changed their password
+post auth/forgot | Asked for a password reset
+post auth/forgot/verify | Entered a password reset code
+post auth/login | Signed in
+post auth/logout | Signed out
+patch auth/me | Updated their profile
+post auth/me/auto-signoff-notice/ack | Acknowledged an automatic sign-off notice
+post auth/me/avatar | Changed their profile photo
+patch auth/me/onboarding | Progressed their onboarding
+patch auth/me/provider-bio | Edited their provider bio
+put auth/me/ui-prefs | Changed their screen preferences
+post auth/mfa/confirm | Turned on two-step sign-in
+post auth/mfa/disable | Turned off two-step sign-in
+post auth/mfa/setup | Started setting up two-step sign-in
+post auth/passkey/options | Started a passkey sign-in
+post auth/passkey/verify | Signed in with a passkey
+post auth/register | Created an account
+post auth/reset | Reset their password
+post auth/set-password | Set their password from an invite
+post auth/social/app-exchange | Signed in with Google or Apple
+post billing/prorate-preview | Previewed a pro-rated fee
+post billing/schedule | Set a family's billing schedule
+delete billing/schedule/{familyId} | Turned off a family's billing schedule
+post billing/tuition-increases | Scheduled a fee increase
+post billing/vacation-holds | Asked for a vacation hold
+post billing/vacation-holds/for-family | Added a vacation hold for a family
+patch billing/vacation-holds/{id} | Decided a vacation hold
+patch cacfp/family/{familyId} | Changed a family's meal program tier
+post cacfp/meal | Recorded a meal program meal
+post care/logs | Logged a care moment
+post care/milestones | Recorded a milestone
+post chat-archive | Archived a chat
+post chat/conversations/{id}/read | Read a conversation
+post chat/conversations/{id}/typing | Typing in a conversation
+post chat/voice | Sent a voice message
+post chatbot/ask | Asked the help assistant
+patch compliance/cwelcc/families/{id} | Changed a family's CWELCC enrolment
+post compliance/families/{id}/cwelcc | Changed a family's CWELCC details
+post compliance/subsidies | Added a subsidy
+patch compliance/subsidies/{id} | Updated a subsidy
+delete compliance/subsidies/{id} | Deleted a subsidy
+post compliance/subsidies/{id}/documents | Uploaded subsidy documents
+delete compliance/subsidies/{id}/documents/{doc} | Removed a subsidy document
+post compliance/subsidies/{id}/end | Ended a subsidy
+post conferences/slots | Opened parent-teacher conference times
+post conferences/slots/{id}/book | Booked a parent-teacher conference
+post conferences/slots/{id}/cancel | Cancelled a parent-teacher conference
+post contacts | Added a contact
+post contacts/scan-card | Scanned a business card
+patch contacts/{id} | Updated a contact
+delete contacts/{id} | Deleted a contact
+post curriculum | Created a curriculum
+post curriculum/{id}/use | Used a curriculum
+post diag/bio | App diagnostic report (biometrics)
+post diag/client-error | App error report
+post diag/crash | App crash report
+post diag/scroll | App diagnostic report (scrolling)
+post director/attendance/manual | Added an attendance entry by hand
+delete director/attendance/{event} | Removed an attendance entry
+patch director/centre | Updated centre details
+post director/centres/{centre}/kiosk-toggle | Turned the check-in kiosk on or off
+post director/centres/{centre}/kiosk-token | Reset the check-in kiosk link
+patch director/certifications/{id} | Updated a staff certificate
+delete director/certifications/{id} | Deleted a staff certificate
+patch director/children/{child} | Updated a child's record
+delete director/children/{child} | Deleted a child's record
+post director/children/{child}/documents | Uploaded a document to a child's record
+delete director/children/{child}/documents/{doc} | Deleted a document from a child's record
+patch director/children/{child}/health | Updated a child's health information
+post director/children/{child}/immunization-exemption | Recorded an immunization exemption
+post director/children/{child}/immunization-records | Uploaded an immunization record
+post director/children/{child}/immunization-records/{doc}/details | Entered immunization record details
+post director/children/{child}/photo | Uploaded a child's photo
+post director/children/{child}/transfer | Transferred a child to another provider
+post director/digest-status/regenerate | Rebuilt the daily digest
+post director/edocuments | Created a document for signature
+patch director/edocuments/{id} | Updated a document for signature
+post director/edocuments/{id}/archive | Archived a document for signature
+post director/emergency-contacts/{ec}/pickup-login | Gave an emergency contact a pick-up login
+delete director/emergency-contacts/{ec}/pickup-login | Removed an emergency contact's pick-up login
+post director/enrollments | Enrolled a child
+patch director/enrollments/{enrollment} | Updated a child's enrolment
+post director/families | Created a family
+post director/families/{family}/invite | Invited a family to the app
+post director/guardians/{guardian}/kiosk-pin | Set a parent's kiosk PIN
+post director/guardians/{user}/login-invite | Invited a parent to sign in
+post director/immunizations | Recorded an immunization
+patch director/immunizations/{id} | Updated an immunization
+delete director/immunizations/{id} | Deleted an immunization
+post director/incidents/{id}/close | Closed an incident report
+post director/incidents/{id}/email | Emailed an incident report
+post director/incidents/{id}/notes | Added a note to an incident report
+post director/incidents/{id}/notify-parent | Told the parent about an incident
+patch director/incidents/{incident}/review | Reviewed an incident report
+post director/invitation-codes | Created an invitation code
+delete director/invitation-codes/{id} | Deleted an invitation code
+post director/invitation-codes/{id}/revoke | Revoked an invitation code
+post director/invoices/generate | Generated invoices
+post director/invoices/{invoice}/issue | Issued an invoice
+post director/invoices/{invoice}/lines | Added a line to an invoice
+patch director/invoices/{invoice}/lines/{line} | Changed an invoice line
+delete director/invoices/{invoice}/lines/{line} | Removed an invoice line
+patch director/invoices/{invoice}/notes | Changed an invoice's notes
+post director/invoices/{invoice}/payments | Recorded a payment on an invoice
+post director/invoices/{invoice}/receipt | Emailed a payment receipt
+post director/invoices/{invoice}/void | Voided an invoice
+post director/lesson-plans-ai/generate | Drafted a lesson plan with AI
+post director/lesson-plans-ai/save | Saved an AI lesson plan
+post director/lesson-plans-ai/{id}/publish | Published a lesson plan
+post director/medications | Added a medication
+patch director/medications/{id} | Updated a medication
+post director/medications/{id}/authorize | Authorized a medication
+post director/medications/{id}/discontinue | Stopped a medication
+post director/pickup-login-requests/{id}/decline | Declined a pick-up login request
+post director/rooms | Created a room
+patch director/rooms/{room} | Updated a room
+delete director/rooms/{room} | Deleted a room
+post director/rooms/{room}/logo | Uploaded a room logo
+post director/schedule/autofill | Filled the staff schedule automatically
+patch director/schedule/settings | Changed staff schedule settings
+post director/schedule/shift | Added a shift to the staff schedule
+patch director/schedule/shift/{id} | Changed a scheduled shift
+delete director/schedule/shift/{id} | Removed a scheduled shift
+post director/staff/invite | Invited a staff member
+post director/staff/shifts | Added a staff shift
+post director/staff/{user}/certifications | Added a certificate for a staff member
+patch director/staff/{user}/contractor | Changed a staff member's contractor status
+post director/waitlist | Added a child to the waitlist
+post director/waitlist/{child}/decline | Declined a waitlist child
+post director/waitlist/{child}/move | Moved a child on the waitlist
+post director/waitlist/{child}/promote | Offered a waitlist child a place
+post director/waitlist/{child}/remind | Sent a waitlist reminder
+post director/withdrawals/{id}/decide | Decided a withdrawal request
+post director/zum/request | Requested a payment from a family (Zūm)
+post director/zum/send | Sent money out (Zūm)
+post directory/me | Changed their family directory listing
+post doc-workflows | Started a document signing workflow
+post doc-workflows/{id}/sign | Signed a document in a workflow
+post drills | Recorded an emergency drill
+post drills/cadence | Changed the emergency drill schedule
+post drills/cadence-reminders | Changed emergency drill reminder settings
+post drills/reminders | Sent emergency drill reminders
+delete drills/{id} | Deleted an emergency drill record
+post email/accounts | Connected an email account
+patch email/accounts/{id} | Updated a connected email account
+delete email/accounts/{id} | Removed a connected email account
+post email/accounts/{id}/test | Tested a connected email account
+post email/messages/{uid}/action | Filed, flagged or deleted an email
+post engagement/nps | Answered the satisfaction survey
+post engagement/reenrollment | Started a re-enrolment campaign
+post engagement/reenrollment/{id}/respond | Answered the re-enrolment request
+post engagement/sign-document | Signed a document
+post exports/table | Exported a table
+post family/checkin | Submitted a health check-in
+post family/pickup-auth | Added an authorized pick-up person
+delete family/pickup-auth/{id} | Removed an authorized pick-up person
+post family/referrals | Referred a family
+post feedback | Sent feedback
+post feedback/day/{child} | Rated their child's day
+post feedback/mine-educator/read | Read parent feedback
+post feedback/{id}/release | Shared parent feedback with the educator
+post field-trips/{id}/ping | Field trip location update
+post files/upload/{req}/{u} | Uploaded a requested file
+post forms/fill/{form}/{u} | Signed and submitted a form
+post forms/fill/{form}/{u}/draft | Saved a draft of a form
+post forms/{form}/submit | Submitted a form
+post hazards | Reported a hazard
+patch hazards/{id} | Updated a hazard report
+post hazards/{id}/notify | Sent a hazard alert
+post hazards/{id}/reopen | Re-opened a hazard report
+post hazards/{id}/resolve | Resolved a hazard report
+post headcounts | Took a headcount
+post headcounts/acting/{centre} | Took a headcount for another centre
+post headcounts/settings | Changed headcount settings
+post headcounts/{id}/alert | Raised a headcount alert
+post headcounts/{id}/resolve | Resolved a headcount alert
+post help/ask | Asked the help centre
+post help/featured | Pinned a help article
+delete help/featured/{slug} | Unpinned a help article
+post help/{slug}/feedback | Rated a help article
+post help/{slug}/view | Read a help article
+post home-visits | Wrote a home visit report
+patch home-visits/{report} | Updated a home visit report
+delete household-resident-checks/{id} | Deleted a household member's check
+patch household-residents/{id} | Updated a household member
+delete household-residents/{id} | Removed a household member
+post household-residents/{id}/checks | Recorded a household member's check
+post household/{centre}/residents | Added a household member
+post immunization/schedule | Changed the immunization schedule
+post immunization/schedule/preset | Loaded a preset immunization schedule
+delete immunization/schedule/{id} | Removed an immunization from the schedule
+post import/children | Imported children
+post import/families | Imported families
+post import/inspection | Imported an inspection
+post import/menu | Imported a menu
+post import/users | Imported users
+post inspection-forms | Created an inspection form
+patch inspection-forms/{id} | Updated an inspection form
+post integration/centres | iLearn sync: provider updated
+post integration/children | iLearn sync: child updated
+post integration/children/deactivate | iLearn sync: child withdrawn
+post integration/families | iLearn sync: family updated
+post integration/families/deactivate | iLearn sync: family withdrawn
+post integration/families/restore | iLearn sync: family restored
+post integration/guardians | iLearn sync: parent updated
+post integration/invoices | iLearn sync: invoice updated
+post integration/payroll | iLearn sync: payroll updated
+post integration/sync | Integration sync
+post integration/waitlist | iLearn sync: waitlist updated
+post invoices/{id}/charge | Charged a saved payment method
+post kb | Added a knowledge base article
+put kb/{id} | Updated a knowledge base article
+delete kb/{id} | Deleted a knowledge base article
+post kiosk/{token}/temperature | Recorded a temperature at the kiosk
+post locale | Changed their language
+post login | Signed in
+put login | Sign-in page (wrong request type)
+patch login | Sign-in page (wrong request type)
+delete login | Sign-in page (wrong request type)
+post managed-forms/{id}/draft | Saved a draft of a form
+post managed-forms/{id}/sign | Signed and submitted a form
+post marketing-site/booking | Booked a demo on the website
+post marketing-site/chat | Website chat message
+post marketing-site/chat/end | Website chat ended
+post marketing-site/chat/human | Website visitor asked for a person
+post marketing-site/contact | Website contact form
+post marketing-site/hit | Website visit
+post marketing-site/i18n/missing | Website missing translation report
+post marketing-site/lead | Website lead
+post marketing-site/subscribe | Website newsletter sign-up
+post marketing-site/support | Website support request
+post marketing/assets | Uploaded a marketing file
+delete marketing/assets/{id} | Deleted a marketing file
+post marketing/campaigns | Created an email campaign
+patch marketing/campaigns/{id} | Updated an email campaign
+delete marketing/campaigns/{id} | Deleted an email campaign
+post marketing/campaigns/{id}/send | Sent an email campaign
+post marketing/drip | Created an email drip sequence
+post marketing/images | Uploaded a marketing image
+post me/account-deletion | Asked to delete their account
+post me/biometric-enrolled | Turned on fingerprint or face sign-in
+post me/biometric-revoked | Turned off fingerprint or face sign-in
+put me/contact-prefs | Changed how they want to be contacted
+put me/markers | Dismissed a tip or banner
+put me/notification-prefs | Changed their notification settings
+put me/payout-method | Changed their payout method
+post me/sms-consent | Changed their text message consent
+put me/voice-opt-out | Changed their voice call opt-out
+post my-policies/{id}/acknowledge | Acknowledged a policy
+post notifications/delete | Deleted notifications
+post notifications/mark-read | Marked notifications read
+delete notifications/{id} | Deleted a notification
+patch notifications/{id}/unread | Marked a notification unread
+patch notifications/{notification}/read | Marked a notification read
+post occms/roa/capacity | Changed licensed capacity (OCCMS)
+patch occms/roa/cell | Edited the Record of Attendance (OCCMS)
+post occms/roa/status | Changed the Record of Attendance status (OCCMS)
+post occms/settings | Changed OCCMS settings
+post operations/bus-routes | Created a bus route
+patch operations/bus-routes/{id} | Updated a bus route
+delete operations/bus-routes/{id} | Deleted a bus route
+post operations/bus-routes/{id}/children | Added a child to a bus route
+delete operations/bus-routes/{id}/children/{child} | Removed a child from a bus route
+post operations/closures | Added a closure day
+post operations/closures/bulk | Added closure days
+patch operations/closures/{id} | Updated a closure day
+delete operations/closures/{id} | Removed a closure day
+post operations/field-trips | Created a field trip
+delete operations/field-trips/{id} | Deleted a field trip
+patch operations/inspection/{id} | Updated an inspection checklist item
+post operations/late-pickup | Logged a late pick-up
+post operations/menu | Saved the weekly menu
+patch operations/permissions/{id} | Answered a permission request
+put operations/ratio-settings/{centre} | Changed ratio settings
+post operations/room-rotations | Planned a room rotation
+post operations/sub-requests | Asked for a substitute
+post operations/sub-requests/{id}/claim | Took a substitute shift
+post operations/substitutes | Saved a substitute
+patch parent-issues/{id} | Updated a parent concern
+post parent-issues/{id}/messages | Replied to a parent concern
+post parent/absences | Reported an absence
+delete parent/absences/{child}/{date} | Cancelled an absence report
+post parent/billing/ach-save | Saved a bank account for payments
+post parent/billing/ach-setup-intent | Started adding a bank account
+post parent/billing/autopay | Turned autopay on or off
+post parent/billing/confirm-autopay | Confirmed autopay
+post parent/billing/disable-autopay | Turned off autopay
+post parent/billing/save-card | Saved a card
+post parent/billing/setup-intent | Started adding a card
+post parent/chats/start | Started a conversation with the provider
+delete parent/chats/{conversation} | Deleted a conversation
+delete parent/chats/{conversation}/messages/{message} | Deleted a message
+post parent/chats/{conversation}/messages/{message}/react | Reacted to a message
+post parent/chats/{conversation}/send | Sent a message to the provider
+post parent/chats/{conversation}/typing | Typing a message
+post parent/checkin/scan | Scanned the check-in QR code
+post parent/children/{child}/immunization-records | Uploaded an immunization record
+post parent/children/{child}/medications | Asked for a medication to be given
+post parent/edocuments/{id}/sign | Signed a document
+post parent/family-contacts | Added a family contact
+patch parent/family-contacts/{ec} | Updated a family contact
+delete parent/family-contacts/{ec} | Removed a family contact
+post parent/family-contacts/{ec}/login-request | Asked for a pick-up login for a contact
+post parent/files | Sent a file to the centre
+delete parent/files/{id} | Deleted a file
+post parent/helcim/checkout | Started a card payment (Helcim)
+post parent/helcim/complete | Completed a card payment (Helcim)
+post parent/incidents/{id}/acknowledge | Acknowledged an incident report
+post parent/incidents/{id}/feedback | Commented on an incident report
+post parent/invoices/{invoice}/email | Emailed themselves an invoice
+post parent/issues | Raised a concern
+post parent/issues/{id}/messages | Replied about a concern
+post parent/messages | Sent a message to the centre
+post parent/messages/nudge | Nudged the centre about a message
+post parent/messages/{conversation}/react/{message} | Reacted to a message
+post parent/messages/{conversation}/typing | Typing a message
+patch parent/messages/{message} | Edited a message
+delete parent/messages/{message} | Deleted a message
+patch parent/notifications/{notification}/read | Marked a notification read
+post parent/onboarding/children/{child} | Filled in a child's details during onboarding
+post parent/onboarding/children/{child}/photo | Added a child's photo during onboarding
+delete parent/pickup-login-requests/{id} | Cancelled a pick-up login request
+post parent/threads/{thread}/messages/{message}/react | Reacted to a message
+post parent/threads/{thread}/send | Sent a message
+post parent/wallet | Added a payment method
+post parent/wallet/setup-intent | Started adding a payment method
+delete parent/wallet/{id} | Removed a payment method
+post parent/wallet/{id}/default | Changed the default payment method
+post parent/withdrawals | Asked to withdraw a child
+post parent/zum/bank-account | Saved a bank account (Zūm)
+post parent/zum/connect-complete | Connected a bank account (Zūm)
+post parent/zum/pay | Paid an invoice (Zūm)
+post passkeys/register/options | Started adding a passkey
+post passkeys/register/verify | Added a passkey
+delete passkeys/{id} | Removed a passkey
+post payment-plans | Created a payment plan
+patch payment-plans/{id} | Updated a payment plan
+post payment-plans/{id}/cancel | Cancelled a payment plan
+patch payment-plans/{plan}/installments/{installment} | Changed a payment plan instalment
+delete payment-plans/{plan}/installments/{installment} | Removed a payment plan instalment
+post pd-hours | Logged professional development hours
+delete pd-hours/{id} | Deleted professional development hours
+post pd-hours/{id}/review | Reviewed professional development hours
+post pfcc/authorizations | Added a subsidy authorization
+patch pfcc/authorizations/{id} | Updated a subsidy authorization
+post pfcc/authorizations/{id}/agreement | Uploaded a subsidy agreement
+post pfcc/authorizations/{id}/end | Ended a subsidy authorization
+patch pfcc/copays/{id} | Recorded a co-pay payment
+post pfcc/invoices/{id}/split | Split an invoice between subsidy and family
+delete pfcc/invoices/{id}/split | Undid an invoice split
+patch pfcc/settings | Changed subsidy settings
+post photos | Shared a photo
+post photos/tag-confirm | Confirmed who is in a photo
+post photos/{id}/classify | Sorted a photo
+post platform/agencies | Created an agency
+patch platform/agencies/{agency} | Updated an agency
+post platform/agencies/{agency}/resend-invite | Re-sent an agency's invitation
+post platform/agencies/{agency}/resume | Resumed an agency
+post platform/agencies/{agency}/suspend | Suspended an agency
+put platform/billing-automation | Changed platform billing automation
+put platform/billing-plans/{agencyId} | Changed an agency's billing plan
+post platform/compliance-evidence/access-reviews | Recorded an access review
+post platform/email-logs/{id}/resend | Re-sent an email
+post platform/impersonate/{user} | Viewed the portal as another user
+post platform/invoices/raise | Raised a platform invoice
+patch platform/invoices/{id} | Updated a platform invoice
+delete platform/invoices/{id} | Deleted a platform invoice
+post platform/invoices/{id}/email | Emailed a platform invoice
+post platform/invoices/{id}/issue | Issued a platform invoice
+post platform/invoices/{id}/mark-paid | Marked a platform invoice paid
+post platform/invoices/{id}/void | Voided a platform invoice
+put platform/mail-settings | Changed platform email settings
+put platform/mail-settings/google | Changed the Google email connection
+post platform/mail-settings/google/check | Checked the Google email connection
+post platform/mail-settings/test | Sent a platform test email
+post platform/maintenance | Changed maintenance mode
+post platform/maintenance/notify-all | Announced maintenance to everyone
+post platform/maintenance/test | Sent a test maintenance notice
+put platform/marketing-site | Changed the marketing website
+post platform/marketing-site/chats/archive | Archived website chats
+post platform/marketing-site/chats/delete | Deleted website chats
+post platform/marketing-site/leads | Added a website lead
+post platform/marketing-site/leads/delete | Deleted website leads
+post platform/marketing-site/leads/update | Updated a website lead
+put platform/marketing-site/translations/{id} | Edited a website translation
+delete platform/marketing-site/translations/{id} | Deleted a website translation
+put platform/phone | Changed the phone line settings
+delete platform/phone/voicemails/{id} | Deleted a voicemail
+post platform/security-alerts/clear | Cleared security alerts
+post platform/security-alerts/resolve-all | Resolved all security alerts
+post platform/security-alerts/{id}/resolve | Resolved a security alert
+post platform/site-subscribers | Added a newsletter subscriber
+delete platform/site-subscribers/{id} | Deleted a newsletter subscriber
+post platform/site-subscribers/{id}/resubscribe | Re-subscribed a newsletter subscriber
+post platform/site-subscribers/{id}/unsubscribe | Unsubscribed a newsletter subscriber
+post platform/social-config | Changed Google / Apple sign-in settings
+post policies | Created a policy
+post policies/reminders | Sent policy reminders
+post policies/seed-ontario | Loaded the Ontario policy set
+patch policies/{id} | Updated a policy
+post policies/{id}/archive | Archived a policy
+post policies/{id}/contraventions | Recorded a policy contravention
+post policies/{id}/reviewed | Marked a policy reviewed
+post policies/{id}/training | Recorded policy training
+post policies/{id}/versions | Published a new policy version
+post provider/announcements | Sent an announcement
+post provider/announcements/delete | Deleted announcements
+delete provider/announcements/{id} | Deleted an announcement
+post provider/awards | Gave a child an award
+delete provider/awards/{id} | Removed an award
+post provider/chat-archive | Archived a chat
+post provider/chats/broadcast | Sent a message to several families
+post provider/chats/start | Started a conversation with a family
+delete provider/chats/{conversation} | Deleted a conversation
+delete provider/chats/{conversation}/messages/{message} | Deleted a message
+post provider/chats/{conversation}/messages/{message}/react | Reacted to a message
+post provider/chats/{conversation}/nudge | Nudged a family about a message
+post provider/chats/{conversation}/send | Replied to a family
+post provider/chats/{conversation}/text-email | Sent a message by text or email
+post provider/chats/{conversation}/typing | Typing a message
+post provider/check-in | Signed a child in
+post provider/check-in-batch | Signed children in
+post provider/check-out | Signed a child out
+patch provider/child-notes/{id} | Edited a note on a child
+post provider/children/{child}/message-parents | Messaged a child's parents
+post provider/children/{child}/notes | Added a note on a child
+post provider/clock-in | Clocked in
+post provider/clock-out | Clocked out
+post provider/conversations/{conversation}/typing | Typing a message
+post provider/document-templates | Created a document template
+post provider/document-templates/import | Imported a document template
+post provider/document-templates/preview | Previewed a document template
+delete provider/document-templates/{id} | Deleted a document template
+post provider/document-templates/{id}/activate | Switched on a document template
+post provider/educator-rooms | Changed which rooms an educator works in
+post provider/events | Logged a care moment
+post provider/events/bulk | Logged care moments for several children
+patch provider/events/{event} | Edited a care moment
+delete provider/events/{event} | Deleted a care moment
+post provider/files | Sent a file to a family
+post provider/files/settings | Changed family file settings
+delete provider/files/{id} | Deleted a family file
+post provider/incidents | Wrote an incident report
+patch provider/incidents/{id} | Updated an incident report
+post provider/incidents/{id}/email | Emailed an incident report
+post provider/incidents/{id}/notes | Added a note to an incident report
+patch provider/incidents/{id}/status | Changed an incident report's status
+post provider/incidents/{id}/submit | Submitted an incident report
+post provider/late-events | Logged a late arrival or pick-up
+post provider/late-events/{id}/decide | Decided a late fee
+post provider/lesson-plan-templates | Saved a lesson plan template
+delete provider/lesson-plan-templates/{id} | Deleted a lesson plan template
+post provider/lesson-plan-templates/{id}/used | Used a lesson plan template
+put provider/lesson-plans | Saved a lesson plan
+post provider/medications/give | Gave a medication
+post provider/messages | Replied to a parent
+post provider/observations | Recorded an observation
+post provider/observations/save | Saved an observation
+post provider/observations/structure | Structured an observation with AI
+post provider/payee-invoices | Created an invoice to the agency
+patch provider/payee-invoices/{id} | Updated an invoice to the agency
+post provider/payee-invoices/{id}/lines | Added a line to an invoice to the agency
+delete provider/payee-invoices/{id}/lines/{line} | Removed a line from an invoice to the agency
+post provider/payee-invoices/{id}/send | Sent an invoice to the agency
+post provider/payee-invoices/{id}/status | Changed an invoice to the agency's status
+post provider/payroll-documents/backfill | Rebuilt payroll documents
+post provider/payroll-documents/{id}/email | Emailed a payroll document
+post provider/payroll-documents/{id}/status | Changed a payroll document's status
+post provider/photos | Shared a photo or video
+post provider/team-threads/group | Started a staff group chat
+post provider/team-threads/start | Started a staff conversation
+patch provider/team-threads/{thread} | Renamed a staff conversation
+post provider/team-threads/{thread}/leave | Left a staff conversation
+post provider/team-threads/{thread}/messages/{message}/react | Reacted to a staff message
+post provider/team-threads/{thread}/participants | Added people to a staff conversation
+delete provider/team-threads/{thread}/participants/{user} | Removed someone from a staff conversation
+post provider/team-threads/{thread}/send | Sent a staff message
+post provider/walks/start | Started a walk
+post provider/walks/{id}/end | Ended a walk
+post public/give/{slug} | Donation pledge from the website
+post public/nda/{token}/sign | Prospect signed the NDA
+post public/proposal/{token}/decline | Prospect declined a proposal
+post public/proposal/{token}/sign | Prospect signed a proposal
+post public/rsvp/event/{token} | RSVP from the public event page
+post public/rsvp/invite/{token} | RSVP from an invitation
+post public/rsvp/optout/{token} | Opted out of event invitations
+post public/tours | Booked a tour on the website
+post push/device | Registered a phone for notifications
+post push/subscribe | Turned on notifications in the browser
+post push/test | Sent a test notification
+post push/test-fcm | Sent a test phone notification
+post push/unsubscribe | Turned off notifications
+post qbo/disconnect | Disconnected QuickBooks
+post qbo/sync | Synced with QuickBooks
+post qbo/sync/invoice/{id} | Synced an invoice to QuickBooks
+post qbo/sync/invoices/bulk | Synced invoices to QuickBooks
+post reactions | Reacted to a photo or post
+delete reactions | Removed a reaction
+post refunds | Issued a refund
+post refunds/invoice | Refunded an invoice
+post report-cards/generate | Generated report cards
+patch report-cards/{id} | Edited a report card
+post report-cards/{id}/approve | Approved a report card
+post report-cards/{id}/reject | Sent a report card back
+post report-cards/{id}/send | Sent a report card to the family
+post report-cards/{id}/submit | Submitted a report card for approval
+post reports | Created a report
+post reports/preview | Previewed a report
+patch reports/{id} | Updated a report
+delete reports/{id} | Deleted a report
+put safe-arrival/settings | Changed safe arrival settings
+post safe-arrival/test-call | Made a test safe arrival call
+post safe-arrival/{childId}/resolve | Resolved a safe arrival alert
+post sage/business | Chose the Sage business
+post sage/disconnect | Disconnected Sage
+post sage/sync | Synced with Sage
+post sage/sync/invoice/{id} | Synced an invoice to Sage
+post sage50/export | Exported a Sage 50 journal file
+patch sales/activities/{activity} | Updated a sales activity
+post sales/activities/{activity}/notify | Sent a sales activity reminder now
+post sales/activities/{activity}/upload | Uploaded a file to a sales activity
+delete sales/activity-files/{file} | Deleted a sales activity file
+post sales/announcements | Posted a sales announcement
+delete sales/announcements/{announcement} | Deleted a sales announcement
+post sales/demo-token | Opened a demo login
+post sales/leads | Added a sales lead
+patch sales/leads/{lead} | Updated a sales lead
+delete sales/leads/{lead} | Deleted a sales lead
+post sales/leads/{lead}/activities | Logged a sales activity
+post sales/leads/{lead}/quotes | Created a proposal
+post sales/library | Added a file to the sales library
+post sales/library/folders | Created a sales library folder
+delete sales/library/folders/{folder} | Deleted a sales library folder
+delete sales/library/{doc} | Deleted a sales library file
+patch sales/library/{doc} | Moved a sales library file
+post sales/messages | Sent a sales team message
+post sales/products | Added a product
+patch sales/products/{product} | Updated a product
+delete sales/products/{product} | Deleted a product
+put sales/proposal-defaults | Changed proposal defaults
+patch sales/quotes/{quote} | Updated a proposal
+delete sales/quotes/{quote} | Deleted a proposal
+post sales/quotes/{quote}/countersign | Counter-signed a proposal
+post sales/quotes/{quote}/send | Sent a proposal
+post sales/quotes/{quote}/sign-link | Created a proposal signing link
+post sales/web-chats/presence | Website chat availability
+post sales/web-chats/{id}/close | Closed a website chat
+post sales/web-chats/{id}/join | Joined a website chat
+post sales/web-chats/{id}/lead | Turned a website chat into a lead
+post sales/web-chats/{id}/release | Released a website chat
+post sales/web-chats/{id}/reply | Replied in a website chat
+post sales/web-chats/{id}/typing | Typing in a website chat
+post signup/by-code | Signed up with an invitation code
+post signup/centre | Signed up a new centre
+post sleep-checks | Recorded a sleep check
+post sleep-checks/children/{child}/direction | Recorded a sleeping position
+post sleep-checks/settings | Changed sleep check settings
+post sms-consent/{u} | Answered the text message consent request
+post sms/inbound | Text message received
+post sms/telnyx/inbound/{agency} | Text message received
+post staff-certifications | Added a staff certificate
+post staff-certifications/{id} | Updated a staff certificate
+patch staff-certifications/{id} | Updated a staff certificate
+delete staff-certifications/{id} | Deleted a staff certificate
+post staff-certifications/{id}/verify | Verified a staff certificate
+post staff/punch | Clocked in or out
+post stripe/webhook | Subscription update received from Stripe
+post sutq/cip | Saved a quality improvement plan item
+patch sutq/cip/{id} | Updated a quality improvement plan item
+delete sutq/cip/{id} | Deleted a quality improvement plan item
+post sutq/events | Recorded a quality program event
+patch sutq/events/{id} | Updated a quality program event
+post sutq/referrals | Recorded a referral
+patch sutq/referrals/{id} | Updated a referral
+post tasks | Created a task
+patch tasks/{task} | Updated a task
+delete tasks/{task} | Deleted a task
+patch tasks/{task}/status | Changed a task's status
+post tickets | Opened a support ticket
+post tickets/{id}/files | Attached a file to a support ticket
+post tickets/{id}/reply | Replied to a support ticket
+patch tickets/{id}/status | Changed a support ticket's status
+post time-off | Asked for time off
+post time-off/act/{id} | Answered a time-off request
+post time-off/{id}/cancel | Cancelled a time-off request
+post training/assignments | Assigned training
+delete training/assignments/{id} | Cancelled a training assignment
+post training/{id}/progress | Made progress on a training course
+post training/{id}/publish | Published a training course
+post videos | Shared a video
+post voice/telnyx/webhook/{agency} | Voice call update
+post voice/voicemail/{token} | Voicemail left
+post wellness/screening | Submitted a wellness screening
+post workforce-funding/components/{id} | Updated a workforce funding item
+patch workforce-funding/components/{id} | Updated a workforce funding item
+post workforce-funding/policy | Changed the workforce funding policy
+post workforce-funding/receipts | Added a workforce funding receipt
+post workforce-funding/receipts/{id}/void | Voided a workforce funding receipt
+post workforce-funding/settings | Changed workforce funding settings
+post workforce-funding/staff/{user}/components | Added workforce funding for a staff member
+post xero/disconnect | Disconnected Xero
+post xero/sync | Synced with Xero
+post xero/sync/invoice/{id} | Synced an invoice to Xero
+post xero/tenant | Chose the Xero organisation
+post zones | Created a zone
+post zones/visit | Logged a zone visit
+post zumrails/webhook | Payment update received from Zūm Rails
