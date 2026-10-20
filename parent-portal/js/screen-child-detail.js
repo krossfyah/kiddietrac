@@ -125,16 +125,27 @@
     return 'background:#DC2626;color:white;';
   }
 
-  function showEditModal(child, onSaved) {
-    var overlay = Dom.el('div', {
+  /* EDIT IN PLACE (2026-10-20). Anthony: "when editing a child record the popup is shown but
+     I need to close that first popup to get to edit the other fields - make this whole
+     experience better so when hitting edit I get access to it all". The details form was a
+     second popup laid over the record, so the record's own tabs (schedule, enrolment, files)
+     sat underneath it until it was closed. With an `inlineHost` it now renders INTO the
+     record as its "Details" tab: no overlay, everything else one click away. Without one it
+     is still the old popup, for any caller that wants that. */
+  function showEditModal(child, onSaved, inlineHost) {
+    var inline = !!inlineHost;
+    var overlay = inline ? null : Dom.el('div', {
       style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow:auto;',
     });
+    var closeIt = function () { if (overlay) { overlay.remove(); } };
     var modal = Dom.el('div', {
-      style: 'background:white;border-radius:14px;padding:24px;max-width:640px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);',
+      style: inline
+        ? 'background:white;border:1px solid #E5E7EB;border-radius:14px;padding:18px;'
+        : 'background:white;border-radius:14px;padding:24px;max-width:640px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);',
     });
     modal.appendChild(Dom.el('h3', {
-      style: 'margin:0 0 16px;font-size:18px;',
-    }, 'Edit ' + (child.display_name || child.full_name)));
+      style: 'margin:0 0 ' + (inline ? '12' : '16') + 'px;font-size:' + (inline ? '16' : '18') + 'px;',
+    }, inline ? '✏️ Child details' : 'Edit ' + (child.display_name || child.full_name)));
 
     /* THE CHILD'S PHOTO, IN THE SAME FORM (2026-10-09: "edit on child record should also
        allow to edit the avatar/display picture for that child"). Uploaded the moment it is
@@ -187,6 +198,8 @@
     paintPhoto();
 
     var form = Dom.el('form', {});
+    // Enter in a field must not submit the form (a native submit reloads the portal).
+    form.addEventListener('submit', function (e) { e.preventDefault(); });
 
     /* ALLERGIES & HEALTH IS A SUBTAB OF THIS POPUP (2026-10-09: "at a glance with child
        record still showing the ability to add allergies when this should be included in
@@ -209,8 +222,8 @@
         allergyLoaded = true;
         KT.healthEditor.open(child, {
           into: allergyPane,
-          onClose: function () { overlay.remove(); },
-          onSaved: function () { overlay.remove(); if (onSaved) onSaved(); },
+          onClose: function () { closeIt(); },
+          onSaved: function () { closeIt(); if (onSaved) onSaved(); },
         });
       }
     };
@@ -219,7 +232,9 @@
       b.addEventListener('click', function () { showPane(t[0]); });
       subTabs.appendChild(b);
     });
-    modal.insertBefore(subTabs, photoBox);
+    // Inline, Allergies & health is its own tab of the record, so no sub-tabs here.
+    if (!inline) { modal.insertBefore(subTabs, photoBox); }
+    if (inline) { form.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:0 14px;'; }
     var fields = [
       { name: 'first_name', label: 'First name', value: child.first_name, type: 'text' },
       { name: 'last_name', label: 'Last name', value: child.last_name, type: 'text' },
@@ -271,13 +286,23 @@
       }
       inputs[f.name] = input;
       wrap.appendChild(input);
+      if (inline && f.type === 'textarea') { wrap.style.gridColumn = '1 / -1'; }
       form.appendChild(wrap);
     });
 
     var actions = Dom.el('div', {
-      style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px;',
+      style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px;' + (inline ? 'grid-column:1 / -1;' : ''),
     });
-    var cancelB = btn('Cancel', btnSecondary(), function () { overlay.remove(); });
+    var original = { photo: photoState.url };
+    var cancelB = btn(inline ? 'Discard changes' : 'Cancel', btnSecondary(), function (ev) {
+      if (ev && ev.preventDefault) { ev.preventDefault(); }
+      if (!inline) { closeIt(); return; }
+      // Inline there is nothing to close: put the fields back as they were.
+      fields.forEach(function (f) { if (inputs[f.name]) { inputs[f.name].value = f.value || ''; } });
+      photoState.url = original.photo; photoState.preview = null; photoState.changed = false;
+      photoMsg.style.color = '#6B7280'; photoMsg.textContent = 'JPG, PNG or WebP, up to 4 MB.';
+      paintPhoto();
+    });
     actions.appendChild(cancelB);
     var saveB = btn('Save changes', btnPrimary());
     actions.appendChild(saveB);
@@ -296,7 +321,7 @@
       saveB.textContent = 'Saving...';
       Api.patch('/director/children/' + child.id, payload)
         .then(function () {
-          overlay.remove();
+          closeIt();
           if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Child updated', 'success');
           if (onSaved) onSaved();
         })
@@ -310,6 +335,10 @@
     modal.appendChild(form);
     modal.appendChild(allergyPane);
     showPane('details');
+    if (inline) {
+      inlineHost.appendChild(modal);
+      return;
+    }
     overlay.appendChild(modal);
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) overlay.remove();
@@ -381,6 +410,8 @@
   var editModeFor = null;
   /* Set by Edit: the next paint of this child opens the details form (one click to edit). */
   var openDetailsFor = null;
+  /* The tab the next paint opens on: Edit opens "Details", and a save keeps you where you were. */
+  var pendingTab = null;
 
   /**
    * Make a region non-interactive while the record is read-only.
@@ -636,12 +667,11 @@
         /* Nothing to add: the banner has already explained why. An explanation beats a
            row of disabled buttons nobody can act on. */
       } else if (editMode) {
-        headerActions.appendChild(btn('📝 Edit details…', btnSecondary(), function () {
-          showEditModal(child, function () { renderChildDetail(container, opts); });
-        }));
+        /* Details and Allergies & health are TABS of the record while editing (see TABS
+           below), not a popup over it - so nothing has to be closed to reach the rest. */
         if (String(openDetailsFor) === String(child.id)) {
           openDetailsFor = null;
-          setTimeout(function () { showEditModal(child, function () { renderChildDetail(container, opts); }); }, 0);
+          pendingTab = 'details';
         }
         /* No "Done" (2026-10-09: "remove the done button ... not sure why there is a done
            button there"). It only switched edit mode off; closing the record does that now
@@ -768,7 +798,7 @@
           style: 'background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;'
                + 'padding:9px 14px;margin:0 0 14px;font-size:13px;color:#92400E;'
                + 'display:flex;align-items:center;gap:8px;',
-        }, '✏️  Editing — changes on every tab are live. Press Done when you have finished.'));
+        }, '✏️  Editing — everything is open: Details, Allergies & health and every other tab. Each section saves with its own button; close the record when you are finished.'));
       }
 
       // Quick facts: one tile each, so the essentials read at a glance.
@@ -1107,7 +1137,17 @@
          should be added when your editing the child record as a subtab"). */
       // (Allergies & health is a subtab of the Edit popup, not of the record — 2026-10-09.)
       // A note alert links here with &tab=notes (2026-10-09).
-      var activeTab = (params && params.tab === 'notes') ? 'notes' : 'overview';
+      var canEditHere = editMode && !_readOnly;
+      if (canEditHere) {
+        TABS = [['details', '✏️ Details'], ['allergies', '⚠️ Allergies & health']].concat(TABS);
+      }
+      var activeTab = (canEditHere && pendingTab) ? pendingTab
+        : ((params && params.tab === 'notes') ? 'notes' : 'overview');
+      pendingTab = null;
+      // Repaint this record, staying in edit mode on the tab that was open.
+      var keepTab = function () { pendingTab = activeTab; renderChildDetail(container, opts); };
+      // Built once per paint and kept across tab switches, so typed values survive a look elsewhere.
+      var detailsHost = null;
       /* ALL THE TABS IN VIEW (2026-10-09: "the subtabs are scrollable vs all there
          visually"): they wrap onto a second line instead of scrolling sideways. */
       var tabbar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:2px 4px;border-bottom:1px solid #E5E7EB;margin:4px 0 18px;' });
@@ -1145,7 +1185,21 @@
         gatherLoose();
         if (looseBox) looseBox.style.display = (activeTab === 'overview') ? '' : 'none';
         Dom.clear(tabContent);
-        if (activeTab === 'allergies') buildAllergySection(tabContent);
+        if (activeTab === 'details') {
+          if (!detailsHost) {
+            detailsHost = Dom.el('div', {});
+            showEditModal(child, keepTab, detailsHost);
+          }
+          tabContent.appendChild(detailsHost);
+        }
+        else if (activeTab === 'allergies' && canEditHere && window.KT && KT.healthEditor) {
+          KT.healthEditor.open(child, {
+            into: tabContent,
+            onClose: function () { activeTab = 'overview'; paintTabs(); paintTab(); },
+            onSaved: keepTab,
+          });
+        }
+        else if (activeTab === 'allergies') buildAllergySection(tabContent);
         else if (activeTab === 'incidents') appendIncidentsSection(tabContent, child.id);
         else if (activeTab === 'enrollment') renderEnrollmentTab(tabContent, child);
         else if (activeTab === 'daily') renderDailyTab(tabContent, child);
