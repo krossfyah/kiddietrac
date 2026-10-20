@@ -210,8 +210,8 @@
     var subTabs = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid #E5E7EB;margin:0 0 14px;' });
     var showPane = function (key) {
       var details = key === 'details';
-      photoBox.style.display = details ? '' : 'none';
-      form.style.display = details ? '' : 'none';
+      if (!inline) { photoBox.style.display = details ? '' : 'none'; }
+      form.style.display = details ? (inline ? 'grid' : '') : 'none';   // inline keeps its grid
       allergyPane.style.display = details ? 'none' : '';
       Array.prototype.forEach.call(subTabs.children, function (b) {
         var on = b.getAttribute('data-pane') === key;
@@ -234,6 +234,8 @@
     });
     // Inline, Allergies & health is its own tab of the record, so no sub-tabs here.
     if (!inline) { modal.insertBefore(subTabs, photoBox); }
+    // Inline, the photo is changed on the record itself (tap the photo at the top).
+    if (inline) { photoBox.remove(); }
     if (inline) { form.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:0 14px;'; }
     var fields = [
       { name: 'first_name', label: 'First name', value: child.first_name, type: 'text' },
@@ -531,7 +533,7 @@
       return;
     }
 
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    var wrap = Dom.el('div', { class: 'kt-cd-wrap', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
 
     var loading = Dom.el('div', {
@@ -554,7 +556,18 @@
          its too plain can you make this present itself better". The header is a soft branded
          card (bigger photo, status / room / family chips), and the plain label-value list
          under the tabs is quick-fact tiles plus a "Health & care" card. Same data, same tabs. */
+      /* In the popup the title bar says which mode this is: "At a glance", or
+         "Editing · <child>" with the accent line (see ensureChildModalStyles). */
+      try {
+        var _cm = container.closest && container.closest('.modal.kt-child-modal');
+        if (_cm) {
+          _cm.classList.toggle('kt-editing', !!editMode);
+          var _t = _cm.querySelector('#kt-modal-title');
+          if (_t) { _t.textContent = editMode ? ('✏️ Editing · ' + (child.display_name || child.full_name || 'child')) : (opts && opts.params && opts.params.archived ? 'At a glance (archived)' : 'At a glance'); }
+        }
+      } catch (e) {}
       var header = Dom.el('div', {
+        class: 'kt-cd-head',
         style: 'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:14px;'
              + 'background:radial-gradient(120% 140% at 0% 0%,rgba(34,193,195,.16) 0%,rgba(34,193,195,0) 55%),'
              + 'radial-gradient(120% 140% at 100% 0%,rgba(124,58,237,.12) 0%,rgba(124,58,237,0) 55%),linear-gradient(135deg,#F7FBFD 0%,#FAF8FF 100%);'
@@ -583,12 +596,67 @@
       /* The face before the name: a record about a person should look like one.
          (Anthony, 2026-08-25) */
       var _idRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;' });
-      _idRow.appendChild(_avatarEl(child.full_name, {
+      var _face = _avatarEl(child.full_name, {
         size: 78,
         photoUrl: child.photo_url ? mediaUrl(child.photo_url) : '',
         sex: child.sex || child.gender || null,
         kind: 'child',
-      }));
+      });
+      /* THE PHOTO IS CHANGED WHERE IT IS SHOWN (2026-10-20). Anthony: "with the display pic
+         to change for the child record make it editable at the top vs having a second option
+         below". While editing, the photo at the top is the control: tap it to choose a new
+         one (uploaded and saved at once), "Remove" under it to clear it. The Details form no
+         longer carries its own copy of the photo. */
+      if (editMode && !_departed) {
+        var _faceWrap = Dom.el('div', { style: 'flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;' });
+        var _faceBtn = Dom.el('button', { type: 'button', title: 'Change photo', 'aria-label': 'Change ' + (child.display_name || child.full_name || 'child') + '\'s photo',
+          style: 'position:relative;border:0;padding:0;background:none;cursor:pointer;border-radius:50%;line-height:0;' });
+        _faceBtn.appendChild(_face);
+        _faceBtn.appendChild(Dom.el('span', { 'aria-hidden': 'true',
+          style: 'position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:50%;background:#0F2D57;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;box-shadow:0 2px 6px rgba(15,23,42,.3);' }, '📷'));
+        var _faceIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;' });
+        var _faceMsg = Dom.el('div', { style: 'font-size:11px;color:#64748B;text-align:center;max-width:110px;' }, 'Tap to change');
+        var _repaint = function () {
+          try { pendingTab = (typeof activeTab !== 'undefined' && activeTab) ? activeTab : null; } catch (e) {}
+          renderChildDetail(container, opts);
+        };
+        var _savePhoto = function (url) {
+          return Api.patch('/director/children/' + child.id, { photo_url: url }).then(function () {
+            if (KT.Dom && KT.Dom.toast) { KT.Dom.toast(url ? 'Photo updated' : 'Photo removed', 'success'); }
+            _repaint();
+          });
+        };
+        _faceBtn.addEventListener('click', function () { _faceIn.click(); });
+        _faceIn.addEventListener('change', function () {
+          var f = _faceIn.files && _faceIn.files[0];
+          if (!f) { return; }
+          if (f.size > 4 * 1024 * 1024) { _faceMsg.style.color = '#B91C1C'; _faceMsg.textContent = 'Over 4 MB - choose a smaller photo'; return; }
+          var fd = new FormData(); fd.append('photo', f);
+          var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+          var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+          var agency = ''; try { agency = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+          _faceMsg.style.color = '#64748B'; _faceMsg.textContent = 'Uploading…'; _faceBtn.disabled = true;
+          fetch(base + '/director/children/' + child.id + '/photo', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'X-Active-Agency-Id': agency, 'Accept': 'application/json' }, body: fd })
+            .then(function (r) { return r.json().then(function (j) { if (!r.ok) { throw new Error(j.message || ('HTTP ' + r.status)); } return j; }); })
+            .then(function (j) { return _savePhoto(j.photo_url); })
+            .catch(function (e) { _faceBtn.disabled = false; _faceMsg.style.color = '#B91C1C'; _faceMsg.textContent = 'Not saved: ' + ((e && e.message) || 'error'); })
+            .then(function () { _faceIn.value = ''; });
+        });
+        _faceWrap.appendChild(_faceBtn);
+        _faceWrap.appendChild(_faceIn);
+        _faceWrap.appendChild(_faceMsg);
+        if (child.photo_url) {
+          var _rm = Dom.el('button', { type: 'button', style: 'background:none;border:0;padding:0;color:#B91C1C;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline;' }, 'Remove');
+          _rm.addEventListener('click', function () {
+            _rm.disabled = true;
+            _savePhoto(null).catch(function (e) { _rm.disabled = false; _faceMsg.style.color = '#B91C1C'; _faceMsg.textContent = 'Not removed: ' + ((e && e.message) || 'error'); });
+          });
+          _faceWrap.appendChild(_rm);
+        }
+        _idRow.appendChild(_faceWrap);
+      } else {
+        _idRow.appendChild(_face);
+      }
       var _idText = Dom.el('div', {});
       _idRow.appendChild(_idText);
       headerLeft.appendChild(_idRow);
@@ -2088,12 +2156,14 @@
        content, so it grew and shrank as you moved between tabs; it now holds a fixed
        height and the content scrolls inside it. The title says what this is ("At a
        glance") — the child's name is the first line of the record itself. */
-    var host = Dom.el('div', { style: 'height:min(76vh, 860px);overflow-y:auto;overflow-x:hidden;' });
+    var host = Dom.el('div', { class: 'kt-cd-host', style: 'height:min(76vh, 860px);overflow-y:auto;overflow-x:hidden;' });
     Shell.Modal.open({
       title: opts.archived ? 'At a glance (archived)' : 'At a glance',
       body: host,
       large: true,
     });
+    ensureChildModalStyles();
+    try { var _m = document.querySelector('#modalRoot .modal'); if (_m) { _m.classList.add('kt-child-modal'); } } catch (e) {}
     // Opening a record starts read-only; Edit (below) is the only way in to edit mode.
     if (!opts.edit) { editMode = false; editModeFor = String(childId); }
     /* Opened by a list's Edit (2026-10-09): start in edit mode, details form up — the
@@ -2115,6 +2185,32 @@
         if (typeof opts.onChanged === 'function') { opts.onChanged(); }
       },
     });
+  }
+
+  /* THE RECORD POPUP, EDGE TO EDGE UNDER A NAVY BAR (2026-10-20). Anthony: "the at a glance
+     should be a dark navy border or make this a gradient ... and the popup should be edge to
+     edge with the content as right now there is a white space". Two paddings stacked (the
+     popup body's and the record's own 24px) left a white gutter all round. Scoped to this
+     popup by .kt-child-modal; the shared popup is unchanged everywhere else. */
+  function ensureChildModalStyles() {
+    if (document.getElementById('kt-child-modal-css')) { return; }
+    var css = ''
+      + '.modal.kt-child-modal{overflow:hidden;border:1px solid #0B2447;}'
+      + '.modal.kt-child-modal .modal-header{background:linear-gradient(135deg,#081C41 0%,#0F2D57 55%,#1F6080 100%) !important;border-bottom:0 !important;padding:13px 18px !important;}'
+      + '.modal.kt-child-modal .modal-header h2{color:#FFFFFF !important;font-size:16px !important;font-weight:800 !important;letter-spacing:.2px;}'
+      + '.modal.kt-child-modal .modal-close{color:#FFFFFF !important;background:rgba(255,255,255,.12) !important;border-radius:8px;opacity:1 !important;}'
+      + '.modal.kt-child-modal .modal-close:hover{background:rgba(255,255,255,.24) !important;}'
+      + '.modal.kt-child-modal.kt-editing .modal-header{background:linear-gradient(135deg,#081C41 0%,#0F2D57 50%,#0F766E 100%) !important;box-shadow:inset 0 -3px 0 #2EA9AC;}'
+      + '.modal.kt-child-modal .modal-body{padding:0 !important;}'
+      + '.modal.kt-child-modal .kt-cd-wrap{padding:0 0 18px !important;max-width:none !important;}'
+      + '.modal.kt-child-modal .kt-cd-wrap>*{margin-left:18px;margin-right:18px;}'
+      + '.modal.kt-child-modal .kt-cd-wrap>.kt-cd-head{margin:0 0 14px !important;border-radius:0 !important;border-width:0 0 1px 0 !important;box-shadow:none !important;padding:18px 20px !important;}'
+      + '@media (max-width:600px){.modal.kt-child-modal .kt-cd-wrap>*{margin-left:12px;margin-right:12px;}'
+      + '.modal.kt-child-modal .kt-cd-wrap>.kt-cd-head{padding:14px !important;}}';
+    var st = document.createElement('style');
+    st.id = 'kt-child-modal-css';
+    st.textContent = css;
+    document.head.appendChild(st);
   }
 
   // Expose for tests / debug.
