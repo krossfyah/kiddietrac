@@ -3209,6 +3209,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // The other direction: families and children that ORIGINATED here, so a
         // consumer can create them. pullContacts only refreshes what it already owns.
         Route::get ('/pull/new', [\App\Http\Controllers\Api\IntegrationController::class, 'pullNew']);
+        // People too (2026-10-19): staff and parents, so a consumer can mirror them.
+        Route::get ('/pull/users', [\App\Http\Controllers\Api\IntegrationController::class, 'pullUsers']);
         Route::post('/sync',     [\App\Http\Controllers\Api\IntegrationController::class, 'sync']);
         /* What we actually hold, by id — so a push integration can check that what it
            sent arrived, instead of only knowing that it was sent. */

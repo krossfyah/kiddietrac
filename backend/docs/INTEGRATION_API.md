@@ -2,7 +2,8 @@
 
 A generic, idempotent, **agency-scoped** ingest API that lets any external agency
 platform (the first consumer is **iLearn**) feed its **centres, families, and
-children** into KiddieTrac under **its own agency**. Built for reuse: any agency
+children** into KiddieTrac under **its own agency** — and read back the families,
+children and people created in KiddieTrac (see *Reading back from KiddieTrac*). Built for reuse: any agency
 gets an `agency_admin` API token and pushes the same JSON shapes.
 
 Base URL: `https://api.kiddietrac.com/api/v1/integration`
@@ -71,6 +72,81 @@ centres→families→guardians→children→withdrawals so references resolve an
 enrol+withdraw in the same batch never undoes itself. `withdrawals[]` items take
 the `/children/deactivate` shape. Returns per-item results (a bad row never blocks
 the batch).
+
+## Reading back from KiddieTrac (pull endpoints)
+
+KiddieTrac is the source of record for anything created in it. A consumer that keeps
+its own copy polls these endpoints; nothing is pushed to the consumer, so there is no
+second credential and no inbound API to secure on its side. Same token, same headers,
+same agency scoping as everything above. All are `GET` and read-only.
+
+### `GET /pull/new?since=<ISO-8601>`  → families and children created here
+- `families[]` — families created in KiddieTrac (`kt_id`, name, contact and address,
+  `centre_external_id`), each with its `guardians[]` and `children[]`.
+- `children[]` — children created here inside a family *you* created (a new sibling),
+  carrying `family_external_id` so you attach them to the parent you already hold.
+- `deactivations{children[],families[],centres[]}` — departures (`withdrawn`,
+  `deleted`, `de_enrolled`, `archived`), stated explicitly rather than implied by a
+  record no longer appearing. Rows carry `external_id` when you created the record.
+
+### `GET /pull/users`  → every person in the agency (staff and parents)
+The whole current list on every call (it is small, and matching on your side should be
+idempotent, so a full read can never drift). Service accounts, including the caller's
+own integration login, are never included.
+
+```json
+{
+  "ok": true,
+  "users": [
+    {
+      "kt_user_id": 812,
+      "first_name": "Jordan", "last_name": "Lee",
+      "email": "jordan@example.com", "phone": "+14165550100",
+      "status": "active",
+      "roles": ["educator"],
+      "staff": {
+        "roles": ["educator"],
+        "centres": [{ "kt_id": 41, "name": "Maple Home Daycare",
+                      "external_id": "provider-123", "external_source": "ilearn" }]
+      },
+      "guardian_of": [],
+      "created_at": "2026-10-19 14:02:11", "updated_at": "2026-10-19 14:02:11"
+    },
+    {
+      "kt_user_id": 913,
+      "first_name": "Sam", "last_name": "Rivera", "email": "sam@example.com",
+      "roles": ["guardian"], "staff": null,
+      "guardian_of": [{ "family_kt_id": 77, "family_name": "Rivera",
+                        "family_external_id": "parent-456", "family_external_source": "ilearn",
+                        "centre_external_id": "provider-123",
+                        "is_primary": false, "relationship": "guardian" }]
+    }
+  ],
+  "deactivations": [
+    { "kt_user_id": 640, "name": "Alex Moore", "email": "alex@example.com",
+      "reason": "roles_ended", "at": "2026-10-18 09:30:00" }
+  ]
+}
+```
+
+- `staff` is `null` for someone who is only a parent; `guardian_of` is empty for
+  someone who is only staff. A person can be both.
+- `roles` are `educator`, `home_visitor`, `centre_director`, `agency_admin`, `guardian`.
+- `guardian_of[].family_external_id` is set when **you** created the family — attach
+  the parent to that record. When it is null the family was created in KiddieTrac and
+  arrives through `/pull/new` as `ktfam-<family_kt_id>` on your side.
+- `deactivations[]` lists **staff** whose access here has ended (`deleted` or
+  `roles_ended`). Parents leave with their family, which `/pull/new` states.
+- A staff member's `centres[].external_id` names your own provider when you created
+  that centre; it is null for a centre made in KiddieTrac.
+
+### `GET /contacts/pull?since=`, `GET /waitlist/pull?since=`
+Name/date-of-birth changes to children you created, and waitlist leads created here.
+
+### Suggested polling
+Every 5 minutes for `/pull/new` and `/pull/users`. Match on `kt_user_id` /
+`kt_id` once you have stored them; before that, match people on email
+(case-insensitive) so someone you already hold is never created twice.
 
 ## Example
 ```bash

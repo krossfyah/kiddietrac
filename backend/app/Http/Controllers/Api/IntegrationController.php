@@ -913,9 +913,25 @@ class IntegrationController extends Controller
             ]);
         }
 
-        DB::table('guardians')->updateOrInsert(
-            ['family_id' => $family->id, 'user_id' => $userId],
-            array_filter([
+        /* AN EXISTING GUARDIAN KEEPS WHAT WAS SET HERE (2026-10-19). This was one
+           updateOrInsert with defaults, so every push from the source system re-wrote
+           can_pickup = true, relationship = 'guardian' and is_primary = false on a parent
+           who already existed -- a director's "cannot pick up" was undone by the next
+           nightly sync. Defaults now apply on INSERT only; an update carries just the
+           fields the caller actually sent. */
+        $gKey = ['family_id' => $family->id, 'user_id' => $userId];
+        if (DB::table('guardians')->where($gKey)->exists()) {
+            $upd = [];
+            foreach (['relationship', 'is_primary', 'can_pickup', 'date_of_birth'] as $k) {
+                if ($request->has($k) && ($data[$k] ?? null) !== null) {
+                    $upd[$k] = $data[$k];
+                }
+            }
+            if ($upd) {
+                DB::table('guardians')->where($gKey)->update($upd);
+            }
+        } else {
+            DB::table('guardians')->insert($gKey + array_filter([
                 'relationship'        => $data['relationship'] ?? 'guardian',
                 'is_primary'          => $data['is_primary'] ?? false,
                 'can_pickup'          => $data['can_pickup'] ?? true,
@@ -923,8 +939,8 @@ class IntegrationController extends Controller
                 'billing_share_pct'   => 0,
                 'date_of_birth'       => $data['date_of_birth'] ?? null,
                 'created_at'          => now(),
-            ], fn ($v) => $v !== null)
-        );
+            ], fn ($v) => $v !== null));
+        }
         DB::table('role_assignments')->updateOrInsert(
             ['user_id' => $userId, 'role' => 'guardian', 'agency_id' => $agencyId, 'centre_id' => null],
             ['active' => true, 'created_at' => now()]
@@ -1657,6 +1673,121 @@ class IntegrationController extends Controller
             'children' => $orphanOut,
             'deactivations' => $deactivations,
         ]);
+    }
+
+    /**
+     * GET /integration/pull/users -- every person in this agency, for a consumer that keeps
+     * its own people list (2026-10-19).
+     *
+     * Anthony: "create a sync back to the ilearn system with any new users added from
+     * kiddietrac". pull/new already carries families created here, with the parents they
+     * were created with -- but a parent added LATER to an existing family, and every member
+     * of staff (educators, home visitors, directors, admins), never reached the far side.
+     *
+     * Returns the whole current list (it is small, and the consumer matches idempotently, so
+     * a full read every run cannot drift), plus `deactivations`: staff who USED to be here
+     * and are not any more -- stated, never implied by absence (the lesson of 2026-08-25).
+     *
+     * Each person carries `staff` (their roles and the centres they work at, with each
+     * centre's external id so the consumer can name its own provider) and `guardian_of`
+     * (each family, with the family's external id when the consumer created it -- so a new
+     * parent attaches to the record it already holds instead of inventing a second family).
+     * Service accounts, including the caller's own integration login, are never listed.
+     * Scoped to the token's agency like everything else here.
+     */
+    public function pullUsers(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+
+        $centres = DB::table('centres')->where('agency_id', $agencyId)
+            ->get(['id', 'name', 'external_id', 'external_source', 'deleted_at'])->keyBy('id');
+        $centreIds = $centres->keys()->all() ?: [0];
+        $staffRoles = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
+        $me = (int) $request->user()->id;
+
+        $roleRows = DB::table('role_assignments as ra')
+            ->whereIn('ra.role', array_merge($staffRoles, ['guardian']))
+            ->where(function ($q) use ($agencyId, $centreIds) {
+                $q->where('ra.agency_id', $agencyId)->orWhereIn('ra.centre_id', $centreIds);
+            })
+            ->get(['ra.user_id', 'ra.role', 'ra.centre_id', 'ra.active']);
+        $userIds = $roleRows->pluck('user_id')->unique()->values()->all();
+
+        $users = DB::table('users')->whereIn('id', $userIds ?: [0])
+            ->get(['id', 'first_name', 'last_name', 'email', 'phone', 'status', 'deleted_at', 'created_at', 'updated_at'])
+            ->keyBy('id');
+
+        // The families each guardian belongs to, inside this agency only.
+        $guardianRows = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+            ->whereIn('g.user_id', $userIds ?: [0])->whereIn('f.centre_id', $centreIds)->whereNull('f.deleted_at')
+            ->get(['g.user_id', 'g.is_primary', 'g.relationship', 'f.id as family_id', 'f.family_name',
+                   'f.external_id', 'f.external_source', 'f.centre_id'])
+            ->groupBy('user_id');
+
+        $out = [];
+        $gone = [];
+        foreach ($users as $u) {
+            if ((int) $u->id === $me || \App\Support\ChatAudience::isServiceEmail((string) $u->email)) {
+                continue;
+            }
+            $rows = $roleRows->where('user_id', $u->id);
+            $active = $rows->filter(fn ($r) => (bool) $r->active);
+            $label = trim(($u->first_name ?? '').' '.($u->last_name ?? ''));
+
+            if ($u->deleted_at || $active->isEmpty()) {
+                // Only staff are announced as leaving: a parent leaves with their family,
+                // which pull/new already states.
+                if ($rows->whereIn('role', $staffRoles)->isNotEmpty()) {
+                    $gone[] = ['kt_user_id' => (int) $u->id, 'name' => $label, 'email' => $u->email,
+                        'reason' => $u->deleted_at ? 'deleted' : 'roles_ended', 'at' => $u->updated_at];
+                }
+                continue;
+            }
+
+            $staff = $active->whereIn('role', $staffRoles);
+            $guardianOf = ($guardianRows[$u->id] ?? collect())->map(function ($g) use ($centres) {
+                $c = $centres->get($g->centre_id);
+
+                return [
+                    'family_kt_id' => (int) $g->family_id,
+                    'family_name' => $g->family_name,
+                    'family_external_id' => $g->external_id,
+                    'family_external_source' => $g->external_source,
+                    'centre_external_id' => $c->external_id ?? null,
+                    'is_primary' => (bool) $g->is_primary,
+                    'relationship' => $g->relationship,
+                ];
+            })->values();
+
+            if ($staff->isEmpty() && $guardianOf->isEmpty()) {
+                continue;   // a guardian role with no family in this agency: nothing to attach to
+            }
+
+            $out[] = [
+                'kt_user_id' => (int) $u->id,
+                'first_name' => $u->first_name,
+                'last_name' => $u->last_name,
+                'email' => $u->email,
+                'phone' => $u->phone,
+                'status' => $u->status,
+                'roles' => $active->pluck('role')->unique()->values(),
+                'staff' => $staff->isEmpty() ? null : [
+                    'roles' => $staff->pluck('role')->unique()->values(),
+                    'centres' => $staff->pluck('centre_id')->filter()->unique()->map(function ($cid) use ($centres) {
+                        $c = $centres->get($cid);
+
+                        return $c ? ['kt_id' => (int) $c->id, 'name' => $c->name, 'external_id' => $c->external_id,
+                            'external_source' => $c->external_source] : null;
+                    })->filter()->values(),
+                ],
+                'guardian_of' => $guardianOf,
+                'created_at' => $u->created_at,
+                'updated_at' => $u->updated_at,
+            ];
+        }
+
+        return response()->json(['ok' => true, 'users' => $out, 'deactivations' => $gone]);
     }
 
     public function sync(Request $request): JsonResponse
