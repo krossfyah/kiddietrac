@@ -1030,6 +1030,21 @@
   function isActive() { return !!(dock && dock.style.display !== 'none' && bodyEl && bodyEl.children.length); }
   function isMinimized() { return minimized; }
 
+  /* A MESSAGE BOX THAT FITS THE MESSAGE (2026-10-19). The staff thread's box is a one-row
+     textarea that never grew, so a second line scrolled out of sight inside 46px. It now
+     grows with what is typed (up to the CSS max-height in kt-chat-composer.css) and drops
+     back to one line once the message is sent and the box is emptied. */
+  function fitBox(t) {
+    if (!t || t.tagName !== 'TEXTAREA' || t.id !== 'kt-st-input') return;
+    // !important: kt-polish-v22.css sets every textarea to height:auto !important.
+    t.style.setProperty('height', 'auto', 'important');
+    var max = parseFloat(w.getComputedStyle(t).maxHeight) || 156;
+    t.style.setProperty('height', Math.min(max, Math.max(44, t.scrollHeight + 3)) + 'px', 'important');
+  }
+  ['input', 'focusin', 'keyup'].forEach(function (ev) {
+    document.addEventListener(ev, function (e) { try { fitBox(e.target); } catch (x) {} }, true);
+  });
+
   KT.ChatDock = {
     enabled: isDesktop,
     contentEl: contentEl,

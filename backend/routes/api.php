@@ -1499,8 +1499,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             Route::get('/staff', [StaffController::class, 'index']);
             Route::post('/staff/invite', [StaffController::class, 'invite']);
-            Route::get('/staff/{user}/certifications', [StaffController::class, 'certifications']);
-            Route::post('/staff/{user}/certifications', [StaffController::class, 'addCertification']);
+            // Scoped like every certificate route (2026-10-19): these took any user id before.
+            Route::get('/staff/{user}/certifications', [\App\Http\Controllers\Api\StaffComplianceController::class, 'certIndexFor'])->whereNumber('user');
+            Route::post('/staff/{user}/certifications', [\App\Http\Controllers\Api\StaffComplianceController::class, 'certStoreFor'])->whereNumber('user');
             // The contractor flag — the announcement audience needs it and nothing
             // else in the portal could set it.
             Route::patch('/staff/{user}/contractor', [StaffController::class, 'setContractor']);
@@ -1955,6 +1956,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/admin/staff-compliance/{user}',        [\App\Http\Controllers\Api\StaffComplianceController::class, 'show'])->whereNumber('user');
         Route::patch ('/admin/staff-compliance/{user}/hr',     [\App\Http\Controllers\Api\StaffComplianceController::class, 'updateHr'])->whereNumber('user');
         Route::get   ('/my-compliance',                        [\App\Http\Controllers\Api\StaffComplianceController::class, 'mine']);
+        // Staff certificates (2026-10-19): CPR, first aid, RECE … with the certificate file.
+        Route::get   ('/staff-certifications',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'certIndex']);
+        Route::get   ('/staff-certifications/roster',          [\App\Http\Controllers\Api\StaffComplianceController::class, 'certRoster']);
+        Route::post  ('/staff-certifications',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'certStore'])->middleware('throttle:30,1');
+        Route::post  ('/staff-certifications/{id}',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'certUpdate'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::patch ('/staff-certifications/{id}',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'certUpdate'])->whereNumber('id');
+        Route::post  ('/staff-certifications/{id}/verify',     [\App\Http\Controllers\Api\StaffComplianceController::class, 'certVerify'])->whereNumber('id');
+        Route::delete('/staff-certifications/{id}',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'certDelete'])->whereNumber('id');
+        Route::get   ('/staff-certifications/{id}/document',   [\App\Http\Controllers\Api\StaffComplianceController::class, 'certDocument'])->whereNumber('id');
         Route::get   ('/pd-hours',                             [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdIndex']);
         Route::post  ('/pd-hours',                             [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdStore'])->middleware('throttle:30,1');
         Route::post  ('/pd-hours/{id}/review',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdReview'])->whereNumber('id');
@@ -2136,8 +2146,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/schedule/shift/{id}',    [SchedulingController::class, 'deleteShift']);
         Route::get('/timesheets',                [SchedulingController::class, 'timesheets']);
         Route::get('/certifications',            [SchedulingController::class, 'certifications']);
-        Route::patch('/certifications/{id}',     [\App\Http\Controllers\Api\StaffController::class, 'updateCertification']);
-        Route::delete('/certifications/{id}',    [\App\Http\Controllers\Api\StaffController::class, 'deleteCertification']);
+        Route::patch('/certifications/{id}',     [\App\Http\Controllers\Api\StaffComplianceController::class, 'certUpdate'])->whereNumber('id');
+        Route::delete('/certifications/{id}',    [\App\Http\Controllers\Api\StaffComplianceController::class, 'certDelete'])->whereNumber('id');
     });
     
     // PARENT — lesson plan view

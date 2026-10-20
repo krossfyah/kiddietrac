@@ -92,6 +92,12 @@ final class PushController extends Controller
                 'created_at' => now(),
             ]);
         } catch (\Throwable $e) {
+            // Same two-at-once race as registerDevice(): the row is there now, so update it.
+            $race = DB::table('device_tokens')->where('platform', 'web')->where('token', $tokenJson)->first();
+            if ($race) {
+                DB::table('device_tokens')->where('id', $race->id)->update(['user_id' => $user->id, 'last_active_at' => now()]);
+                return response()->json(['success' => true, 'token_id' => $race->id, 'updated' => true]);
+            }
             Log::error('Push subscribe failed', ['error' => $e->getMessage()]);
             return response()->json(['message' => 'Could not save subscription'], 500);
         }
@@ -131,6 +137,18 @@ final class PushController extends Controller
                 'created_at' => now(),
             ]);
         } catch (\Throwable $e) {
+            /* TWO REGISTRATIONS AT ONCE (2026-10-19). The app sends its token on start-up and
+               again on resume; when both land together each finds no row, one inserts, and the
+               other hits the unique key and was answered 500 "Could not save device" — logged
+               as a server error while the device was in fact saved. The row now exists, so
+               this is the update branch above, a moment late. */
+            $race = DB::table('device_tokens')->where('token', $data['token'])->first();
+            if ($race) {
+                DB::table('device_tokens')->where('id', $race->id)->update([
+                    'user_id' => $user->id, 'platform' => $platform, 'last_active_at' => now(),
+                ]);
+                return response()->json(['success' => true, 'token_id' => $race->id, 'updated' => true]);
+            }
             Log::error('Device register failed', ['error' => $e->getMessage()]);
             return response()->json(['message' => 'Could not save device'], 500);
         }

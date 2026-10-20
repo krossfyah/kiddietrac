@@ -520,6 +520,7 @@
           { hash: 'policies',          label: 'Policies',             icon: '📘' },
           { hash: 'my-policies',       label: 'Policies to review',   icon: '✍️' },
           { hash: 'my-training',       label: 'My training',          icon: '🎓' },
+          { hash: 'my-certificates',   label: 'My certificates',      icon: '❤️' },
           { hash: 'household',         label: 'Household residents',  icon: '🏠' },
           { hash: 'inspection',        label: 'Inspection checklist', icon: '✅' },
           { hash: 'renewals',          label: 'Renewals calendar',    icon: '📅' },
@@ -601,6 +602,7 @@
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
           { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'my-certificates', label: 'My certificates', icon: '❤️' },
           { hash: 'my-policies',   label: 'Policies to review', icon: '📘' },
           { hash: 'household',     label: 'Household residents', icon: '🏠' },
         ]},
@@ -629,6 +631,7 @@
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
           { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'my-certificates', label: 'My certificates', icon: '❤️' },
           { hash: 'my-policies',   label: 'Policies to review', icon: '📘' },
           { hash: 'household',     label: 'Household residents', icon: '🏠' },
           { hash: 'files',          label: 'Files',          icon: '📎' },

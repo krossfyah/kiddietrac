@@ -1,0 +1,194 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   kt-chat-composer.css — one look for every chat typing box (2026-10-19)
+
+   Anthony: "for the messenger popout chat, the window to type a message is really small
+   - can you make this look better including the mobile view one as well - full sweep".
+
+   Measured in the popout: the box was 219 × 28px with 13px text. Every composer sets a
+   roomy inline style (46px pill, 15–16px text), but kt-polish-v22.css styles ALL inputs and
+   textareas as form fields with !important — 13px text, 5px padding, an extra 26px on the
+   right for a dropdown chevron that is not there, 8px corners. The phone stylesheet undoes
+   that for the family thread inside #appMain only; the popout lives outside #appMain, and
+   the staff thread's textarea and the popout's "new chat" box were never covered anywhere.
+
+   Every selector here starts with an ID (#appMain / #kt-chat-dock), which outranks the
+   polish rule's thirteen :not()s whatever order the sheets load in. Covers:
+     · family threads (.kt-compose-input) — educator/director/admin and parent, desktop + phone
+     · staff ↔ staff threads (#kt-st-input) — a textarea that grows as you type
+     · the popout's "new chat" message box (.kt-cd-compose textarea)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── the composer bar ── */
+#kt-chat-dock .kt-thread-compose,
+#appMain .kt-thread-compose.kt-thread-compose {
+  background: #fff !important;
+  border-top: 1px solid #E5EAF0 !important;
+}
+#kt-chat-dock .kt-thread-compose { padding: 10px 12px !important; gap: 4px !important; align-items: center !important; }
+
+/* ── the typing box ── */
+#kt-chat-dock input.kt-compose-input.kt-compose-input,
+#appMain input.kt-compose-input.kt-compose-input,
+#kt-chat-dock textarea#kt-st-input,
+#appMain textarea#kt-st-input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+  min-height: 46px !important;
+  padding: 12px 18px !important;
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+  color: #0F172A !important;
+  background: #F4F7FA !important;
+  border: 1.5px solid #D5DEE7 !important;
+  border-radius: 23px !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease !important;
+}
+#kt-chat-dock input.kt-compose-input.kt-compose-input,
+#appMain input.kt-compose-input.kt-compose-input { height: 46px !important; }
+/* The staff box is a textarea: one line to start, growing to six as you type (kt-chat-dock.js). */
+#kt-chat-dock textarea#kt-st-input,
+#appMain textarea#kt-st-input {
+  height: 46px;
+  max-height: 156px !important;
+  resize: none !important;
+  overflow-y: auto !important;
+}
+#kt-chat-dock input.kt-compose-input.kt-compose-input:focus,
+#appMain input.kt-compose-input.kt-compose-input:focus,
+#kt-chat-dock textarea#kt-st-input:focus,
+#appMain textarea#kt-st-input:focus {
+  outline: none !important;
+  background: #fff !important;
+  border-color: #159FB4 !important;
+  box-shadow: 0 0 0 3px rgba(21, 159, 180, .16) !important;
+}
+#kt-chat-dock .kt-compose-input::placeholder, #appMain .kt-compose-input::placeholder,
+#kt-chat-dock #kt-st-input::placeholder, #appMain #kt-st-input::placeholder { color: #94A3B8 !important; }
+#kt-chat-dock .kt-compose-input:disabled, #appMain .kt-compose-input:disabled { background: #F1F5F9 !important; color: #94A3B8 !important; }
+
+/* ── emoji / photo / mic: tidy round 38px taps, so the text box gets the width ── */
+#kt-chat-dock .kt-thread-compose .kt-emoji-btn,
+#kt-chat-dock .kt-thread-compose .kt-attach-btn,
+#kt-chat-dock .kt-thread-compose .kt-mic-btn,
+#kt-chat-dock #kt-st-emoji-btn, #kt-chat-dock #kt-st-photo-btn, #kt-chat-dock #kt-st-mic-btn,
+#appMain #kt-st-emoji-btn, #appMain #kt-st-photo-btn, #appMain #kt-st-mic-btn {
+  flex: 0 0 auto !important;
+  width: 38px !important; height: 38px !important; min-width: 0 !important; min-height: 0 !important;
+  padding: 0 !important; margin: 0 !important;
+  border-radius: 50% !important;
+  font-size: 19px !important; line-height: 1 !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  background: transparent !important;
+  transition: background-color .15s ease !important;
+}
+#kt-chat-dock .kt-thread-compose .kt-emoji-btn:hover,
+#kt-chat-dock .kt-thread-compose .kt-attach-btn:hover,
+#kt-chat-dock .kt-thread-compose .kt-mic-btn:hover,
+#kt-chat-dock #kt-st-emoji-btn:hover, #kt-chat-dock #kt-st-photo-btn:hover, #kt-chat-dock #kt-st-mic-btn:hover,
+#appMain #kt-st-emoji-btn:hover, #appMain #kt-st-photo-btn:hover, #appMain #kt-st-mic-btn:hover { background: #EEF2F6 !important; }
+
+/* ── send ── */
+#kt-chat-dock .kt-thread-compose .kt-send-btn { width: 46px !important; height: 46px !important; min-height: 0 !important; flex: 0 0 auto !important; }
+#kt-chat-dock #kt-st-send, #appMain #kt-st-send {
+  flex: 0 0 auto !important;
+  height: 46px !important; min-height: 0 !important;
+  padding: 0 18px !important;
+  border-radius: 23px !important;
+  font-size: 14px !important; font-weight: 800 !important;
+}
+/* The staff row lines its buttons up with the bottom line of a grown box. */
+#kt-chat-dock #kt-st-input, #appMain #kt-st-input { align-self: flex-end; }
+
+/* ── the popout's "new chat" message box ── */
+#kt-chat-dock .kt-cd-compose { padding: 12px !important; gap: 10px !important; }
+#kt-chat-dock .kt-cd-compose textarea {
+  min-height: 110px !important;
+  max-height: 260px !important;
+  padding: 11px 14px !important;
+  font-size: 14.5px !important;
+  line-height: 1.45 !important;
+  color: #0F172A !important;
+  background: #F4F7FA !important;
+  border: 1.5px solid #D5DEE7 !important;
+  border-radius: 14px !important;
+  background-image: none !important;
+  resize: vertical !important;
+}
+#kt-chat-dock .kt-cd-compose textarea:focus {
+  outline: none !important; background: #fff !important; border-color: #159FB4 !important;
+  box-shadow: 0 0 0 3px rgba(21, 159, 180, .16) !important;
+}
+#kt-chat-dock .kt-cd-compose button {
+  align-self: flex-end;
+  height: 40px !important; min-height: 0 !important;
+  padding: 0 20px !important;
+  border-radius: 20px !important;
+  font-size: 14px !important; font-weight: 800 !important;
+}
+
+/* ── phones: 16px text (iOS zooms the page into anything smaller), 44px tall ── */
+@media (max-width: 768px) {
+  #appMain input.kt-compose-input.kt-compose-input,
+  #appMain textarea#kt-st-input {
+    font-size: 16px !important;
+    min-height: 44px !important;
+    padding: 11px 16px !important;
+    border-radius: 22px !important;
+  }
+  #appMain input.kt-compose-input.kt-compose-input { height: 44px !important; }
+  #appMain #kt-st-send { height: 44px !important; border-radius: 22px !important; padding: 0 16px !important; }
+  #appMain #kt-st-emoji-btn, #appMain #kt-st-photo-btn, #appMain #kt-st-mic-btn { width: 36px !important; height: 36px !important; font-size: 18px !important; }
+}
+
+/* ── TWO LINES WHERE SPACE IS TIGHT: the popout, and phones ──
+   In the popout the thread shares ~420px with the conversation list, and three tool
+   buttons plus 🚨 left the box 228px: a sentence was cut off after five words. Same on a
+   phone. So the box takes its own full-width line, and the tools sit on a slim row under
+   it with Send at the right — the layout Teams/Slack use in a narrow pane. */
+#kt-chat-dock .kt-thread-compose,
+#kt-chat-dock .kt-thread-compose > div:has(> #kt-st-input) {
+  flex-wrap: wrap !important;
+  row-gap: 6px !important;
+}
+#kt-chat-dock .kt-thread-compose > .kt-compose-input,
+#kt-chat-dock .kt-thread-compose #kt-st-input {
+  order: -1 !important;
+  flex: 1 1 100% !important;
+  width: 100% !important;
+}
+#kt-chat-dock .kt-thread-compose > button:last-of-type,
+#kt-chat-dock .kt-thread-compose #kt-st-send { margin-left: auto !important; }
+#kt-chat-dock .kt-thread-compose > .kt-em-btn { margin-left: auto !important; }
+#kt-chat-dock .kt-thread-compose > .kt-em-btn ~ button { margin-left: 0 !important; }
+/* The emoji tray opens above the whole two-line bar, not over the text box. */
+#kt-chat-dock .kt-thread-compose .kt-emoji-panel,
+#kt-chat-dock .kt-thread-compose #kt-st-emoji { bottom: calc(100% + 6px) !important; }
+
+@media (max-width: 768px) {
+  #appMain .kt-thread-compose.kt-thread-compose,
+  #appMain .kt-thread-compose > div:has(> #kt-st-input) {
+    flex-wrap: wrap !important;
+    row-gap: 6px !important;
+  }
+  #appMain .kt-thread-compose > input.kt-compose-input.kt-compose-input,
+  #appMain .kt-thread-compose textarea#kt-st-input {
+    order: -1 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+  }
+  #appMain .kt-thread-compose > button:last-of-type,
+  #appMain .kt-thread-compose #kt-st-send { margin-left: auto !important; }
+  #appMain .kt-thread-compose > .kt-em-btn { margin-left: auto !important; }
+  #appMain .kt-thread-compose > .kt-em-btn ~ button { margin-left: 0 !important; }
+  #appMain .kt-thread-compose .kt-emoji-panel,
+  #appMain .kt-thread-compose #kt-st-emoji { bottom: calc(100% + 6px) !important; }
+  /* The tool row is slimmer on a phone so the conversation keeps its height. */
+  #appMain .kt-thread-compose .kt-attach-btn,
+  #appMain .kt-thread-compose .kt-emoji-btn,
+  #appMain .kt-thread-compose .kt-mic-btn { width: 36px !important; height: 36px !important; }
+  /* Send matches the popout: a round 44px arrow (display is left to the script). */
+  #appMain .kt-thread-compose .kt-send-btn.kt-send-btn { width: 44px !important; height: 44px !important; padding: 0 !important; border-radius: 50% !important; }
+}

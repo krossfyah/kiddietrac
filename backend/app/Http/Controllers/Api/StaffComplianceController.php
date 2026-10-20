@@ -230,6 +230,318 @@ final class StaffComplianceController extends Controller
         return Storage::disk('local')->response($row->certificate_path, $row->certificate_name ?: 'certificate', ['Cache-Control' => 'private, no-store']);
     }
 
+    /* ───────────── certifications (CPR, first aid, RECE …) ─────────────
+
+       2026-10-19, Anthony: "add ability to add CPR certificates with issue and expiry dates -
+       full system and add ability for educators to upload using their view", then "staff
+       certifications should also be linked to their user profile record as well".
+
+       One set of endpoints for every door: the Certifications screen (directors/admins), the
+       Certifications tab on the user record, and an educator's own "My certificates". Before
+       this the add/edit/delete routes checked nothing — any director could change any row by
+       id, and any educator could add a certificate to anyone. Now: your own rows, or rows of
+       people you manage in the ACTIVE agency, and nothing else; the reader and every write
+       use the same rule (certRow). */
+
+    private const CERT_MIMES = 'pdf,jpg,jpeg,png,webp,heic,heif';
+
+    /** The certificate types for the agency's jurisdiction: [code => label]. */
+    private function certTypes(int $agencyId): array
+    {
+        $out = [];
+        foreach ((array) (\App\Support\Jurisdictions::forAgency($agencyId)['certifications'] ?? []) as $c) $out[$c['code']] = $c['label'];
+        if (! $out) $out = ['RECE' => 'RECE', 'First_Aid' => 'First Aid', 'CPR' => 'CPR', 'Other' => 'Other'];
+        if (! isset($out['CPR'])) $out['CPR'] = 'CPR';
+        if (! isset($out['Other'])) $out['Other'] = 'Other';
+
+        return $out;
+    }
+
+    /** Every code the column accepts (other jurisdictions' types stay valid on old rows). */
+    private function certCodes(): array
+    {
+        return array_values(array_unique(array_merge(['RECE', 'ECE_Assistant', 'First_Aid', 'CPR', 'Food_Handler', 'VSC', 'WHMIS', 'Vulnerable_Sector_Check', 'Health_Card', 'Other'],
+            \App\Support\Jurisdictions::allCertificationCodes())));
+    }
+
+    /** A row this person may see: their own or a managed person's, entered under this agency (or legacy, unowned). */
+    private function certRow(Request $request, int $agencyId, int $id): object
+    {
+        $row = DB::table('staff_certifications')->where('id', $id)
+            ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereNull('agency_id'))->first();
+        abort_unless($row, 404, 'Certificate not found.');
+        $me = (int) $request->user()->id;
+        abort_unless((int) $row->user_id === $me || $this->canManageUser($request, $agencyId, (int) $row->user_id), 404, 'Certificate not found.');
+
+        return $row;
+    }
+
+    private function certOut(object $c, array $types, string $today, array $names = []): array
+    {
+        $status = 'no_expiry'; $days = null;
+        if ($c->expires_at) {
+            $days = (int) \Illuminate\Support\Carbon::parse($today)->diffInDays(\Illuminate\Support\Carbon::parse($c->expires_at), false);
+            $status = $days < 0 ? 'expired' : ($days <= 30 ? 'expiring_soon' : ($days <= 90 ? 'warning' : 'ok'));
+        }
+        $code = (string) $c->cert_type;
+
+        return [
+            'id' => (int) $c->id, 'user_id' => (int) $c->user_id, 'staff_name' => $names[(int) $c->user_id] ?? null,
+            'cert_type' => $code, 'label' => $c->title ?: ($types[$code] ?? str_replace('_', ' ', $code)), 'title' => $c->title,
+            'certifier' => $c->certifier, 'issued_at' => $c->issued_at ? substr((string) $c->issued_at, 0, 10) : null,
+            'expires_at' => $c->expires_at ? substr((string) $c->expires_at, 0, 10) : null, 'days_until_expiry' => $days, 'status' => $status,
+            'has_document' => (bool) $c->document_path, 'document_name' => $c->document_name,
+            'verified' => (bool) $c->verified_at, 'verified_at' => $c->verified_at, 'verified_by_name' => $names['v' . (int) $c->verified_by] ?? null,
+            'self_added' => $c->added_by !== null && (int) $c->added_by === (int) $c->user_id,
+        ];
+    }
+
+    private function namesFor(array $ids): array
+    {
+        $out = [];
+        foreach (DB::table('users')->whereIn('id', array_values(array_unique(array_filter($ids))) ?: [0])->get(['id', 'first_name', 'last_name']) as $u) {
+            $out[(int) $u->id] = trim($u->first_name . ' ' . $u->last_name);
+        }
+
+        return $out;
+    }
+
+    private function certToday(int $agencyId): string
+    {
+        return \Illuminate\Support\Carbon::now(\App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto')->toDateString();
+    }
+
+    /** GET /staff-certifications?user_id= — one person's certificates (yours by default). */
+    public function certIndex(Request $request): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $me = (int) $request->user()->id;
+        $uid = (int) ($request->query('user_id') ?: $me);
+        $manage = $this->canManageUser($request, $agencyId, $uid);
+        abort_unless($uid === $me || $manage, 403);
+        $rows = DB::table('staff_certifications')->where('user_id', $uid)->where('active', 1)
+            ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereNull('agency_id'))
+            ->orderByRaw('expires_at IS NULL')->orderBy('expires_at')->orderByDesc('id')->get();
+        $types = $this->certTypes($agencyId); $today = $this->certToday($agencyId);
+        $names = $this->namesFor(array_merge([$uid], $rows->pluck('verified_by')->all()));
+        foreach ($rows as $r) if ($r->verified_by && isset($names[(int) $r->verified_by])) $names['v' . (int) $r->verified_by] = $names[(int) $r->verified_by];
+
+        return response()->json([
+            'user_id' => $uid, 'name' => $names[$uid] ?? null, 'can_manage' => $manage, 'is_self' => $uid === $me,
+            'types' => collect($types)->map(fn ($l, $c) => ['code' => $c, 'label' => $l])->values(),
+            'certifications' => $rows->map(fn ($r) => $this->certOut($r, $types, $today, $names))->values(),
+        ]);
+    }
+
+    /** GET /staff-certifications/roster?centre_id=&type= — everyone you manage (directors/admins). */
+    public function certRoster(Request $request): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $s = $this->scope($request, $agencyId);
+        abort_unless($s, 403, 'Directors and admins only.');
+        $centres = DB::table('centres')->whereIn('id', \App\Support\Live::centreIds($agencyId) ?: [0])
+            ->when(! $s['all'], fn ($q) => $q->whereIn('id', $s['centres'] ?: [0]))->orderBy('name')->get(['id', 'name']);
+        $centreId = (int) $request->query('centre_id');
+        $filter = $s['all'] ? null : $s['centres'];
+        if ($centreId) {
+            abort_unless($centres->contains('id', $centreId), 403, 'That centre is not one of yours.');
+            $filter = [$centreId];
+        }
+        $staff = StaffCompliance::staffIds($agencyId, $filter);
+        $types = $this->certTypes($agencyId); $today = $this->certToday($agencyId);
+        $type = (string) $request->query('type', '');
+        $rows = DB::table('staff_certifications')->whereIn('user_id', $staff ?: [0])->where('active', 1)
+            ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereNull('agency_id'))
+            ->when($type !== '', fn ($q) => $q->where('cert_type', $type))
+            ->orderByRaw('expires_at IS NULL')->orderBy('expires_at')->get();
+        $names = $this->namesFor(array_merge($staff, $rows->pluck('verified_by')->all()));
+        foreach ($rows as $r) if ($r->verified_by && isset($names[(int) $r->verified_by])) $names['v' . (int) $r->verified_by] = $names[(int) $r->verified_by];
+        $out = $rows->map(fn ($r) => $this->certOut($r, $types, $today, $names))->values();
+
+        // Who has no CURRENT certificate of the chosen type (CPR when none is chosen).
+        $need = $type !== '' ? $type : 'CPR';
+        $have = DB::table('staff_certifications')->whereIn('user_id', $staff ?: [0])->where('active', 1)->where('cert_type', $need)
+            ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereNull('agency_id'))
+            ->where(fn ($w) => $w->whereNull('expires_at')->orWhere('expires_at', '>=', $today))->pluck('user_id')->map(fn ($i) => (int) $i)->all();
+        $missing = [];
+        foreach ($staff as $uid) if (! in_array($uid, $have, true)) $missing[] = ['user_id' => $uid, 'name' => $names[$uid] ?? ''];
+        usort($missing, fn ($a, $b) => strcasecmp($a['name'], $b['name']));
+        $staffList = array_map(fn ($u) => ['id' => $u, 'name' => $names[$u] ?? ''], $staff);
+        usort($staffList, fn ($a, $b) => strcasecmp($a['name'], $b['name']));
+
+        return response()->json([
+            'centres' => $centres, 'centre_id' => $centreId ?: null, 'type' => $type ?: null,
+            'types' => collect($types)->map(fn ($l, $c) => ['code' => $c, 'label' => $l])->values(),
+            'staff' => $staffList, 'certifications' => $out,
+            'missing' => ['type' => $need, 'label' => $types[$need] ?? $need, 'staff' => $missing],
+            'counts' => ['total' => $out->count(), 'expired' => $out->where('status', 'expired')->count(),
+                'expiring_soon' => $out->where('status', 'expiring_soon')->count(), 'unverified' => $out->where('verified', false)->count()],
+        ]);
+    }
+
+    private function certValidate(Request $request, bool $creating): array
+    {
+        return $request->validate([
+            'user_id' => ['nullable', 'integer'],
+            'cert_type' => [$creating ? 'required' : 'sometimes', 'in:' . implode(',', $this->certCodes())],
+            'title' => ['nullable', 'string', 'max:160'],
+            'certifier' => ['nullable', 'string', 'max:160'],
+            'issued_at' => [$creating ? 'required' : 'sometimes', 'date', 'before_or_equal:' . now()->addDay()->toDateString()],
+            'expires_at' => ['nullable', 'date', 'after_or_equal:issued_at'],
+            'document' => ['nullable', 'file', 'max:10240', 'mimes:' . self::CERT_MIMES],
+            'remove_document' => ['nullable', 'boolean'],
+        ], [
+            'expires_at.after_or_equal' => 'The expiry date cannot be before the issue date.',
+            'document.mimes' => 'Upload a PDF or a photo (JPG, PNG, HEIC).',
+            'document.max' => 'The file is over 10 MB.',
+        ]);
+    }
+
+    private function certStoreFile(Request $request, int $agencyId): array
+    {
+        $f = $request->file('document');
+
+        return [$f->storeAs('staff-certificates/' . $agencyId, Str::uuid() . '.' . strtolower($f->getClientOriginalExtension() ?: 'bin'), 'local'),
+            mb_substr($f->getClientOriginalName(), 0, 190)];
+    }
+
+    /** POST /staff-certifications (multipart) {user_id?, cert_type, title?, certifier?, issued_at, expires_at?, document?} */
+    public function certStore(Request $request): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $me = (int) $request->user()->id;
+        $d = $this->certValidate($request, true);
+        $uid = (int) ($d['user_id'] ?? $me);
+        $manager = $this->canManageUser($request, $agencyId, $uid);
+        abort_unless($uid === $me || $manager, 403, 'You can add certificates for yourself, or for staff you manage.');
+        [$path, $name] = $request->hasFile('document') ? $this->certStoreFile($request, $agencyId) : [null, null];
+        // Entered by a director/admin for someone else = checked by them. Your own = waits for a check.
+        $checked = $manager && $uid !== $me;
+        $id = DB::table('staff_certifications')->insertGetId([
+            'user_id' => $uid, 'agency_id' => $agencyId, 'cert_type' => $d['cert_type'],
+            'title' => ($d['cert_type'] === 'Other' || ! empty($d['title'])) ? (trim((string) ($d['title'] ?? '')) ?: null) : null,
+            'certifier' => trim((string) ($d['certifier'] ?? '')) ?: null, 'issued_at' => $d['issued_at'], 'expires_at' => $d['expires_at'] ?? null,
+            'document_path' => $path, 'document_name' => $name, 'active' => 1, 'added_by' => $me,
+            'verified_by' => $checked ? $me : null, 'verified_at' => $checked ? now() : null, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $label = $this->certTypes($agencyId)[$d['cert_type']] ?? $d['cert_type'];
+        $this->audit($request, $agencyId, 'staff.certification_added', 'user', $uid, 'Certificate added: ' . $label
+            . ' (issued ' . $d['issued_at'] . (! empty($d['expires_at']) ? ', expires ' . $d['expires_at'] : '') . ')' . ($path ? ' with the certificate attached' : ''));
+        if ($uid === $me) $this->certTellManagers($agencyId, $uid, '🎓 %s added a certificate', $label . (! empty($d['expires_at']) ? ' — expires ' . $d['expires_at'] : '') . '. Open it to check and mark it verified.');
+
+        return response()->json(['id' => $id, 'verified' => $checked], 201);
+    }
+
+    /** POST|PATCH /staff-certifications/{id} — change the details, replace or remove the file. */
+    public function certUpdate(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $row = $this->certRow($request, $agencyId, $id);
+        $me = (int) $request->user()->id;
+        $manager = $this->canManageUser($request, $agencyId, (int) $row->user_id);
+        $d = $this->certValidate($request, false);
+        $u = [];
+        foreach (['cert_type', 'issued_at'] as $k) if (array_key_exists($k, $d)) $u[$k] = $d[$k];
+        foreach (['title', 'certifier', 'expires_at'] as $k) if ($request->has($k)) $u[$k] = trim((string) ($d[$k] ?? '')) ?: null;
+        $issued = $u['issued_at'] ?? substr((string) $row->issued_at, 0, 10);
+        $exp = array_key_exists('expires_at', $u) ? $u['expires_at'] : ($row->expires_at ? substr((string) $row->expires_at, 0, 10) : null);
+        abort_if($exp && $issued && $exp < $issued, 422, 'The expiry date cannot be before the issue date.');
+        $old = null;
+        if ($request->hasFile('document')) {
+            [$u['document_path'], $u['document_name']] = $this->certStoreFile($request, $agencyId);
+            $old = $row->document_path;
+        } elseif (! empty($d['remove_document'])) {
+            $u['document_path'] = null; $u['document_name'] = null; $old = $row->document_path;
+        }
+        // A change made by the holder needs checking again; one made by their manager is checked by them.
+        if ($u) {
+            if ($manager && (int) $row->user_id !== $me) { $u['verified_by'] = $me; $u['verified_at'] = now(); }
+            else { $u['verified_by'] = null; $u['verified_at'] = null; }
+            if ($row->agency_id === null) $u['agency_id'] = $agencyId;
+            DB::table('staff_certifications')->where('id', $id)->update($u + ['updated_at' => now()]);
+        }
+        if ($old) { try { Storage::disk('local')->delete($old); } catch (\Throwable $e) {} }
+        $this->audit($request, $agencyId, 'staff.certification_updated', 'user', (int) $row->user_id, 'Certificate changed: '
+            . ($this->certTypes($agencyId)[$u['cert_type'] ?? $row->cert_type] ?? $row->cert_type) . ' ' . json_encode(array_intersect_key($u, array_flip(['cert_type', 'title', 'certifier', 'issued_at', 'expires_at', 'document_name']))));
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** POST /staff-certifications/{id}/verify {verified: bool} — a director/admin, not on their own. */
+    public function certVerify(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $row = $this->certRow($request, $agencyId, $id);
+        $me = (int) $request->user()->id;
+        abort_unless($this->canManageUser($request, $agencyId, (int) $row->user_id) && (int) $row->user_id !== $me, 403, 'A director or admin checks certificates (not their own).');
+        $ok = (bool) ($request->validate(['verified' => ['nullable', 'boolean']])['verified'] ?? true);
+        DB::table('staff_certifications')->where('id', $id)->update(['verified_by' => $ok ? $me : null, 'verified_at' => $ok ? now() : null, 'updated_at' => now()]
+            + ($row->agency_id === null ? ['agency_id' => $agencyId] : []));
+        $this->audit($request, $agencyId, $ok ? 'staff.certification_verified' : 'staff.certification_unverified', 'user', (int) $row->user_id,
+            'Certificate ' . ($ok ? 'checked and verified' : 'marked not verified') . ': ' . ($this->certTypes($agencyId)[$row->cert_type] ?? $row->cert_type));
+
+        return response()->json(['ok' => true, 'verified' => $ok]);
+    }
+
+    /** DELETE /staff-certifications/{id} — a director/admin, or the holder while it is not yet verified. */
+    public function certDelete(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $row = $this->certRow($request, $agencyId, $id);
+        $me = (int) $request->user()->id;
+        $manager = $this->canManageUser($request, $agencyId, (int) $row->user_id);
+        abort_unless($manager || ((int) $row->user_id === $me && ! $row->verified_at), 403, 'This certificate has been verified — ask your director to remove it.');
+        DB::table('staff_certifications')->where('id', $id)->delete();
+        if ($row->document_path) { try { Storage::disk('local')->delete($row->document_path); } catch (\Throwable $e) {} }
+        $this->audit($request, $agencyId, 'staff.certification_removed', 'user', (int) $row->user_id, 'Certificate removed: '
+            . ($this->certTypes($agencyId)[$row->cert_type] ?? $row->cert_type) . ' (issued ' . substr((string) $row->issued_at, 0, 10) . ($row->expires_at ? ', expires ' . substr((string) $row->expires_at, 0, 10) : '') . ')');
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** GET /staff-certifications/{id}/document — the certificate file, to the holder or their manager. */
+    public function certDocument(Request $request, int $id)
+    {
+        $agencyId = $this->agencyId($request);
+        $row = $this->certRow($request, $agencyId, $id);
+        abort_unless($row->document_path && Storage::disk('local')->exists($row->document_path), 404, 'No certificate file is attached.');
+        $this->audit($request, $agencyId, 'staff.certification_viewed', 'user', (int) $row->user_id, 'Opened a certificate file: ' . ($this->certTypes($agencyId)[$row->cert_type] ?? $row->cert_type));
+
+        return Storage::disk('local')->response($row->document_path, $row->document_name ?: 'certificate', ['Cache-Control' => 'private, no-store']);
+    }
+
+    /** Wrappers for the older /staff/{user}/certifications routes, now scoped the same way. */
+    public function certIndexFor(Request $request, int $user): JsonResponse
+    {
+        $request->query->set('user_id', $user);
+
+        return $this->certIndex($request);
+    }
+
+    public function certStoreFor(Request $request, int $user): JsonResponse
+    {
+        $request->merge(['user_id' => $user]);
+
+        return $this->certStore($request);
+    }
+
+    /** A bell to the directors of the person's centres and the agency's admins. */
+    private function certTellManagers(int $agencyId, int $uid, string $titleFmt, string $body): void
+    {
+        try {
+            $centres = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id');
+            $to = DB::table('role_assignments as ra')->where('ra.active', true)
+                ->where(fn ($w) => $w->where(fn ($a) => $a->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId))
+                    ->orWhere(fn ($dd) => $dd->where('ra.role', 'centre_director')->whereIn('ra.centre_id', $centres->all() ?: [0])))
+                ->where('ra.user_id', '!=', $uid)->pluck('ra.user_id')->unique();
+            $who = trim((string) DB::table('users')->where('id', $uid)->value(DB::raw("CONCAT_WS(' ', first_name, last_name)")));
+            $rows = [];
+            foreach ($to as $r) $rows[] = ['user_id' => (int) $r, 'type' => 'compliance', 'title' => sprintf($titleFmt, $who), 'body' => $body,
+                'data' => json_encode(['hash' => 'certifications', 'link' => '#certifications']), 'created_at' => now()];
+            if ($rows) \App\Support\Notify::write($rows);
+        } catch (\Throwable $e) {}
+    }
+
     /* ───────────── household residents ───────────── */
 
     /** Centres whose household this person may see: directors/admins' centres, and a provider's own home. */

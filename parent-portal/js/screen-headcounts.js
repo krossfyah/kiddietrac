@@ -161,6 +161,17 @@
     refresh();
     $('[data-save]').onclick = async function () {
       var btn = this;
+      /* NOBODY TICKED (2026-10-19). A save with 0 of 3 ticked was filed as three children
+         missing and corrected to 3 of 3 twenty-four seconds later: saved before ticking.
+         A zero count now asks once, on the button itself, before it is filed. */
+      var ticked = st.children.filter(function (c) { return st.seen[c.id]; }).length;
+      if (!ticked && total > 0 && !btn._ktZeroOk) {
+        btn._ktZeroOk = true;
+        btn.textContent = 'Nobody ticked — tap again to save as ' + total + ' not seen';
+        setTimeout(function () { btn._ktZeroOk = false; if (!btn.disabled) refresh(); }, 5000);
+        return;
+      }
+      btn._ktZeroOk = false;
       st.location = ($('[data-loc]').value || '').trim(); st.note = ($('[data-note]').value || '').trim();
       btn.disabled = true; btn.textContent = 'Saving…';
       var body = { context: st.ctx, location: st.location || null, note: st.note || null,

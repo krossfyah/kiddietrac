@@ -325,7 +325,9 @@
         if (!status) {
           const startedAt = Date.now() - (ms || 0);
           if ((typeof document !== 'undefined' && document.hidden)
-              || (Api._hiddenAt && Api._hiddenAt >= startedAt)) {
+              || (Api._hiddenAt && Api._hiddenAt >= startedAt)
+              // Woken just now and the 5s tick has not caught up yet (see the bottom of this file).
+              || (Api._lastTick && Date.now() - Api._lastTick > 20000)) {
             return;
           }
         }
@@ -551,6 +553,24 @@
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) { Api._hiddenAt = Date.now(); }
     });
+  } catch (_) {}
+  /* THE ANDROID APP NEVER SAYS IT WENT TO SLEEP (2026-10-19). Every "request never
+     completed" in the audit log that day (12 of them, 5 to 10 minutes long) came from the
+     app's WebView ("; wv)"), where document.hidden stays false when the phone locks or the
+     app is put away, so the check above never ran. Two signals that do work there: the
+     native shell's pause/resume events, and the clock itself — a timer that should tick
+     every 5s and instead wakes 20s+ later means this page was frozen in between. Either
+     marks the page as having been asleep, and _reportFailure skips what was in flight. */
+  try {
+    ['pause', 'resume', 'freeze', 'pagehide'].forEach(function (ev) {
+      document.addEventListener(ev, function () { Api._hiddenAt = Date.now(); });
+    });
+    Api._lastTick = Date.now();
+    setInterval(function () {
+      var now = Date.now();
+      if (now - Api._lastTick > 20000) { Api._hiddenAt = now; }
+      Api._lastTick = now;
+    }, 5000);
   } catch (_) {}
 
   // Export

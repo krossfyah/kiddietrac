@@ -67,6 +67,35 @@ final class ExpiryWarningCommand extends Command
         }
         $this->info("Sent {$sent} expiry warnings");
 
+        /* CERTIFICATES TOO (2026-10-19). This command said "certifications" in its name and
+           description and only ever read background_checks, so a CPR card ran out with nobody
+           told. Same window, same weekly de-duplication, a bell to the holder pointing at
+           their own "My certificates" (where they can upload the renewed one). */
+        $certBells = 0;
+        $certs = DB::table('staff_certifications')->where('active', 1)
+            ->whereIn('user_id', fn ($q) => \App\Support\Audience::excludeOff($q->from('users as u')->whereNull('u.deleted_at'), 'u')->select('u.id'))
+            ->whereNotNull('expires_at')
+            ->where('expires_at', '<=', $cutoff->toDateString())
+            ->where('expires_at', '>=', $now->copy()->subDays(30)->toDateString())
+            ->get();
+        foreach ($certs as $c) {
+            $dedupe = "cert:{$c->id}:{$weekKey}";
+            if (DB::table('notifications')->where('user_id', $c->user_id)->where('body', 'like', "%[{$dedupe}]%")->exists()) continue;
+            $label = $c->title ?: str_replace('_', ' ', (string) $c->cert_type);
+            $exp = Carbon::parse($c->expires_at)->startOfDay();
+            $daysOut = (int) $now->copy()->startOfDay()->diffInDays($exp, false);
+            \App\Support\Notify::write([
+                'user_id' => $c->user_id,
+                'type' => 'compliance',
+                'title' => $daysOut < 0 ? "🎓 Your {$label} certificate has expired" : "🎓 Your {$label} certificate expires in {$daysOut} day" . ($daysOut === 1 ? '' : 's'),
+                'body' => 'Expires ' . $exp->format('M j, Y') . '. When you renew it, add the new certificate under My certificates. [' . $dedupe . ']',
+                'data' => json_encode(['hash' => 'my-certificates']),
+                'created_at' => now(),
+            ]);
+            $certBells++;
+        }
+        $this->info("Sent {$certBells} certificate expiry warnings");
+
         /* DEADLINES FROM HIRE DATE, AND TRAINING HOURS (2026-10-10). Where the agency's
            jurisdiction sets them (App\Support\StaffCompliance — Ohio today; Ontario sets none,
            so nothing here runs for it): a bell to the staff member for anything due within 14

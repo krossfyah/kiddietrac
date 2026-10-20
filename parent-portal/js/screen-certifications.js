@@ -574,6 +574,8 @@
   function td() { return 'padding:12px 14px;color:#374151;'; }
 
   window.KT = window.KT || {};
-  window.KT.Certifications = { render: renderCerts };
+  /* The roster now lives in kt-staff-certs.js (2026-10-19): add, upload the certificate,
+     verify, who has no current CPR. The table above stays as the fallback. */
+  window.KT.Certifications = { render: function (c) { return (window.KT.StaffCerts && window.KT.StaffCerts.renderRoster) ? window.KT.StaffCerts.renderRoster(c) : renderCerts(c); } };
   window.KT.Timesheets = { render: renderTimesheets };
 })(window);

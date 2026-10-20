@@ -2464,6 +2464,7 @@
        rather than a second strip nested inside Details. */
     const paneStaff = Dom.el('div', { style: 'display:none;' });
     const paneChecks = Dom.el('div', { style: 'display:none;' });
+    const paneCerts = Dom.el('div', { style: 'display:none;' });
     const paneClock = Dom.el('div', { style: 'display:none;' });
     const paneData = Dom.el('div', { style: 'display:none;' });
 
@@ -2518,6 +2519,14 @@
       mkTab('🛡️ Background checks', paneChecks);
       mkTab('🕓 Clock in / out', paneClock);
       mkTab('🔐 Account & pay', paneAccount);
+    }
+    /* CERTIFICATES ON THE RECORD (2026-10-19, Anthony: "staff certifications should also be
+       linked to their user profile record as well"). Staff only; directors too (the server
+       admits them for their own centres' people). Loaded the first time the tab is opened. */
+    var _staffRoles = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
+    if ((user.roles || []).some(function (r) { return _staffRoles.indexOf(r) >= 0; }) && window.KT && KT.StaffCerts) {
+      var _certTab = mkTab('🎓 Certifications', paneCerts), _certsDrawn = false;
+      _certTab.addEventListener('click', function () { if (!_certsDrawn) { _certsDrawn = true; KT.StaffCerts.renderList(paneCerts, user.id); } });
     }
     if (_isSelf) { mkTab('💬 Texts & calls', paneContact); }
     if (!_dirMode) mkTab('🗄️ Data & retention', paneData);
@@ -2600,6 +2609,7 @@
     paneHost.appendChild(paneFiles);
     paneHost.appendChild(paneStaff);
     paneHost.appendChild(paneChecks);
+    paneHost.appendChild(paneCerts);
     paneHost.appendChild(paneClock);
     paneHost.appendChild(paneAccount);
     paneHost.appendChild(paneData);
