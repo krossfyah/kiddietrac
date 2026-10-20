@@ -6963,7 +6963,46 @@
     function inp(val, ph, type) { var e = Dom.el('input', { type: type || 'text', style: IN }); if (ph) e.placeholder = ph; e.value = val == null ? '' : val; return e; }
     function selEl(val, opts) { var s = Dom.el('select', { style: IN + 'background:#fff;' }); opts.forEach(function (o) { var op = Dom.el('option', { value: o.value }, o.label); if (String(val) === String(o.value)) op.selected = true; s.appendChild(op); }); return s; }
     function fwrap(l, e) { var d = Dom.el('div', { style: 'margin-bottom:12px;' }); d.appendChild(Dom.el('label', { style: 'display:block;font-size:12.5px;font-weight:600;color:#334155;margin-bottom:4px;' }, l)); d.appendChild(e); return d; }
-    function grid(cols) { return Dom.el('div', { style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;' }); }
+    function grid(cols) { return Dom.el('div', { class: 'kt-fe-row', style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;' }); }
+    /* ONE LAYOUT FOR THE WHOLE EDITOR (2026-10-20). Anthony: "when i edit a family and look at
+       all of the sections, the fields and presentment is all over the place". Four tabs had
+       four layouts. Now every group of fields is a card with the light band header, fields
+       sit in aligned rows and fill their column, and each card's buttons sit bottom-right;
+       one column on a phone. */
+    (function feCss() {
+      if (document.getElementById('kt-fe-css')) { return; }
+      var st = document.createElement('style'); st.id = 'kt-fe-css';
+      st.textContent = ''
+        + '.kt-fe-sec{border:1px solid #E2E8F0;border-radius:12px;background:#fff;margin:0 0 14px;overflow:hidden;}'
+        + '.kt-fe-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:linear-gradient(90deg,#E8F1FB 0%,#F5F9FD 100%);'
+        + 'border-bottom:1px solid #E2E8F0;border-left:3px solid #4A7FA6;}'
+        + '.kt-fe-h .kt-fe-t{flex:1;min-width:0;font-size:12.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#12305A;}'
+        + '.kt-fe-h .kt-fe-t.kt-fe-name{text-transform:none;letter-spacing:0;font-size:14px;}'
+        + '.kt-fe-b{padding:12px 14px 2px;}'
+        + '.kt-fe-b>.kt-fe-row{margin-bottom:0;}'
+        + '.kt-fe-act{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 14px 12px;}'
+        + '.kt-fe-btn{height:32px;padding:0 14px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;border:1px solid transparent;white-space:nowrap;}'
+        + '.kt-fe-btn.p{background:#1F6080;color:#fff;}.kt-fe-btn.p:hover{background:#18506C;}'
+        + '.kt-fe-btn.s{background:#fff;color:#1F6080;border-color:#9EC2E3;}.kt-fe-btn.s:hover{background:#F0F7FC;}'
+        + '.kt-fe-btn.d{background:#fff;color:#B91C1C;border-color:#FCA5A5;}.kt-fe-btn.d:hover{background:#FEF2F2;}'
+        + '.kt-fe-btn.sm{height:28px;padding:0 10px;font-size:12px;}'
+        + '.kt-fe-check{display:flex;align-items:center;gap:8px;font-size:13px;color:#0F172A;margin:2px 0 12px;}'
+        + '.kt-fe-muted{font-size:12px;color:#64748B;}'
+        + '@media (max-width:640px){.kt-fe-row{grid-template-columns:1fr !important;}}';
+      document.head.appendChild(st);
+    })();
+    function feBtn(label, kind, small) { return Dom.el('button', { type: 'button', class: 'kt-fe-btn ' + (kind || 'p') + (small ? ' sm' : '') }, label); }
+    /* A card: band header (title, or a person's name, plus optional small buttons), body. */
+    function feSection(title, opts) {
+      opts = opts || {};
+      var sec = Dom.el('div', { class: 'kt-fe-sec', 'data-kt-nosechead': '1' });
+      var h = Dom.el('div', { class: 'kt-fe-h' });
+      h.appendChild(Dom.el('div', { class: 'kt-fe-t' + (opts.name ? ' kt-fe-name' : '') }, title));
+      (opts.tools || []).forEach(function (t) { h.appendChild(t); });
+      var b = Dom.el('div', { class: 'kt-fe-b' });
+      sec.appendChild(h); sec.appendChild(b);
+      return { el: sec, head: h, body: b, actions: function () { var a = Dom.el('div', { class: 'kt-fe-act' }); sec.appendChild(a); return a; } };
+    }
     /* One field, formatted as you type by KT.Phone — the separate "Area" box was the
        last place in the portal still splitting a phone across two inputs. Same
        { wrap, get } contract, so every caller is untouched. */
@@ -6976,7 +7015,7 @@
     var root = Dom.el('div', {});
     // Same tab strip as the user record (2026-10-20): tinted band, current section filled.
     var tabBar = Dom.el('div', { role: 'tablist', class: 'kt-rtabbar', style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;padding:5px;background:#EEF3F8;border:1px solid #E2E8F0;border-radius:14px;' });
-    var pane = Dom.el('div', {});
+    var pane = Dom.el('div', { 'data-kt-nogrid': '1', 'data-kt-nofit': '1' });
     var msg = Dom.el('div', { style: 'min-height:18px;font-size:13px;margin-top:10px;' });
     // Same steady height as the user dialog, so switching tabs never resizes the popup.
     pane.style.height = 'min(58vh, 640px)'; pane.style.overflowY = 'auto'; pane.style.overflowX = 'hidden';
@@ -7015,7 +7054,9 @@
       var iCountry = selEl(f.country || 'CA', [{ value: 'CA', label: 'Canada' }, { value: 'US', label: 'United States' }]);
       var iBill = selEl(f.billing_split, [{ value: 'single', label: 'Single payer' }, { value: 'split_50_50', label: 'Split 50 / 50' }, { value: 'custom', label: 'Custom split' }]);
       var iNotes = Dom.el('textarea', { style: IN + 'min-height:60px;font-family:inherit;' }); iNotes.value = f.notes || '';
-      pane.appendChild(fwrap('Family name *', iName));
+      var sFam = feSection('Family'), sCon = feSection('Contact'), sAdr = feSection('Address'), sBil = feSection('Billing'), sNot = feSection('Notes');
+      var famRow = grid('1fr 1fr'); sFam.body.appendChild(famRow);
+      famRow.appendChild(fwrap('Family name *', iName));
       /* Locked once a child is enrolled (2026-10-09): the provider changes only through
          ⋮ → Move to another provider, which moves the children's rooms, tells the parents
          and both educators, and keeps the history. The server refuses it here too. */
@@ -7029,20 +7070,20 @@
         mv.addEventListener('click', function (ev) { ev.preventDefault(); try { Shell.Modal.close(); } catch (e) {} openFamilyTransfer(family, content); });
         hint.appendChild(mv);
         hint.appendChild(document.createTextNode(' — it moves the children\u2019s rooms, tells the parents and both educators, and keeps the history.'));
-        pane.appendChild(cw); pane.appendChild(hint);
+        famRow.appendChild(cw); hint.style.margin = '-4px 0 12px'; sFam.body.appendChild(hint);
       } else {
-        pane.appendChild(fwrap('Provider', iCentre));
+        famRow.appendChild(fwrap('Provider', iCentre));
       }
-      var g1 = grid('1fr 1fr'); g1.appendChild(ph.wrap); g1.appendChild(fwrap('Primary email', iEmail)); pane.appendChild(g1);
-      pane.appendChild(fwrap('Country', iCountry));
-      pane.appendChild(fwrap('Street address', iAddr));
-      var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province / State', iProv)); g2.appendChild(fwrap('Postal / ZIP code', iPost)); pane.appendChild(g2);
-      pane.appendChild(fwrap('Billing split', iBill));
+      var g1 = grid('1fr 1fr'); g1.appendChild(ph.wrap); g1.appendChild(fwrap('Primary email', iEmail)); sCon.body.appendChild(g1);
+      var gA = grid('2fr 1fr'); gA.appendChild(fwrap('Street address', iAddr)); gA.appendChild(fwrap('Country', iCountry)); sAdr.body.appendChild(gA);
+      var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province / State', iProv)); g2.appendChild(fwrap('Postal / ZIP code', iPost)); sAdr.body.appendChild(g2);
+      var gB = grid('1fr 1fr'); gB.appendChild(fwrap('Billing split', iBill)); gB.appendChild(Dom.el('div', {})); sBil.body.appendChild(gB);
+      [sFam, sCon, sAdr, sBil].forEach(function (x) { pane.appendChild(x.el); });
       /* WHO PAYS WHAT (split billing, 2026-09-29). The select only said "split"; nothing
          said between whom or in what proportion, and nothing billed that way. The panel
          saves on its own endpoint with the percentages, which must total 100%. */
-      var splitBox = Dom.el('div', { style: 'border:1px solid #BFDBFE;background:#F8FBFF;border-radius:10px;padding:10px 12px;margin:-4px 0 12px;' });
-      pane.appendChild(splitBox);
+      var splitBox = Dom.el('div', { style: 'border:1px solid #BFDBFE;background:#F8FBFF;border-radius:10px;padding:10px 12px;margin:0 0 12px;' });
+      sBil.body.appendChild(splitBox);
       function paintSplit() {
         var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
         var mode = iBill.value;
@@ -7079,8 +7120,9 @@
       }
       iBill.addEventListener('change', paintSplit);
       paintSplit();
-      pane.appendChild(fwrap('Internal notes', iNotes));
-      var save = Dom.el('button', { style: 'padding:9px 18px;background:#1F6080;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;' }, 'Save family');
+      sNot.body.appendChild(fwrap('Internal notes (staff only)', iNotes));
+      pane.appendChild(sNot.el);
+      var save = feBtn('Save family', 'p');
       save.addEventListener('click', async function () {
         if (!iName.value.trim()) { setMsg('Family name is required.'); return; }
         save.disabled = true; setMsg('Saving…', true);
@@ -7092,7 +7134,7 @@
         } catch (e) { setMsg((e.message || 'Save failed') + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '')); }
         save.disabled = false;
       });
-      pane.appendChild(save);
+      var famAct = Dom.el('div', { class: 'kt-fe-act', style: 'padding:0 0 4px;' }); famAct.appendChild(save); pane.appendChild(famAct);
     }
 
     function renderGuardians() {
@@ -7104,26 +7146,28 @@
         showAddGuardian(DATA.family, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
       }));
       (DATA.guardians || []).forEach(function (g) {
-        var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
-        card.appendChild(Dom.el('div', { style: 'font-weight:700;color:#1F6080;font-size:13px;margin-bottom:10px;' }, ((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? ' ★ primary' : '') + (Number(g.billing_hidden) ? '  ·  🚸 Pick-up login (no billing)' : '')));
+        var gsec = feSection(((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? '  ★ primary' : '') + (Number(g.billing_hidden) ? '  ·  🚸 Pick-up login (no billing)' : ''), { name: true });
+        var card = gsec.body;
         var iF = inp(g.first_name, 'First name'), iL = inp(g.last_name, 'Last name');
         var ph = phoneField('Phone', g.phone);
         var iR = selEl(g.relationship, [{ value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' }, { value: 'guardian', label: 'Guardian' }, { value: 'grandparent', label: 'Grandparent' }, { value: 'foster', label: 'Foster' }, { value: 'other', label: 'Other' }]);
-        var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:26px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
-        var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('First name', iF)); g1.appendChild(fwrap('Last name', iL)); card.appendChild(g1);
+        var pickWrap = Dom.el('label', { class: 'kt-fe-check' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('span', {}, 'Authorized for pickup'));
         var iSex = selEl(g.sex || '', [{ value: '', label: '—' }, { value: 'Female', label: 'Female' }, { value: 'Male', label: 'Male' }, { value: 'Non-binary', label: 'Non-binary' }, { value: 'Prefer not to say', label: 'Prefer not to say' }]);
-        var g2 = grid('1fr 1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Gender', iSex)); g2.appendChild(fwrap('Relationship', iR)); card.appendChild(g2);
+        var g1 = grid('1fr 1fr 1fr'); g1.appendChild(fwrap('First name', iF)); g1.appendChild(fwrap('Last name', iL)); g1.appendChild(fwrap('Relationship', iR)); card.appendChild(g1);
+        var g2 = grid('1fr 1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Gender', iSex)); g2.appendChild(Dom.el('div', {})); card.appendChild(g2);
         // Second number + its type, with an extension for a work number (2026-10-13).
         var ph2 = phoneField('Second phone', g.phone2);
         var iT2 = selEl(g.phone2_type || 'work', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
         var iX2 = inp(g.phone2_ext, 'Ext.'); iX2.setAttribute('inputmode', 'numeric');
         var x2wrap = fwrap('Ext. (optional)', iX2);
-        var g3 = grid('130px 1fr 110px'); g3.appendChild(fwrap('Type', iT2)); g3.appendChild(ph2.wrap); g3.appendChild(x2wrap); card.appendChild(g3);
+        var g3 = grid('1fr 1fr 1fr'); g3.appendChild(ph2.wrap); g3.appendChild(fwrap('Second phone type', iT2)); g3.appendChild(x2wrap); card.appendChild(g3);
         var syncX2 = function () { x2wrap.style.visibility = iT2.value === 'work' ? 'visible' : 'hidden'; };
         iT2.addEventListener('change', syncX2); syncX2();
-        card.appendChild(pickWrap);
-        card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:8px;' }, 'Login email: ' + (g.email || '—')));
-        var save = Dom.el('button', { style: 'margin-top:10px;padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save guardian');
+        var gRow = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;' });
+        gRow.appendChild(pickWrap);
+        gRow.appendChild(Dom.el('div', { class: 'kt-fe-muted', style: 'margin:2px 0 12px;' }, 'Login email: ' + (g.email || '—')));
+        card.appendChild(gRow);
+        var save = feBtn('Save guardian', 'p');
         save.addEventListener('click', async function () {
           save.disabled = true; setMsg('Saving…', true);
           try { await Api.patch('/admin/guardians/' + g.id, { first_name: iF.value.trim(), last_name: iL.value.trim(), phone: ph.get() || null,
@@ -7133,12 +7177,11 @@
           catch (e) { setMsg(e.message || 'Save failed'); }
           save.disabled = false;
         });
-        card.appendChild(save);
         /* Kiosk PIN and Remove — these were only on the family record, behind its edit
-           mode; with Edit now opening this form in one click, they live here. */
-        var gx = Dom.el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;' });
+           mode; with Edit now opening this form in one click, they live here (in the band). */
+        var gx = gsec.head;
         if (g.can_pickup !== false && g.id) {
-          var pinB = Dom.el('button', { type: 'button', style: 'padding:7px 12px;background:#fff;color:#1F6080;border:1px solid #1F6080;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;' }, '🔐 Set kiosk PIN');
+          var pinB = feBtn('🔐 Set kiosk PIN', 's', true);
           pinB.addEventListener('click', async function () {
             var who = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
             var pin = await window.KT.prompt({ title: 'Set kiosk PIN for ' + who,
@@ -7154,7 +7197,7 @@
           gx.appendChild(pinB);
         }
         if (g.id) {
-          var rmB = Dom.el('button', { type: 'button', style: 'padding:7px 12px;background:#fff;color:#B91C1C;border:1px solid #FCA5A5;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;' }, 'Remove from family');
+          var rmB = feBtn('Remove from family', 'd', true);
           rmB.addEventListener('click', async function () {
             var who = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
             var ok = !(window.KT && KT.confirm) || await KT.confirm({ title: 'Remove ' + who + ' from this family?',
@@ -7170,8 +7213,8 @@
           });
           gx.appendChild(rmB);
         }
-        card.appendChild(gx);
-        pane.appendChild(card);
+        gsec.actions().appendChild(save);
+        pane.appendChild(gsec.el);
       });
       if (!(DATA.guardians || []).length) pane.appendChild(Dom.el('div', { style: 'color:#64748B;' }, 'No guardians.'));
     }
@@ -7183,14 +7226,14 @@
       }));
       pane.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:12px;' }, 'Open a child’s record to edit health, enrolment and details.'));
       (DATA.children || []).forEach(function (c) {
-        var row = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;' });
+        var row = Dom.el('div', { class: 'kt-fe-sec', style: 'padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-left:3px solid #4A7FA6;' });
         var info = Dom.el('div', {});
         info.appendChild(Dom.el('div', { style: 'font-weight:700;' }, (c.preferred_name || ((c.first_name || '') + ' ' + (c.last_name || ''))).trim()));
         var bits = [c.date_of_birth ? 'Born ' + c.date_of_birth : null, c.gender, c.enrollment_status].filter(Boolean).join(' · ');
         info.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;' }, bits));
         if (c.allergies) info.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#B45309;margin-top:2px;' }, '⚠️ ' + c.allergies));
         row.appendChild(info);
-        var open = Dom.el('button', { style: 'padding:7px 12px;background:#fff;color:#1F6080;border:1px solid #1F6080;border-radius:7px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;' }, 'Open record →');
+        var open = feBtn('Open record →', 's', true);
         open.addEventListener('click', function () { Shell.Modal.close(); location.hash = '#child-detail?id=' + c.id; });
         row.appendChild(open); pane.appendChild(row);
       });
@@ -7198,7 +7241,8 @@
     }
 
     function ecCard(e) {
-      var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
+      var esec = feSection(e.__new ? 'New emergency contact' : ((e.name || 'Emergency contact') + (e.relationship ? '  ·  ' + e.relationship : '')), { name: true });
+      var card = esec.body;
       var iN = inp(e.name, 'Full name'); var iR = selEl(e.relationship || '', [{ value: '', label: 'Relationship…' }].concat(EREL.map(function (r) { return { value: r, label: r }; })));
       var ph = phoneField('Phone', e.phone); var pha = phoneField('Second phone', e.alt_phone);
       var iAT = selEl(e.alt_phone_type || 'work', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
@@ -7206,15 +7250,14 @@
       var axWrap = fwrap('Ext. (optional)', iAX);
       var iEm = inp(e.email, 'name@example.com', 'email');
       var lg = Dom.el('input', { type: 'checkbox' }); lg.checked = !!e.user_id;
-      var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
-      var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('Full name', iN)); g1.appendChild(fwrap('Relationship', iR)); card.appendChild(g1);
-      card.appendChild(ph.wrap);
-      var g2 = grid('130px 1fr 110px'); g2.appendChild(fwrap('Type', iAT)); g2.appendChild(pha.wrap); g2.appendChild(axWrap); card.appendChild(g2);
+      var pickWrap = Dom.el('label', { class: 'kt-fe-check' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('span', {}, 'Authorized for pickup'));
+      var g1 = grid('1fr 1fr 1fr'); g1.appendChild(fwrap('Full name', iN)); g1.appendChild(fwrap('Relationship', iR)); g1.appendChild(ph.wrap); card.appendChild(g1);
+      var g2 = grid('1fr 1fr 1fr'); g2.appendChild(pha.wrap); g2.appendChild(fwrap('Second phone type', iAT)); g2.appendChild(axWrap); card.appendChild(g2);
       var axSync = function () { axWrap.style.visibility = iAT.value === 'work' ? 'visible' : 'hidden'; };
       iAT.addEventListener('change', axSync); axSync();
       card.appendChild(pickWrap);
       // Pick-up login: parent view minus billing (2026-10-13).
-      var lgBox = Dom.el('div', { style: 'margin-top:10px;border:1px solid #E2E8F0;background:#F8FAFC;border-radius:10px;padding:10px 12px;' });
+      var lgBox = Dom.el('div', { style: 'margin:0 0 12px;border:1px solid #E2E8F0;background:#F8FAFC;border-radius:10px;padding:10px 12px;' });
       var lgRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
       lgRow.appendChild(lg); lgRow.appendChild(Dom.el('label', { style: 'font-size:13px;font-weight:700;color:#0F172A;' }, e.user_id ? 'Has a pick-up login' : 'Give a pick-up login'));
       lgBox.appendChild(lgRow);
@@ -7224,8 +7267,8 @@
       var lgSync = function () { emWrap.style.display = lg.checked ? 'block' : 'none'; };
       lg.addEventListener('change', function () { if (lg.checked) pick.checked = true; lgSync(); }); lgSync();
       card.appendChild(lgBox);
-      var bar = Dom.el('div', { style: 'display:flex;gap:8px;margin-top:10px;' });
-      var save = Dom.el('button', { style: 'padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save');
+      var bar = esec.actions();
+      var save = feBtn('Save contact', 'p');
       save.addEventListener('click', async function () {
         if (!iN.value.trim()) { setMsg('Name is required.'); return; }
         save.disabled = true; setMsg('Saving…', true);
@@ -7243,9 +7286,8 @@
         save.disabled = false;
       });
       bar.appendChild(save);
-      if (!e.__new) { var del = Dom.el('button', { style: 'padding:8px 14px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Delete'); del.addEventListener('click', async function () { if (KT.confirm && !await KT.confirm('Delete this emergency contact?')) return; try { await Api.delete('/admin/emergency-contacts/' + e.id); card.remove(); setMsg('✓ Deleted', true); refreshList(); } catch (err) { setMsg(err.message || 'Delete failed'); } }); bar.appendChild(del); }
-      card.appendChild(bar);
-      return card;
+      if (!e.__new) { var del = feBtn('Delete', 'd', true); del.addEventListener('click', async function () { if (KT.confirm && !await KT.confirm('Delete this emergency contact?')) return; try { await Api.delete('/admin/emergency-contacts/' + e.id); esec.el.remove(); setMsg('✓ Deleted', true); refreshList(); } catch (err) { setMsg(err.message || 'Delete failed'); } }); esec.head.appendChild(del); }
+      return esec.el;
     }
     function renderEmergency() {
       pane.innerHTML = '';
