@@ -341,6 +341,9 @@ Route::match(['get', 'post'], '/voice/dialer/hook/{id}/{token?}/{step?}', [\App\
 Route::match(['get', 'post'], '/voice/ivr/{token}/dialed',    [\App\Http\Controllers\Api\PhoneMenuController::class, 'dialed'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
 // A held caller put through to the app that answered the ringing push (2026-10-23).
 Route::match(['get', 'post'], '/voice/ivr/{token}/connect',   [\App\Http\Controllers\Api\PhoneMenuController::class, 'connect'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+// Parents call in to report absent / late (2026-11-24, App\Support\ParentLine): every call starts here.
+Route::match(['get', 'post'], '/voice/ivr/{token}/start', [\App\Http\Controllers\Api\ParentLineController::class, 'start'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+Route::match(['get', 'post'], '/voice/ivr/{token}/parent/{step}', [\App\Http\Controllers\Api\ParentLineController::class, 'step'])->where(['token' => '[A-Za-z0-9]{24,64}', 'step' => '[a-z]{2,12}'])->middleware('throttle:240,1,ivr');
 // An answered incoming call's recording (2026-10-23, App\Support\CallRecords).
 Route::match(['get', 'post'], '/voice/ivr/{token}/recorded',  [\App\Http\Controllers\Api\PhoneMenuController::class, 'recorded'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
 Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1,r-stripe-webhook');
@@ -1035,6 +1038,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/me/sms-consent',  [\App\Http\Controllers\Api\SmsConsentController::class, 'show']);
         Route::post('/me/sms-consent', [\App\Http\Controllers\Api\SmsConsentController::class, 'store']);
         // 'My child isn't coming in today' — reported by a parent, tells the centre.
+        // Call in instead: the KiddieTrac number and my phone PIN (2026-11-24, App\Support\ParentLine).
+        Route::get   ('/parent/phone-line',     [\App\Http\Controllers\Api\ParentLineController::class, 'mineParent']);
+        Route::put   ('/parent/phone-line/pin', [\App\Http\Controllers\Api\ParentLineController::class, 'setPin'])->middleware('throttle:10,1,r-ppin');
+        Route::delete('/parent/phone-line/pin', [\App\Http\Controllers\Api\ParentLineController::class, 'deletePin'])->middleware('throttle:10,1,r-ppin');
         Route::get('/parent/absences',    [\App\Http\Controllers\Api\AbsenceController::class, 'index']);
         Route::post('/parent/absences',   [\App\Http\Controllers\Api\AbsenceController::class, 'store']);
         Route::delete('/parent/absences/{child}/{date}', [\App\Http\Controllers\Api\AbsenceController::class, 'destroy']);
@@ -3620,6 +3627,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/safe-arrival/{childId}/late',   [\App\Http\Controllers\Api\SafeArrivalController::class, 'cancelLate'])->where('childId', '[0-9]+');
         // End of day (Safe Departure, 2026-10-22): picked up at… / still here / other.
         Route::post('/safe-arrival/departure/{childId}/resolve', [\App\Http\Controllers\Api\SafeArrivalController::class, 'resolveDeparture'])->where('childId', '[0-9]+');
+        // Phone messages a director/admin approves (2026-11-24, App\Support\ParentLine).
+        Route::get ('/safe-arrival/phone-messages',              [\App\Http\Controllers\Api\ParentLineController::class, 'index']);
+        Route::get ('/safe-arrival/phone-messages/{id}/audio',   [\App\Http\Controllers\Api\ParentLineController::class, 'audio'])->whereNumber('id');
+        Route::post('/safe-arrival/phone-messages/{id}/approve', [\App\Http\Controllers\Api\ParentLineController::class, 'approve'])->whereNumber('id')->middleware('throttle:30,1,r-pmsg');
+        Route::post('/safe-arrival/phone-messages/{id}/decline', [\App\Http\Controllers\Api\ParentLineController::class, 'decline'])->whereNumber('id')->middleware('throttle:30,1,r-pmsg');
         Route::get ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'settings']);
         Route::put ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'saveSettings']);
         Route::post('/safe-arrival/test-call',          [\App\Http\Controllers\Api\SafeArrivalController::class, 'testCall'])->middleware('throttle:5,60,r-safe-arrival-test-call');

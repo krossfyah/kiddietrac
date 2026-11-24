@@ -292,6 +292,7 @@
       + kpi('NOT DUE YET', (c.waiting || 0) + (c.running_late || 0), '#F8FAFC', '#475569')
       + kpi('NEEDS ATTENTION', (c.overdue || 0) + (c.escalated || 0), (c.overdue || c.escalated) ? '#FEF2F2' : '#F8FAFC', (c.overdue || c.escalated) ? '#991B1B' : '#475569')
       + '</div>'
+      + '<div id="sa-phone"></div>'
       + '<h3 style="margin:8px 0 10px;font-size:15px;color:#0F172A;">Needs attention</h3>'
       + (urgent.length ? urgent.map(function (r) {
           var red = r.state === 'escalated' || r.state === 'dropped_off';
@@ -347,6 +348,7 @@
     var sel = root.querySelector('#sa-centre');
     if (sel) sel.onchange = function () { centreFilter = sel.value; render(main); };
     root.querySelector('#sa-refresh').onclick = function () { render(main); };
+    phoneMessages(root, main);
     var st = root.querySelector('#sa-settings');
     if (st) st.onclick = function () { settingsDialog(main, s); };
     root.querySelectorAll('[data-sd-act]').forEach(function (b) {
@@ -704,6 +706,86 @@
     var save = !had && h && h.backdrop && h.backdrop.querySelector('.modal-footer .btn-primary');
     if (save) save.setAttribute('data-kt-always-save', '1');
     setTimeout(function () { var i = body.querySelector('#sa-late-time'); if (i && !(window.matchMedia && matchMedia('(pointer: coarse)').matches)) i.focus(); }, 30);
+  }
+
+  /* PHONE MESSAGES (2026-11-24, App\Support\ParentLine). A parent called the KiddieTrac line but couldn't confirm the
+     texted code or their phone PIN, so they left a message. A director/admin listens, picks the child and approves
+     (recorded exactly as the app would, and the parent is texted) or declines. Educators don't see this. */
+  var phoneOpened = {};
+  var PM_BTN = 'height:32px;padding:0 12px;border-radius:8px;font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit;';
+  function pmWhat(m) {
+    return esc(m.action_label) + (m.by ? ' by ' + esc(m.by) : '') + (m.reason ? ' · ' + esc(m.reason) : '') + ' · ' + esc(m.for_date);
+  }
+  function pmRow(m) {
+    var st = m.status === 'pending' ? ['#FEF3C7', '#92400E', 'Waiting for you'] : m.status === 'approved' ? ['#DCFCE7', '#166534', 'Approved'] : ['#F1F5F9', '#475569', 'Declined'];
+    return '<div style="border:1px solid ' + (m.status === 'pending' ? '#FCD34D' : '#E2E8F0') + ';background:' + (m.status === 'pending' ? '#FFFDF5' : '#fff') + ';border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;">'
+      + '<div><div style="font-weight:800;font-size:14px;color:#0F172A;">📞 ' + esc(m.children.map(function (c) { return c.name; }).join(' or ')) + ': ' + pmWhat(m)
+      + ' <span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;background:' + st[0] + ';color:' + st[1] + ';">' + st[2] + '</span></div>'
+      + '<div style="font-size:12.5px;color:#475569;margin-top:3px;">Called ' + esc(m.at) + ' from ' + esc(m.from)
+      + (m.decided_by ? ' · ' + (m.status === 'approved' ? 'approved' : 'declined') + ' by ' + esc(m.decided_by) + ' ' + esc(m.decided_at) : '') + '</div></div>'
+      + '<button type="button" data-pm="' + m.id + '" data-kt-iconized="1" style="' + PM_BTN + (m.status === 'pending' ? 'border:0;background:#1F6080;color:#fff;' : 'border:1px solid #CBD5E1;background:#fff;color:#334155;') + '">'
+      + (m.status === 'pending' ? 'Listen and decide' : 'View') + '</button></div>';
+  }
+  async function phoneMessages(root, main) {
+    var box = root.querySelector('#sa-phone'); if (!box) return;
+    var d; try { d = await call('GET', '/safe-arrival/phone-messages'); } catch (e) { return; }
+    if (!box.isConnected) return;
+    var list = d.messages || [];
+    if (!list.length) { box.innerHTML = ''; return; }
+    var pend = list.filter(function (m) { return m.status === 'pending'; });
+    var done = list.filter(function (m) { return m.status !== 'pending'; }).slice(0, 6);
+    box.innerHTML = '<h3 style="margin:8px 0 10px;font-size:15px;color:#0F172A;">📞 Phone messages from parents</h3>'
+      + (pend.length ? pend.map(pmRow).join('') : '<div style="padding:10px 14px;background:#F8FAFC;border-radius:12px;color:#475569;font-size:13px;margin-bottom:8px;">No phone messages waiting.</div>')
+      + (done.length ? '<details style="margin:0 0 12px;"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:#475569;">Recently decided (' + done.length + ')</summary><div style="margin-top:8px;">' + done.map(pmRow).join('') + '</div></details>' : '');
+    var find = function (id) { return list.filter(function (m) { return String(m.id) === String(id); })[0]; };
+    box.querySelectorAll('[data-pm]').forEach(function (b) { b.onclick = function () { openPhone(find(b.getAttribute('data-pm')), main); }; });
+    var hm = /[?&]phone=(\d+)/.exec(location.hash || '');
+    if (hm && !phoneOpened[hm[1]] && find(hm[1])) { phoneOpened[hm[1]] = 1; openPhone(find(hm[1]), main); }
+  }
+  function openPhone(m, main) {
+    var Shell = window.KT && KT.Shell;
+    if (!m || !Shell || !Shell.Modal) return;
+    var pending = m.status === 'pending';
+    var body = document.createElement('div');
+    body.innerHTML = '<div style="font-size:14px;font-weight:800;color:#0F172A;">' + pmWhat(m) + '</div>'
+      + '<div style="font-size:12.5px;color:#475569;margin-top:3px;">Called ' + esc(m.at) + ' from ' + esc(m.from) + ' (matches a parent on file)</div>'
+      + '<div style="margin-top:12px;">' + (m.has_audio ? '<div data-pm-audio><button type="button" data-pm-play data-kt-iconized="1" style="' + PM_BTN + 'border:1px solid #CBD5E1;background:#fff;color:#1F6080;">▶ Play the message' + (m.seconds ? ' (' + m.seconds + 's)' : '') + '</button></div>' : '<div style="font-size:12.5px;color:#94A3B8;">No recording was kept.</div>') + '</div>'
+      + '<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#F8FAFC;font-size:13px;color:#334155;line-height:1.5;white-space:pre-wrap;">' + (m.transcript ? esc(m.transcript) : '<span style="color:#94A3B8;">' + (m.has_audio ? 'The written version is on its way. Play the message to hear it now.' : 'No message.') + '</span>') + '</div>'
+      + (pending
+        ? '<div style="font-size:12px;font-weight:700;color:#374151;margin:14px 0 6px;">Which child is it about?</div>'
+          + m.children.map(function (c, i) { return '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;margin-bottom:6px;cursor:pointer;"><input type="radio" name="pm-child" value="' + c.id + '"' + (m.children.length === 1 || i === 0 && m.children.length === 1 ? ' checked' : '') + '> ' + esc(c.name) + '</label>'; }).join('')
+          + '<div style="font-size:12px;color:#64748B;margin-top:10px;line-height:1.5;">The caller couldn\'t confirm the texted code or their phone PIN. Approve only if the message and the details match. Approving records it exactly as if the parent had used the app, and texts them. Declining texts them to contact the centre.</div>'
+        : '<div style="margin-top:12px;font-size:13px;color:#334155;">' + (m.status === 'approved' ? '✓ Approved' : 'Declined') + (m.decided_by ? ' by ' + esc(m.decided_by) + ' ' + esc(m.decided_at) : '') + (m.outcome && m.status === 'approved' ? '. ' + esc(m.outcome) : '') + '</div>')
+      + '<div data-err role="alert" style="color:#B91C1C;font-size:13px;font-weight:700;min-height:18px;margin-top:8px;"></div>';
+    var url = null;
+    var play = body.querySelector('[data-pm-play]');
+    if (play) play.onclick = async function () {
+      play.disabled = true; play.textContent = 'Loading…';
+      try {
+        var r = await fetch(API() + '/safe-arrival/phone-messages/' + m.id + '/audio', { headers: hdrs(false) });
+        if (!r.ok) throw new Error('The recording could not be loaded.');
+        url = URL.createObjectURL(await r.blob());
+        body.querySelector('[data-pm-audio]').innerHTML = '<audio controls autoplay src="' + url + '" style="width:100%;height:36px;"></audio>';
+      } catch (e) { play.disabled = false; play.textContent = '▶ Play the message'; body.querySelector('[data-err]').textContent = e.message; }
+    };
+    var err = function (t) { body.querySelector('[data-err]').textContent = t; };
+    var after = function (msg) { if (window.ktToast) window.ktToast('📞', msg); render(main); };
+    var actions = [{ label: pending ? 'Cancel' : 'Close' }];
+    if (pending) {
+      actions.push({ label: 'Decline', busyLabel: 'Declining…', handler: async function () {
+        try { await call('POST', '/safe-arrival/phone-messages/' + m.id + '/decline', {}); } catch (e) { err(e.message); return false; }
+        after('Declined. The parent was texted to contact the centre.');
+      } });
+      actions.push({ label: 'Approve', primary: true, busyLabel: 'Approving…', handler: async function () {
+        var c = body.querySelector('input[name="pm-child"]:checked');
+        if (!c) { err('Pick the child this message is about.'); return false; }
+        var r; try { r = await call('POST', '/safe-arrival/phone-messages/' + m.id + '/approve', { child_id: +c.value }); } catch (e) { err(e.message); return false; }
+        after((r.message || 'Approved.').replace(/^Thank you\. /, ''));
+      } });
+    }
+    var h = Shell.Modal.open({ title: '📞 Phone message', body: body, actions: actions });
+    var save = h && h.backdrop && h.backdrop.querySelector('.modal-footer .btn-primary');
+    if (save) save.setAttribute('data-kt-always-save', '1');
   }
 
   window.KT = window.KT || {};

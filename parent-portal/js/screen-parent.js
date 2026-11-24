@@ -5053,6 +5053,46 @@
     list.appendChild(Dom.el('div', { style: 'color:var(--ink-500);font-size:13px;' }, 'Loading…'));
     try { paint(await Api.get('/parent/running-late')); }
     catch (e) { Dom.clear(list); list.appendChild(Dom.el('div', { style: 'color:#B91C1C;font-size:13.5px;' }, e.message || 'Could not load. Try again.')); }
+    /* CALL IN INSTEAD (2026-11-24, App\Support\ParentLine): the KiddieTrac number, which phones it knows, and a phone PIN
+       for calling from a landline or a phone that can't get texts. */
+    const callBox = Dom.el('div', { style: card('padding:14px;margin-top:14px;') });
+    wrap.appendChild(callBox);
+    const paintCall = (p) => {
+      if (!p || !p.enabled) { callBox.remove(); return; }
+      const B = 'height:32px;padding:0 12px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;';
+      callBox.innerHTML = '<div style="font-weight:800;font-size:15px;color:var(--ink-900);">📞 Call in instead</div>'
+        + '<div style="font-size:13px;color:var(--ink-600);line-height:1.55;margin-top:4px;">Call <a href="tel:' + lateEsc(p.number.replace(/-/g, '')) + '" style="color:#1F6080;font-weight:800;">' + lateEsc(p.number) + '</a>'
+        + (p.phones.length ? ' from ' + p.phones.map(lateEsc).join(' or ') : '') + ' to report an absence, or a late drop-off or pickup. To make sure it\'s really you, we text a code to your phone during the call.</div>'
+        + (p.phones.length ? '' : '<div style="margin-top:8px;padding:8px 10px;border-radius:9px;background:#FEF3C7;color:#92400E;font-size:12.5px;font-weight:700;">Add your phone number to your profile first. The line knows you by the number you call from.</div>')
+        + '<div style="margin-top:10px;font-size:13px;color:var(--ink-700);">' + (p.has_pin
+          ? '🔒 Phone PIN set' + (p.pin_set ? ' ' + lateEsc(p.pin_set) : '') + '. You can enter it instead of the texted code.'
+          : 'Calling from a landline, or a phone that can\'t get texts? Set a 4-digit phone PIN to use instead of the code.') + '</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
+        + '<button type="button" data-pin-set data-kt-iconized="1" style="' + B + 'border:0;background:#1F6080;color:#fff;">' + (p.has_pin ? 'Change phone PIN' : 'Set a phone PIN') + '</button>'
+        + (p.has_pin ? '<button type="button" data-pin-del data-kt-iconized="1" style="' + B + 'border:1px solid #CBD5E1;background:#fff;color:#334155;">Remove PIN</button>' : '')
+        + '</div>';
+      callBox.querySelector('[data-pin-set]').addEventListener('click', () => {
+        const body = document.createElement('div');
+        const F = 'width:140px;box-sizing:border-box;height:32px;padding:0 9px;border:1px solid #D1D5DB;border-radius:8px;font-size:16px;letter-spacing:4px;background:#fff;';
+        body.innerHTML = '<div style="font-size:13.5px;color:#475569;line-height:1.55;">Pick 4 digits that only you know. Not a repeated digit, a run like 1234, a year, or the end of your phone number.</div>'
+          + '<label style="display:block;font-size:12px;font-weight:700;color:#374151;margin:12px 0 4px;" for="pp-1">New PIN</label><input id="pp-1" type="password" inputmode="numeric" autocomplete="new-password" maxlength="4" style="' + F + '">'
+          + '<label style="display:block;font-size:12px;font-weight:700;color:#374151;margin:12px 0 4px;" for="pp-2">Type it again</label><input id="pp-2" type="password" inputmode="numeric" autocomplete="new-password" maxlength="4" style="' + F + '">'
+          + '<div data-err role="alert" style="color:#B91C1C;font-size:13px;font-weight:700;min-height:18px;margin-top:8px;"></div>';
+        Shell.Modal.open({ title: '🔒 Phone PIN', body: body, actions: [{ label: 'Cancel' }, { label: 'Save PIN', primary: true, busyLabel: 'Saving…', handler: async () => {
+          const a = body.querySelector('#pp-1').value.trim(), b = body.querySelector('#pp-2').value.trim();
+          const e = body.querySelector('[data-err]');
+          if (!/^\d{4}$/.test(a)) { e.textContent = 'Use exactly 4 digits.'; return false; }
+          if (a !== b) { e.textContent = 'The two PINs don\'t match.'; return false; }
+          let r; try { r = await Api.put('/parent/phone-line/pin', { pin: a }); } catch (x) { e.textContent = x.message; return false; }
+          ktToast('🔒', 'Phone PIN saved.'); paintCall(r);
+        } }] });
+      });
+      const del = callBox.querySelector('[data-pin-del]');
+      if (del) del.addEventListener('click', async () => {
+        try { paintCall(await Api.delete('/parent/phone-line/pin')); ktToast('🔒', 'Phone PIN removed. The texted code still works.'); } catch (x) { ktToast('⚠️', x.message); }
+      });
+    };
+    try { paintCall(await Api.get('/parent/phone-line')); } catch (e) { callBox.remove(); }
   }
 
   window.KT = window.KT || {};

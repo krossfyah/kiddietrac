@@ -1216,3 +1216,9 @@ patch provider/play-spark/ideas/{id} | Changed a Play Spark idea (favourite, rat
 delete provider/play-spark/ideas/{id} | Removed a Play Spark idea
 post provider/play-spark/materials | Added play materials to a room (Play Spark)
 delete provider/play-spark/materials/{id} | Removed a play material from a room (Play Spark)
+put parent/phone-line/pin | Set their phone PIN for the KiddieTrac line
+delete parent/phone-line/pin | Removed their phone PIN for the KiddieTrac line
+post safe-arrival/phone-messages/{id}/approve | Approved a parent's phone message
+post safe-arrival/phone-messages/{id}/decline | Declined a parent's phone message
+post voice/ivr/{token}/start | A call to the KiddieTrac line began
+post voice/ivr/{token}/parent/{step} | A parent used the phone line

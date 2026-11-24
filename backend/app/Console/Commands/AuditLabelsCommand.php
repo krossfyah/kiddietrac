@@ -33,6 +33,8 @@ final class AuditLabelsCommand extends Command
         'api/v1/voice/telnyx/webhook/{agency}'    => 'carrier webhook: every call is in the voice log',
         'api/v1/voice/dialer/hook/{id}/{token?}/{step?}' => 'carrier call steps for a portal call: placing it (call.placed), playing a recording and changing settings are audited; the steps update the call log',
         'api/v1/voice/voicemail/{token}'          => 'carrier webhook: voicemail is stored with the support ticket',
+        'api/v1/voice/ivr/{token}/start'          => 'carrier call step: every call to the line begins here (a recognised parent is audited as phone_line.call)',
+        'api/v1/voice/ivr/{token}/parent/{step}'  => 'carrier call step for the parent line (verify, report and message are each audited as phone_line.*)',
         'api/v1/voice/ivr/{token}/screen'         => 'carrier call-leg step: a staff phone being offered the call (the choice and outcome are audited)',
         'api/v1/voice/ivr/{token}/screen-ok'      => 'carrier call-leg step: a staff phone accepting (the outcome is audited in /dialed)',
         'api/v1/voice/ivr/{token}/recorded'       => 'carrier callback: a call recording is ready (saved and transcribed by kt:call-transcripts; no person acts)',
