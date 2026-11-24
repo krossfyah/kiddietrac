@@ -477,7 +477,7 @@ class EducatorDailySummaryCommand extends Command
     {
         return '<td valign="top" width="33.33%" style="padding:5px;">'
             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-            .   'style="border-collapse:separate;background:' . $wash . ';border-radius:14px;">'
+            .   'class="kt-panel" style="border-collapse:separate;background:' . $wash . ';border-radius:14px;">'
             . '<tr><td style="padding:14px 10px;text-align:center;">'
             .   '<div style="font-size:20px;line-height:1;">' . $icon . '</div>'
             .   '<div style="font-size:26px;font-weight:800;color:' . $accent . ';margin-top:6px;line-height:1.1;">'
@@ -598,7 +598,7 @@ class EducatorDailySummaryCommand extends Command
 
             return $this->sectionHead("\u{1F4EC}", 'A note on timing')
                 . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                .   'style="border-collapse:separate;background:#FFF8EC;border-radius:14px;">'
+                .   'class="kt-panel" style="border-collapse:separate;background:#FFF8EC;border-radius:14px;">'
                 . '<tr><td style="padding:14px 16px;">'
                 . '<div style="font-size:13.5px;line-height:1.65;color:#7A4E10;">'
                 .   'Families get their daily update at <strong>' . htmlspecialchars($when) . '</strong>. '
@@ -931,7 +931,7 @@ class EducatorDailySummaryCommand extends Command
                 ]);
 
                 $body .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                    . 'style="border-collapse:separate;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:14px;margin-bottom:10px;">'
+                    . 'class="kt-panel" style="border-collapse:separate;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:14px;margin-bottom:10px;">'
                     . '<tr><td style="padding:13px 15px;">'
                     . '<div style="font-size:15px;font-weight:800;color:#0C4A6E;">'
                     . htmlspecialchars($w['where']) . '</div>'
@@ -988,7 +988,7 @@ class EducatorDailySummaryCommand extends Command
         ];
         $body .= $this->sectionHead("\u{1F4CA}", "What made up today's score")
             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-            . 'style="border-collapse:separate;background:#fff;border:1px solid #EEF2F6;border-radius:14px;">'
+            . 'class="kt-panel" style="border-collapse:separate;background:#fff;border:1px solid #EEF2F6;border-radius:14px;">'
             . '<tr><td style="padding:14px 16px;">';
         foreach ($bars as $b) {
             $pct = (int) round($b[1] * 100);
@@ -998,7 +998,7 @@ class EducatorDailySummaryCommand extends Command
                 .   '<td align="right" style="font-size:12px;color:#94A3B8;">' . e($b[2]) . '</td>'
                 . '</tr></table>'
                 . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                .   'style="border-collapse:separate;background:#F1F5F9;border-radius:999px;margin-top:4px;"><tr>'
+                .   'class="kt-track" style="border-collapse:separate;background:#F1F5F9;border-radius:999px;margin-top:4px;"><tr>'
                 .   '<td width="' . max(2, $pct) . '%" style="background:' . $b[3] . ';border-radius:999px;height:9px;font-size:0;line-height:0;">&nbsp;</td>'
                 .   '<td style="font-size:0;line-height:0;">&nbsp;</td>'
                 . '</tr></table>'
@@ -1014,7 +1014,7 @@ class EducatorDailySummaryCommand extends Command
         if ($away['expected_absent'] || $away['reported']) {
             $body .= $this->sectionHead("\u{1F3E0}", "Who wasn't in today");
             $body .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                . 'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;margin-bottom:6px;">';
+                . 'class="kt-panel" style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;margin-bottom:6px;">';
 
             foreach ($away['expected_absent'] as $c) {
                 $body .= '<tr><td style="padding:11px 13px;border-bottom:1px solid #F1F5F9;">'
@@ -1053,7 +1053,7 @@ class EducatorDailySummaryCommand extends Command
             $n = count($strikes);
             $body .= $this->sectionHead("\u{26A0}\u{FE0F}", 'Missed headcounts · ' . $n . ' ' . ($n === 1 ? 'strike' : 'strikes'));
             $body .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                . 'style="border-collapse:collapse;background:#fff;border:1px solid #FECACA;border-radius:14px;overflow:hidden;margin-bottom:6px;">';
+                . 'class="kt-panel" style="border-collapse:collapse;background:#fff;border:1px solid #FECACA;border-radius:14px;overflow:hidden;margin-bottom:6px;">';
             foreach ($strikes as $s) {
                 $body .= '<tr><td style="padding:11px 13px;border-bottom:1px solid #F1F5F9;">'
                     . '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DC2626;margin-right:8px;"></span>'
@@ -1068,8 +1068,8 @@ class EducatorDailySummaryCommand extends Command
         // ── How today compares ─────────────────────────────────────────────
         $body .= $this->sectionHead("\u{1F4C8}", 'How today compares')
             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-            .   'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">'
-            . '<tr style="background:#F8FAFC;">'
+            .   'class="kt-panel" style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">'
+            . '<tr class="kt-panel" style="background:#F8FAFC;">'
             .   '<td style="padding:9px 12px;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#94A3B8;text-transform:uppercase;">&nbsp;</td>'
             .   '<td align="center" style="padding:9px 8px;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#94A3B8;text-transform:uppercase;">Today</td>'
             .   '<td align="center" style="padding:9px 8px;font-size:10.5px;font-weight:800;letter-spacing:.5px;color:#94A3B8;text-transform:uppercase;">vs yesterday</td>'
@@ -1086,7 +1086,7 @@ class EducatorDailySummaryCommand extends Command
         // reads better as a closing note once the numbers have been seen.
         $body .= $this->sectionHead("\u{1F4AD}", 'A thought to end on')
             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-            .   'style="border-collapse:separate;background:#F8FBFD;--kt-edge:#0E7C90;border-radius:0 12px 12px 0;">'
+            .   'class="kt-panel" style="border-collapse:separate;background:#F8FBFD;--kt-edge:#0E7C90;border-radius:0 12px 12px 0;">'
             . '<tr><td style="padding:14px 16px;">' . EmailTemplate::dailyQuote(crc32($date->toDateString())) . '</td></tr></table>';
 
         // ── The children's day, in words ───────────────────────────────────
@@ -1094,7 +1094,7 @@ class EducatorDailySummaryCommand extends Command
         if ($kids) {
             $body .= $this->sectionHead("\u{1F9F8}", 'How the children\'s day went')
                 . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                .   'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">';
+                .   'class="kt-panel" style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">';
             foreach ($kids as $i => $k) {
                 $body .= '<tr><td style="padding:12px 14px;' . ($i ? 'border-top:1px solid #F1F5F9;' : '') . 'font-size:13.5px;line-height:1.6;color:#334155;">'
                     . '<strong style="color:#0F172A;">' . htmlspecialchars($k['name']) . '</strong> &mdash; ' . $k['line']
@@ -1108,7 +1108,7 @@ class EducatorDailySummaryCommand extends Command
         if ($shift['rows']) {
             $body .= $this->sectionHead("\u{1F553}", 'Your sign-in and sign-out')
                 . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                .   'style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">';
+                .   'class="kt-panel" style="border-collapse:collapse;background:#fff;border:1px solid #EEF2F6;border-radius:14px;overflow:hidden;">';
             foreach ($shift['rows'] as $i => $r) {
                 $dur = intdiv($r['mins'], 60) . 'h ' . ($r['mins'] % 60) . 'm' . ($r['out'] ? '' : ' so far');
                 $body .= '<tr><td style="padding:11px 14px;' . ($i ? 'border-top:1px solid #F1F5F9;' : '') . 'font-size:13.5px;color:#334155;">'
@@ -1119,7 +1119,7 @@ class EducatorDailySummaryCommand extends Command
                     . '</td></tr>';
             }
             $tot = $shift['total'];
-            $body .= '<tr><td style="padding:11px 14px;border-top:2px solid #EEF2F6;background:#F8FAFC;font-size:13.5px;font-weight:800;color:#0F172A;">'
+            $body .= '<tr><td class="kt-panel" style="padding:11px 14px;border-top:2px solid #EEF2F6;background:#F8FAFC;font-size:13.5px;font-weight:800;color:#0F172A;">'
                 . 'Total on the floor' . ($shift['open'] ? ' so far' : '')
                 . '<span style="float:right;">' . intdiv($tot, 60) . 'h ' . ($tot % 60) . 'm</span></td></tr></table>';
         }
@@ -1132,7 +1132,7 @@ class EducatorDailySummaryCommand extends Command
         if ($ideas) {
             $body .= $this->sectionHead("\u{1F31E}", 'A couple of ideas for tomorrow')
                 . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-                .   'style="border-collapse:separate;background:#F0FAFC;border-radius:14px;"><tr><td style="padding:14px 16px;">';
+                .   'class="kt-panel" style="border-collapse:separate;background:#F0FAFC;border-radius:14px;"><tr><td style="padding:14px 16px;">';
             foreach ($ideas as $i => $idea) {
                 $body .= '<div style="font-size:13.5px;line-height:1.6;color:#134E5A;' . ($i ? 'margin-top:10px;' : '') . '">'
                     . '<span style="color:#0E7C90;font-weight:800;">&bull;</span> ' . $idea . '</div>';

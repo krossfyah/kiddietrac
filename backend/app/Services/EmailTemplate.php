@@ -178,6 +178,8 @@ final class EmailTemplate
             . '.kt-panel td,.kt-panel div,.kt-panel span,.kt-panel p{color:#D6DEE9 !important;}'
             // Row rules inside a panel (the parent summary's menu, 2026-11-02) were near-white lines on the dark fill.
             . '.kt-panel td{border-color:#2C3B54 !important;}'
+            // Progress-bar tracks (the educator summary's score bars, 2026-11-24) were pale stripes on the dark panel.
+            . '.kt-track{background:#2C3B54 !important;}'
             . '.kt-footer{background:#101A2B !important;color:#94A3B8 !important;border-color:#26344A !important;}'
             . '.kt-footer a{color:#7CC3E8 !important;}'
             . '.kt-footer strong{color:#CBD5E1 !important;}'
@@ -200,6 +202,7 @@ final class EmailTemplate
             . '[data-ogsc] .kt-card a{color:#7CC3E8 !important;}'
             . '[data-ogsb] .kt-panel,[data-ogsb] td.kt-callout{background:#1B2740 !important;}'
             . '[data-ogsb] .kt-panel td{border-color:#2C3B54 !important;}'
+            . '[data-ogsb] .kt-track{background:#2C3B54 !important;}'
             . '[data-ogsc] .kt-muted{color:#9AA8BC !important;}'
             . '[data-ogsc] .kt-btn,[data-ogsc] .kt-btn *{color:#FFFFFF !important;}'
             . '[data-ogsb] .kt-footer{background:#101A2B !important;}[data-ogsb] .kt-footer div{border-color:#26344A !important;}'
@@ -549,7 +552,7 @@ final class EmailTemplate
         $seed = $seed ?? (int) date('Ymd');
         $q = $quotes[abs($seed) % count($quotes)];
         return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="margin:22px 0 6px;">'
-            . '<tr><td bgcolor="#F3F4FB" style="background-color:#F3F4FB;background-image:linear-gradient(135deg,#F0F7FB 0%,#F6F1FB 100%);--kt-edge:#7C3AED;border-radius:12px;padding:16px 20px;">'
+            . '<tr><td class="kt-panel" bgcolor="#F3F4FB" style="background-color:#F3F4FB;background-image:linear-gradient(135deg,#F0F7FB 0%,#F6F1FB 100%);--kt-edge:#7C3AED;border-radius:12px;padding:16px 20px;">'
             . '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#8B5CF6;margin-bottom:6px;">✨ A thought for today</div>'
             . '<div style="font-size:15.5px;font-style:italic;color:#334155;line-height:1.55;">“' . htmlspecialchars($q[0]) . '”</div>'
             . '<div style="font-size:12.5px;color:#7A8AA3;margin-top:8px;font-weight:700;">— ' . htmlspecialchars($q[1]) . '</div>'
