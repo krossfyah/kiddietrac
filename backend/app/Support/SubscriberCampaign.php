@@ -232,13 +232,14 @@ final class SubscriberCampaign
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="body-bg" bgcolor="#F3F5F8" style="background:#F3F5F8;"><tr><td align="center" style="padding:28px 12px;">'
             . '<table role="presentation" class="wrap sheet" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="width:600px;max-width:600px;background:#ffffff;border:1px solid ' . $line . ';border-radius:12px;overflow:hidden;">'
             // header: the four toy colours as a slim bar (solid cells, no gradient-only background), wordmark, "Product update"
-            . '<tr><td style="padding:0;font-size:0;line-height:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
-            . '<td width="25%" bgcolor="#FF5A4E" style="height:4px;background:#FF5A4E;">&nbsp;</td><td width="25%" bgcolor="#FFC531" style="height:4px;background:#FFC531;">&nbsp;</td>'
-            . '<td width="25%" bgcolor="#3D8BFF" style="height:4px;background:#3D8BFF;">&nbsp;</td><td width="25%" bgcolor="#2FCB8E" style="height:4px;background:#2FCB8E;">&nbsp;</td></tr></table></td></tr>'
-            /* HEADER v2 (2026-11-24, Anthony: "create a better header for the email and add some real life image"): a
+            . '<tr><td bgcolor="#FFC531" style="padding:0;font-size:0;line-height:0;height:4px;background-color:#FFC531;background-image:linear-gradient(90deg,#FF5A4E 0%,#FFC531 33%,#3D8BFF 67%,#2FCB8E 100%);">'
+            . '<img src="' . $S . '/email-icons/playspark/spark-bar.png" width="600" height="4" alt="" style="display:block;width:100%;max-width:600px;height:4px;border:0;"></td></tr>'
+            /* HEADER v3: one smooth spark strip (PNG + CSS gradient + solid fallback), the banner on a pre-rendered
+               gradient image (background attr + CSS, solid fallback), and photos used nowhere else (README in
+               /email-icons/playspark/). HEADER v2 (2026-11-24, Anthony: "create a better header for the email and add some real life image"): a
                midnight banner (solid bgcolor + gradient, never gradient-only) with the small white KiddieTrac wordmark,
                the Play Spark mark and name, and the headline as LIVE text; then a real photo fading up into it. */
-            . '<tr><td class="pad banner" bgcolor="#0B1026" style="background-color:#0B1026;background-image:linear-gradient(160deg,#0B1026 0%,#1B2350 100%);padding:22px 40px 26px;">'
+            . '<tr><td class="pad banner" bgcolor="#0B1026" background="' . $S . '/email-icons/playspark/banner-bg.jpg" style="background-color:#0B1026;background-image:url(\'' . $S . '/email-icons/playspark/banner-bg.jpg\');background-size:cover;background-position:center bottom;background-repeat:no-repeat;padding:22px 40px 26px;">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
             . '<td valign="middle"><a href="' . $S . '/"><img src="' . $S . '/email-icons/brand/kiddietrac-wordmark.png" width="104" alt="KiddieTrac" style="display:block;border:0;width:104px;height:auto;"></a></td>'
             . '<td align="right" valign="middle" class="gold" style="font:700 11px/1 ' . $font . ';letter-spacing:1.2px;text-transform:uppercase;color:#FFC531;">New in KiddieTrac</td></tr></table>'
@@ -247,7 +248,7 @@ final class SubscriberCampaign
             . '<h1 class="keep" style="margin:0 0 10px;font:800 30px/1.2 ' . $font . ';color:#FFFFFF;letter-spacing:-.4px;">One tap. A play idea for every age in the room.</h1>'
             . '<div class="keep2" style="font:400 15px/1.6 ' . $font . ';color:#C9CFEA;">For the moments when nothing&rsquo;s planned and the kids are ready to go.</div>'
             . '</td></tr>'
-            . '<tr><td bgcolor="#0B1026" style="padding:0;line-height:0;font-size:0;background:#0B1026;"><img src="' . $S . '/email-icons/playspark/hero-photo.jpg" width="600" alt="An educator leading an activity with young children at a table" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>'
+            . '<tr><td bgcolor="#1B2350" style="padding:0;line-height:0;font-size:0;background:#1B2350;"><img src="' . $S . '/email-icons/playspark/hero-photo2.jpg" width="600" alt="An educator playing with young children at an outdoor sandbox" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></td></tr>'
             // intro
             . '<tr><td class="pad" style="padding:30px 40px 8px;">'
             . $p(($first ? $e($first) . ', you' : 'You') . ' know the moment. It&rsquo;s raining, six kids are restless, and nothing&rsquo;s planned for the next twenty minutes.')
@@ -262,12 +263,12 @@ final class SubscriberCampaign
             . $hr
             // how it helps: a real photo, the four points, then two photos (outdoors / at home)
             . '<tr><td class="pad" style="padding:30px 40px 12px;">' . $label('How it works') . $h2('Less planning on the fly, more time with the kids')
-            . '<img src="' . $S . '/email-icons/playspark/play-blocks.jpg" width="520" alt="A child building with colourful blocks" style="display:block;width:100%;max-width:520px;height:auto;border:0;border-radius:12px;margin:6px 0 18px;">'
+            . '<img src="' . $S . '/email-icons/playspark/play-blocks2.jpg" width="520" alt="Two young girls building with colourful wooden blocks" style="display:block;width:100%;max-width:520px;height:auto;border:0;border-radius:12px;margin:6px 0 18px;">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">' . $rows . '</table>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 8px;"><tr>'
-            . '<td class="col" width="50%" valign="top" style="padding:0 8px 0 0;"><img src="' . $S . '/email-icons/playspark/play-outdoors.jpg" width="252" alt="An adult and a toddler drawing with chalk outside" style="display:block;width:100%;max-width:252px;height:auto;border:0;border-radius:12px;">'
+            . '<td class="col" width="50%" valign="top" style="padding:0 8px 0 0;"><img src="' . $S . '/email-icons/playspark/play-outdoors2.jpg" width="252" alt="Children chasing bubbles in a garden" style="display:block;width:100%;max-width:252px;height:auto;border:0;border-radius:12px;">'
             . '<div style="font:400 13px/1.5 ' . $font . ';color:' . $muted . ';margin:8px 0 0;">Indoors or out, with what you have.</div></td>'
-            . '<td class="col" width="50%" valign="top" style="padding:0 0 0 8px;"><img src="' . $S . '/email-icons/playspark/home-together.jpg" width="252" alt="A parent reading with a young child at home" style="display:block;width:100%;max-width:252px;height:auto;border:0;border-radius:12px;">'
+            . '<td class="col" width="50%" valign="top" style="padding:0 0 0 8px;"><img src="' . $S . '/email-icons/playspark/home-together2.jpg" width="252" alt="A parent and child drawing together at home" style="display:block;width:100%;max-width:252px;height:auto;border:0;border-radius:12px;">'
             . '<div style="font:400 13px/1.5 ' . $font . ';color:' . $muted . ';margin:8px 0 0;">And a version families can try at home.</div></td>'
             . '</tr></table></td></tr>'
             . $hr
