@@ -222,7 +222,10 @@ final class ProblemReport
                of a class in tinker - "Cannot declare class" - arrived as high-priority server faults). Nothing the
                application runs goes through tinker. So is a fault thrown by a file outside the application (a staged
                copy under ~/stage, a scratch file): nobody ships that file. */
-            if (($_SERVER['argv'][1] ?? '') === 'tinker') {
+            /* artisan db likewise: the interactive database shell (ticket #265, 2026-11-24: run over SSH with no
+               terminal - "TTY mode requires /dev/tty" - filed as a high-priority server error). The person who typed
+               it sees the error; the application never runs either command. */
+            if (in_array($_SERVER['argv'][1] ?? '', ['tinker', 'db'], true)) {
                 return false;
             }
             if ($e) {
