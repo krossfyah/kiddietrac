@@ -111,6 +111,14 @@
       + '@media (max-width:600px){'
       + '.kt-tabband,#appMain .kt-tabband{padding:4px !important;border-radius:12px !important;}'
       + '.kt-tbwrap{gap:4px;}'
+      /* ONE BAND IN POPUPS TOO (2026-11-24, Anthony: "in mobile under leads and going into the lead the subtab scrolling
+         looks different than what we designed in the audit logs"). A record popup's tab bar is drawn edge to edge
+         (negative margins, square, 8px 12px), so the wrapper took the bleed look: a flat 51px slab with the arrows
+         inside it, stopping short of the popup's right edge. On a phone every strip is the Audit log band - rounded
+         pill, 1px line, 4px padding, 44px tall, arrows outside - whether or not it overflows. Desktop keeps its bar. */
+      + '.kt-tbwrap.kt-tbwrap-bleed{margin-left:0 !important;margin-right:0 !important;padding-left:0 !important;padding-right:0 !important;background:transparent !important;border-bottom:0 !important;}'
+      + '.kt-tbwrap.kt-tbwrap-bleed>.kt-tabband:not(#kt-x),.modal.kt-record-modal .kt-rtabbar.kt-tabband:not(#kt-x){border-radius:12px !important;padding:4px !important;border:1px solid #E2E8F0 !important;}'
+      + '.modal.kt-record-modal .kt-rtabbar.kt-tabband:not(#kt-x){margin-left:0 !important;margin-right:0 !important;}'
       + '.kt-tabband>.kt-tabbtn,#appMain .kt-tabband>.kt-tabbtn,'
       + '.kt-tabband:not([data-kt-tabsize="own"])>.kt-tabbtn:not([hidden]),#appMain .kt-tabband:not([data-kt-tabsize="own"])>.kt-tabbtn:not([hidden]){flex:0 0 auto !important;white-space:nowrap !important;height:34px !important;min-height:34px !important;padding:0 12px !important;font-size:13px !important;border-radius:9px !important;}'
       + '}';
