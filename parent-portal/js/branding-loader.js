@@ -552,7 +552,7 @@
     if (!el) { el = document.createElement('style'); el.id = 'kt-brand-hero'; (document.head || document.documentElement).appendChild(el); }
     const toks = ['', '-warm', '-a', '-b', '-c', '-d', '-e', '-f', '-g', '-h'].map(function (x) { return '--kt-hero-grad' + x + ':var(--kt-brand-hero) !important;'; }).join('');
     let css = ':root{--kt-brand-hero:' + h.css + ' !important;' + toks + '}'
-      + HERO_SEL + '{background:var(--kt-brand-hero) !important;background-size:auto !important;}';
+      + HERO_SEL + '{background:var(--kt-brand-hero) !important;background-size:200% 200% !important;}';
     if (h.text === 'dark') {
       const kids = HERO_SEL.split(',').map(function (s) { return s + ',' + s + ' :is(h1,h2,h3,h4,p,small,span,div,.kt-hero-emoji)'; }).join(',');
       css += kids + '{color:#0F172A !important;text-shadow:none !important;}'

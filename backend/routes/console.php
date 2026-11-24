@@ -580,6 +580,8 @@ Schedule::command('kt:screen-guard-check --quiet-ok')->dailyAt('05:45')->timezon
 // Prospects who have not sent the intake form: one reminder a day until the meeting (2026-10-23).
 Schedule::command('kt:intake-reminders')->dailyAt('09:00')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 // Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
+// Every section banner shimmers: gradient range, animation not switched off, white-label size kept (2026-11-24).
+Schedule::command('kt:banner-shimmer-check --quiet-ok')->dailyAt('05:52')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
 Schedule::command('kt:text-check')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 /* Xero: agencies that turned on automatic sync in Settings → Xero (off by default). */
 Schedule::command('xero:sync')->cron('9,39 * * * *')->withoutOverlapping(25)->runInBackground()->onOneServer();

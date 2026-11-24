@@ -39,7 +39,7 @@
 
   /* ── from kt-polish-v22.css ────────────────────────────── */
   --kt-hero-grad: linear-gradient(135deg, #1F6080 0%, #2C8AAC 55%, #8EC73C 130%);
-  --kt-hero-grad-warm: linear-gradient(135deg, #FF8A65 0%, #F9A26C 50%, #FFC07A 100%);
+  --kt-hero-grad-warm: linear-gradient(135deg, #F06A3E 0%, #F9A26C 50%, #FFC66E 100%);
 
   /* ── Hero identity palette (2026-09-06) ───────────────────────────────
      Every banner used to be --kt-hero-grad, so screens differed only by a floating
