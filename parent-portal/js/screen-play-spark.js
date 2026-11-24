@@ -21,7 +21,7 @@
     '.ps-wrap{padding:16px 20px 40px;}' +
     '.ps-hero{display:flex;align-items:center;gap:12px;margin-bottom:12px;}' +
     '.ps-hero img{width:44px;height:44px;border-radius:24%;flex:none;}' +
-    '.ps-hero .ey{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#1DB9C3;}' +
+    '.ps-hero .ey{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#3D8BFF;background:linear-gradient(90deg,#FF5A4E,#E8A400 35%,#3D8BFF 68%,#22B37C);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;display:inline-block;}' +
     '.ps-hero h1{margin:0;font-size:22px;line-height:1.2;}' +
     '.ps-hero .sub{font-size:13px;color:var(--kt-text-muted);}' +
     '.ps-tabs{display:flex;gap:6px;margin:0 0 14px;flex-wrap:wrap;}' +
@@ -346,7 +346,7 @@
   function printIdea(row) {
     var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(row.title) + '</title><style>' + CSS +
       'body{font-family:Inter,system-ui,sans-serif;color:#0f172a;margin:24px;--kt-border:#d7dde8;--kt-bg:#f6f8fb;--kt-surface:#fff;--kt-text-faint:#64748b;--kt-text-muted:#475569;}' +
-      '.ps-hero{border-bottom:3px solid #1DB9C3;padding-bottom:8px;}</style></head><body>' +
+      '.ps-hero{border-bottom:3px solid #3D8BFF;border-image:linear-gradient(90deg,#FF5A4E,#E8A400 35%,#3D8BFF 68%,#22B37C) 1;padding-bottom:8px;}</style></head><body>' +
       '<div class="ps-hero"><img src="' + location.origin + MARK + '" alt=""><div><div class="ey">Play Spark</div><div class="sub">On-the-spot play ideas</div></div></div>' +
       ideaHtml(row, true) + '</body></html>';
     if (KT.printDoc) KT.printDoc(html, { title: row.title });

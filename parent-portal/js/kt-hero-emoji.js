@@ -79,7 +79,10 @@
       bg: 'linear-gradient(135deg,#0A1E55 0%,#12307A 52%,#0E8F99 100%)' },
     /* Safe Arrival (2026-10-27): the sidebar's green shield, not the 🛡 emoji. */
     { re: /\bsafe arrival\b/, mark: '/img/safe-arrival.svg', art: '/img/safe-arrival-ghost.svg', alt: 'Safe Arrival',
-      bg: 'linear-gradient(135deg,#064E3B 0%,#047857 55%,#10B981 100%)' }
+      bg: 'linear-gradient(135deg,#064E3B 0%,#047857 55%,#10B981 100%)' },
+    /* Play Spark (2026-11-24): the Toy-box spark on its Midnight ink tile, not the 🧩 emoji. Parents' screen is "Play at home". */
+    { re: /\bplay spark\b|^play at home\b/, mark: '/img/play-spark.svg?v=2', art: '/img/play-spark-ghost.svg', alt: 'Play Spark',
+      bg: 'linear-gradient(135deg,#0B1026 0%,#1B2350 55%,#2A3570 100%)' }
   ];
   function brandOf(hero) {
     var t = heroTitle(hero);
