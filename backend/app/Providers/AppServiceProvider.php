@@ -161,6 +161,11 @@ class AppServiceProvider extends ServiceProvider
             \Illuminate\Mail\Events\MessageSending::class,
             [\App\Listeners\KiddieTracFirstNames::class, 'handle']
         );
+        // Children are "First L." in every email that is not to their own family (2026-11-24, Anthony).
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\StaffChildNames::class, 'handle']
+        );
         // White-label agencies: "KiddieTrac" in the words becomes their brand (2026-10-21).
         Event::listen(
             \Illuminate\Mail\Events\MessageSending::class,
