@@ -140,7 +140,13 @@
   }
 
   function isStrip(el) {
-    if (!el || el.nodeType !== 1 || (el.closest && el.closest(EXCLUDE))) { return false; }
+    if (!el || el.nodeType !== 1) { return false; }
+    /* AN EXPLICIT TAB STRIP INSIDE A NO-BAND AREA (2026-11-24 sub-tab sweep). A screen puts data-kt-noband on its wrapper so
+       its own chip rows are left alone (Play Spark); that also hid its real tab strip, which then wrapped and scrolled
+       differently from every other screen's. A row that says data-kt-tabbar itself is a tab strip wherever it is; only
+       data-kt-noband on the row itself (or the bars/cells in EXCLUDE) still opts it out. */
+    var optIn = el.hasAttribute('data-kt-tabbar') && !el.hasAttribute('data-kt-noband');
+    if (el.closest && el.closest(optIn ? EXCLUDE.replace('[data-kt-noband], ', '') : EXCLUDE)) { return false; }
     var btns = buttonsOf(el);
     if (btns.length < 2) { return false; }
     // Tabs only: the row must be (almost) nothing but its buttons.

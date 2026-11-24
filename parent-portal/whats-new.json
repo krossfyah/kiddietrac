@@ -5,6 +5,23 @@
             "type": "improved",
             "date": "2026-11-24",
             "icon": "📱",
+            "title": "Tidier screens on your phone",
+            "body": "Lists that were cut off on a phone now show in full: Documents in My settings, Inspection forms and other record lists fit the screen as cards. Sub-tabs in Sales Bookings and Play Spark scroll in one row like everywhere else.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
+            "icon": "📱",
             "title": "The bottom bar shows what is open",
             "body": "Tapping Phone, Add or One-Tap on the phone bar now lights that button while its panel is open, the same as every other tab, and the light moves back when you close it.",
             "roles": [

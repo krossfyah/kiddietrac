@@ -2651,12 +2651,17 @@
     function tabs() {
       clear(top);
       var c = (state.data && state.data.counts) || {};
+      /* THE VIEWS ARE THEIR OWN TAB STRIP (2026-11-24, Anthony: sub-tabs in Sales should scroll like Audit log's - full
+         sweep). They shared one wrapping row with "New meeting", "Booking settings" and a spacer, so kt-tab-band (rightly)
+         did not read the row as a tab strip and on a phone the four views stacked into four rows. Now the views are a
+         tablist of their own (the standard band: one row, arrows, scrolls) and the actions sit beside it. */
+      var strip = el('div', { role: 'tablist', 'aria-label': 'Bookings', style: 'display:flex;gap:6px;flex:1 1 auto;min-width:0;max-width:100%' });
+      top.appendChild(strip);
       [['pending', 'Needs a decision' + (c.pending ? ' (' + c.pending + ')' : '')], ['upcoming', 'Upcoming' + (c.upcoming ? ' (' + c.upcoming + ')' : '')], ['past', 'Past & declined'], ['all', 'All']].forEach(function (t) {
-        top.appendChild(el('button', { type: 'button', role: 'tab', 'data-tab': t[0], class: state.view === t[0] ? 'on' : '',
+        strip.appendChild(el('button', { type: 'button', role: 'tab', 'aria-selected': state.view === t[0] ? 'true' : 'false', 'data-tab': t[0], class: state.view === t[0] ? 'on' : '',
           style: 'height:32px;padding:0 12px;border-radius:999px;border:1px solid ' + (state.view === t[0] ? ACCENT : '#CBD5E1') + ';background:' + (state.view === t[0] ? ACCENT : '#fff') + ';color:' + (state.view === t[0] ? '#fff' : '#334155') + ';font-weight:700;font-size:13px;cursor:pointer',
           onclick: function () { state.view = t[0]; load(); } }, [t[1]]));
       });
-      top.appendChild(el('div', { style: 'flex:1' }));
       // A meeting of your own from Bookings, with Teams and invitations (2026-10-25).
       top.appendChild(btn('🤝 New meeting', 'primary', function () { if (KT.Meeting) KT.Meeting.compose({ scope: 'platform' }); }));
       top.appendChild(btn('⚙ Booking settings', 'ghost', function () { settings(); }));

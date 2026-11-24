@@ -157,7 +157,7 @@
     w.innerHTML = hero(ai
         ? { title: 'Play ideas and weekly plans', sub: 'One tap. A fresh idea for every age in the room, and the week families see.' }
         : { title: 'Weekly plans and activity ideas', sub: 'Plan the week for every room, and share it with families.' }) +
-      (tabs.length > 1 ? '<div class="ps-tabs" role="tablist">' + tabs.map(function (t) {
+      (tabs.length > 1 ? '<div class="ps-tabs" role="tablist" data-kt-tabbar="1">' + tabs.map(function (t) {   // the standard band, inside the no-band wrapper (kt-tab-band opt-in, 2026-11-24)
         return '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="ps-tab' + (S.tab === t[0] ? ' on' : '') + '" data-ps-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div>' : '') + '<div data-ps-body></div>';
     w.querySelectorAll('[data-ps-tab]').forEach(function (b) {
