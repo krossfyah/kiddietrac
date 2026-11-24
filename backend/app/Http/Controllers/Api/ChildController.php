@@ -38,6 +38,7 @@ final class ChildController extends Controller
            explicit, historical asks (the Children screen's status filter sends them). */
         $statusParam = (string) $request->input('status', '');
         $historical = in_array($statusParam, ['all', 'withdrawn'], true);
+        $heldFamilies = [];
 
         if ($requestedCentre && $this->authorizeCentreAccess($user, $requestedCentre)) {
             $centreIds = [$requestedCentre];
@@ -49,6 +50,12 @@ final class ChildController extends Controller
             $centreIds = $agencyId
                 ? ($historical ? DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() : \App\Support\Live::centreIds($agencyId))
                 : [];
+            /* Families on the agency waitlist after their provider closed (2026-11-24, Anthony could not find
+               Liam / Arzoie: status=waitlist came back empty because their centre is closed). Agency level only,
+               and only when someone asks - a status filter or a search - so default lists stay open-centre. */
+            if ($agencyId && ! $historical && ($statusParam !== '' || trim((string) $request->input('search', '')) !== '')) {
+                $heldFamilies = \App\Support\AgencyWaitlist::familyIds((int) $agencyId);
+            }
         } else {
             $cid = $this->resolveCentreId($user);
             $centreIds = $cid ? [$cid] : [];
@@ -95,7 +102,7 @@ final class ChildController extends Controller
             ->join('families', 'families.id', '=', 'children.family_id')
             ->leftJoinSub($enrolments, 'en', fn ($j) => $j->on('en.child_id', '=', 'children.id'))
             ->leftJoin('rooms', 'rooms.id', '=', 'en.room_id')
-            ->whereIn('families.centre_id', $centreIds)
+            ->where(fn ($w) => $w->whereIn('families.centre_id', $centreIds)->orWhereIn('families.id', $heldFamilies ?: [0]))
             ->whereNull('children.deleted_at');
 
         if ($roomId = $request->input('room_id')) {

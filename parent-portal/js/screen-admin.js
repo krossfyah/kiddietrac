@@ -5213,7 +5213,7 @@
     var _allFamilies = data.families || [];
     data = Object.assign({}, data, {
       families: _allFamilies.filter(function (f) {
-        if (famStatus === 'enrolled') { return !f.suspended && !f.waitlisted; }
+        if (famStatus === 'enrolled') { return !f.suspended; }   // waitlisted (provider closed) stay in view, with their pill (2026-11-24)
         if (famStatus === 'suspended') { return !!f.suspended; }
         if (famStatus === 'waitlisted') { return !!f.waitlisted; }   // provider closed, waiting to be placed (2026-11-24)
         return true;
