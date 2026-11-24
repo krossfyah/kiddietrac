@@ -70,6 +70,11 @@ class SafeArrivalCommand extends Command
             foreach ($list as $row) {
                 $c = $row['check'];
 
+                // Marked absent by Safe Arrival, then signed in after all: the absence is taken back (2026-11-24).
+                if ($row['state'] === 'arrived' && ! empty($row['absent'])
+                    && \App\Support\SafeArrivalAbsentMail::clearIfArrived($agencyId, (int) $row['child_id'], $date, $row['arrived_at'] ?? null, $dry)) {
+                    $this->line(($dry ? '[dry] ' : '') . "{$row['name']} signed in after being marked absent: absence removed");
+                }
                 // Close an open check the moment the child arrives or is reported absent.
                 if ($c && ! $c->resolved_at && in_array($row['state'], ['arrived', 'absent'], true)) {
                     if (! $dry) {
@@ -175,6 +180,21 @@ class SafeArrivalCommand extends Command
                     }
                     $this->line(($dry ? '[dry] ' : '') . "still open: alerted {$n} director(s)/admin(s) about {$row['name']}");
                 }
+
+                // 4. Still not here this long after the LAST staff alert (absent_notice = after_alert, 2026-11-24): marked
+                //    absent and the family emailed, staff BCC'd. Not when a parent answered (on the way) or staff logged
+                //    running late - those reset the clock. With directors/admins alerted later, that alert is the last one.
+                if ($cfg['absent_notice'] === 'after_alert' && $c && ! $c->resolved_at && in_array($row['state'], ['overdue', 'escalated'], true)
+                    && ! ($c->parent_response ?? null) && empty($row['late']) && $alerted) {
+                    $last = ($c->up_alerted_at ?? null) ?: ($cfg['up_timing'] === 'after' ? null : $c->escalated_at);
+                    // Within an hour of its time only: turning this on (or a deploy) in the afternoon must not mail
+                    // families about this morning. Anything older is left to the end-of-day close, as before.
+                    if ($last && $now->greaterThanOrEqualTo(Carbon::parse($last)->addMinutes($cfg['absent_after_minutes']))
+                        && $now->lessThan(Carbon::parse($last)->addMinutes($cfg['absent_after_minutes'] + 60))) {
+                        $this->line(\App\Support\SafeArrivalAbsentMail::markAbsent($agencyId, $cfg, $c, $tz, $dry, $quietParents,
+                            $cfg['absent_after_minutes'] . ' min after the last alert'));
+                    }
+                }
             }
 
             $this->endOfDay($agencyId, $cfg, $date, $tz, $now, $dry);
@@ -208,6 +228,11 @@ class SafeArrivalCommand extends Command
                 if ($now->lt(Carbon::parse($date . ' ' . $close, $tz))) {
                     continue;
                 }
+            }
+            // absent_notice = closing (2026-11-24): an alerted child still not here at closing is marked absent, family emailed.
+            if ((string) $c->check_date === $date && ($cfg['absent_notice'] ?? '') === 'closing' && $c->escalated_at && empty($c->parent_response)) {
+                $this->line(\App\Support\SafeArrivalAbsentMail::markAbsent($agencyId, $cfg, $c, $tz, $dry, \App\Support\Suppression::isAgency($agencyId), 'at closing time'));
+                continue;
             }
             $child = \App\Models\Child::find($c->child_id);
             $name = $child ? trim(($child->preferred_name ?: $child->first_name) . ' ' . $child->last_name) : 'A child';

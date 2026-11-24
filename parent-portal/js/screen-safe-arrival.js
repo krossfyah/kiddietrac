@@ -328,7 +328,7 @@
       + (rest.length ? rest.map(function (r) {
           var det = r.state === 'arrived' ? 'Signed in ' + esc(r.arrived)
             : r.state === 'absent' ? (r.absent && r.absent.reason ? esc(r.absent.reason) : 'Reported absent') + (r.absent && r.absent.note ? ' — ' + esc(r.absent.note) : '')
-            : r.state === 'resolved' ? esc(r.resolution === 'unresolved' ? 'not resolved by end of day' : (r.resolution || '').replace('_', ' ')) + (r.note ? ' — ' + esc(r.note) : '') + (r.resolved ? ' (' + esc(r.resolved) + ')' : '')
+            : r.state === 'resolved' ? esc(r.resolution === 'unresolved' ? 'not resolved by end of day' : r.resolution === 'no_show' ? 'marked absent by Safe Arrival, family emailed' : r.resolution === 'arrived_late' ? 'signed in after being marked absent' : (r.resolution || '').replace('_', ' ')) + (r.note ? ' — ' + esc(r.note) : '') + (r.resolved ? ' (' + esc(r.resolved) + ')' : '')
             : r.state === 'counted' ? 'Counted at ' + esc(r.counted || '') + (r.counted_until ? ' — holds until ' + esc(r.counted_until) : '') + (r.counted_by ? ' (' + esc(r.counted_by) + ')' : '') + '. No message sent. <b style="color:#854D0E;">Please sign them in.</b>'
             : r.state === 'running_late' && r.late ? 'Expected by <b style="color:#3730A3;">' + esc(r.late.by) + '</b>' + (r.late.note ? ' — ' + esc(r.late.note) : '')
                 + lateWho(r.late) + '. Nothing sent before ' + esc(r.late.check_at) + '. '
@@ -542,6 +542,17 @@
       + '</div>'
       + '<div style="font-size:12px;color:#64748B;margin-top:6px;line-height:1.45;">Everyone gets the alert in the app and as a push notification. Texts go to the mobile number on each person\'s profile, and your agency\'s SMS setting applies. The end-of-day check uses the same people and channels, on its own timing below.</div>'
       + '</div>'
+      /* Not here after every check: marked absent, family emailed (2026-11-24). */
+      + '<div style="margin-top:16px;border-top:1px solid #E2E8F0;padding-top:12px;">'
+      + '<div style="font-weight:800;font-size:14px;color:#0F172A;">💛 Not here after every check</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 12px;">'
+      + '<div><label style="' + LBL + '">Mark absent and email the family</label><select data-abn style="' + SEL + '">'
+      +   [['after_alert', 'After the last alert, if still not here'], ['closing', 'At the centre\'s closing time'], ['off', 'Never (leave it for staff)']].map(function (o) { return '<option value="' + o[0] + '"' + ((s.absent_notice || 'after_alert') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('')
+      + '</select></div>'
+      + '<div data-abwrap><label style="' + LBL + '">…this many minutes after the last alert</label><input type="number" data-abm min="15" max="240" style="' + SEL + '" value="' + esc(s.absent_after_minutes || 60) + '"></div>'
+      + '</div>'
+      + '<div style="font-size:12px;color:#64748B;margin-top:6px;line-height:1.45;">The family gets a short, kind email (“We missed Ava today”) saying the child wasn\'t signed in and has been marked absent, with what was tried and how to reach you. The room\'s educators and the people chosen above get a copy (BCC). Not sent when a parent answered “on the way” or staff logged running late. If the child is signed in later, the absence is removed.</div>'
+      + '</div>'
       /* End of day — Safe Departure. */
       + '<div style="margin-top:16px;border-top:1px solid #E2E8F0;padding-top:12px;">'
       + '<label style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#0F172A;cursor:pointer;">'
@@ -618,6 +629,8 @@
         up_after_minutes: Math.max(5, Math.min(120, parseInt(m.querySelector('[data-ua]').value, 10) || 10)),
         up_email: m.querySelector('[data-ue]').value || 'fallback',
         up_sms: m.querySelector('[data-us]').checked,
+        absent_notice: m.querySelector('[data-abn]').value || 'after_alert',
+        absent_after_minutes: Math.max(15, Math.min(240, parseInt(m.querySelector('[data-abm]').value, 10) || 60)),
         departure_enabled: m.querySelector('[data-den]').checked,
         departure_grace_minutes: Math.max(0, parseInt(m.querySelector('[data-dgrace]').value, 10) || 0),
         departure_escalate_after_minutes: Math.max(5, parseInt(m.querySelector('[data-desc]').value, 10) || 15),

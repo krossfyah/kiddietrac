@@ -42,6 +42,11 @@ class SafeArrival
            still being set up, and the first morning text would be about a child nobody has told them about yet.
            A child moved to a new room or enrolment is NOT new: only the child record's own date counts. */
         'start_next_day' => true,
+        /* NOT HERE AFTER EVERY CHECK: MARK ABSENT AND TELL THE FAMILY (2026-11-24, Anthony: "after the last alert but make this
+           configurable"). after_alert = this many minutes after the last staff alert; closing = at the centre's closing
+           time; off = never (the check closes as "Not resolved" as before). App\Support\SafeArrivalAbsentMail. */
+        'absent_notice' => 'after_alert',
+        'absent_after_minutes' => 60,
         /* WHO IS ALERTED (2026-10-22, Anthony: "add settings for safe arrival to notify
            director, admin (right now for ilearn it should be both)"). Used by the morning
            alert and the end-of-day one. Directors = centre directors of the child's
@@ -112,6 +117,8 @@ class SafeArrival
         $out['departure_parents_after_minutes'] = max(5, min(240, (int) $out['departure_parents_after_minutes']));
         $out['departure_default_time'] = preg_match('/^\d{2}:\d{2}$/', (string) $out['departure_default_time']) ? $out['departure_default_time'] : '18:00';
         $out['headcount_mode'] = in_array($out['headcount_mode'], ['off', 'present'], true) ? $out['headcount_mode'] : 'present';
+        $out['absent_notice'] = in_array($out['absent_notice'], ['after_alert', 'closing', 'off'], true) ? $out['absent_notice'] : 'after_alert';
+        $out['absent_after_minutes'] = max(15, min(240, (int) $out['absent_after_minutes']));
         $out['headcount_hold_minutes'] = in_array((int) $out['headcount_hold_minutes'], [0, 60, 120, 180], true) ? (int) $out['headcount_hold_minutes'] : 120;
         foreach (['late_notify_educators', 'late_notify_directors', 'late_notify_admins'] as $k) {
             $out[$k] = (bool) $out[$k];

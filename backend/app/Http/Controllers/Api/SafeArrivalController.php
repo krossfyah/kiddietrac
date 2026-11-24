@@ -228,6 +228,7 @@ class SafeArrivalController extends Controller
         $resLabel = ['arrived' => 'Signed in', 'absent' => 'Absent', 'parent_contacted' => 'Parent contacted', 'other' => 'Other',
             'checked_out' => 'Signed out', 'picked_up' => 'Picked up', 'still_here' => 'Still here (late pickup)', 'unconfirmed' => 'Signed out automatically, pickup not confirmed',
             'centre_closed' => 'Centre closed that day', 'unresolved' => 'Not resolved by end of day',
+            'no_show' => 'Marked absent by Safe Arrival (family emailed)', 'arrived_late' => 'Signed in after being marked absent',
             'not_expected' => 'No longer expected (withdrawn or taken off the day)'];
 
         $rows = [];
@@ -578,6 +579,8 @@ class SafeArrivalController extends Controller
             'start_next_day' => ['sometimes', 'boolean'],
             'notify_directors' => ['sometimes', 'boolean'],
             'notify_admins' => ['sometimes', 'boolean'],
+            'absent_notice' => ['sometimes', 'in:after_alert,closing,off'],
+            'absent_after_minutes' => ['sometimes', 'integer', 'min:15', 'max:240'],
             'up_timing' => ['sometimes', 'in:with_educators,after'],
             'up_after_minutes' => ['sometimes', 'integer', 'min:5', 'max:120'],
             'up_email' => ['sometimes', 'in:fallback,always,off'],
